@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Renders and installs the production Mini server, Expo, and agent-runner LaunchAgents.
+# Renders and installs the production Mini server, Expo, and agent-runner LaunchAgents, and the 7:00 AM Today job.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -65,6 +65,9 @@ PY
   return 0
 }
 
+# The Today job runs on its calendar slot; kickstarting it would build the queue at install time.
+CALENDAR_LABELS=" com.milad.imsg-today "
+
 reload() {
   local label="$1" destination="$INSTALL_DIR/$label.plist" loaded=1
   launchctl bootout "gui/$UID_VALUE/$label" 2>/dev/null || true
@@ -75,7 +78,7 @@ reload() {
   [ "$loaded" -eq 0 ] || { printf 'launchagents: timed out unloading %s\n' "$label" >&2; return 1; }
   for attempt in $(seq 1 5); do
     if launchctl bootstrap "gui/$UID_VALUE" "$destination"; then
-      launchctl kickstart -k "gui/$UID_VALUE/$label"
+      [[ "$CALENDAR_LABELS" == *" $label "* ]] || launchctl kickstart -k "gui/$UID_VALUE/$label"
       return 0
     fi
     [ "$attempt" -eq 5 ] || sleep 2
@@ -109,7 +112,7 @@ restore_changed() {
   done
 }
 
-for label in com.milad.imsg com.milad.imsg-expo com.milad.imsg-agent; do
+for label in com.milad.imsg com.milad.imsg-expo com.milad.imsg-agent com.milad.imsg-today; do
   if render "$label"; then
     CHANGED_LABELS+=("$label")
     changed=1
@@ -134,4 +137,11 @@ if [ "$LOAD" -eq 1 ]; then
     restore_changed
     exit 1
   fi
+  # A calendar job has no resident process to check; loaded is what can be verified.
+  if ! launchctl print "gui/$UID_VALUE/com.milad.imsg-today" >/dev/null 2>&1; then
+    printf 'launchagents: com.milad.imsg-today did not load\n' >&2
+    restore_changed
+    exit 1
+  fi
+  printf 'Verified calendar job: com.milad.imsg-today\n'
 fi

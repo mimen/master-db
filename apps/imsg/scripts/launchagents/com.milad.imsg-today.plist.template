@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.milad.imsg-today</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>__HOME__/Programming/Repos/hub/bin/run</string>
+    <string>mini.launchd.com.milad.imsg-today</string>
+    <string>--</string>
+    <string>/bin/zsh</string>
+    <string>-lc</string>
+    <string>unset PROCID PROCID_REF PROCID_OFF; cd __REPO_DIR__/apps/imsg &amp;&amp; exec -a comma:today __HOME__/.bun/bin/bun server/today/trigger.ts</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/comma-today.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/comma-today.log</string>
+</dict>
+</plist>

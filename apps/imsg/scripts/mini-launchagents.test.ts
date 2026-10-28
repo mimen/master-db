@@ -44,6 +44,14 @@ describe("Mini LaunchAgent installation", () => {
     expect(agent).toContain("server/agent/main.ts");
     expect(agent).toContain(`<string>${repo}/apps/imsg</string>`);
     expect(agent).not.toMatch(/__(HOME|REPO_DIR)__/);
+    const today = readFileSync(join(install, "com.milad.imsg-today.plist"), "utf8");
+    expect(today).toContain(`<string>${home}/Programming/Repos/hub/bin/run</string>`);
+    expect(today).toContain("<string>mini.launchd.com.milad.imsg-today</string>");
+    expect(today).toContain(`cd ${repo}/apps/imsg &amp;&amp; exec -a comma:today ${home}/.bun/bin/bun server/today/trigger.ts`);
+    expect(today).toContain("<key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer>");
+    expect(today).not.toContain("KeepAlive");
+    expect(today).not.toContain("RunAtLoad");
+    expect(today).not.toMatch(/__(HOME|REPO_DIR)__/);
     const backup = join(home, "Library/Application Support/imsg-deploy/launchagents");
     expect(readFileSync(join(backup, "com.milad.imsg.previous.plist"), "utf8")).toBe("prior server plist");
     expect(readFileSync(join(backup, "com.milad.imsg-expo.previous.plist"), "utf8")).toBe("prior expo plist");

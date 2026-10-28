@@ -431,7 +431,42 @@ Four candidates were sketched in parallel (Opus 5.5, GPT-6 Astra, Grok 4.6, and 
 
 ## Implementation reconciliation
 
-*Empty until Phase D.*
+Where the build differs from the shapes above, and why.
+
+**Convex**
+- `requestBuild` and `todaySchedule` reject a `dayStart` that is not `todayWindow(dayStart)`'s midnight for `day`. Cheap, and the client is the only caller that could get it wrong.
+- `todayFinish` answers `true` to a replay of the outcome that already landed (done then ok, failed then not ok) and `false` to anything else, so the worker's ingest retries never log a false failure.
+- Expiry errors are "The Mini didn't pick it up" (requested) and "The build timed out" (building). The header appends "at 7:00 AM".
+- The CRM view moved into `validators.ts` as `conversationCrmView`; `listConversations` uses it unchanged.
+- `convex/_generated/api.d.ts` was edited by hand in codegen's shape. `bunx convex codegen` needs a configured deployment, and deploying is the lead's step.
+
+**Mini**
+- One port type, `TodayPort.post<K>`, typed from the internal function refs (`TodayRoutes`), serves the worker, the build and the trigger instead of overloads plus a separate read port.
+- `startTodayWorker` also returns `idle()` for tests.
+- `startBridge` now creates the one `ConvexClient` itself (when `CONVEX_CLOUD_URL` is set) and hands it to both the outbox and the worker; the outbox still closes it on stop. The worker posts through a fresh `ConvexIngest`, which is stateless, because the injectable `ingest` dependency has no `request`.
+- `buildToday` with no candidates writes an empty queue ("Nothing needs you right now.") without a model call.
+- The gateway forwards `system` for every structured call, not only thinking models.
+- The prompt neutralizes `<thread>` tags as well as the existing fence tags, puts notes per person, and lists events collected from the conversation's people.
+- The parser orders groups by their first accepted item, so rank 1 always heads the first group. `dropped` counts rejected items and items past 50.
+- `awaitScheduledBuild` takes a `TodayPort`, keeps polling through a failed poll until the timeout, and measures the timeout by summed poll intervals so tests need no clock.
+
+**Client**
+- `classifyToday(view, chat)` and `planToday(view, chats, { held })` take no `now`; nothing in the table depends on it. `TodayPlan` adds `newSince`.
+- `TodayHeader` carries no `dayStart`; the card takes the date from the view, else the provider's day. `failed` adds `failedAt` for "at 7:00 AM".
+- Settled today lists conversations cleared today that carry no flag now; the settled count still counts every known conversation cleared today, per the decision below.
+- `InboxRow` section `fold` is `{ key, open } | null`, because the toggle needs the section key.
+- `use-today` is `use-today.ts` with `createElement`, as `use-ai.ts` is, since oxlint flags a `.tsx` that exports a hook. Regenerate calls `useConvex().mutation`, the agent pane's pattern; the fixture's `convex/react` has no `useMutation`.
+- `stripCopy` keeps its object input; `today` is an optional field and `StripCopy` carries it.
+- While building, the meta line reads "Reading threads with Opus 5.5…" and the brief dims. A failed Regenerate over a good queue adds a "Regenerate failed: …" line.
+- The settings `openOn` parser was left alone; it is still stored-only.
+
+**Fixture and ops**
+- A fixture Regenerate stays `building` for 2.5 s, not 300 ms: the fixture client polls every 500 ms and would never show "Regenerating". It ranks into "Start here" and "Everything else".
+- `todayMode` is a route, `POST /__fixture/today {"mode": "seeded" | "unbuilt" | "failed"}`, so a drive can switch the header mid-run.
+- The plist runs `unset PROCID PROCID_REF PROCID_OFF` and the absolute bun path, as the other templates do. The installer bootstraps the calendar job without `kickstart` (a kickstart would build at install time) and checks it with `launchctl print`.
+
+**Not verified**
+- No real gateway call was made. Whether the gateway accepts `claude-opus-5-5` structured output at 120 threads inside 300 s is still the first real build's question.
 
 ## Decisions on the runners' open questions
 
