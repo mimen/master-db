@@ -33,6 +33,8 @@ test("settle-loop: strip, ⌘E settle with toast and undo, auto-advance, positio
   const page = desk.page;
   const kinds = captureCommands(page);
   await open(page, 1440, 900, "light");
+  // The app opens on Today; this loop is Needs you's.
+  await page.getByRole("tab", { name: /^Needs you, \d+/ }).click();
   const rows = page.getByTestId("conversation-row");
   const before = await needsCount(page);
   await rows.first().click();
