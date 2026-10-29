@@ -45,14 +45,6 @@ export const getDueTodayItems = authedQuery({
     const day = String(nowLocal.getUTCDate()).padStart(2, '0');
     const todayLocalDate = `${year}-${month}-${day}`;
 
-    // Calculate today's boundaries in user's timezone
-    const todayLocal = new Date(Date.UTC(year, nowLocal.getUTCMonth(), nowLocal.getUTCDate(), 0, 0, 0, 0));
-    const endOfTodayLocal = new Date(Date.UTC(year, nowLocal.getUTCMonth(), nowLocal.getUTCDate(), 23, 59, 59, 999));
-
-    // Convert back to actual UTC for datetime comparisons
-    const todayUTC = new Date(todayLocal.getTime() - offsetMs);
-    const endOfTodayUTC = new Date(endOfTodayLocal.getTime() - offsetMs);
-
     const dueTodayItems: Doc<"todoist_items">[] = allItems.filter((item: Doc<"todoist_items">) => {
       // Exclude routine tasks from time filters
       if (item.labels?.includes("routine")) return false;
@@ -62,14 +54,9 @@ export const getDueTodayItems = authedQuery({
       const dueDate = item.due.date;
       if (!dueDate) return false;
 
-      if (dueDate.includes('T')) {
-        // For datetime strings, compare in UTC
-        const dueDateObj = new Date(dueDate);
-        return dueDateObj >= todayUTC && dueDateObj <= endOfTodayUTC;
-      } else {
-        // For date-only strings, compare with local date
-        return dueDate === todayLocalDate;
-      }
+      // Floating local time, no zone. `new Date` would read it in the server zone.
+      const dateOnly = dueDate.includes("T") ? dueDate.split("T")[0] : dueDate;
+      return dateOnly === todayLocalDate;
     });
 
     const sortedItems: Doc<"todoist_items">[] = dueTodayItems.sort((a: Doc<"todoist_items">, b: Doc<"todoist_items">) => {
