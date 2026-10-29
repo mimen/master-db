@@ -131,7 +131,12 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
   // Cap thumbnails so desktop doesn't blow them up huge — pane-relative too.
   const base = paneWidth > 0 ? paneWidth : winW;
   const mediaW = Math.min(260, Math.round(base * 0.6));
-  const images = message.attachments.filter((a) => a.mimeType?.startsWith("image/"));
+  const isVideo = (a: Message["attachments"][number]) =>
+    a.mimeType?.startsWith("video/") === true || /\.(mov|mp4|m4v)$/i.test(a.filename ?? "");
+  const viewable = message.attachments
+    .filter((a) => a.mimeType?.startsWith("image/") || isVideo(a))
+    .map((a) => ({ ...a, isVideo: isVideo(a) }));
+  const openViewer = (guid: string) => openLightbox(viewable, viewable.findIndex((m) => m.guid === guid));
   return (
     <View style={{ gap: 6 }}>
       {message.attachments.map((att) => {
@@ -143,7 +148,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
           return <AudioBubble key={att.guid} guid={att.guid} chatGuid={message.chatGuid} url={url} mine={mine} sending={message.pending === true} />;
         }
         if (!url && !(att.mimeType?.startsWith("image/") && thumbnail)) return <MediaUnavailable key={att.guid} onMac={att.onMac} />;
-        if (att.mimeType?.startsWith("video/") || /\.(mov|mp4|m4v)$/i.test(att.filename ?? "")) {
+        if (isVideo(att)) {
           return (
             <VideoBubble
               key={att.guid}
@@ -151,6 +156,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
               width={Math.min(230, mediaW)}
               sourceWidth={att.width}
               sourceHeight={att.height}
+              onOpen={() => openViewer(att.guid)}
             />
           );
         }
@@ -181,12 +187,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
               key={att.guid}
               accessibilityRole="button"
               accessibilityLabel="Open photo"
-              onPress={() =>
-                openLightbox(
-                  images.map((i) => ({ ...i, isVideo: false })),
-                  images.findIndex((i) => i.guid === att.guid),
-                )
-              }
+              onPress={() => openViewer(att.guid)}
               style={[tile, { overflow: "hidden" }]}
             >
               {state?.status !== "loaded" && <ImageSkeleton />}

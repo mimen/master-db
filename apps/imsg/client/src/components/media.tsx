@@ -1,7 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useEventListener } from "expo";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useTheme } from "@/hooks/use-theme";
@@ -187,66 +186,39 @@ function aspectRatio(width: number | null, height: number | null): number {
   return width !== null && height !== null && width > 0 && height > 0 ? width / height : 1;
 }
 
+/** A still of the video's first frame; tapping opens it full screen in the lightbox. */
 export function VideoBubble({
   url,
   width,
   sourceWidth,
   sourceHeight,
+  onOpen,
 }: {
   url: string;
   width: number;
   sourceWidth: number | null;
   sourceHeight: number | null;
+  onOpen: () => void;
 }) {
-  const [activated, setActivated] = useState(false);
-  const [ratio, setRatio] = useState(() => aspectRatio(sourceWidth, sourceHeight));
-  const videoRef = useRef<VideoView>(null);
-  const player = useVideoPlayer(url, (p) => {
-    p.loop = false;
-  });
-
-  useEventListener(player, "sourceLoad", ({ availableVideoTracks }) => {
-    const size = availableVideoTracks[0]?.size;
-    if (size) setRatio(aspectRatio(size.width, size.height));
-  });
-
-  const updateAspectRatio = () => {
-    const trackSize = player.videoTrack?.size;
-    if (trackSize) {
-      setRatio(aspectRatio(trackSize.width, trackSize.height));
-      return;
-    }
-    if (Platform.OS !== "web") return;
-    const video: HTMLVideoElement | null = videoRef.current?.nativeRef.current ?? null;
-    if (video) setRatio(aspectRatio(video.videoWidth, video.videoHeight));
-  };
-
+  const player = useVideoPlayer(url);
+  // iOS reports a portrait video's track size unrotated, so the tile keeps the stored size
+  // (square when the bridge sent 0x0) and crops the frame to fill it.
   return (
-    <View style={[styles.video, { width, aspectRatio: ratio }]}>
-      <VideoView
-        ref={videoRef}
-        player={player}
-        style={styles.videoFrame}
-        contentFit="contain"
-        nativeControls
-        onFirstFrameRender={updateAspectRatio}
-      />
-      {!activated && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Play video"
-          onPress={() => {
-            setActivated(true);
-            player.play();
-          }}
-          style={styles.videoOverlay}
-        >
-          {/* Play-circle overlay on top of the video frame — theme-invariant
-              media control, always white regardless of app theme. */}
-          <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.9)" />
-        </Pressable>
-      )}
-    </View>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Play video"
+      onPress={onOpen}
+      style={[styles.video, { width, aspectRatio: aspectRatio(sourceWidth, sourceHeight) }]}
+    >
+      <View pointerEvents="none" style={styles.videoFrame}>
+        <VideoView player={player} style={styles.videoFrame} contentFit="cover" nativeControls={false} />
+      </View>
+      <View pointerEvents="none" style={styles.videoOverlay}>
+        {/* Play-circle overlay on top of the video frame — theme-invariant
+            media control, always white regardless of app theme. */}
+        <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.9)" />
+      </View>
+    </Pressable>
   );
 }
 
@@ -333,7 +305,7 @@ const styles = StyleSheet.create({
   video: {
     borderRadius: 14,
     overflow: "hidden",
-    // Letterbox background for the video frame — always black, theme-invariant.
+    // Shows before the first frame paints; always black, theme-invariant.
     backgroundColor: "#000",
   },
   videoFrame: {
