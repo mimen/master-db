@@ -21,12 +21,14 @@ function HeaderTitle({
   isGroup,
   memberCount,
   hasGroupPhoto,
+  maxWidth,
 }: {
   guid: string;
   name: string;
   isGroup: boolean;
   memberCount?: number;
   hasGroupPhoto?: boolean;
+  maxWidth: number;
 }) {
   const theme = useTheme();
   const dmAddress = !isGroup ? (guid.split(";").pop() ?? null) : null;
@@ -34,7 +36,7 @@ function HeaderTitle({
   const known = useChatDirectory()?.find((chat) => chat.guid === guid);
   const title = known?.displayName ?? name;
   return (
-    <View style={headerStyles.container}>
+    <View style={[headerStyles.container, { maxWidth }]}>
       {isGroup ? (
         <GroupPhotoAvatar guid={guid} size={32} iconSize={15} hasPhoto={hasGroupPhoto} />
       ) : (
@@ -60,8 +62,6 @@ const headerStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    // Leaves room for the back chevron and the three header actions at 390pt.
-    maxWidth: 170,
   },
   identityText: {
     flexShrink: 1,
@@ -80,7 +80,7 @@ export default function ChatScreen(): React.JSX.Element | null {
   }>();
   const headerHeight = useHeaderHeight();
   const theme = useTheme();
-  const { wide } = useLayoutMode();
+  const { wide, width } = useLayoutMode();
   const agentEnabled = useAgentEnabled();
   const isGroup = params.isGroup === "1" || params.guid.includes(";+;");
   const jumpTarget: JumpTarget | null =
@@ -88,6 +88,8 @@ export default function ChatScreen(): React.JSX.Element | null {
       ? { guid: params.targetGuid, dateCreated: Number(params.targetDate) }
       : null;
   if (wide) return null;
+  // Room left of the action pill: ~70pt for the back button, ~44pt per action, ~32pt of pill padding.
+  const titleMaxWidth = width - 70 - (agentEnabled ? 4 : 3) * 44 - 32;
 
   return (
     <>
@@ -106,6 +108,7 @@ export default function ChatScreen(): React.JSX.Element | null {
               isGroup={isGroup}
               memberCount={params.count ? Number(params.count) : undefined}
               hasGroupPhoto={params.hasGroupPhoto === "1"}
+              maxWidth={titleMaxWidth}
             />
           ),
           headerRight: () => (
