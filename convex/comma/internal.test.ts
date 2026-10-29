@@ -1,13 +1,15 @@
+import type { FunctionArgs } from "convex/server";
 import { convexTest, type TestConvex } from "convex-test";
 import { describe, expect, test } from "vitest";
 
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
+import type { MutationCtx } from "../_generated/server";
 import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
 import { conversationKey } from "./conversationKey";
-import { choosePrimary } from "./internal";
+import { choosePrimary, importOverlay } from "./internal";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 
@@ -266,6 +268,36 @@ describe("importOverlay", () => {
     expect(state?.readAt).toBe(20);
     expect(again.events).toBe(0);
     expect(events).toHaveLength(1);
+  });
+  test("a conversation's settle log is read once per import, not once per event", async () => {
+    const t = convexTest(schema, modules);
+    const chatGuid = "iMessage;-;+15550001111";
+    await seedDm(t, "+15550001111", [{ chatGuid, lastMessageAt: 1 }]);
+    const triageEvents = Array.from({ length: 300 }, (_, n) => ({ chatGuid, messageGuid: `m${n}`, reason: "reply" as const, clearedAt: n }));
+    const handler = (importOverlay as typeof importOverlay & { _handler: (ctx: MutationCtx, args: FunctionArgs<typeof internal.comma.internal.importOverlay>) => Promise<unknown> })._handler;
+    let read = 0;
+    for (const replaceChatGuids of [[chatGuid], undefined]) {
+      read = 0;
+      await t.run(async (ctx) => {
+        const db = new Proxy(ctx.db, {
+          get(target, property) {
+            if (property !== "query") return Reflect.get(target, property);
+            return (table: Parameters<typeof target.query>[0]) => {
+              const query = target.query(table);
+              if (table !== "comma_triage_events") return query;
+              return { withIndex: (...args: Parameters<typeof query.withIndex>) => {
+                const indexed = query.withIndex(...args);
+                return { collect: async () => { const rows = await indexed.collect(); read += rows.length; return rows; } };
+              } };
+            };
+          },
+        });
+        await handler({ ...ctx, db } as MutationCtx, { ...(replaceChatGuids ? { replaceChatGuids } : {}), chatState: [], triageEvents, triageOpen: [] });
+      });
+      // Rereading the log per event read 44,850 documents here, and a full mirror passed Convex's 32,000 limit.
+      expect(read).toBeLessThanOrEqual(2 * triageEvents.length);
+    }
+    expect(await t.run((ctx) => ctx.db.query("comma_triage_events").collect())).toHaveLength(300);
   });
 });
 

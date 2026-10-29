@@ -440,19 +440,25 @@ export const importOverlay = internalMutation({
     }
 
     let events = 0;
+    // Each conversation's log is read once: rereading it per event grew with the square of the log, until a full
+    // mirror passed Convex's 32,000-read limit and every Overlay mirror after it failed.
+    const logged = new Map<Id<"comma_conversations">, Set<string>>();
     for (const event of triageEvents) {
       const conversationId = await conversationForChat(ctx, event.chatGuid);
       if (!conversationId) {
         unresolved++;
         continue;
       }
-      const duplicate = (
-        await ctx.db
-          .query("comma_triage_events")
-          .withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId))
-          .collect()
-      ).some((row) => row.messageGuid === event.messageGuid && row.clearedAt === event.clearedAt);
-      if (duplicate) continue;
+      let keys = logged.get(conversationId);
+      if (!keys) {
+        const rows = await ctx.db.query("comma_triage_events")
+          .withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId)).collect();
+        keys = new Set(rows.map((row) => `${row.messageGuid} ${row.clearedAt}`));
+        logged.set(conversationId, keys);
+      }
+      const key = `${event.messageGuid} ${event.clearedAt}`;
+      if (keys.has(key)) continue;
+      keys.add(key);
       await ctx.db.insert("comma_triage_events", {
         conversationId,
         messageGuid: event.messageGuid,
