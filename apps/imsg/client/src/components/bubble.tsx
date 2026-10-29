@@ -384,23 +384,6 @@ export const Bubble = memo(function Bubble({
                 )}
               </Pressable>
             )}
-
-            {tapbacks.length > 0 && (
-              <View style={[styles.reactionRow, mine ? { left: -18 } : { right: -14 }]}>
-                {tapbacks.map(([type, count]) => (
-                  <Pressable
-                    key={type}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${TAPBACK_LABEL[type] ?? type}${count > 1 ? `, ${count}` : ""}`}
-                    onPress={() => onShowReactions(message)}
-                    style={[styles.reactionChip, { backgroundColor: theme.tapbackBg, borderColor: theme.tapbackBorder }]}
-                  >
-                    <Text style={{ fontSize: 12 }}>{TAPBACK_EMOJI.get(type) ?? type}</Text>
-                    {count > 1 && <Text style={[styles.reactionCount, { color: theme.textSecondary }]}>{count}</Text>}
-                  </Pressable>
-                ))}
-              </View>
-            )}
           </View>
 
           {notDelivered ? (
@@ -432,6 +415,23 @@ export const Bubble = memo(function Bubble({
             <PendingReceipt style={[styles.meta, caption]} />
           ) : (
             <Receipt style={[styles.meta, caption]} text={receiptText({ message, isLatestOutgoing, slowSend, showTime })} />
+          )}
+          {/* Anchored to the whole message, so a media-only message still wears its tapbacks on top. */}
+          {tapbacks.length > 0 && (
+            <View style={[styles.reactionRow, mine ? { left: -18 } : { right: -14 }]}>
+              {tapbacks.map(([type, count]) => (
+                <Pressable
+                  key={type}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${TAPBACK_LABEL[type] ?? type}${count > 1 ? `, ${count}` : ""}`}
+                  onPress={() => onShowReactions(message)}
+                  style={[styles.reactionChip, { backgroundColor: theme.tapbackBg, borderColor: theme.tapbackBorder }]}
+                >
+                  <Text style={{ fontSize: 12 }}>{TAPBACK_EMOJI.get(type) ?? type}</Text>
+                  {count > 1 && <Text style={[styles.reactionCount, { color: theme.textSecondary }]}>{count}</Text>}
+                </Pressable>
+              ))}
+            </View>
           )}
         </View>
 
