@@ -284,11 +284,8 @@ export function ConversationListPane({
   const leaving = seen.leaving;
   const rows = useMemo(() => withLeaving(modelRows, leaving, rowKey), [modelRows, leaving]);
   // The thread's "2 of 41" and auto-advance read the order this list renders.
-  useEffect(() => {
-    if (!wide) return;
-    publishRenderedOrder(deskModel.listChats);
-  }, [deskModel.listChats, wide]);
-  useEffect(() => (wide ? () => publishRenderedOrder(null) : undefined), [wide]);
+  useEffect(() => publishRenderedOrder(deskModel.listChats), [deskModel.listChats]);
+  useEffect(() => () => publishRenderedOrder(null), []);
   const dropLeaving = useCallback((key: string): void => {
     setSeen((current) => {
       if (!current.leaving.has(key)) return current;

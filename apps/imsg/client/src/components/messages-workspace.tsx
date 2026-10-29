@@ -2,7 +2,7 @@ import { formatAddress } from "@shared/address";
 import { matchesFilters, settleActionFor, settleLeavesLens } from "@shared/chat-state";
 import Reanimated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
-import { router } from "expo-router";
+import { router, useGlobalSearchParams, usePathname } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
 import { Platform, Text, View } from "react-native";
 
@@ -39,6 +39,19 @@ import { showToast } from "@/lib/toast";
 
 /** The lenses where a reply or a settle moves straight on to the next conversation. */
 const ADVANCING: ReadonlySet<StateFilter> = new Set(["today", "unresponded", "unread"]);
+
+function chatRoute(chat: ChatSummary) {
+  return {
+    pathname: "/chat/[guid]" as const,
+    params: {
+      guid: chat.guid,
+      name: chat.displayName,
+      isGroup: chat.isGroup ? "1" : "0",
+      count: String(chat.participants.length),
+      hasGroupPhoto: chat.hasGroupPhoto ? "1" : "0",
+    },
+  };
+}
 
 export function MessagesWorkspace({
   active,
@@ -205,30 +218,12 @@ export function MessagesWorkspace({
   const openChat = (chat: ChatSummary): void => {
     if (wide) {
       commitChatSelection(chat, "reply");
-      router.replace({
-        pathname: "/chat/[guid]",
-        params: {
-          guid: chat.guid,
-          name: chat.displayName,
-          isGroup: chat.isGroup ? "1" : "0",
-          count: String(chat.participants.length),
-          hasGroupPhoto: chat.hasGroupPhoto ? "1" : "0",
-        },
-      });
+      router.replace(chatRoute(chat));
       setListMode(false);
       requestFocus("composer");
       return;
     }
-    router.push({
-      pathname: "/chat/[guid]",
-      params: {
-        guid: chat.guid,
-        name: chat.displayName,
-        isGroup: chat.isGroup ? "1" : "0",
-        count: String(chat.participants.length),
-        hasGroupPhoto: chat.hasGroupPhoto ? "1" : "0",
-      },
-    });
+    router.push(chatRoute(chat));
   };
 
   // Auto-advance (round4 ux.md daily loop): in Today, Needs you and Unread, a reply or a settle
@@ -248,8 +243,23 @@ export function MessagesWorkspace({
   useEffect(() => {
     if (selected && order.some((chat) => chat.guid === selected.guid)) nextRef.current = advanceTarget(order, selected.guid);
   }, [order, rendered, selected]);
+  // A phone thread is a pushed route, not a selection: settling the one on screen replaces it with the next.
+  const pathname = usePathname();
+  const routeGuid = useGlobalSearchParams<{ guid?: string }>().guid;
+  const phoneThreadRef = useRef<string | null>(null);
+  phoneThreadRef.current = pathname.startsWith("/chat/") ? routeGuid ?? null : null;
+  const orderRef = useRef(order);
+  orderRef.current = order;
   const advanceFrom = useCallback((guid: string): void => {
-    if (!wide || !ADVANCING.has(stateRef.current)) return traceTriage({ kind: "advance", from: guid, to: null, reason: `lens ${stateRef.current}` });
+    if (!ADVANCING.has(stateRef.current)) return traceTriage({ kind: "advance", from: guid, to: null, reason: `lens ${stateRef.current}` });
+    if (!wide) {
+      if (phoneThreadRef.current !== guid) return traceTriage({ kind: "advance", from: guid, to: null, reason: "thread not open" });
+      const next = advanceTarget(orderRef.current, guid);
+      if (!next || next.guid === guid) return traceTriage({ kind: "advance", from: guid, to: null, reason: next ? "next is self" : "no next" });
+      traceTriage({ kind: "advance", from: guid, to: next.guid, reason: "ok" });
+      router.replace(chatRoute(next));
+      return;
+    }
     if (selectedRef.current?.guid !== guid) return traceTriage({ kind: "advance", from: guid, to: null, reason: `selected ${selectedRef.current?.guid.slice(-6) ?? "none"}` });
     const next = nextRef.current;
     if (!next || next.guid === guid) return traceTriage({ kind: "advance", from: guid, to: null, reason: next ? "next is self" : "no next" });
