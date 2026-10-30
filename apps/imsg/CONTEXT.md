@@ -1,29 +1,39 @@
 # imsg
 
 Self-hosted iMessage client. The Expo/React-Native-Web app reads and sends through
-Convex. A Bun/Hono server on the Mini bridges BlueBubbles and its SQLite overlay
-into Convex, and serves session, release and deployment-health routes plus the web app.
+Convex. A Bun/Hono server on the Mini bridges BlueBubbles into Convex, runs the iMessage
+side of queued commands, and serves session, release and deployment-health routes plus the web app.
 The client has no feature REST calls or Mini event-stream connection.
 
 ## Language
 
 **Chat Directory**:
-The always-fresh, flag-annotated list of chat summaries the server maintains — BlueBubbles
-data merged with the Overlay, unread counts, and the mark-read override.
+The Mini's cached list of BlueBubbles chats: names, groups, service siblings, last messages,
+unread counts and the mark-read override. It carries no triage flags; those are Convex's.
 _Avoid_: chat list cache, summaries cache
 
 **Chat State**:
-The pure rules for a chat's flags — how Unresponded/Waiting/Unread are derived
-and how a new message flips them. Shared verbatim by server and client.
+The pure rules for a chat's flags: how Unresponded/Waiting/Unread derive from its triage
+state and last message, and which lens it matches. Convex computes flags with them and the
+client filters with them.
 _Avoid_: filter logic, flag logic
 
+**Triage state**:
+Comma's own per-conversation state that BlueBubbles knows nothing about: dismissal anchors,
+pin, mute, marked-unread, the read time, and the clear log of settles and replies. Convex owns it
+in `comma_conversation_state` and `comma_triage_events` and is its only writer. Clients write it
+with `comma/triage` mutations whose optimistic updates show the change in the frame of the
+gesture; only a read goes on to the Mini, for iMessage's read receipt. A settle anchors on the
+conversation's last message in Convex, the one every client shows. Message ingest logs a reply
+when a real send follows an unsettled inbound message. `comma_triage_open` is retired: nothing
+reads or writes it.
+_Avoid_: overlay (for this state), local state
+
 **Overlay**:
-App-local per-chat state stored in SQLite that BlueBubbles knows nothing about:
-dismissal GUIDs, mute, pin, marked-unread.
-Convex `comma_conversation_state` mirrors the Overlay. Client
-writes go through the Convex outbox. The bridge applies them to SQLite and mirrors the result
-back to Convex.
-_Avoid_: overlay DB rows (when meaning the concept), local state
+The Mini's SQLite file (`OverlayDb`): bridge cursors and versions, AI caches, transcripts.
+Its `chat_state`, `triage_clear_event` and `triage_open_item` tables held triage state before
+Convex took it over; nothing writes them, and they stay as a rollback copy.
+_Avoid_: overlay DB rows (when meaning the concept)
 
 **Unresponded**:
 A chat whose last message is inbound — you owe a reply. Dismissable until the next

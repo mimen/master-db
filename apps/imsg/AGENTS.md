@@ -11,7 +11,7 @@ fronting the Mac Mini's BlueBubbles. Read `CONTEXT.md` for the domain model/voca
   `~/Programming/Repos/imsg.pre-migration-backup` on both machines.
 - **The server runs ONLY on the Mini.** Every client uses
   `https://milads-mac-mini.taild31e9a.ts.net:8447` (web/PWA/desktop) or Expo Go; there is no
-  resident laptop server, so all production overlay state lives in one place. Branches
+  resident laptop server, so the Mini's Overlay DB lives in one place. Branches
   changing server code use the deployment command's scratch DB mode.
 - Client: `client/` (Expo, SDK **57**). Expo Go from the App Store runs exactly one SDK, so
   the client SDK must match the current App Store Expo Go major; when Expo Go moves, the
@@ -65,8 +65,11 @@ and Restart banners.
 
 ## Convex architecture
 
-- The [bridge](server/bridge/) mirrors Messages history, BlueBubbles events, media,
-  and SQLite Overlay state into Convex, and executes queued outbox commands.
+- The [bridge](server/bridge/) mirrors Messages history, BlueBubbles events and media into
+  Convex, and executes queued outbox commands that touch iMessage.
+- Convex owns Comma's triage state (settles, pins, mutes, marked-unread, read times and the
+  clear log). Clients write it with `comma/triage` mutations; only a read reaches the Mini, for
+  iMessage's read receipt. See "Triage state" in `CONTEXT.md`.
 - The [`comma_*` tables](../../convex/schema/comma/) store conversations, messages,
   attachments, conversation state, drafts, scheduled messages, triage, sync state, and outbox commands.
   The local ingest contract reference is `apps/imsg/docs/convex-ingest-contract.md`.
@@ -86,7 +89,7 @@ and Restart banners.
   the `authed*` guards accept that admin identity. A plain `convex run` is rejected as Unauthorized.
   Reads are free. Writes (outbox commands) change real data: only for what Milad asked.
   `bun scripts/settle.ts <conversationId|name> ...` settles conversations the way ⌘E does and reports
-  the Mini's answer.
+  Convex's answer.
 - Convex functions deploy separately from the repo root with
   `CONVEX_DEPLOYMENT=dev:shiny-gerbil-853 bunx convex dev --once`. A push to main deploys only imsg.
 
@@ -100,8 +103,9 @@ and Restart banners.
 - **`.env` is NOT in the checkout** (gitignored). Local server runs need
   `BB_URL/BB_PASSWORD/HOST/PORT/DB_PATH`; keep `HOST=127.0.0.1`. The Mini's
   `apps/imsg/.env` has them. BlueBubbles supplies all message history.
-- **Overlay DB (`imsg.db`) and `.cache/avatars/`** hold pins, dismissals, mark-unread state
-  and contact photos. Carry them on any checkout move and never commit them.
+- **Overlay DB (`imsg.db`) and `.cache/avatars/`** hold bridge cursors, AI caches, transcripts,
+  the rollback copy of the old triage tables, and contact photos. Carry them on any checkout
+  move and never commit them.
 - Contact avatars: run `bun scripts/export-avatars.ts` **on the Mini**
   after contact-photo changes; BlueBubbles itself returns no avatars.
 - master-db `bun.lock` churns across sessions — `git checkout -- **/bun.lock` before pull.

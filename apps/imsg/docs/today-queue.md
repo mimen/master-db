@@ -12,7 +12,7 @@ Comma needs a Today lens: an LLM-ranked, grouped plan of the day's conversations
 4. Live queries do not rerun on wall-clock time, so day rollover and stale builds need a changing argument or a write.
 5. `queueOrder`/`groupByAge` would destroy LLM order; the Today branch must live at `deriveInboxModel`, and selection/holds/keyboard key on `guid` while the stored queue keys on `conversationId`.
 
-One fact found while grounding changes the design: the Overlay already keeps a **triage clear log**. `ChatDirectory` records a `reply` event when Milad answers an open Needs you (`server/chat-directory.ts:239-247`) and a `dismiss` event on settle (`:489`); undo deletes the event (`server/db.ts:372`). `importOverlay` mirrors it into `comma_triage_events`, indexed `by_clearedAt` (`convex/schema/comma/index.ts:55`). That log answers "was this handled since the build?" and "how many settled today?" without any new write path.
+One fact changes the design: Convex already keeps a **triage clear log**, `comma_triage_events`, indexed `by_clearedAt`. A settle (`comma/triage:settle`, `convex/comma/triage.ts`) records a `dismiss` event and its un-settle deletes it. Message ingest (`upsertMessages`, through `logReply`) records a `reply` event when a real send follows an inbound message nobody settled. Convex is the log's only writer. That log answers "was this handled since the build?" and "how many settled today?" without any new write path.
 
 ## Usage (caller's view)
 
@@ -405,7 +405,7 @@ The join is by `conversationId` inside `classifyToday`; every row it emits is th
 ### Fixture
 
 - `apps/imsg/e2e/fixture/world.ts` adds `TODAY_SEED`: a queue over existing fixture conversations (fixture ids are chat GUIDs), `snapshotAt = FIXTURE_NOW - 2h`, so seeded later inbound chats show in New since. Three groups, one Waiting item, two Needs you left below the line.
-- `apps/imsg/e2e/fixture/convex.ts` adds handlers `"comma/today:get"`, which serves the store for any `day` with `cleared` derived from the fixture OverlayDb's triage events (the conversation id is the chat GUID), and `"comma/today:requestBuild"`, which sets `building`, then after 300 ms ranks the current known Needs you chats newest first into two fixed groups and sets `done`. A `todayMode: "seeded" | "unbuilt" | "failed"` option drives the header states. The store resets in the cleanup function. No outbox kind and no global-kind allowlist edit.
+- `apps/imsg/e2e/fixture/convex.ts` adds handlers `"comma/today:get"`, which serves the store for any `day` with `cleared` derived from the fixture's triage state (`e2e/fixture/triage.ts`; the conversation id is the chat GUID), and `"comma/today:requestBuild"`, which sets `building`, then after 300 ms ranks the current known Needs you chats newest first into two fixed groups and sets `done`. A `todayMode: "seeded" | "unbuilt" | "failed"` option drives the header states. The store resets in the cleanup function. No outbox kind and no global-kind allowlist edit.
 
 ### Tests (one per module, behavior not implementation)
 
@@ -546,7 +546,7 @@ Four candidates were sketched in parallel (Opus 5.5, GPT-6 Astra, Grok 4.6, and 
 
 - We accept one more table and four ingest routes in exchange for never touching the serial outbox, and for a Regenerate that is a plain authed mutation with no receipt to observe.
 - We accept reusing the per-conversation `agentContext`/`agentPeople` routes, about 160 calls per build, in exchange for zero new message-reading code. The upgrade path is a batched route if build latency matters.
-- We accept that "handled since build" relies on the Overlay's triage log, which records `reply` only when an open Needs you existed. A reply to a queued Waiting thread records nothing and correctly keeps it ranked.
+- We accept that "handled since build" relies on the triage clear log, which records `reply` only when the inbound message it answers was still unsettled. A reply to a queued Waiting thread records nothing and correctly keeps it ranked.
 - We accept that "N settled" counts every known conversation cleared today, not only queued ones, in exchange for a number that is pure derivation and survives any Regenerate.
 - We accept that the day rolls at LA midnight, so 0:00 to 7:00 shows the fallback, in exchange for never showing yesterday's plan.
 - We accept that a failed build over a good queue keeps that queue with an inline error rather than falling back. The mock's fallback rule is read as applying when today has no queue.
@@ -639,7 +639,6 @@ Where the build differs from the shapes above, and why.
 
 - Does the v2 reduce (58k tokens, about 50 items) finish inside 300 seconds? The first real v2 build answers it. The log line carries the reduce time.
 - Haiku marks about two thirds of the read threads as settle. If the reduce trusts that too much, raw messages still let it overrule a card; watch the settle group's size in the log line.
-- Does the fixture expose its OverlayDb triage events to `convex.ts`? If not, add a small accessor.
 
 ## Next implementation step
 

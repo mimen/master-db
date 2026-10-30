@@ -1,6 +1,6 @@
 /**
- * Settles conversations the way ⌘E does, from a shell: queues a `settle` command anchored on each
- * conversation's newest message, then waits for the Mini's answer.
+ * Settles conversations the way ⌘E does, from a shell: comma/triage:settle anchored on each
+ * conversation's newest message, which Convex applies and answers at once.
  *
  *   bun scripts/settle.ts <conversationId|name> [...]
  *
@@ -29,7 +29,6 @@ const conversations = convex(["data", "comma_conversations", "--limit", "20000",
 const targets = process.argv.slice(2);
 if (targets.length === 0) throw new Error("usage: bun scripts/settle.ts <conversationId|name> [...]");
 
-const queued: { name: string; id: string }[] = [];
 for (const target of targets) {
   const matches = conversations.filter((c) => c._id === target || c.displayName.toLowerCase() === target.toLowerCase());
   if (matches.length !== 1) {
@@ -42,26 +41,10 @@ for (const target of targets) {
     console.log(`skip ${conversation.displayName}: no last message`);
     continue;
   }
-  const id = asMilad("comma/outbox:enqueue", {
-    clientKey: `cli-settle-${conversation._id}-${anchor}`,
-    conversationId: conversation._id,
-    payload: { kind: "settle", messageGuid: anchor },
-  }) as string;
-  queued.push({ name: conversation.displayName, id });
-}
-
-// The bridge claims and answers within seconds; report each command's final status.
-const deadline = Date.now() + 60_000;
-const pending = new Map(queued.map((q) => [q.id, q.name]));
-while (pending.size > 0 && Date.now() < deadline) {
-  await Bun.sleep(2000);
-  const rows = convex(["data", "comma_outbox", "--limit", "200", "--order", "desc", "--format", "jsonLines"])
-    .split("\n").filter(Boolean).map((line) => JSON.parse(line) as { _id: string; status: string; error?: string });
-  for (const row of rows) {
-    const name = pending.get(row._id);
-    if (!name || row.status === "pending" || row.status === "claimed") continue;
-    console.log(`${row.status === "sent" ? "settled" : row.status}: ${name}${row.error ? ` (${row.error})` : ""}`);
-    pending.delete(row._id);
+  try {
+    asMilad("comma/triage:settle", { conversationId: conversation._id, anchor });
+    console.log(`settled: ${conversation.displayName}`);
+  } catch (error) {
+    console.log(`failed: ${conversation.displayName} (${error instanceof Error ? error.message.split("\n").at(-1) : String(error)})`);
   }
 }
-for (const name of pending.values()) console.log(`no answer yet: ${name}`);

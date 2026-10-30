@@ -29,7 +29,8 @@ Preconditions:
 - **Settle from a row.** Hover a row and click `row.getByRole("button", { name: "Settle <Name>" })`. The row leaves the Needs you list.
 - **Undo.** Click `Undo`. The toast disappears and the row count returns to its value before settling.
 - **Un-settle.** In the All view, a settled row's button reads `Un-settle <Name>`. Clicking it shows `Un-settled — back in Needs you`.
-- **Side effect.** `comma/outbox:enqueue` bodies carry `{ kind: "settle" }`, then `{ kind: "unsettle" }` after Undo.
+- **Side effect.** The client calls `comma/triage:settle` with `{ conversationId, anchor }`, then `comma/triage:unsettle` after Undo. A conversation in Needs you only for its agent chat calls `comma/agent:settleConversationAgents` instead.
+- **No flicker.** `drives/settle-flicker.ts` settles from the sidebar and by a phone swipe against a slowed `comma/triage:settle` (`POST /__fixture/latency`), samples the row every frame, and fails if it shows again.
 - **Proof.** Screenshot with the toast visible, then after Undo, plus an ARIA snapshot of the sidebar list.
 
 ## Gotchas
