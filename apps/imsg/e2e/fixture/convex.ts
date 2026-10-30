@@ -535,16 +535,26 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return row ? [{ clientKey, status: row.status }] : [];
     }),
   };
+  // Drives slow one function to watch the client across a long server round trip.
+  const latency = new Map<string, number>();
+  app.post("/__fixture/latency", async (c) => {
+    const { name, delayMs } = await c.req.json<{ name: string; delayMs: number | null }>();
+    if (delayMs === null) latency.delete(name);
+    else latency.set(name, delayMs);
+    return c.json({ ok: true });
+  });
   app.post("/__fixture/convex", async (c) => {
     try {
       const { name, args } = await c.req.json<{ name: string; args: Record<string, unknown> }>();
       const handler = Object.hasOwn(handlers, name) ? handlers[name] : undefined;
       if (!handler) return c.json({ error: `Unknown fixture Convex function: ${name}` }, 400);
+      const delay = latency.get(name);
+      if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
       return Response.json(await handler(args));
     } catch (error) {
       return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: error instanceof FixtureError ? error.status : 400 });
     }
   });
-  return () => { agent.reset(); today.reset(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
+  return () => { agent.reset(); today.reset(); latency.clear(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
     for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };
 }
