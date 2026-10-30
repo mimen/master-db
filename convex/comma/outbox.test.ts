@@ -1,5 +1,5 @@
 import { convexTest, type TestConvex } from "convex-test";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { api, internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -157,6 +157,22 @@ describe("claim and complete", () => {
     await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "s", claimToken: claim.claimToken!, status: "failed", error: "BB 500" });
     const states = await as.query(api.comma.outbox.outboxStatusFor, { clientKeys: ["s"] });
     expect(states).toEqual([{ clientKey: "s", status: "failed", error: "BB 500" }]);
+  });
+
+  test("a failed send's bubble moves to the time it failed", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const { t, as, c } = await setup();
+      vi.setSystemTime(1_000);
+      await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
+      const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 10 });
+      vi.setSystemTime(9_000);
+      await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "s", claimToken: claim.claimToken!, status: "failed", error: "BB 500" });
+      const temp = await t.run((ctx) => ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "temp-s")).unique());
+      expect(temp).toMatchObject({ error: 1, dateCreated: 9_000 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // The bridge sends one command at a time, and each send lands with the time the Mac sent it.

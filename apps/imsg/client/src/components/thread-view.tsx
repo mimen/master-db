@@ -22,7 +22,7 @@ import { createInboundReadObserver } from "@/lib/message-observers";
 import { useActionSheet } from "@/lib/action-sheet";
 import { copyHandleAction } from "@/lib/copy-handle";
 import { setForwardText } from "@/lib/forward";
-import { tempMessage } from "@/lib/local-sends";
+import { failedSend, tempMessage } from "@/lib/local-sends";
 import { onOpenThreadSearch } from "@/lib/thread-search";
 import { readChat } from "@/lib/chat-actions";
 import { useAgentEnabled } from "@/hooks/use-agent";
@@ -392,7 +392,7 @@ export function ThreadView({
       runCommand(chatGuid, { kind: "send", text: failed.text, replyToGuid: failed.replyToGuid ?? undefined, mentions: failed.mentions })
         .then(({ message }) => replaceTemp(revived.guid, message))
         .catch((error: unknown) => {
-          replaceTemp(revived.guid, { ...revived, pending: false, failed: true });
+          replaceTemp(revived.guid, failedSend(revived));
           showToast(messagingCommandError(error, "Send failed"));
         });
     },
@@ -468,7 +468,7 @@ export function ThreadView({
                   runCommand(chatGuid, { kind: "send", text: message.text, replyToGuid: message.replyToGuid ?? undefined, mentions: message.mentions }, { clientKey: temp.guid })
                     .then(({ message: sent }) => replaceTemp(temp.guid, sent))
                     .catch((error: unknown) => {
-                      replaceTemp(temp.guid, { ...temp, pending: false, failed: true });
+                      replaceTemp(temp.guid, failedSend(temp));
                       showToast(messagingCommandError(error, "Send failed"));
                     });
                 },

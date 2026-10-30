@@ -233,7 +233,9 @@ export const completeOutbox = internalMutation({
         await refreshLastMessage(ctx, temp.conversationId);
       }
       // A failed or unknown send keeps its temp bubble so the client can show the state.
-      else if (temp) await ctx.db.patch(temp._id, { error: status === "failed" ? 1 : 0 });
+      // A failed send moves to the time it failed, among the messages around its attempt; the
+      // client keeps only sends still in flight below the rest of the thread.
+      else if (temp) await ctx.db.patch(temp._id, status === "failed" ? { error: 1, dateCreated: Date.now() } : { error: 0 });
     }
     if (row.payload.kind === "react" && row.payload.remove && status === "sent") {
       // macOS 15 removes a tapback by deleting its chat.db row; no removal row ever reaches

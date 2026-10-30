@@ -40,7 +40,7 @@ import { openAgentChat } from "@/hooks/use-agent-toasts";
 import { agentApi, type AgentChatSummary } from "@/lib/agent-api";
 import { AGENT_ATTENTION } from "@/lib/inbox-model";
 import { useAgentSettings } from "@/lib/settings";
-import { localSends, tempMessage } from "@/lib/local-sends";
+import { failedSend, localSends, tempMessage } from "@/lib/local-sends";
 import { afterPaint } from "@/lib/open-timing";
 import { AgentBadge } from "./agent-badge";
 import { ChatAvatar, PersonAvatar } from "./avatar";
@@ -585,7 +585,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
         selectChat({ guid: chatGuid });
       })
       .catch((e: unknown) => {
-        if (existing && temp) localSends.settle(existing.guid, temp.guid, { ...temp, pending: false, failed: true });
+        if (existing && temp) localSends.settle(existing.guid, temp.guid, failedSend(temp));
         const detail =
           e instanceof Error ? /"error"\s*:\s*"([^"]+)"/.exec(e.message)?.[1] : undefined;
         showToast(messagingCommandError(e, detail ? `Couldn't start: ${detail.slice(0, 120)}` : e instanceof Error ? `Couldn't start: ${e.message.slice(0, 120)}` : "Couldn't start the conversation"));

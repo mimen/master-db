@@ -47,6 +47,14 @@ export function resetLocalSendsForTests(): void {
   sends = new Map();
 }
 
+/**
+ * A send that failed takes the time it failed. The thread keeps sends in flight below everything
+ * else, so a failed one moves back among the messages around its attempt and stays there.
+ */
+export function failedSend(temp: Message): Message {
+  return { ...temp, pending: false, failed: true, dateCreated: Date.now() };
+}
+
 /** An outgoing text message drawn before the send is queued; its guid doubles as the outbox clientKey. */
 export function tempMessage(
   chatGuid: string,

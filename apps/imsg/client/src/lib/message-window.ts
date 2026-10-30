@@ -1,14 +1,15 @@
 import type { Message, ServerEvent } from "@shared/types";
 
-const undelivered = (m: Message): boolean => m.pending === true || m.failed === true;
+const inFlight = (m: Message): boolean => m.pending === true && m.failed !== true;
 
 /**
- * Delivered messages by date, then the sends still queued or failed in the order they were sent.
- * A send lands with the time the Mac sent it, later than the sends queued behind it, so date
- * alone would drop each one below the rest of its burst until all of them land.
+ * Messages by date, then the sends still in flight in the order they were sent. A send lands with
+ * the time the Mac sent it, later than the sends queued behind it, so date alone would drop each
+ * one below the rest of its burst until all of them land. A failed send has left the queue: it
+ * takes the time it failed (failedSend) and sorts among the rest.
  */
 export function sortThread(messages: Message[]): Message[] {
-  return [...messages].sort((a, b) => Number(undelivered(a)) - Number(undelivered(b)) || a.dateCreated - b.dateCreated);
+  return [...messages].sort((a, b) => Number(inFlight(a)) - Number(inFlight(b)) || a.dateCreated - b.dateCreated);
 }
 
 /** `next` under `prev`'s row identity, so replacing a message never remounts its row. */

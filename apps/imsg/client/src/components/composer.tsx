@@ -33,7 +33,7 @@ import { setTyping as sendTyping } from "@/lib/presence-api";
 import { messagingCommandError } from "@/lib/messaging-api";
 import { sendWithSuggestionFeedback } from "@/lib/ai-api";
 import { getDraft, setDraft } from "@/lib/drafts";
-import { tempMessage } from "@/lib/local-sends";
+import { failedSend, tempMessage } from "@/lib/local-sends";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatAddress } from "@shared/address";
 import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
@@ -615,7 +615,7 @@ export function Composer({
     } catch {
       setSendStatus("idle");
       hapticFailure();
-      onSettled(temp.guid, { ...temp, pending: false, failed: true });
+      onSettled(temp.guid, failedSend(temp));
       if (sendFailureToast()) showToast("Couldn't send. Check the Mac mini connection.");
     }
   };

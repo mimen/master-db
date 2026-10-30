@@ -253,11 +253,13 @@ describe("a burst of sends resolving one at a time", () => {
       .toEqual(["see you at 8", "X", "a", "Y", "b…", "c…"]);
   });
 
-  test("a failed send keeps its place in the queue and stays below what lands after it", () => {
-    expect(thread([older, x, real("a"), temp("b", 1), temp("c")], [settled("a"), failed("b"), local("c")]))
+  test("a failed send sits at the time it failed, and what lands after it goes below", () => {
+    const failedRow = { ...temp("b", 1), dateCreated: 7_000 };
+    const failedOwn = { ...failed("b"), dateCreated: 7_000 };
+    expect(thread([older, x, real("a"), failedRow, temp("c")], [settled("a"), failedOwn, local("c")]))
       .toEqual(["see you at 8", "X", "a", "b!", "c…"]);
-    expect(thread([older, x, real("a"), temp("b", 1), real("c")], [settled("a"), failed("b"), settled("c")]))
-      .toEqual(["see you at 8", "X", "a", "c", "b!"]);
+    expect(thread([older, x, real("a"), failedRow, real("c")], [settled("a"), failedOwn, settled("c")]))
+      .toEqual(["see you at 8", "X", "a", "b!", "c"]);
   });
 
   test("once every send lands the thread is in iMessage's order", () => {

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { takeForwardText } from "@/lib/forward";
-import { localSends, tempMessage } from "@/lib/local-sends";
+import { failedSend, localSends, tempMessage } from "@/lib/local-sends";
 import { showToast } from "@/lib/toast";
 import { useForwardTargets } from "@/hooks/use-forward-targets";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
@@ -39,7 +39,7 @@ export function ForwardContent({ onClose, onOpenChat }: ForwardContentProps): Re
     void runCommand(chat.guid, { kind: "send", text }, { clientKey: temp.guid })
       .then(({ message }) => localSends.settle(chat.guid, temp.guid, message))
       .catch((error: unknown) => {
-        localSends.settle(chat.guid, temp.guid, { ...temp, pending: false, failed: true });
+        localSends.settle(chat.guid, temp.guid, failedSend(temp));
         showToast(messagingCommandError(error, "Forward failed"));
       });
   };
