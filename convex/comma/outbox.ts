@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, mutation, query, type MutationCtx } from "../_generated/server";
@@ -45,6 +45,31 @@ async function triageCore(ctx: MutationCtx, conversationId: Id<"comma_conversati
     case "mute": return await setConversationFlag(ctx, conversationId, { mutedUnresponded: payload.value });
     case "markUnread": return await setConversationFlag(ctx, conversationId, { markedUnread: true });
   }
+}
+
+/**
+ * A triage command queued before Convex owned these kinds is applied when the Mini would have claimed it, so it
+ * never reaches a Mini that no longer applies them. A stale anchor fails it, as it would have on the Mini.
+ */
+async function applyQueuedTriage(ctx: MutationCtx, row: Doc<"comma_outbox"> & { conversationId: Id<"comma_conversations"> }, payload: TriagePayload, now: number) {
+  try {
+    await triageCore(ctx, row.conversationId, payload);
+    await ctx.db.patch(row._id, { status: "sent", result: { kind: payload.kind, ok: true }, error: undefined, updatedAt: now });
+  } catch (error) {
+    // A throw here would fail every claim after it and stall the queue, so any failure fails only this row.
+    const message = error instanceof ConvexError ? String(error.data) : error instanceof Error ? error.message : String(error);
+    await ctx.db.patch(row._id, { status: "failed", error: message, updatedAt: now });
+  }
+}
+
+/**
+ * A send that failed, or whose outcome is unknown, is no longer in flight. Its bubble takes that moment and shows
+ * Not delivered, as the sender's own copy already does, and sorts among the messages around its attempt instead
+ * of staying below the thread with the sends still queued.
+ */
+async function strandTemp(ctx: MutationCtx, clientKey: string): Promise<void> {
+  const temp = await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", tempGuid(clientKey))).unique();
+  if (temp) await ctx.db.patch(temp._id, { error: 1, dateCreated: Date.now() });
 }
 
 /**
@@ -204,7 +229,7 @@ export const claimOutbox = internalMutation({
         leaseUntil: undefined,
         claimToken: undefined,
         updatedAt: now,
-      });
+      });      if (!retry && row.payload.kind === "send") await strandTemp(ctx, row.clientKey);
     }
     const claimed: Doc<"comma_outbox">[] = [];
     for (const row of await ctx.db
@@ -212,6 +237,11 @@ export const claimOutbox = internalMutation({
       .withIndex("by_status_createdAt", (q) => q.eq("status", "pending"))
       .order("asc")
       .take(limit)) {
+      if (row.conversationId && isTriage(row.payload)) {
+        await applyQueuedTriage(ctx, { ...row, conversationId: row.conversationId }, row.payload, now);
+        continue;
+      }
+      if (row.conversationId && row.payload.kind === "markRead") await readConversation(ctx, row.conversationId, row.createdAt);
       const patch = { claimToken: `${row._id}:${row.attempts + 1}`, error: undefined, status: "claimed" as const, leaseUntil: now + leaseMs, attempts: row.attempts + 1, updatedAt: now };
       await ctx.db.patch(row._id, patch);
       claimed.push({ ...row, ...patch });
@@ -263,9 +293,7 @@ export const completeOutbox = internalMutation({
         await refreshLastMessage(ctx, temp.conversationId);
       }
       // A failed or unknown send keeps its temp bubble so the client can show the state.
-      // A failed send moves to the time it failed, among the messages around its attempt; the
-      // client keeps only sends still in flight below the rest of the thread.
-      else if (temp) await ctx.db.patch(temp._id, status === "failed" ? { error: 1, dateCreated: Date.now() } : { error: 0 });
+      else if (temp && status !== "sent") await strandTemp(ctx, clientKey);
     }
     if (row.payload.kind === "react" && row.payload.remove && status === "sent") {
       // macOS 15 removes a tapback by deleting its chat.db row; no removal row ever reaches

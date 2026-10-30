@@ -159,21 +159,24 @@ describe("claim and complete", () => {
     expect(states).toEqual([{ clientKey: "s", status: "failed", error: "BB 500" }]);
   });
 
-  test("a failed send's bubble moves to the time it failed", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    try {
-      const { t, as, c } = await setup();
-      vi.setSystemTime(1_000);
-      await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
-      const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 10 });
-      vi.setSystemTime(9_000);
-      await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "s", claimToken: claim.claimToken!, status: "failed", error: "BB 500" });
-      const temp = await t.run((ctx) => ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "temp-s")).unique());
-      expect(temp).toMatchObject({ error: 1, dateCreated: 9_000 });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
+  for (const ending of ["failed", "unknown", "lease lost"] as const) {
+    test(`a send that ends ${ending} leaves the queue: its bubble shows Not delivered at that moment`, async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        const { t, as, c } = await setup();
+        vi.setSystemTime(1_000);
+        await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
+        const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1_000, leaseMs: 1000, limit: 10 });
+        vi.setSystemTime(9_000);
+        if (ending === "lease lost") await t.mutation(internal.comma.outbox.claimOutbox, { now: 9_000, leaseMs: 1000, limit: 10 });
+        else await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "s", claimToken: claim.claimToken!, status: ending, error: "BB 500" });
+        const temp = await t.run((ctx) => ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "temp-s")).unique());
+        expect(temp).toMatchObject({ error: 1, dateCreated: 9_000 });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  }
 
   // The bridge sends one command at a time, and each send lands with the time the Mac sent it.
   const bridgeSends = async (t: T, c: Id<"comma_conversations">, key: string, status: "sent" | "failed", at: number) => {
