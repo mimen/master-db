@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import { beginUndoAction, commitUndoAction, runLatestUndo, runUndo } from "@/lib/action-undo";
 import { conversationState } from "@/lib/conversation-state";
 import { showToast } from "@/lib/toast";
-import { runExclusiveTriageWrite, settleAnchor, type TriageWriteOutcome } from "@/lib/triage-writes";
+import { runExclusiveTriageWrite, type TriageWriteOutcome } from "@/lib/triage-writes";
 
 type TriageListener = (chatGuid: string) => void;
 const resolvedListeners = new Set<TriageListener>();
@@ -57,7 +57,8 @@ function settleWrite(chat: ChatSummary, settled: (reverse: () => Promise<void>) 
   return runExclusiveTriageWrite(chat.guid, async () => {
     if (settleActionFor(chat) !== "settle") return;
 
-    const anchor = opts.pinned ?? settleAnchor(chat.lastMessage);
+    // A send's temp guid anchors too: Convex matches it to the real message once that send lands.
+    const anchor = opts.pinned ?? chat.lastMessage?.guid;
     // In Needs you only for its agent chats, it settles just those: a conversation settle's Undo would
     // undismiss both anchors and bring back a flag the user had already cleared.
     const agentsOnly = !chat.flags.unresponded && !chat.flags.waiting;

@@ -153,6 +153,12 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
     expect(toasts.map((t) => t.message)).toEqual(["Settled Person 1"]);
   });
 
+  test("a settle right after a send anchors on that send, so a message after it can't be dismissed", async () => {
+    const sent = { ...owed(1), lastMessage: { guid: "temp-k1", text: "on it", dateCreated: 3, isFromMe: true, senderName: null, hasAttachments: false }, flags: flags({ waiting: true }) };
+    await toggleSettleChat(sent);
+    expect(writes).toEqual([["comma/triage:settle", { conversationId: "conv-1", anchor: "temp-k1" }]]);
+  });
+
   test("a settle Convex rejects brings the row back with its toast and leaves no undo entry", async () => {
     const person = owed(1);
     server = () => false;
