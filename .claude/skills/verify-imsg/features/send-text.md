@@ -9,6 +9,7 @@ A user types in the composer of an open conversation and sends. The message appe
 - `send-state` shows a pending bubble that settles to `Sent` in place, without remounting.
 - `send-triage` moves the conversation from Needs you to Waiting.
 - `send-failure` marks the bubble Not Delivered and raises one toast when the send fails.
+- `send-burst` keeps a quick run of sends in send order below everything delivered while they land one at a time, and keeps the newest one as the sidebar preview.
 
 ## How to get to it (user POV)
 
@@ -29,9 +30,12 @@ Preconditions:
 - **Settled state.** Poll the bubble's computed opacity until it is 1. The bubble's footer reads `Sent`, and the sidebar Needs you count drops by one while Waiting rises by one.
 - **Failure path.** Before sending, `POST /__fixture/fault {"method":"sendText","error":"offline"}`. The bubble shows Not Delivered and one toast appears. Clear the fault with `{"method":null}`.
 - **Proof.** Run `drives/send-text.ts`. It writes `1-before.png`, `2-after.png`, `aria.txt` and `side-effects.json`.
+- **Burst.** `POST /__fixture/send-timing {"delayMs":1500,"echo":false}`, send three texts back to back, and `desk.receive` a message before the first lands. Run `drives/send-burst.ts`. It writes `frames/`, `samples.json` (every change to the thread order and the preview), `timeline.json` (which sends had landed at each frame) and `stored.json`.
 
 ## Gotchas
 
 - The bubble fades in. A screenshot taken immediately shows a faint bubble, so wait for opacity 1.
 - The fixture clock is pinned to `FIXTURE_NOW`. Timing assertions about "slow" sends need the page clock shifted (see `e2e/fixture/send.playwright.ts`).
 - Mentions are carried in the same `send` command. Check the payload's `mentions`, not a separate request.
+- The fixture runs queued sends one at a time, as the bridge does, so a delayed burst lands one send per `delayMs`.
+- The fixture has no optimistic sidebar update. The preview reaches a new send on the next 500 ms poll, where production moves it on the frame of the send.

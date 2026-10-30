@@ -32,7 +32,7 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 
 ## Features
 
-- [Send a message](./send-text.md) covers typed sends, the Enter and Send entry points, delivery state, and moving out of Needs you. Its drive is `drives/send-text.ts`.
+- [Send a message](./send-text.md) covers typed sends, the Enter and Send entry points, delivery state, a burst of sends, and moving out of Needs you. Its drives are `drives/send-text.ts` and `drives/send-burst.ts`.
 - [Receive a message](./receive.md) covers live inbound messages, the sidebar preview, the open thread, peer typing, and mark-read.
 - [Settle a conversation](./settle.md) covers settling from the row, the header and the keyboard, and Undo.
 - [Send attachments](./attachments.md) covers file drops with a caption, voice memos, and an unknown outcome.

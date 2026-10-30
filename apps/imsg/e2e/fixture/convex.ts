@@ -115,6 +115,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   const transcripts = new Map<string, TranscriptState>();
   const inFlight = new Map<string, Promise<string>>();
   const temps = new Map<string, ConvexMessage>();
+  let sendTurn: Promise<unknown> = Promise.resolve();
   const peerTyping = new Map<string, { peerTyping: boolean; updatedAt: number; expiresAt: number }>();
   const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
   bb.onEvent((event) => {
@@ -509,7 +510,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
             isGroupEvent: false, mentions: payload.mentions ?? [], attachmentGuids: [], clientKey, sourceVersion: 0, attachments: [],
           });
         }
-        const result = await execute(chatGuid, payload, clientKey).finally(() => temps.delete(clientKey));
+        // The Mini's bridge claims one command at a time, so a burst of sends lands one by one.
+        const run = payload.kind === "send" ? sendTurn.then(() => execute(chatGuid, payload, clientKey)) : execute(chatGuid, payload, clientKey);
+        if (payload.kind === "send") sendTurn = run.catch(() => undefined);
+        const result = await run.finally(() => temps.delete(clientKey));
         const resultGuid = result && "message" in result ? result.message.guid : undefined;
         const draft = drafts.get(chatGuid);
         if (draft && (payload.kind === "send" || (payload.kind === "sendAttachment" && draft.attachments?.some((a) => a.storageId === payload.storageId)))) {
@@ -545,6 +549,6 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: error instanceof FixtureError ? error.status : 400 });
     }
   });
-  return () => { agent.reset(); today.reset(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
+  return () => { sendTurn = Promise.resolve(); agent.reset(); today.reset(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
     for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };
 }
