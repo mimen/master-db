@@ -6,6 +6,7 @@ export const commaDraftsApi = anyApi.comma.drafts as unknown as typeof api.comma
 export const commaOutbox = anyApi.comma.outbox as unknown as typeof api.comma.outbox;
 const today = anyApi.comma.today as unknown as typeof api.comma.today;
 export const todayApi = { get: today.get, requestBuild: today.requestBuild };
+export const triageApi = anyApi.comma.triage as unknown as typeof api.comma.triage;
 
 /** Include public foundation functions whose module differs from comma/queries. */
 export const commaApi = {
