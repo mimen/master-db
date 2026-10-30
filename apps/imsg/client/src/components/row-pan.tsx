@@ -7,7 +7,8 @@ import { rubberBand, SWIPE_THRESHOLD } from "@/lib/row-swipe";
 
 /**
  * Phone swipe: left settles, right toggles unread. The row follows the finger 1:1,
- * rubber-bands past the threshold, and commits on release.
+ * rubber-bands past the threshold, and commits on release. A committed row stays
+ * where it was let go; ChatRow brings it home only if it is still in the list.
  */
 export function RowPan({
   offset,
@@ -39,8 +40,7 @@ export function RowPan({
       const committed = Math.abs(offset.value) >= SWIPE_THRESHOLD;
       if (committed && offset.value < 0 && settleOffered) runOnJS(onSettle)();
       else if (committed && offset.value > 0) runOnJS(onToggleRead)();
-      // An armed release slides home on smooth; an unarmed one springs back on snappy.
-      offset.value = withSpring(0, { ...(committed ? Springs.smooth : Springs.snappy), reduceMotion: ReduceMotion.System });
+      else offset.value = withSpring(0, { ...Springs.snappy, reduceMotion: ReduceMotion.System });
     });
   return <GestureDetector gesture={pan}>{children}</GestureDetector>;
 }
