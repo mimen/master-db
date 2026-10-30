@@ -118,7 +118,7 @@ test("typing handler skips superseded transitions and rechecks expiry after the 
   const typing = new OutboundTyping(h.bb, h.now, t.timers);
   stops.push(() => { typing.stop(); sent.mockRestore(); });
   const contacts = new ContactBook(h.bb);
-  const commands = new ChatCommands(h.bb, new ChatDirectory(h.bb, h.db, contacts), contacts);
+  const commands = new ChatCommands(h.bb, new ChatDirectory(h.bb, contacts), contacts);
   const context: CommandContext = { chatGuid: CHAT, writer: h.writer, commands, signal: new AbortController().signal,
     withLeaseRenewal: async (work) => work(), row: {
       _id: "outbox-test" as GenericId<"comma_outbox">, _creationTime: 1000, clientKey: "typing", conversationId: h.ingest.id,

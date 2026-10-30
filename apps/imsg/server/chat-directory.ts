@@ -1,11 +1,10 @@
 import type { BBChat, BBHandle, BBMessage } from "./bb-types";
 import type { BlueBubbles } from "./bluebubbles";
 import type { ContactBook } from "./contacts";
-import type { OverlayDb } from "./db";
 import { applyMessage as applyMessageToSummaries } from "../shared/chat-state";
-import { isQuietMessage, mapChat, mapMessage, type UnreadSummary } from "./map";
+import { mapChat, mapMessage, type DirectoryChat, type UnreadSummary } from "./map";
 import type { NameSource } from "./name-resolver";
-import type { ChatSummary, Message } from "../shared/types";
+import type { Message } from "../shared/types";
 import { sameSendAddress } from "./message-verification";
 
 export interface ChatLookup {
@@ -29,13 +28,13 @@ interface RealtimeSpamOverride {
 }
 
 /**
- * The chat directory: the cached, Overlay-aware view of every conversation.
- * Owns the summary cache (with the socket fast path), the recent-unread scan,
- * and the local mark-read overrides, and emits a `changed` event whenever a
- * mutation invalidates that view.
+ * The chat directory: the Mini's cached view of every BlueBubbles conversation, for names, groups,
+ * siblings and last messages. Triage state lives in Convex; this view carries none. Owns the summary
+ * cache (with the socket fast path), the recent-unread scan, and the local mark-read overrides, and
+ * emits a `changed` event whenever a mutation invalidates that view.
  */
 /** One person, one thread: normalize a DM's participant for service-merging. */
-function dmKey(chat: ChatSummary): string | null {
+function dmKey(chat: DirectoryChat): string | null {
   if (chat.isGroup || chat.participants.length !== 1) return null;
   const addr = chat.participants[0]?.address ?? "";
   if (!addr) return null;
@@ -48,7 +47,7 @@ function dmKey(chat: ChatSummary): string | null {
  * (e.g. a rename event riding RCS creates RCS;+;chatX beside SMS;+;chatX).
  * The guid embeds the identifier — SERVICE;+;identifier — so key on that.
  */
-function mergeKey(chat: ChatSummary): string | null {
+function mergeKey(chat: DirectoryChat): string | null {
   const dm = dmKey(chat);
   if (dm) return `dm:${dm}`;
   if (chat.isGroup) {
@@ -59,7 +58,7 @@ function mergeKey(chat: ChatSummary): string | null {
 }
 
 export class ChatDirectory {
-  private summaryCache: { at: number; chats: ChatSummary[]; sourceChats: ChatSummary[] } | null = null;
+  private summaryCache: { at: number; chats: DirectoryChat[]; sourceChats: DirectoryChat[] } | null = null;
   /** Any sibling guid → its merged-conversation identity. */
   private siblingMap = new Map<string, { primary: string; all: string[] }>();
   private siblingsBuilt = false;
@@ -87,7 +86,6 @@ export class ChatDirectory {
 
   constructor(
     private bb: BlueBubbles,
-    private db: OverlayDb,
     private contacts: ContactBook,
     private now: () => number = Date.now,
     names?: NameSource,
@@ -216,7 +214,7 @@ export class ChatDirectory {
     }
   }
 
-  private applyRealtimeSpam(chats: ChatSummary[]): ChatSummary[] {
+  private applyRealtimeSpam(chats: DirectoryChat[]): DirectoryChat[] {
     return chats.map((chat) => {
       const override = this.realtimeSpam.get(chat.guid);
       const last = chat.lastMessage;
@@ -234,38 +232,16 @@ export class ChatDirectory {
    */
   private patchSummaries(chatGuid: string, m: Message): void {
     this.rememberRealtimeSpam(chatGuid, m);
-    const prior = this.summaryCache?.chats.find((chat) => chat.guid === chatGuid)
-      ?? this.summaryCache?.sourceChats.find((chat) => chat.guid === chatGuid);
-    const open = this.db.getOpenTriageItem(chatGuid);
-    const replyAnchor =
-      open?.messageGuid ??
-      (prior?.flags.unresponded && prior.lastMessage && !prior.lastMessage.isFromMe
-        ? prior.lastMessage.guid
-        : null);
-    if (m.isFromMe && replyAnchor) {
-      this.db.recordTriageClear(chatGuid, replyAnchor, "reply", this.now());
-      this.db.clearOpenTriageItem(chatGuid);
-    }
-    if (!this.summaryCache) {
-      if (!m.isFromMe) this.db.setOpenTriageItem(chatGuid, m.guid, m.dateCreated);
-      return;
-    }
+    if (!this.summaryCache) return;
     const result = applyMessageToSummaries(this.summaryCache.chats, chatGuid, m);
     if (result === null) {
       this.clearCache();
       return;
     }
-    if (result === this.summaryCache.chats) return; // stale message — nothing changed
-    const updated = result.find((chat) => chat.guid === chatGuid);
-    if (updated?.flags.unresponded && updated.lastMessage) {
-      this.db.setOpenTriageItem(chatGuid, updated.lastMessage.guid, updated.lastMessage.dateCreated);
-    } else {
-      this.db.clearOpenTriageItem(chatGuid);
-    }
     this.summaryCache = { ...this.summaryCache, chats: result };
   }
 
-  async summaries(): Promise<{ ok: true; chats: ChatSummary[] } | { ok: false; error: string }> {
+  async summaries(): Promise<{ ok: true; chats: DirectoryChat[] } | { ok: false; error: string }> {
     if (this.summaryCache && this.now() - this.summaryCache.at < SUMMARY_TTL_MS) {
       return { ok: true, chats: this.summaryCache.chats };
     }
@@ -284,20 +260,14 @@ export class ChatDirectory {
     );
     await this.contacts.refresh();
     const unread = await this.unreadCounts();
-    const overlay = this.db.getAll();
     let chats = all
       .map((chat) => {
-        const state = overlay.get(chat.guid);
-        const summary = mapChat(chat, state, this.names, unread.get(chat.guid));
+        const summary = mapChat(chat, this.names, unread.get(chat.guid));
         // Mark-read override: trust our own mark-read over BB's lagging DB.
-        // Persisted (overlay) readAt survives restarts — Apple never back-fills
-        // dateRead on old group messages, so without it the scan resurrects
-        // long-read chats as unread after every deploy.
-        const readAt = Math.max(this.localReadAt.get(chat.guid) ?? 0, state?.readAt ?? 0);
+        const readAt = this.localReadAt.get(chat.guid) ?? 0;
         if (readAt && (summary.lastMessage?.dateCreated ?? 0) <= readAt) {
           summary.unreadCount = 0;
           summary.firstUnreadAt = null;
-          summary.flags.unread = state?.markedUnread === 1;
         }
         return summary;
       })
@@ -311,18 +281,6 @@ export class ChatDirectory {
     return { ok: true, chats };
   }
 
-  async reconcileState(): Promise<void> {
-    const result = await this.summaries();
-    if (!result.ok) return;
-    for (const chat of result.chats) {
-      if (chat.flags.unresponded && chat.lastMessage) {
-        this.db.setOpenTriageItem(chat.guid, chat.lastMessage.guid, chat.lastMessage.dateCreated);
-      } else {
-        this.db.clearOpenTriageItem(chat.guid);
-      }
-    }
-  }
-
   /**
    * Apple keeps a separate chat row per service (iMessage;-;X, SMS;-;X, RCS)
    * for the SAME person; Messages.app merges them silently. Do the same: fold
@@ -330,10 +288,10 @@ export class ChatDirectory {
    * "primary" — also the guid sends target, so replies use the last-working
    * service). Input is sorted newest-first, so first occurrence is primary.
    */
-  private mergeServiceSiblings(chats: ChatSummary[]): ChatSummary[] {
+  private mergeServiceSiblings(chats: DirectoryChat[]): DirectoryChat[] {
     this.siblingMap.clear();
-    const byKey = new Map<string, ChatSummary>();
-    const out: ChatSummary[] = [];
+    const byKey = new Map<string, DirectoryChat>();
+    const out: DirectoryChat[] = [];
     for (const c of chats) {
       const key = mergeKey(c);
       if (!key) {
@@ -342,7 +300,7 @@ export class ChatDirectory {
       }
       const existing = byKey.get(key);
       if (!existing) {
-        const merged = { ...c, flags: { ...c.flags } };
+        const merged = { ...c };
         byKey.set(key, merged);
         out.push(merged);
         this.siblingMap.set(c.guid, { primary: c.guid, all: [c.guid] });
@@ -359,7 +317,6 @@ export class ChatDirectory {
           const a = existing.firstUnreadAt ?? null;
           const b = c.firstUnreadAt ?? null;
           existing.firstUnreadAt = a === null ? b : b === null ? a : Math.min(a, b);
-          existing.flags.unread = existing.flags.unread || c.flags.unread;
         }
         existing.known = existing.known || c.known;
       }
@@ -433,105 +390,17 @@ export class ChatDirectory {
     this.patchSummaries(chatGuid, message);
   }
 
+  /** Sends the read receipt; the read itself is Convex's. A local override covers BlueBubbles' lag. */
   async markRead(guid: string): Promise<boolean> {
     const result = await this.bb.markRead(guid);
     if (result.ok) {
       this.clearCache();
       this.localReadAt.set(guid, this.now());
-      this.db.setReadAt(guid, this.now());
       this.resetUnreadScan();
       this.unreadScan.summaries.set(guid, { count: 0, firstUnreadAt: null });
-      this.db.setMarkedUnread(guid, false);
       this.emitChanged();
     }
     return result.ok;
-  }
-
-  markUnread(guid: string): void {
-    this.db.setMarkedUnread(guid, true);
-    // Keep localReadAt: manual unread is an overlay flag, not evidence that
-    // BlueBubbles' lagging unread rows became genuinely unread again.
-    this.clearCache();
-    this.emitChanged();
-  }
-
-  setPinned(guid: string, pinned: boolean): void {
-    this.db.setPinned(guid, pinned);
-    this.invalidate();
-  }
-
-  /**
-   * Settles a conversation on the message the user saw. Never trusts BlueBubbles' /chat/query
-   * last message, which can be a tapback or, for old chats, a stale earlier message: it reads the
-   * chat's own newest messages and finds the newest one that is not a tapback or unsent, the same
-   * message Convex shows as last and compares the dismissal with. Whose message that is decides
-   * Needs you or Waiting. With an anchor, a real message after it rejects the settle.
-   */
-  async settle(
-    guid: string,
-    anchor?: string,
-    /** Every chat Convex groups into this conversation; read and written alongside the Mini's own siblings. */
-    conversationChats: readonly string[] = [],
-  ): Promise<{ ok: boolean; error?: string; status?: 404 | 409 | 502 }> {
-    await this.ensureSiblings();
-    const chats = [...new Set([...this.siblingGuids(guid), ...conversationChats])];
-    const newest = await this.newestRealMessage(chats);
-    if (!newest.ok) return { ok: false, error: newest.error, status: 502 };
-    const last = newest.message;
-    if (!last) return { ok: false, error: "chat has no last message", status: 404 };
-    if (anchor && anchor !== last.guid) return { ok: false, error: "latest message changed", status: 409 };
-    const kind = last.isFromMe ? "waiting" : "unresponded";
-    for (const sibling of chats) {
-      if (kind === "unresponded") this.db.dismissUnresponded(sibling, last.guid);
-      else this.db.dismissWaiting(sibling, last.guid);
-    }
-    const canonical = this.canonicalGuid(guid);
-    this.db.recordTriageClear(canonical, last.guid, "dismiss", this.now());
-    this.db.clearOpenTriageItem(canonical);
-    this.invalidate();
-    return { ok: true };
-  }
-
-  /** The newest message across service siblings that is not a tapback or unsent, paging back as far as it takes. */
-  private async newestRealMessage(chats: readonly string[]): Promise<{ ok: true; message: BBMessage | null } | { ok: false; error: string }> {
-    const PAGE = 50;
-    const cursors = new Map(chats.map((chat) => [chat, undefined as number | undefined]));
-    const seen = new Set<string>();
-    while (cursors.size > 0) {
-      const pages = await Promise.all([...cursors].map(async ([sibling, before]) => [sibling, await this.bb.chatMessages(sibling, { limit: PAGE, ...(before ? { before } : {}) })] as const));
-      const batch: BBMessage[] = [];
-      for (const [sibling, page] of pages) {
-        if (!page.ok) return { ok: false, error: page.error };
-        const fresh = page.value.filter((m) => !seen.has(m.guid));
-        for (const m of fresh) seen.add(m.guid);
-        batch.push(...fresh);
-        const oldest = page.value.at(-1)?.dateCreated;
-        // A short page, or one with nothing new (an inclusive `before`), is the end of this sibling.
-        if (page.value.length < PAGE || fresh.length === 0 || oldest === undefined) cursors.delete(sibling);
-        else cursors.set(sibling, oldest);
-      }
-      // Newest first across siblings; within this window any real message beats every older page.
-      const real = batch.filter((m) => !isQuietMessage(m)).toSorted((a, b) => (b.dateCreated ?? 0) - (a.dateCreated ?? 0))[0];
-      if (real) return { ok: true, message: real };
-    }
-    return { ok: true, message: null };
-  }
-
-  async undismiss(
-    guid: string,
-    kind: "unresponded" | "waiting",
-  ): Promise<{ ok: boolean; error?: string; status?: 502 }> {
-    await this.ensureSiblings();
-    const canonical = this.canonicalGuid(guid);
-    const state = this.db.getAll();
-    for (const sibling of this.siblingGuids(guid)) {
-      // Drop the clear recorded for whatever this dismissal pointed at, not a guess at the last message.
-      const dismissed = kind === "unresponded" ? state.get(sibling)?.dismissedUnrespondedGuid : state.get(sibling)?.dismissedWaitingGuid;
-      if (dismissed) this.db.deleteTriageClear(canonical, dismissed);
-      this.db.clearDismissal(sibling, kind);
-    }
-    this.invalidate();
-    return { ok: true };
   }
 
   async findByAddress(

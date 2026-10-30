@@ -79,7 +79,7 @@ test("sends share BlueBubbles history, preserve the client key, clear drafts, an
   expect(await call<unknown>("comma/outbox:outboxStatusFor", { clientKeys: [clientKey] })).toEqual([{ clientKey, status: "sent" }]);
 });
 
-test("read, unread, settle, unsettle, pin, and mute update the shared overlay", async () => {
+test("read, unread, settle, unsettle, pin, and mute enqueued by an older client apply to the triage state", async () => {
   await command({ kind: "markUnread" });
   expect((await conversation()).flags.unread).toBe(true);
   await command({ kind: "markRead" });
@@ -88,10 +88,26 @@ test("read, unread, settle, unsettle, pin, and mute update the shared overlay", 
   expect((await conversation()).flags.unresponded).toBe(false);
   await command({ kind: "unsettle" });
   expect((await conversation()).flags.unresponded).toBe(true);
-  await command({ kind: "pin", value: true });
-  await command({ kind: "mute", value: true });
-  expect((await conversation()).flags.pinned).toBe(true);
-  expect(db.getAll().get(CHAT_GUIDS.needs)?.mutedUnresponded).toBe(1);
+  await command({ kind: "pin", value: false });
+  expect((await conversation()).flags.pinned).toBe(false);
+  const mute = await command({ kind: "mute", value: true });
+  expect(await call("comma/outbox:getCommand", { commandId: mute })).toMatchObject({ status: "sent", result: { kind: "mute", ok: true } });
+});
+
+test("comma/triage settles against the shown last message, reads with a receipt, and a reply joins the clear log", async () => {
+  const triage = (name: string, args: Record<string, unknown> = {}) => call<unknown>(`comma/triage:${name}`, { conversationId: CHAT_GUIDS.needs, ...args });
+  await expect(triage("settle", { anchor: "needs-1" })).rejects.toThrow("latest message changed");
+  await triage("settle", { anchor: "needs-2" });
+  expect((await conversation()).flags.unresponded).toBe(false);
+  await triage("unsettle");
+  expect((await conversation()).flags.unresponded).toBe(true);
+  await triage("markUnread");
+  const receipt = await triage("markRead", { at: FIXTURE_NOW });
+  expect((await conversation()).flags.unread).toBe(false);
+  expect(await call("comma/outbox:getCommand", { commandId: receipt })).toMatchObject({ status: "sent", result: { kind: "markRead", ok: true } });
+  await command({ kind: "send", text: "on it" });
+  const today = await call<{ cleared: unknown[] }>("comma/today:get", { day: "2026-10-27" });
+  expect(today.cleared).toEqual([{ conversationId: CHAT_GUIDS.needs, at: expect.any(Number) }]);
 });
 
 test("settle and un-settle carry the conversation's agent chats, and sending a chat's draft settles it", async () => {

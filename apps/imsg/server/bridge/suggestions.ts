@@ -1,6 +1,7 @@
 import type { AiService } from "../ai/service";
 import type { OverlayDb } from "../db";
-import type { ChatSummary, ReplySuggestions, SuggestionModel } from "../../shared/types";
+import type { DirectoryChat } from "../map";
+import type { ReplySuggestions, SuggestionModel } from "../../shared/types";
 import type { ConvexIngest, MessageRow } from "./convex-ingest";
 
 export type ShelfUpdate =
@@ -24,7 +25,7 @@ export interface SuggestionDeps {
   ai: Pick<AiService, "available" | "replySuggestions"> & Partial<Pick<AiService, "cachedReplySuggestions">>;
   db: OverlayDb;
   ingest: Pick<ConvexIngest, "post">;
-  getChat: (chatGuid: string) => Promise<ChatSummary | null>;
+  getChat: (chatGuid: string) => Promise<DirectoryChat | null>;
   now?: () => number;
 }
 

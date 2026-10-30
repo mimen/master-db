@@ -29,10 +29,10 @@ function write(state: ChatState, intent: FlagIntent, last: ChatSummary["lastMess
   switch (intent.change) {
     case "settle": return last && (intent.seen === undefined ? last.isFromMe : last.guid === intent.seen)
       ? { ...state, dismissedUnrespondedGuid: last.guid, dismissedWaitingGuid: last.guid } : state;
-    case "unsettle": return { ...state, dismissedUnrespondedGuid: null, dismissedWaitingGuid: null };
-    case "read": return { ...state, readAt: intent.at, markedUnread: 0 };
-    case "unread": return { ...state, markedUnread: 1 };
-    case "pin": return { ...state, pinned: Number(intent.value) };
+    case "unsettle": return { ...state, dismissedUnrespondedGuid: undefined, dismissedWaitingGuid: undefined };
+    case "read": return { ...state, readAt: intent.at, markedUnread: false };
+    case "unread": return { ...state, markedUnread: true };
+    case "pin": return { ...state, pinned: intent.value };
     case "rename": return state;
   }
 }
@@ -41,12 +41,12 @@ function write(state: ChatState, intent: FlagIntent, last: ChatSummary["lastMess
 function overlayOf(chat: ChatSummary): ChatState {
   const last = chat.lastMessage;
   return {
-    chatGuid: chat.guid,
-    dismissedUnrespondedGuid: last && !last.isFromMe && !chat.flags.unresponded ? last.guid : null,
-    dismissedWaitingGuid: last && last.isFromMe && !chat.flags.waiting ? last.guid : null,
-    mutedUnresponded: 0,
-    pinned: Number(chat.flags.pinned),
-    markedUnread: Number(chat.flags.unread && chat.unreadCount === 0),
+    dismissedUnrespondedGuid: last && !last.isFromMe && !chat.flags.unresponded ? last.guid : undefined,
+    dismissedWaitingGuid: last && last.isFromMe && !chat.flags.waiting ? last.guid : undefined,
+    mutedUnresponded: false,
+    pinned: chat.flags.pinned,
+    markedUnread: chat.flags.unread && chat.unreadCount === 0,
+    readAt: -1,
   };
 }
 
@@ -54,7 +54,7 @@ function apply(chat: ChatSummary, pending: readonly PendingFlag[]): ChatSummary 
   const intents = pending.map(({ intent }) => intent);
   const state = intents.reduce((current, intent) => write(current, intent, chat.lastMessage), overlayOf(chat));
   // listConversations' rule: a read at or after the last message zeroes the count.
-  const unreadCount = (state.readAt ?? -1) >= (chat.lastMessage?.dateCreated ?? 0) ? 0 : chat.unreadCount;
+  const unreadCount = state.readAt >= (chat.lastMessage?.dateCreated ?? 0) ? 0 : chat.unreadCount;
   const flags = computeFlags(state, chat.lastMessage, unreadCount);
   const displayName = intents.reduce((name, intent) => intent.change === "rename" ? intent.name : name, chat.displayName);
   // Convex settles the agent chats when it takes the command, so by the bridge's confirmation the

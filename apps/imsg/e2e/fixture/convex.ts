@@ -15,6 +15,7 @@ import type { OverlayDb } from "../../server/db";
 import type { ChatSummary, Contact, ReplySuggestions, TranscriptState } from "../../shared/types";
 import { createAgentFixture } from "./agent";
 import { createTodayFixture, type TodayMode } from "./today";
+import { createTriageFixture } from "./triage";
 import type { FixtureBlueBubbles } from "./fake-bluebubbles";
 import { AGENT_SEED, fixtureSeed, FIXTURE_NOW, type FixtureIdentity } from "./world";
 
@@ -144,10 +145,18 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return upload?.filename && upload.mimeType ? { filename: upload.filename, mimeType: upload.mimeType, size: upload.bytes.size } : null;
     },
   }, 400, AGENT_SEED);
+  const triage = createTriageFixture({
+    lastMessage: async (chatGuid) => {
+      const row = (await conversations()).find((candidate) => candidate._id === chatGuid);
+      return row ? row.lastMessage ?? null : undefined;
+    },
+    settled: (chatGuid) => agent.outbox.settle(chatGuid),
+    unsettled: (chatGuid) => agent.outbox.unsettle(chatGuid),
+  });
   const chatSummaries = async () => {
     const result = await controls.directory.summaries();
     if (!result.ok) throw new FixtureError(result.error, 502);
-    return result.chats;
+    return result.chats.map(triage.flagged);
   };
   const accept = (result: { ok: boolean; error?: string; status?: number }) => {
     if (!result.ok) throw new FixtureError(result.error ?? "BlueBubbles operation failed", result.status);
@@ -218,15 +227,16 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         transcripts.set(payload.attachmentGuid, transcript);
         return { kind: "transcribe" as const, transcript };
       }
-      case "markRead": accept({ ok: await commands.markRead(chatGuid) }); break;
-      case "markUnread": directory.markUnread(chatGuid); break;
-      case "pin": directory.setPinned(chatGuid, payload.value); break;
-      case "mute": db.setMutedUnresponded(chatGuid, payload.value); directory.invalidate(); break;
-      case "settle": accept(await directory.settle(chatGuid, payload.messageGuid)); break;
-      case "unsettle":
-        accept(await directory.undismiss(chatGuid, "unresponded"));
-        accept(await directory.undismiss(chatGuid, "waiting"));
+      // Production's enqueue applies the triage kinds in Convex; only markRead goes on to the Mini, for the receipt.
+      case "markRead":
+        triage.read(chatGuid, FIXTURE_NOW);
+        accept({ ok: await commands.markRead(chatGuid), error: "BlueBubbles mark read failed" });
         break;
+      case "markUnread": await triage.flag(chatGuid, { markedUnread: true }); break;
+      case "pin": await triage.flag(chatGuid, { pinned: payload.value }); break;
+      case "mute": await triage.flag(chatGuid, { mutedUnresponded: payload.value }); break;
+      case "settle": await triage.settle(chatGuid, payload.messageGuid); break;
+      case "unsettle": await triage.unsettle(chatGuid); break;
       case "react": accept(await commands.react(payload.messageGuid, { ...payload, chatGuid })); break;
       case "edit": accept(await commands.edit(payload.messageGuid, payload.text, payload.partIndex)); break;
       case "unsend": accept(await commands.unsend(payload.messageGuid, payload.partIndex)); break;
@@ -345,7 +355,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   });
   const today = createTodayFixture({
     chats: chatSummaries,
-    clears: () => db.overlaySnapshot().triageEvents,
+    clears: triage.clears,
     canonical: (chatGuid) => controls.directory.canonicalGuid(chatGuid),
   });
   // Drives switch the header between the seeded queue, before the morning build, and a failed build.
@@ -357,6 +367,11 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   });
   const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
     ...today.handlers,
+    ...triage.handlers,
+    "comma/triage:markRead": async (args) => {
+      triage.read(String(args.conversationId), Number(args.at));
+      return handlers["comma/outbox:enqueue"]!({ clientKey: `markRead-${String(args.conversationId)}-${new Date().getTime()}`, conversationId: args.conversationId, payload: { kind: "markRead" } });
+    },
     "comma/linkPreview:fetchLinkPreview": async (args) => {
       const url = typeof args.url === "string" ? parsePublicPreviewUrl(args.url) : null;
       return url ? extractLinkPreview('<title>Fixture link preview</title><meta name="description" content="A deterministic preview for fixture messages.">', url) : null;
@@ -492,11 +507,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       const execution = (async () => {
         const payload = args.payload as CommaOutboxPayload;
         const chatGuid = typeof args.conversationId === "string" ? args.conversationId : "";
+        const conversation = (await conversations()).find((row) => row._id === chatGuid);
         if (payload.kind === "createChat" || payload.kind === "clearSuggestionLearning") {
           if (chatGuid) throw new FixtureError(`${payload.kind} must be global`, 400);
-        } else if (!(await conversations()).some((row) => row._id === chatGuid)) throw new FixtureError("Conversation not found", 400);
-        if (payload.kind === "settle") agent.outbox.settle(chatGuid);
-        if (payload.kind === "unsettle") agent.outbox.unsettle(chatGuid);
+        } else if (!conversation) throw new FixtureError("Conversation not found", 400);
         // Production's enqueue writes this temp row; the bridge's completion retires it.
         if (payload.kind === "send") {
           const primaryChatGuid = (await conversations()).find((row) => row._id === chatGuid)!.primaryChatGuid;
@@ -511,6 +525,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         }
         const result = await execute(chatGuid, payload, clientKey).finally(() => temps.delete(clientKey));
         const resultGuid = result && "message" in result ? result.message.guid : undefined;
+        if (result && "message" in result) triage.replied(chatGuid, conversation?.lastMessage ?? null, result.message.dateCreated);
         const draft = drafts.get(chatGuid);
         if (draft && (payload.kind === "send" || (payload.kind === "sendAttachment" && draft.attachments?.some((a) => a.storageId === payload.storageId)))) {
           agent.outbox.sentDraft(draft.agentChatId);
@@ -555,6 +570,6 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: error instanceof FixtureError ? error.status : 400 });
     }
   });
-  return () => { agent.reset(); today.reset(); latency.clear(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
+  return () => { agent.reset(); today.reset(); triage.reset(); latency.clear(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
     for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };
 }

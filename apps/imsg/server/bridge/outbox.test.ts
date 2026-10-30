@@ -31,7 +31,7 @@ function harness(now = 1_000) {
   const db = new OverlayDb(":memory:");
   const ingest = new FakeIngest();
   const contacts = new ContactBook(bb);
-  const commands = new ChatCommands(bb, new ChatDirectory(bb, db, contacts), contacts);
+  const commands = new ChatCommands(bb, new ChatDirectory(bb, contacts), contacts);
   const writer = new MessageWriter({ bb, db, ingest });
   writer.conversationIds.set(CHAT, ingest.id);
   const { client, fire } = fakeClient();
@@ -93,15 +93,15 @@ test("a transport error mid-send completes as unknown and is never retried", asy
   } finally { bridge.stop(); }
 });
 
-test("pin writes the overlay and completes as sent", async () => {
+test("a triage command queued before Convex applied it fails instead of reaching BlueBubbles", async () => {
   const h = harness();
   await h.writer.refreshChats();
   h.ingest.outboxRows.push(row("p1", { kind: "pin", value: true }));
   const bridge = h.start();
   try {
     await bridge.flush();
-    expect(h.db.getAll().get(CHAT)?.pinned).toBe(1);
-    expect(completions(h.ingest)).toEqual([expect.objectContaining({ clientKey: "p1", status: "sent" })]);
+    expect(completions(h.ingest)).toEqual([expect.objectContaining({ clientKey: "p1", status: "failed",
+      error: "Convex applies this command; the Mini never executes it" })]);
   } finally { bridge.stop(); }
 });
 
@@ -121,7 +121,7 @@ test("a disabled bridge does not subscribe or claim", async () => {
   const h = harness();
   const bridge = new OutboxBridge({
     config: { convexCloudUrl: null, commaBridgeSecret: "test" },
-    writer: h.writer, commands: new ChatCommands(h.bb, new ChatDirectory(h.bb, h.db, new ContactBook(h.bb)), new ContactBook(h.bb)),
+    writer: h.writer, commands: new ChatCommands(h.bb, new ChatDirectory(h.bb, new ContactBook(h.bb)), new ContactBook(h.bb)),
   });
   try {
     await bridge.flush();

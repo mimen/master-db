@@ -23,7 +23,7 @@ function fixture() {
   const db = new OverlayDb(":memory:");
   const ingest = new FakeIngest();
   const contacts = new ContactBook(bb);
-  const commands = new ChatCommands(bb, new ChatDirectory(bb, db, contacts), contacts);
+  const commands = new ChatCommands(bb, new ChatDirectory(bb, contacts), contacts);
   return { config, bb, db, ingest, commands, chatDbPath: "/nonexistent/chat.db", avatarDirectory: "/nonexistent/comma-avatar-fixture" };
 }
 

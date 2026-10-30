@@ -1,13 +1,12 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { BBContact, BBMessage } from "./bb-types";
 import { FakeBlueBubbles, type FakeChatSeed } from "./bluebubbles-fake";
 import { ChatDirectory } from "./chat-directory";
 import { ContactBook } from "./contacts";
-import { OverlayDb } from "./db";
 import { MessageSearch } from "./message-search";
-import { mapMessage, tapbackReactionEvent } from "./map";
+import { mapMessage, tapbackReactionEvent, type DirectoryChat } from "./map";
 import { matchesFilters } from "../shared/chat-state";
-import type { ChatSummary } from "../shared/types";
+import type { TypeFilter } from "../shared/types";
 
 // ---------------------------------------------------------------- fixtures
 
@@ -51,15 +50,13 @@ function twoChatSeed(): FakeChatSeed[] {
 
 async function setup(chats: FakeChatSeed[] = twoChatSeed(), now: () => number = Date.now): Promise<{
   bb: FakeBlueBubbles;
-  db: OverlayDb;
   directory: ChatDirectory;
   contacts: ContactBook;
 }> {
   const bb = new FakeBlueBubbles({ chats, contacts: [ALICE, BOB] });
-  const db = new OverlayDb(":memory:");
   const contacts = new ContactBook(bb);
   await contacts.refresh(true);
-  const directory = new ChatDirectory(bb, db, contacts, now);
+  const directory = new ChatDirectory(bb, contacts, now);
   // Bridge the event stream exactly like server/index.ts does.
   bb.onEvent((event) => {
     if (event.kind === "new-message") {
@@ -68,10 +65,15 @@ async function setup(chats: FakeChatSeed[] = twoChatSeed(), now: () => number = 
       directory.applyUpdatedMessage(event.message.chats?.[0]?.guid ?? null, event.message);
     }
   });
-  return { bb, db, directory, contacts };
+  return { bb, directory, contacts };
 }
 
-function find(chats: ChatSummary[], guid: string): ChatSummary {
+/** The type lens over a directory row. The "all" state reads no triage flags, which the directory never has. */
+function inLens(chat: DirectoryChat, type: TypeFilter): boolean {
+  return matchesFilters({ ...chat, flags: { unresponded: false, waiting: false, unread: false, mutedUnresponded: false, pinned: false } }, "all", type);
+}
+
+function find(chats: DirectoryChat[], guid: string): DirectoryChat {
   const chat = chats.find((c) => c.guid === guid);
   if (!chat) throw new Error(`chat ${guid} not in summaries`);
   return chat;
@@ -88,27 +90,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 // ---------------------------------------------------------------- summaries
 
 describe("ChatDirectory.summaries", () => {
-  test("rebuilds without writing overlay or triage state", async () => {
-    let now = Date.now();
-    const { db, directory } = await setup([{ guid: CHAT_A, messages: [inbound("a1", now + 1000)] }], () => now);
-    db.setPinned(CHAT_A, true);
-    now += 3000;
-    const before = db.getAll();
-    const pinned = spyOn(db, "setPinned");
-    const open = spyOn(db, "setOpenTriageItem");
-    const clear = spyOn(db, "clearOpenTriageItem");
-    try {
-      const result = await directory.summaries();
-      if (!result.ok) throw new Error(result.error);
-      expect(find(result.chats, CHAT_A).flags.pinned).toBe(true);
-      expect(db.getAll()).toEqual(before);
-      for (const write of [pinned, open, clear]) expect(write).not.toHaveBeenCalled();
-    } finally {
-      for (const write of [pinned, open, clear]) write.mockRestore();
-    }
-  });
-
-  test("builds a flag-annotated list from the seeded chats", async () => {
+  test("builds the list from the seeded chats", async () => {
     const { directory } = await setup();
     const result = await directory.summaries();
     expect(result.ok).toBe(true);
@@ -119,8 +101,7 @@ describe("ChatDirectory.summaries", () => {
     expect(a.known).toBe(true);
     expect(a.contactsAvailable).toBe(true);
     expect(a.lastMessage?.text).toBe("hey from alice");
-    expect(a.flags.unresponded).toBe(true); // inbound last message
-    expect(a.flags.unread).toBe(true);
+    expect(a.unreadCount).toBe(1);
   });
 
   test("attributes a group tapback when lastMessage omits its handle relation", async () => {
@@ -166,14 +147,13 @@ describe("ChatDirectory.summaries", () => {
     await contacts.refresh(true);
     expect(contacts.available).toBe(true);
 
-    const db = new OverlayDb(":memory:");
-    const directory = new ChatDirectory(bb, db, contacts);
+    const directory = new ChatDirectory(bb, contacts);
     let changes = 0;
     directory.onEvent(() => changes++);
     let result = await directory.summaries();
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(matchesFilters(find(result.chats, unknownGuid), "all", "known")).toBe(false);
+    expect(inLens(find(result.chats, unknownGuid), "known")).toBe(false);
 
     bb.contacts = () => Promise.resolve({ ok: false, error: "contacts unavailable" });
     await contacts.refresh(true);
@@ -189,8 +169,8 @@ describe("ChatDirectory.summaries", () => {
     const unknown = find(result.chats, unknownGuid);
     expect(unknown.known).toBe(false);
     expect(unknown.contactsAvailable).toBe(false);
-    expect(matchesFilters(unknown, "all", "known")).toBe(true);
-    expect(matchesFilters(unknown, "all", "unknown")).toBe(false);
+    expect(inLens(unknown, "known")).toBe(true);
+    expect(inLens(unknown, "unknown")).toBe(false);
   });
 
   test("scans every page and records the earliest genuine unread message", async () => {
@@ -257,10 +237,8 @@ describe("ChatDirectory.summaries", () => {
     const result = await directory.summaries();
     if (!result.ok) return;
     const chat = find(result.chats, CHAT_A);
-    expect(chat.flags.waiting).toBe(true);
     expect(chat.unreadCount).toBe(0);
     expect(chat.firstUnreadAt).toBeNull();
-    expect(chat.flags.unread).toBe(false);
   });
 
   test("uses the genuine last message as a fallback only when the unread query fails", async () => {
@@ -361,8 +339,6 @@ describe("ChatDirectory reactive fast path", () => {
     expect(result.chats[0]?.guid).toBe(CHAT_A); // moved to top
     const a = find(result.chats, CHAT_A);
     expect(a.lastMessage?.text).toBe("new inbound!");
-    expect(a.flags.unresponded).toBe(true);
-    expect(a.flags.unread).toBe(true);
     expect(a.unreadCount).toBe(2);
     expect(a.firstUnreadAt).toBe(1000);
   });
@@ -479,8 +455,8 @@ describe("ChatDirectory reactive fast path", () => {
     if (!result.ok) return;
     const a = find(result.chats, CHAT_A);
     expect(a.isSpam).toBe(true);
-    expect(matchesFilters(a, "all", "known")).toBe(false);
-    expect(matchesFilters(a, "all", "unknown")).toBe(true);
+    expect(inLens(a, "known")).toBe(false);
+    expect(inLens(a, "unknown")).toBe(true);
   });
 
   test("realtime junk survives an invalidated-cache rebuild", async () => {
@@ -501,8 +477,8 @@ describe("ChatDirectory reactive fast path", () => {
     const a = find(result.chats, CHAT_A);
     expect(a.isSpam).toBe(true);
     expect(a.unreadCount).toBe(2);
-    expect(matchesFilters(a, "all", "known")).toBe(false);
-    expect(matchesFilters(a, "all", "unknown")).toBe(true);
+    expect(inLens(a, "known")).toBe(false);
+    expect(inLens(a, "unknown")).toBe(true);
   });
 
   test("concurrent stale rebuilds cannot drop realtime junk screening", async () => {
@@ -552,7 +528,7 @@ describe("ChatDirectory reactive fast path", () => {
     if (!result.ok) return;
     const a = find(result.chats, CHAT_A);
     expect(a.isSpam).toBe(true);
-    expect(matchesFilters(a, "all", "known")).toBe(false);
+    expect(inLens(a, "known")).toBe(false);
   });
 
   test("updated junk classification replaces the realtime override", async () => {
@@ -572,10 +548,10 @@ describe("ChatDirectory reactive fast path", () => {
     if (!result.ok) return;
     const a = find(result.chats, CHAT_A);
     expect(a.isSpam).toBe(false);
-    expect(matchesFilters(a, "all", "known")).toBe(true);
+    expect(inLens(a, "known")).toBe(true);
   });
 
-  test("junk override preserves local read and pin state", async () => {
+  test("junk override preserves the local read", async () => {
     const { directory } = await setup();
     await directory.summaries();
     directory.applyMessage(CHAT_A, {
@@ -583,15 +559,13 @@ describe("ChatDirectory reactive fast path", () => {
       isSpam: true,
     });
     expect(await directory.markRead(CHAT_A)).toBe(true);
-    directory.setPinned(CHAT_A, true);
 
     const result = await directory.summaries();
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const a = find(result.chats, CHAT_A);
     expect(a.isSpam).toBe(true);
-    expect(a.flags.unread).toBe(false);
-    expect(a.flags.pinned).toBe(true);
+    expect(a.unreadCount).toBe(0);
   });
 
   test("updated messages invalidate summaries for authoritative reconciliation", async () => {
@@ -611,7 +585,7 @@ describe("ChatDirectory reactive fast path", () => {
     expect(bb.calls.queryChats).toBe(rebuilds + 1);
   });
 
-  test("outbound message sets waiting and clears unresponded", async () => {
+  test("an outbound message becomes the last message and reads the conversation", async () => {
     const { bb, directory, contacts } = await setup();
     await directory.summaries();
 
@@ -623,8 +597,8 @@ describe("ChatDirectory reactive fast path", () => {
     const result = await directory.summaries();
     if (!result.ok) return;
     const a = find(result.chats, CHAT_A);
-    expect(a.flags.waiting).toBe(true);
-    expect(a.flags.unresponded).toBe(false);
+    expect(a.lastMessage).toMatchObject({ text: "my reply", isFromMe: true });
+    expect(a.unreadCount).toBe(0);
     expect(bb.sentTexts).toEqual([{ chatGuid: CHAT_A, message: "my reply" }]);
   });
 
@@ -650,14 +624,10 @@ describe("ChatDirectory reactive fast path", () => {
     expect(find(result.chats, CHAT_A).unreadCount).toBe(1);
   });
 
-  test("markRead clears unread via the local override even when BB still says unread", async () => {
-    const { bb, db, directory } = await setup();
-    directory.markUnread(CHAT_A);
-    expect(db.getAll().get(CHAT_A)?.markedUnread).toBe(1);
-
+  test("markRead sends the receipt and clears unread via the local override even when BB still says unread", async () => {
+    const { bb, directory } = await setup();
     let result = await directory.summaries();
     if (!result.ok) return;
-    expect(find(result.chats, CHAT_A).flags.unread).toBe(true);
     expect(find(result.chats, CHAT_A).unreadCount).toBe(1);
     expect(find(result.chats, CHAT_A).firstUnreadAt).toBe(1000);
 
@@ -667,95 +637,8 @@ describe("ChatDirectory reactive fast path", () => {
 
     result = await directory.summaries(); // rebuild; fake's data still shows the message unread
     if (!result.ok) return;
-    expect(find(result.chats, CHAT_A).flags.unread).toBe(false);
     expect(find(result.chats, CHAT_A).unreadCount).toBe(0);
     expect(find(result.chats, CHAT_A).firstUnreadAt).toBeNull();
-    expect(db.getAll().get(CHAT_A)?.markedUnread).toBe(0);
-  });
-
-  test("manual unread does not invent an unread timestamp", async () => {
-    const { directory } = await setup([
-      {
-        guid: CHAT_A,
-        messages: [{ guid: "outbound", text: "sent", dateCreated: 1000, isFromMe: true }],
-      },
-    ]);
-    directory.markUnread(CHAT_A);
-
-    const result = await directory.summaries();
-    if (!result.ok) return;
-    const chat = find(result.chats, CHAT_A);
-    expect(chat.flags.unread).toBe(true);
-    expect(chat.unreadCount).toBe(0);
-    expect(chat.firstUnreadAt).toBeNull();
-  });
-
-  test("manual unread updates an already-cached summary immediately", async () => {
-    const { directory } = await setup([
-      {
-        guid: CHAT_A,
-        messages: [{ guid: "outbound", text: "sent", dateCreated: 1000, isFromMe: true }],
-      },
-    ]);
-    let result = await directory.summaries();
-    if (!result.ok) return;
-    expect(find(result.chats, CHAT_A).flags.unread).toBe(false);
-
-    directory.markUnread(CHAT_A);
-    result = await directory.summaries();
-    if (!result.ok) return;
-    expect(find(result.chats, CHAT_A).flags.unread).toBe(true);
-    expect(find(result.chats, CHAT_A).firstUnreadAt).toBeNull();
-  });
-
-  test("manual unread preserves suppression of BlueBubbles read lag", async () => {
-    const { directory } = await setup();
-    await directory.summaries();
-    expect(await directory.markRead(CHAT_A)).toBe(true);
-    directory.markUnread(CHAT_A);
-
-    const result = await directory.summaries();
-    if (!result.ok) return;
-    const chat = find(result.chats, CHAT_A);
-    expect(chat.flags.unread).toBe(true);
-    expect(chat.unreadCount).toBe(0);
-    expect(chat.firstUnreadAt).toBeNull();
-  });
-
-  test("a settled conversation stays in the default inbox lens", async () => {
-    const { directory } = await setup();
-    await directory.summaries();
-
-    const dismissed = await directory.settle(CHAT_A);
-    expect(dismissed.ok).toBe(true);
-
-    const result = await directory.summaries();
-    if (!result.ok) return;
-    const chat = find(result.chats, CHAT_A);
-    expect(chat.flags.unresponded).toBe(false);
-    expect(chat.flags.waiting).toBe(false);
-    const visible = result.chats.filter((c) => matchesFilters(c, "all", "known"));
-    expect(visible.find((c) => c.guid === CHAT_A)).toBeDefined();
-  });
-
-  test("dismiss('unresponded') clears the flag until a newer inbound arrives", async () => {
-    const { bb, directory } = await setup();
-    let result = await directory.summaries();
-    if (!result.ok) return;
-    expect(find(result.chats, CHAT_A).flags.unresponded).toBe(true);
-
-    const dismissed = await directory.settle(CHAT_A);
-    expect(dismissed.ok).toBe(true);
-
-    result = await directory.summaries();
-    if (!result.ok) return;
-    expect(find(result.chats, CHAT_A).flags.unresponded).toBe(false);
-
-    bb.receiveMessage(CHAT_A, "still there?");
-
-    result = await directory.summaries();
-    if (!result.ok) return;
-    expect(find(result.chats, CHAT_A).flags.unresponded).toBe(true);
   });
 
   test("changed fires for mutations but not for applyMessage", async () => {
@@ -769,10 +652,9 @@ describe("ChatDirectory reactive fast path", () => {
     bb.receiveMessage(CHAT_A, "quiet patch"); // fast path — no changed event
     expect(changed).toBe(0);
 
-    directory.setPinned(CHAT_A, true);
     await directory.markRead(CHAT_A);
-    await directory.settle(CHAT_A);
-    expect(changed).toBe(3);
+    directory.invalidate();
+    expect(changed).toBe(2);
   });
 });
 
@@ -950,109 +832,5 @@ describe("ChatDirectory.findByAddress", () => {
     ]);
 
     expect(await directory.findByAddress(requested, "iMessage")).toBeNull();
-  });
-});
-
-describe("Triage Desk state", () => {
-  test("a tapback after the message the user saw does not block the settle; a new message does", async () => {
-    const tapback: BBMessage = { ...inbound("t1", 1500, "Loved “hey from alice”"), associatedMessageGuid: "p:0/a1", associatedMessageType: "love" };
-    const { bb, db, directory } = await setup([{ ...twoChatSeed()[0]!, messages: [inbound("a1", 1000, "hey from alice"), tapback] }]);
-    expect(await directory.settle(CHAT_A, "a1")).toEqual({ ok: true });
-    // Convex compares the dismissal with the newest message it shows, which skips the tapback.
-    expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid).toBe("a1");
-
-    bb.receiveMessage(CHAT_A, "are you there?", { guid: "a2", handle: "+15550001111" });
-    expect(await directory.settle(CHAT_A, "a1")).toMatchObject({ ok: false, status: 409 });
-  });
-
-  test("a stale last message in BlueBubbles' chat list does not misfile the settle", async () => {
-    const { bb, db, directory } = await setup([{ ...twoChatSeed()[0]!, messages: [inbound("a0", 900, "older"), inbound("a1", 1000, "newest")] }]);
-    // Old chats come back from /chat/query naming an earlier message as their last one.
-    const query = bb.queryChats.bind(bb);
-    spyOn(bb, "queryChats").mockImplementation(async (limit, offset) => {
-      const page = await query(limit, offset);
-      return page.ok ? { ok: true, value: page.value.map((chat) => ({ ...chat, lastMessage: inbound("a0", 900, "older") })) } : page;
-    });
-    directory.invalidate();
-    expect(await directory.settle(CHAT_A, "a1")).toEqual({ ok: true });
-    expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid).toBe("a1");
-  });
-
-  test("a stale last message of mine in the chat list still settles Needs you, and un-settle undoes it", async () => {
-    const mine: BBMessage = { guid: "m0", text: "earlier, mine", dateCreated: 900, isFromMe: true };
-    const { bb, db, directory } = await setup([{ ...twoChatSeed()[0]!, messages: [mine, inbound("a1", 1000, "newest, theirs")] }]);
-    const query = bb.queryChats.bind(bb);
-    spyOn(bb, "queryChats").mockImplementation(async (limit, offset) => {
-      const page = await query(limit, offset);
-      return page.ok ? { ok: true, value: page.value.map((chat) => ({ ...chat, lastMessage: mine })) } : page;
-    });
-    directory.invalidate();
-    expect(await directory.settle(CHAT_A, "a1")).toEqual({ ok: true });
-    expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid).toBe("a1");
-    expect(db.getAll().get(CHAT_A)?.dismissedWaitingGuid ?? null).toBeNull();
-    expect(db.overlaySnapshot().triageEvents.map((e) => e.messageGuid)).toContain("a1");
-
-    await directory.undismiss(CHAT_A, "unresponded");
-    expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid ?? null).toBeNull();
-    expect(db.overlaySnapshot().triageEvents.map((e) => e.messageGuid)).not.toContain("a1");
-  });
-
-  test("the chats Convex groups into the conversation count, even ones the Mini keeps apart", async () => {
-    const other = "SMS;-;+15550002222";
-    const { db, directory } = await setup([twoChatSeed()[0]!, { guid: other, participants: [{ address: "+15550002222" }], messages: [inbound("s1", 5000, "newest, over SMS", "+15550002222")] }]);
-    expect(await directory.settle(CHAT_A, "s1")).toMatchObject({ ok: false, status: 409 });
-    expect(await directory.settle(CHAT_A, "s1", [CHAT_A, other])).toEqual({ ok: true });
-    expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid).toBe("s1");
-    expect(db.getAll().get(other)?.dismissedUnrespondedGuid).toBe("s1");
-  });
-
-  test("any number of tapbacks after the message the user saw still settles", async () => {
-    const tapbacks: BBMessage[] = Array.from({ length: 120 }, (_, i) => ({ ...inbound(`t${i}`, 2000 + i, "Loved “hi”"), associatedMessageGuid: "p:0/a1", associatedMessageType: "love" }));
-    const { db, directory } = await setup([{ ...twoChatSeed()[0]!, messages: [inbound("a1", 1000, "hi"), ...tapbacks] }]);
-    expect(await directory.settle(CHAT_A, "a1")).toEqual({ ok: true });
-    expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid).toBe("a1");
-  });
-
-  test("settles a conversation past BlueBubbles' first page of 1,000 chats", async () => {
-    const filler: FakeChatSeed[] = Array.from({ length: 1000 }, (_, i) => {
-      const address = `+1555${String(i).padStart(7, "0")}`;
-      return { guid: `iMessage;-;${address}`, participants: [{ address }], messages: [inbound(`f${i}`, 10_000 + i, "hi", address)] };
-    });
-    const { directory } = await setup([...filler, twoChatSeed()[0]!]);
-    expect(await directory.settle(CHAT_A, "a1")).toEqual({ ok: true });
-  });
-
-  test("rejects stale Done anchors and supports durable undismiss", async () => {
-    const { db, directory } = await setup();
-    const stale = await directory.settle(CHAT_A, "old-guid");
-    expect(stale).toMatchObject({ ok: false, status: 409 });
-    expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid ?? null).toBeNull();
-
-    expect((await directory.settle(CHAT_A, "a1")).ok).toBe(true);
-    let result = await directory.summaries();
-    if (!result.ok) return;
-    expect(find(result.chats, CHAT_A).flags.unresponded).toBe(false);
-    expect((await directory.undismiss(CHAT_A, "unresponded")).ok).toBe(true);
-    result = await directory.summaries();
-    if (!result.ok) return;
-    expect(find(result.chats, CHAT_A).flags.unresponded).toBe(true);
-  });
-
-  test("records dismiss and outbound clear exactly once", async () => {
-    const { db, directory, contacts } = await setup(twoChatSeed(), () => 50_000);
-    await directory.summaries();
-    await directory.settle(CHAT_A, "a1");
-    await directory.summaries();
-    const outbound = mapMessage(
-      { guid: "reply-b", text: "reply", dateCreated: 40_000, isFromMe: true },
-      CHAT_B,
-      contacts,
-    );
-    directory.applyKnownMessage(CHAT_B, outbound);
-    directory.applyKnownMessage(CHAT_B, outbound);
-    expect(db.overlaySnapshot().triageEvents).toEqual([
-      { chatGuid: CHAT_A, messageGuid: "a1", reason: "dismiss", clearedAt: 50_000 },
-      { chatGuid: CHAT_B, messageGuid: "b1", reason: "reply", clearedAt: 50_000 },
-    ]);
   });
 });

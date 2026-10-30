@@ -8,7 +8,7 @@ import { OverlayDb } from "../../server/db";
 import { FixtureAi } from "./ai";
 import { fixtureMessageWindow, registerConvexFixture } from "./convex";
 import { FixtureBlueBubbles, type FaultableMethod } from "./fake-bluebubbles";
-import { CHAT_GUIDS, FIXTURE_NOW, FixtureIdentity, fixtureSeed } from "./world";
+import { FIXTURE_NOW, FixtureIdentity, fixtureSeed } from "./world";
 
 const fixtureDirectory = dirname(fileURLToPath(import.meta.url));
 const port = Number(Bun.env.IMSG_FIXTURE_PORT ?? 8399);
@@ -50,8 +50,6 @@ const db = new OverlayDb(dbPath);
 const identity = new FixtureIdentity();
 
 function seedOverlay(): void {
-  db.setPinned(CHAT_GUIDS.needs, true);
-  db.setMarkedUnread(CHAT_GUIDS.unreadGroup, true);
   const seed = fixtureSeed();
   for (const chat of seed.chats) {
     const last = chat.messages.at(-1);
@@ -90,13 +88,10 @@ function seedOverlay(): void {
 function resetOverlay(): void {
   const sqlite = new Database(dbPath);
   const tables = [
-    "chat_state",
     "attachment_transcript",
     "ai_meta",
     "suggestion_result_cache",
     "suggestion_feedback",
-    "triage_clear_event",
-    "triage_open_item",
   ];
   sqlite.transaction(() => {
     for (const table of tables) sqlite.exec(`DELETE FROM ${table}`);
