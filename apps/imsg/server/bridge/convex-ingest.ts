@@ -30,7 +30,6 @@ export interface Bodies {
   attachments: { attachments: AttachmentRow[] };
   sync: SyncInput;
   suggestions: FunctionArgs<typeof internal.comma.internal.setSuggestions>;
-  overlay: FunctionArgs<typeof internal.comma.internal.importOverlay>;
   // Typed by hand: the committed generated API predates replaceUnread.
   unread: { chats: { chatGuid: string; count: number; firstAt: number }[] };
   scheduled: FunctionArgs<typeof internal.comma.internal.replaceScheduled>;
@@ -50,7 +49,6 @@ export interface Results {
   attachments: { written: number; skipped: number };
   sync: null;
   suggestions: null;
-  overlay: FunctionReturnType<typeof internal.comma.internal.importOverlay>;
   unread: { changed: number; unresolved: number };
   scheduled: FunctionReturnType<typeof internal.comma.internal.replaceScheduled>;
   claim: FunctionReturnType<typeof internal.comma.outbox.claimOutbox>;

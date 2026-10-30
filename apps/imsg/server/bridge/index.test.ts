@@ -32,7 +32,6 @@ test("bridge is off without a secret or with background services disabled", asyn
     const deps = { ...fixture(), ...override };
     const bridge = startBridge(deps);
     try {
-      deps.db.setPinned(CHAT, true);
       deps.bb.emit({ kind: "new-message", message: { guid: "m1" } });
       await bridge.flush();
       expect(bridge.health()).toEqual({ enabled: false, lastEventAt: null, lastReconcileAt: null, cursor: 0, pending: 0, suggestions: { generatedToday: 0, cap: 150, lastAt: null }, outbox: { inFlight: 0, lastExecutedAt: null }, media: null, photos: { matched: 0, pending: 0, uploadedThisRun: 0 } });
@@ -44,20 +43,18 @@ test("bridge is off without a secret or with background services disabled", asyn
 
 test("startup wires each mirror, reports health, and stops all subscriptions", async () => {
   const deps = fixture();
-  deps.db.setPinned(CHAT, true);
   const bridge = startBridge(deps);
   try {
     await bridge.flush();
     expect(bridge.health()).toMatchObject({ enabled: true, cursor: 1, pending: 0 });
     expect(bridge.health().lastReconcileAt).toBeGreaterThan(0);
     const kinds = deps.ingest.calls.map((call) => call.kind);
-    for (const kind of ["conversations", "messages", "sync", "overlay", "scheduled"] as const) expect(kinds).toContain(kind);
+    for (const kind of ["conversations", "messages", "sync", "scheduled"] as const) expect(kinds).toContain(kind);
     deps.bb.emit({ kind: "updated-message", message: { guid: "m1", dateRead: Date.now() } });
     await bridge.flush();
     expect(bridge.health().lastEventAt).toBeGreaterThan(0);
     bridge.stop();
     const before = deps.ingest.calls.length;
-    deps.db.setPinned(CHAT, false);
     deps.bb.emit({ kind: "group-changed" });
     bridge.scheduledChanged();
     await bridge.flush();
