@@ -156,7 +156,13 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   const conversations = async () => Promise.all((await chatSummaries()).filter((chat) => !deletedChats.has(chat.guid)).map(async (chat) => {
     const raw = await bb.getChat(chat.guid);
     const row = conversationRow(chat);
-    return { ...row, chatGuids: controls.directory.siblingGuids(chat.guid), rawDisplayName: raw.ok ? raw.value.displayName ?? "" : "" };
+    // Production's preview is the newest send the bridge has not finished.
+    const queued = [...temps.values()].filter((temp) => temp.conversationId === chat.guid).at(-1);
+    const preview = queued ? {
+      lastMessage: { guid: queued.guid, text: queued.text, dateCreated: queued.dateCreated, isFromMe: true, senderName: null, hasAttachments: false },
+      lastMessageAt: Math.max(row.lastMessageAt, queued.dateCreated),
+    } : {};
+    return { ...row, ...preview, chatGuids: controls.directory.siblingGuids(chat.guid), rawDisplayName: raw.ok ? raw.value.displayName ?? "" : "" };
   }));
   const searchContacts = (query: string, limit = 25): Contact[] => {
     const needle = query.trim().toLowerCase();

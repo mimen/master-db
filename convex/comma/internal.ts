@@ -13,6 +13,7 @@ import {
 } from "../schema/comma/validators";
 
 import { conversationKey } from "./conversationKey";
+import { tempGuid } from "./tempMessage";
 
 /**
  * Bridge write path for the Comma mirror. The bridge on the Mini calls these
@@ -170,17 +171,33 @@ export async function refoldTarget(ctx: MutationCtx, targetGuid: string): Promis
   await ctx.db.patch(target._id, { reactions: foldTapbacks(tapbacks) });
 }
 
+/** The temp row of the newest send the bridge has not finished. */
+async function newestQueuedSend(ctx: MutationCtx, conversationId: Id<"comma_conversations">): Promise<Doc<"comma_messages"> | null> {
+  let newest: Doc<"comma_outbox"> | null = null;
+  for (const status of ["pending", "claimed"] as const) {
+    // ponytail: scans only the 50 newest commands per status; past that the preview falls back to date order.
+    const queued = await ctx.db.query("comma_outbox").withIndex("by_status_createdAt", (q) => q.eq("status", status)).order("desc").take(50);
+    const send = queued.find((row) => row.conversationId === conversationId && row.payload.kind === "send");
+    if (send && (!newest || send._creationTime > newest._creationTime)) newest = send;
+  }
+  const clientKey = newest?.clientKey;
+  return clientKey ? await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", tempGuid(clientKey))).unique() : null;
+}
+
 export async function refreshLastMessage(ctx: MutationCtx, conversationId: Id<"comma_conversations">): Promise<void> {
   const conversation = await ctx.db.get(conversationId);
   if (!conversation) return;
-  let newest: Doc<"comma_messages"> | null = null;
-  for await (const message of ctx.db
-    .query("comma_messages")
-    .withIndex("by_conversation_date", (q) => q.eq("conversationId", conversationId))
-    .order("desc")) {
-    if (!message.isTapback && !message.retracted) {
-      newest = message;
-      break;
+  // A send lands with the time the Mac sent it, later than the sends still queued behind it.
+  let newest = await newestQueuedSend(ctx, conversationId);
+  if (!newest) {
+    for await (const message of ctx.db
+      .query("comma_messages")
+      .withIndex("by_conversation_date", (q) => q.eq("conversationId", conversationId))
+      .order("desc")) {
+      if (!message.isTapback && !message.retracted) {
+        newest = message;
+        break;
+      }
     }
   }
   if (!newest) return;

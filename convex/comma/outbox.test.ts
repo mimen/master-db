@@ -158,6 +158,47 @@ describe("claim and complete", () => {
     const states = await as.query(api.comma.outbox.outboxStatusFor, { clientKeys: ["s"] });
     expect(states).toEqual([{ clientKey: "s", status: "failed", error: "BB 500" }]);
   });
+
+  // The bridge sends one command at a time, and each send lands with the time the Mac sent it.
+  const bridgeSends = async (t: T, c: Id<"comma_conversations">, key: string, status: "sent" | "failed", at: number) => {
+    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 60_000, limit: 1 });
+    expect(claim?.clientKey).toBe(key);
+    if (status === "sent") await t.mutation(internal.comma.internal.upsertMessages, { messages: [{ ...real(c, `REAL-${key}`), text: key, dateCreated: at }] });
+    await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: key, claimToken: claim!.claimToken!, status, ...(status === "sent" ? { resultGuid: `REAL-${key}` } : { error: "BB 500" }) });
+  };
+  const inbound = (t: T, c: Id<"comma_conversations">, guid: string, at: number) =>
+    t.mutation(internal.comma.internal.upsertMessages, { messages: [{ ...real(c, guid), isFromMe: false, text: guid, dateCreated: at }] });
+  const enqueueBurst = async (as: ReturnType<T["withIdentity"]>, c: Id<"comma_conversations">, keys: string[]) => {
+    for (const key of keys) await as.mutation(api.comma.outbox.enqueue, { clientKey: key, conversationId: c, payload: { kind: "send", text: key } });
+  };
+
+  test("a burst keeps its newest queued send as the preview while the sends before it land", async () => {
+    const { t, as, c } = await setup();
+    await enqueueBurst(as, c, ["a", "b", "c"]);
+    const later = Date.now() + 60_000;
+    const previews: unknown[] = [];
+    await inbound(t, c, "IN", later);
+    previews.push((await rows(t)).last);
+    for (const [i, key] of ["a", "b", "c"].entries()) {
+      await bridgeSends(t, c, key, "sent", later + 1 + i);
+      previews.push((await rows(t)).last);
+    }
+    expect(previews).toEqual(["temp-c", "temp-c", "temp-c", "REAL-c"]);
+  });
+
+  test("a failed send in a burst never holds the preview once nothing is queued", async () => {
+    const { t, as, c } = await setup();
+    await enqueueBurst(as, c, ["a", "b"]);
+    const later = Date.now() + 60_000;
+    const previews: unknown[] = [];
+    await bridgeSends(t, c, "a", "failed", later);
+    previews.push((await rows(t)).last);
+    await bridgeSends(t, c, "b", "sent", later + 1);
+    previews.push((await rows(t)).last);
+    await inbound(t, c, "IN", later + 2);
+    previews.push((await rows(t)).last);
+    expect(previews).toEqual(["temp-b", "REAL-b", "IN"]);
+  });
 });
 
 describe("pendingOutbox", () => {
