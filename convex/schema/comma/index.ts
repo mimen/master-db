@@ -55,8 +55,10 @@ export const comma_conversation_state = defineTable(conversationStateFields).ind
 
 export const comma_triage_events = defineTable(triageEventFields)
   .index("by_clearedAt", ["clearedAt"])
-  .index("by_conversationId", ["conversationId"]);
+  .index("by_conversationId", ["conversationId"])
+  .index("by_conversation_message", ["conversationId", "messageGuid"]);
 
+/** Retired: the Mini's open-item mirror. Nothing reads or writes it; its rows stay for the record. */
 export const comma_triage_open = defineTable(triageOpenFields).index("by_conversationId", ["conversationId"]);
 
 export const comma_outbox = defineTable(outboxFields)

@@ -209,11 +209,14 @@ export function MessagesWorkspace({
 
   // Keep the selected chat's flags fresh as the directory reconciles. Read from the
   // whole directory: a reply or a settle moves the open conversation out of the lens.
+  // A functional update, because a selection made in the same commit must not be
+  // overwritten with the conversation it replaced.
   useEffect(() => {
-    if (!selected) return;
-    const updated = allChats.find((chat) => chat.guid === selected.guid);
-    if (updated && updated !== selected) setSelected(updated);
-  }, [allChats, selected]);
+    setSelected((current) => {
+      const updated = current && allChats.find((chat) => chat.guid === current.guid);
+      return updated ?? current;
+    });
+  }, [allChats]);
 
   const openChat = (chat: ChatSummary): void => {
     if (wide) {

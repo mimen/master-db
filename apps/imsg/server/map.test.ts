@@ -47,7 +47,7 @@ describe("mapChat CRM inheritance", () => {
       chatCrm: { [guid]: { is_favorite: true, priority: 2, tags: ["planning"] } },
       personCrm: { "+15550001111": { is_favorite: false, priority: 5, tags: ["should-not-show"] } },
     });
-    const summary = mapChat(groupChat(guid, ["+15550001111", "+15550002222"]), undefined, contacts);
+    const summary = mapChat(groupChat(guid, ["+15550001111", "+15550002222"]), contacts);
     expect(summary.isGroup).toBe(true);
     expect(summary.crm).toEqual({ is_favorite: true, priority: 2, tags: ["planning"] });
   });
@@ -58,7 +58,7 @@ describe("mapChat CRM inheritance", () => {
       chatCrm: { [guid]: { is_favorite: false, tags: ["should-not-show"] } }, // shouldn't happen, but prove it's ignored for DMs too
       personCrm: { "+15550001111": { is_favorite: true, priority: 1, tags: ["vip"] } },
     });
-    const summary = mapChat(dmChat(guid, "+15550001111"), undefined, contacts);
+    const summary = mapChat(dmChat(guid, "+15550001111"), contacts);
     expect(summary.isGroup).toBe(false);
     expect(summary.crm).toEqual({ is_favorite: true, priority: 1, tags: ["vip"] });
   });
@@ -66,14 +66,14 @@ describe("mapChat CRM inheritance", () => {
   test("a DM whose person has no CRM data resolves to undefined, not an empty object", () => {
     const guid = "iMessage;-;+15550001111";
     const contacts = fakeNameSource({ personCrm: { "+15550001111": {} } });
-    const summary = mapChat(dmChat(guid, "+15550001111"), undefined, contacts);
+    const summary = mapChat(dmChat(guid, "+15550001111"), contacts);
     expect(summary.crm).toBeUndefined();
   });
 
   test("a DM whose address the mirror never resolved at all is undefined", () => {
     const guid = "iMessage;-;+15550009999";
     const contacts = fakeNameSource({});
-    const summary = mapChat(dmChat(guid, "+15550009999"), undefined, contacts);
+    const summary = mapChat(dmChat(guid, "+15550009999"), contacts);
     expect(summary.crm).toBeUndefined();
   });
 
@@ -82,21 +82,21 @@ describe("mapChat CRM inheritance", () => {
     const contacts = fakeNameSource({
       personCrm: { "+15550001111": { is_favorite: true, priority: 1 } },
     });
-    const summary = mapChat(groupChat(guid, ["+15550001111", "+15550002222"]), undefined, contacts);
+    const summary = mapChat(groupChat(guid, ["+15550001111", "+15550002222"]), contacts);
     expect(summary.crm).toBeUndefined();
   });
 
   test("a chat_crm/personCrm entry with only empty arrays for tags/events still collapses to undefined", () => {
     const guid = "iMessage;-;+15550001111";
     const contacts = fakeNameSource({ personCrm: { "+15550001111": { tags: [], events: [] } } });
-    const summary = mapChat(dmChat(guid, "+15550001111"), undefined, contacts);
+    const summary = mapChat(dmChat(guid, "+15550001111"), contacts);
     expect(summary.crm).toBeUndefined();
   });
 
   test("a partial CRM (only priority set) still surfaces, dropping empty tags/events", () => {
     const guid = "RCS;+;group-3";
     const contacts = fakeNameSource({ chatCrm: { [guid]: { priority: 3, tags: [] } } });
-    const summary = mapChat(groupChat(guid, ["+15550001111", "+15550002222"]), undefined, contacts);
+    const summary = mapChat(groupChat(guid, ["+15550001111", "+15550002222"]), contacts);
     expect(summary.crm).toEqual({ priority: 3 });
   });
 });

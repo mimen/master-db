@@ -25,7 +25,7 @@ async function harness() {
   }] });
   const db = new OverlayDb(":memory:");
   const names = new ContactBook(bb);
-  const commands = new ChatCommands(bb, new ChatDirectory(bb, db, names), names);
+  const commands = new ChatCommands(bb, new ChatDirectory(bb, names), names);
   const ingest = new FakeIngest();
   const writer = new MessageWriter({ bb, db, ingest });
   writer.conversationIds.set(CHAT, ingest.id);

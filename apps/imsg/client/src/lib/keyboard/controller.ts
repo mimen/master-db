@@ -50,18 +50,49 @@ export function getListAdapter(): ListAdapter | null {
 }
 
 // ------------------------------------------------------------ focus targets
-const focusTargets = new Map<string, () => void>();
-let pendingFocus: string | null = null;
+/** A focus target's live element; on web a DOM node, on native a component with focus(). */
+type FocusTarget = () => { focus(): void } | null | undefined;
 
-export function registerFocusTarget(id: string, focus: () => void): () => void {
-  focusTargets.set(id, focus);
+const focusTargets = new Map<string, FocusTarget>();
+let pendingFocus: string | null = null;
+/** Where focus was when the pending request was made. */
+let pendingFrom: Element | null = null;
+
+/** Where focus is, on web; native has no document. */
+const activeElement = (): Element | null => globalThis.document?.activeElement ?? null;
+
+function within(dialog: Element, node: unknown): boolean {
+  try {
+    return dialog.contains(node as Node);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A deferred focus never pulls focus out of a dialog opened after it was asked for, unless its target sits in that
+ * dialog. A row click's composer focus that ran after a quick ⌘K left the palette's focus trap holding its Close
+ * button instead of the search field.
+ */
+function deferredFocus(target: FocusTarget, from: Element | null): () => void {
+  return () => {
+    const node = target();
+    if (!node) return;
+    const dialog = activeElement()?.closest('[role="dialog"]');
+    if (dialog && !within(dialog, node) && !within(dialog, from)) return;
+    node.focus();
+  };
+}
+
+export function registerFocusTarget(id: string, target: FocusTarget): () => void {
+  focusTargets.set(id, target);
   if (pendingFocus === id) {
     pendingFocus = null;
     // Defer a tick so the mounting component finishes before focus lands.
-    setTimeout(focus, 0);
+    setTimeout(deferredFocus(target, pendingFrom), 0);
   }
   return () => {
-    if (focusTargets.get(id) === focus) focusTargets.delete(id);
+    if (focusTargets.get(id) === target) focusTargets.delete(id);
   };
 }
 
@@ -88,14 +119,15 @@ let pendingFocusTimer: ReturnType<typeof setTimeout> | null = null;
  */
 export function requestFocus(id: string): void {
   pendingFocus = id;
+  pendingFrom = activeElement();
   if (pendingFocusTimer) clearTimeout(pendingFocusTimer);
   pendingFocusTimer = setTimeout(() => {
     if (pendingFocus === id) pendingFocus = null;
     pendingFocusTimer = null;
   }, PENDING_FOCUS_MS);
 
-  const focus = focusTargets.get(id);
-  if (focus) setTimeout(focus, 0);
+  const target = focusTargets.get(id);
+  if (target) setTimeout(deferredFocus(target, pendingFrom), 0);
 }
 
 // ---------------------------------------------------------------- matching

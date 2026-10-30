@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { FakeBlueBubbles, type FakeChatSeed } from "./bluebubbles-fake";
 import { ChatDirectory } from "./chat-directory";
 import { ContactBook } from "./contacts";
-import { OverlayDb } from "./db";
 import { wireLiveEvents } from "./live-events";
 
 const CHAT = "iMessage;-;+15550001111";
@@ -22,29 +21,26 @@ function seed(): FakeChatSeed[] {
 async function setup(): Promise<{
   bb: FakeBlueBubbles;
   directory: ChatDirectory;
-  db: OverlayDb;
   invalidations: () => number;
 }> {
   const bb = new FakeBlueBubbles({ chats: seed(), contacts: [] });
-  const db = new OverlayDb(":memory:");
   const contacts = new ContactBook(bb);
   await contacts.refresh(true);
-  const directory = new ChatDirectory(bb, db, contacts, Date.now);
+  const directory = new ChatDirectory(bb, contacts, Date.now);
   let invalidated = 0;
   directory.onEvent(() => invalidated++);
   wireLiveEvents(bb, directory, contacts);
   await directory.summaries(); // prime cache + sibling map like a booted server
-  return { bb, db, directory, invalidations: () => invalidated };
+  return { bb, directory, invalidations: () => invalidated };
 }
 
 describe("wireLiveEvents", () => {
-  test("an inbound message updates the directory and persisted triage", async () => {
-    const { bb, directory, db } = await setup();
+  test("an inbound message updates the directory", async () => {
+    const { bb, directory } = await setup();
     bb.receiveMessage(CHAT, "fresh");
     const result = await directory.summaries();
     if (!result.ok) throw new Error(result.error);
     expect(result.chats[0]?.lastMessage?.text).toBe("fresh");
-    expect(db.getOpenTriageItem(CHAT)?.messageGuid).toBe(result.chats[0]?.lastMessage?.guid);
   });
 
   test("the boot connect leaves the primed directory intact", async () => {
@@ -52,16 +48,6 @@ describe("wireLiveEvents", () => {
     const invalidatedBefore = invalidations();
     bb.emit({ kind: "stream-connected" });
     expect(invalidations()).toBe(invalidatedBefore);
-  });
-
-  test("reconnect persists a missed inbound's open triage item", async () => {
-    const { bb, db } = await setup();
-    bb.emit({ kind: "stream-connected" });
-    expect(db.getOpenTriageItem(CHAT)).toBeNull();
-    bb.appendMessage(CHAT, { guid: "missed", text: "hello again", dateCreated: Date.now() + 1000, isFromMe: false });
-    bb.emit({ kind: "stream-connected" });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(db.getOpenTriageItem(CHAT)?.messageGuid).toBe("missed");
   });
 
   test("a reconnect rebuilds the directory", async () => {

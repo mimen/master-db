@@ -3,7 +3,7 @@ import type { ChatDirectory } from "./chat-directory";
 import type { NameSource } from "./name-resolver";
 import { tapbackReactionEvent } from "./map";
 
-/** Keeps the directory and persisted triage state current with BlueBubbles. */
+/** Keeps the directory current with BlueBubbles. */
 export function wireLiveEvents(
   bb: Pick<BlueBubbles, "onEvent">,
   directory: ChatDirectory,
@@ -34,7 +34,6 @@ export function wireLiveEvents(
         }
         // BlueBubbles does not replay events missed while disconnected.
         directory.invalidate(true);
-        void directory.reconcileState().catch((error: Error) => console.error("Directory reconciliation failed", error));
         return;
     }
   });

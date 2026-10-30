@@ -4,7 +4,7 @@ import { internalMutation } from "../_generated/server";
 
 import { choosePrimary, foldTapbacks } from "./internal";
 
-const phases = ["messages", "attachments", "scheduled", "suggestions", "events", "open", "state", "drafts", "presence", "finalize"] as const;
+const phases = ["messages", "attachments", "scheduled", "suggestions", "events", "state", "drafts", "presence", "finalize"] as const;
 const phase = v.union(...phases.map((name) => v.literal(name)));
 
 export const deleteChat = internalMutation({
@@ -60,8 +60,8 @@ export const deleteChat = internalMutation({
       }
       return next(page);
     }
-    if (current === "suggestions" || current === "events" || current === "open") {
-      const table = current === "suggestions" ? "comma_suggestions" : current === "events" ? "comma_triage_events" : "comma_triage_open";
+    if (current === "suggestions" || current === "events") {
+      const table = current === "suggestions" ? "comma_suggestions" : "comma_triage_events";
       const page = await ctx.db.query(table).withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId)).paginate(pagination);
       for (const row of page.page) {
         const guid = "anchorGuid" in row ? row.anchorGuid : row.messageGuid;

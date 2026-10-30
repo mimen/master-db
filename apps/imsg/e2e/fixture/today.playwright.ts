@@ -94,21 +94,23 @@ test("Settle all settles the settle group as one action, and one Undo brings eve
 
 const TAYLOR = "iMessage;-;+16195550204";
 const SOFIA = "iMessage;-;+16195550209";
-type ConvexCall = { name?: string; args?: { conversationId?: string; payload?: { kind?: string; messageGuid?: string } } };
+type ConvexCall = { name?: string; args?: { conversationId?: string; anchor?: string } };
 
-function outboxLog(page: Page): { conversationId?: string; kind?: string; messageGuid?: string }[] {
+/** Every settle and un-settle the client sends Convex, as kind, conversation and anchor. */
+function triageLog(page: Page): { conversationId?: string; kind?: string; messageGuid?: string }[] {
   const log: { conversationId?: string; kind?: string; messageGuid?: string }[] = [];
   page.on("request", (req) => {
     if (!req.url().endsWith("/__fixture/convex")) return;
     const body = req.postDataJSON() as ConvexCall | null;
-    if (body?.name === "comma/outbox:enqueue") log.push({ conversationId: body.args?.conversationId, ...body.args?.payload });
+    const kind = /^comma\/triage:(settle|unsettle)$/.exec(body?.name ?? "")?.[1];
+    if (kind) log.push({ conversationId: body?.args?.conversationId, kind, ...(body?.args?.anchor ? { messageGuid: body.args.anchor } : {}) });
   });
   return log;
 }
 
 test("a settle-group thread that gets a new message after the build moves to New since, and Settle all leaves it alone", async ({ desk }) => {
   const { page } = desk;
-  const outbox = outboxLog(page);
+  const triage = triageLog(page);
   await openToday(page);
   const rows = page.getByTestId("conversation-row");
   const taylor = rows.filter({ hasText: "Taylor Morgan" });
@@ -120,20 +122,20 @@ test("a settle-group thread that gets a new message after the build moves to New
 
   await page.getByTestId("today-settle-all").click();
   await expect(page.getByText("Settled 1 thread", { exact: true })).toBeVisible();
-  expect(outbox.filter((call) => call.kind === "settle")).toEqual([{ conversationId: SOFIA, kind: "settle", messageGuid: "backlog-in-9" }]);
+  expect(triage.filter((call) => call.kind === "settle")).toEqual([{ conversationId: SOFIA, kind: "settle", messageGuid: "backlog-in-9" }]);
   await expect(rows.filter({ hasText: "Sofia Martinez" })).toHaveCount(0);
   await expect(taylor).toBeVisible();
   await expect(taylor).toHaveAttribute("aria-label", /^Taylor Morgan, unread,/);
 });
 
-test("Settle all reports a row the bridge rejected, and its Undo reopens only the rows it settled", async ({ desk }) => {
+test("Settle all reports a row Convex rejected, and its Undo reopens only the rows it settled", async ({ desk }) => {
   const { page } = desk;
-  const outbox = outboxLog(page);
-  // Sofia's settle reaches the bridge anchored to a message that is no longer her newest, so the bridge rejects it.
+  const triage = triageLog(page);
+  // Sofia's settle reaches Convex anchored to a message that is no longer her newest, so Convex rejects it.
   await page.route("**/__fixture/convex", async (route) => {
     const body = route.request().postDataJSON() as ConvexCall | null;
-    if (body?.name !== "comma/outbox:enqueue" || body.args?.payload?.kind !== "settle" || body.args.conversationId !== SOFIA) return route.continue();
-    return route.continue({ postData: JSON.stringify({ ...body, args: { ...body.args, payload: { ...body.args.payload, messageGuid: "backlog-out-9" } } }) });
+    if (body?.name !== "comma/triage:settle" || body.args?.conversationId !== SOFIA) return route.continue();
+    return route.continue({ postData: JSON.stringify({ ...body, args: { ...body.args, anchor: "backlog-out-9" } }) });
   });
   await openToday(page);
   const rows = page.getByTestId("conversation-row");
@@ -149,7 +151,7 @@ test("Settle all reports a row the bridge rejected, and its Undo reopens only th
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(rows.filter({ hasText: "Taylor Morgan" })).toBeVisible();
   await expect.poll(() => todayCount(page)).toBe(before);
-  expect(outbox.filter((call) => call.kind === "unsettle"), "no un-settle for the rejected row").toEqual([{ conversationId: TAYLOR, kind: "unsettle" }]);
+  expect(triage.filter((call) => call.kind === "unsettle"), "no un-settle for the rejected row").toEqual([{ conversationId: TAYLOR, kind: "unsettle" }]);
   await expect(sofia.getByTestId("today-reason")).toHaveText("No reply needed: she said thanks.");
 });
 

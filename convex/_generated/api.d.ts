@@ -2352,6 +2352,44 @@ export declare const api: {
           }
       >;
     };
+    triage: {
+      markRead: FunctionReference<
+        "mutation",
+        "public",
+        { at: number; conversationId: Id<"comma_conversations"> },
+        Id<"comma_outbox">
+      >;
+      markUnread: FunctionReference<
+        "mutation",
+        "public",
+        { conversationId: Id<"comma_conversations"> },
+        null
+      >;
+      setMuted: FunctionReference<
+        "mutation",
+        "public",
+        { conversationId: Id<"comma_conversations">; muted: boolean },
+        null
+      >;
+      setPinned: FunctionReference<
+        "mutation",
+        "public",
+        { conversationId: Id<"comma_conversations">; pinned: boolean },
+        null
+      >;
+      settle: FunctionReference<
+        "mutation",
+        "public",
+        { anchor?: string; conversationId: Id<"comma_conversations"> },
+        null
+      >;
+      unsettle: FunctionReference<
+        "mutation",
+        "public",
+        { conversationId: Id<"comma_conversations"> },
+        null
+      >;
+    };
     uploads: {
       finalizeUpload: FunctionReference<
         "mutation",
@@ -4111,7 +4149,6 @@ export declare const internal: {
             | "scheduled"
             | "suggestions"
             | "events"
-            | "open"
             | "state"
             | "drafts"
             | "presence"
@@ -4126,7 +4163,6 @@ export declare const internal: {
             | "scheduled"
             | "suggestions"
             | "events"
-            | "open"
             | "state"
             | "drafts"
             | "presence"
@@ -4198,34 +4234,6 @@ export declare const internal: {
       generateUploadUrl: FunctionReference<"mutation", "internal", {}, any>;
     };
     internal: {
-      importOverlay: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          chatState: Array<{
-            chatGuid: string;
-            dismissedUnrespondedGuid?: string;
-            dismissedWaitingGuid?: string;
-            markedUnread: boolean;
-            mutedUnresponded: boolean;
-            pinned: boolean;
-            readAt: number;
-          }>;
-          replaceChatGuids?: Array<string>;
-          triageEvents: Array<{
-            chatGuid: string;
-            clearedAt: number;
-            messageGuid: string;
-            reason: "reply" | "dismiss";
-          }>;
-          triageOpen: Array<{
-            chatGuid: string;
-            messageGuid: string;
-            openedAt: number;
-          }>;
-        },
-        { events: number; open: number; states: number; unresolved: number }
-      >;
       markSyncState: FunctionReference<
         "mutation",
         "internal",

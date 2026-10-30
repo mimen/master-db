@@ -86,7 +86,7 @@ const productionIdentity = deps.identity ? null : new IdentityMirror(config);
 const identity = deps.identity ?? productionIdentity;
 if (!identity) throw new Error("identity directory unavailable");
 const names = deps.names ?? new NameResolver(productionIdentity ?? new IdentityMirror(config), contacts);
-const directory = new ChatDirectory(bb, db, contacts, now, names);
+const directory = new ChatDirectory(bb, contacts, now, names);
 const identitySync = new IdentitySync(bb, config, () => void identity.refresh());
 const whisper = new WhisperService(config.whisper, bb, db);
 
@@ -133,7 +133,6 @@ console.log(
     : `Whisper transcription unavailable: ${whisperStatus.detail}`,
 );
 await contacts.refresh(true);
-await directory.reconcileState();
 
 let reconnectTimer: ReturnType<typeof setInterval> | null = null;
 if (deps.backgroundServices !== false) {

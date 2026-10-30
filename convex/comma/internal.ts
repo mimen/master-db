@@ -14,6 +14,7 @@ import {
 
 import { conversationKey } from "./conversationKey";
 import { tempGuid } from "./tempMessage";
+import { carryTempAnchor, logReply } from "./triage";
 
 /**
  * Bridge write path for the Comma mirror. The bridge on the Mini calls these
@@ -244,7 +245,10 @@ export const upsertMessages = internalMutation({
           .query("comma_messages")
           .withIndex("by_guid", (q) => q.eq("guid", `temp-${clientKey}`))
           .unique() : null;
-        if (temp) await ctx.db.delete(temp._id);
+        if (temp) {
+          await ctx.db.delete(temp._id);
+          await carryTempAnchor(ctx, temp.conversationId, temp.guid, message.guid);
+        }
       }
       written++;
       touchedConversations.add(message.conversationId);
@@ -252,7 +256,10 @@ export const upsertMessages = internalMutation({
       touchedTargets.add(message.isTapback && message.tapbackTargetGuid ? message.tapbackTargetGuid : message.guid);
     }
     for (const targetGuid of touchedTargets) await refoldTarget(ctx, targetGuid);
-    for (const conversationId of touchedConversations) await refreshLastMessage(ctx, conversationId);
+    for (const conversationId of touchedConversations) {
+      await refreshLastMessage(ctx, conversationId);
+      await logReply(ctx, conversationId);
+    }
     return { written, skipped };
   },
 });
@@ -369,143 +376,6 @@ export const replaceScheduled = internalMutation({
   },
 });
 
-async function messageDate(ctx: MutationCtx, guid: string | undefined): Promise<number> {
-  if (!guid) return -1;
-  const message = await ctx.db
-    .query("comma_messages")
-    .withIndex("by_guid", (q) => q.eq("guid", guid))
-    .unique();
-  return message?.dateCreated ?? 0;
-}
-
-/** Of two dismissal anchors, keep the one on the newer message. */
-async function newerAnchor(ctx: MutationCtx, a: string | undefined, b: string | undefined): Promise<string | undefined> {
-  if (!a) return b;
-  if (!b) return a;
-  return (await messageDate(ctx, b)) > (await messageDate(ctx, a)) ? b : a;
-}
-
-export const importOverlay = internalMutation({
-  args: {
-    replaceChatGuids: v.optional(v.array(v.string())),
-    chatState: v.array(
-      v.object({
-        chatGuid: v.string(),
-        dismissedUnrespondedGuid: v.optional(v.string()),
-        dismissedWaitingGuid: v.optional(v.string()),
-        mutedUnresponded: v.boolean(),
-        markedUnread: v.boolean(),
-        pinned: v.boolean(),
-        readAt: v.number(),
-      }),
-    ),
-    triageEvents: v.array(
-      v.object({
-        chatGuid: v.string(),
-        messageGuid: v.string(),
-        reason: v.union(v.literal("reply"), v.literal("dismiss")),
-        clearedAt: v.number(),
-      }),
-    ),
-    triageOpen: v.array(v.object({ chatGuid: v.string(), messageGuid: v.string(), openedAt: v.number() })),
-  },
-  returns: v.object({ states: v.number(), events: v.number(), open: v.number(), unresolved: v.number() }),
-  handler: async (ctx, { chatState, triageEvents, triageOpen, replaceChatGuids }) => {
-    // SQLite snapshots must also remove triage rows deleted by undismiss or reply.
-    const replaceIds = new Set<Id<"comma_conversations">>();
-    for (const chatGuid of replaceChatGuids ?? []) {
-      const id = await conversationForChat(ctx, chatGuid);
-      if (id) replaceIds.add(id);
-    }
-    for (const conversationId of replaceIds) {
-      for (const row of await ctx.db.query("comma_triage_events")
-        .withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId)).collect()) {
-        await ctx.db.delete(row._id);
-      }
-      for (const row of await ctx.db.query("comma_triage_open")
-        .withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId)).collect()) {
-        await ctx.db.delete(row._id);
-      }
-    }
-    let unresolved = 0;
-    const merged = new Map<Id<"comma_conversations">, Omit<Doc<"comma_conversation_state">, "_id" | "_creationTime">>();
-    for (const state of chatState) {
-      const conversationId = await conversationForChat(ctx, state.chatGuid);
-      if (!conversationId) {
-        unresolved++;
-        continue;
-      }
-      const prior = merged.get(conversationId);
-      merged.set(conversationId, {
-        conversationId,
-        pinned: (prior?.pinned ?? false) || state.pinned,
-        markedUnread: (prior?.markedUnread ?? false) || state.markedUnread,
-        mutedUnresponded: (prior?.mutedUnresponded ?? false) || state.mutedUnresponded,
-        readAt: Math.max(prior?.readAt ?? 0, state.readAt),
-        dismissedUnrespondedGuid: await newerAnchor(ctx, prior?.dismissedUnrespondedGuid, state.dismissedUnrespondedGuid),
-        dismissedWaitingGuid: await newerAnchor(ctx, prior?.dismissedWaitingGuid, state.dismissedWaitingGuid),
-        updatedAt: Date.now(),
-      });
-    }
-    for (const row of merged.values()) {
-      const existing = await ctx.db
-        .query("comma_conversation_state")
-        .withIndex("by_conversationId", (q) => q.eq("conversationId", row.conversationId))
-        .unique();
-      if (existing) await ctx.db.patch(existing._id, row);
-      else await ctx.db.insert("comma_conversation_state", row);
-    }
-
-    let events = 0;
-    // Each conversation's log is read once: rereading it per event grew with the square of the log, until a full
-    // mirror passed Convex's 32,000-read limit and every Overlay mirror after it failed.
-    const logged = new Map<Id<"comma_conversations">, Set<string>>();
-    for (const event of triageEvents) {
-      const conversationId = await conversationForChat(ctx, event.chatGuid);
-      if (!conversationId) {
-        unresolved++;
-        continue;
-      }
-      let keys = logged.get(conversationId);
-      if (!keys) {
-        const rows = await ctx.db.query("comma_triage_events")
-          .withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId)).collect();
-        keys = new Set(rows.map((row) => `${row.messageGuid} ${row.clearedAt}`));
-        logged.set(conversationId, keys);
-      }
-      const key = `${event.messageGuid} ${event.clearedAt}`;
-      if (keys.has(key)) continue;
-      keys.add(key);
-      await ctx.db.insert("comma_triage_events", {
-        conversationId,
-        messageGuid: event.messageGuid,
-        reason: event.reason,
-        clearedAt: event.clearedAt,
-      });
-      events++;
-    }
-
-    let open = 0;
-    for (const item of triageOpen) {
-      const conversationId = await conversationForChat(ctx, item.chatGuid);
-      if (!conversationId) {
-        unresolved++;
-        continue;
-      }
-      const existing = await ctx.db
-        .query("comma_triage_open")
-        .withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId))
-        .unique();
-      if (existing && existing.openedAt >= item.openedAt) continue;
-      const row = { conversationId, messageGuid: item.messageGuid, openedAt: item.openedAt };
-      if (existing) await ctx.db.patch(existing._id, row);
-      else await ctx.db.insert("comma_triage_open", row);
-      open++;
-    }
-    return { states: merged.size, events, open, unresolved };
-  },
-});
-
 /** Replaces every conversation's unread state with one chat.db snapshot. */
 export const replaceUnread = internalMutation({
   args: { chats: v.array(v.object({ chatGuid: v.string(), count: v.number(), firstAt: v.number() })) },
@@ -598,7 +468,6 @@ export const mergeDuplicateConversations = internalMutation({
           ...(await ctx.db.query("comma_drafts").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).collect()),
           ...(await ctx.db.query("comma_suggestions").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).collect()),
           ...(await ctx.db.query("comma_triage_events").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).collect()),
-          ...(await ctx.db.query("comma_triage_open").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).collect()),
           ...(await ctx.db.query("comma_conversation_state").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).collect()),
         ];
         for (const row of moved) await ctx.db.patch(row._id, { conversationId: keep._id });

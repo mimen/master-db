@@ -1,6 +1,7 @@
 import { beginUndoAction, commitUndoAction, runLatestUndo } from "@/lib/action-undo";
-import { runCommand, type CommandPayload } from "@/lib/convex-commands";
-import { pendFlags, type FlagIntent } from "@/lib/pending-flags";
+import { conversationState } from "@/lib/conversation-state";
+import { runCommand } from "@/lib/convex-commands";
+import { pendRename } from "@/lib/pending-renames";
 import { showToast } from "@/lib/toast";
 import type { ChatSummary } from "@shared/types";
 
@@ -8,14 +9,11 @@ export function undoLastAction(): boolean {
   return runLatestUndo();
 }
 
-/**
- * Shows the intent on the directory at once while `write` runs. Rolls the intent back before
- * rejecting when the write fails, so callers only toast.
- */
-export async function pendWhile(intent: FlagIntent, write: () => Promise<unknown>): Promise<void> {
-  const pending = pendFlags(intent);
+/** Shows the new name at once and rolls it back before rejecting when the Mini cannot rename the group. */
+export async function renameChat(chatGuid: string, name: string): Promise<void> {
+  const pending = pendRename(chatGuid, name);
   try {
-    await write();
+    await runCommand(chatGuid, { kind: "rename", name });
     pending.confirm();
   } catch (error) {
     pending.rollback();
@@ -23,27 +21,23 @@ export async function pendWhile(intent: FlagIntent, write: () => Promise<unknown
   }
 }
 
-/** pendWhile for a command the bridge runs. */
-export function writeFlags(intent: FlagIntent, payload: CommandPayload, onQueued?: () => void): Promise<void> {
-  return pendWhile(intent, () => runCommand(intent.chatGuid, payload, { onQueued }));
-}
-
 export function pinChat(chat: ChatSummary, pinned: boolean): void {
-  writeFlags({ change: "pin", chatGuid: chat.guid, value: pinned }, { kind: "pin", value: pinned })
+  conversationState().then((state) => state.pin(chat, pinned))
     .catch(() => showToast("Couldn't pin the conversation. Try again."));
 }
 
-export function readChat(chatGuid: string): Promise<void> {
-  return writeFlags({ change: "read", chatGuid, at: Date.now() }, { kind: "markRead" });
+/** Reads the conversation; rejects only if iMessage's read receipt could not be sent. */
+export async function readChat(chatGuid: string): Promise<void> {
+  await (await conversationState()).read({ guid: chatGuid });
 }
 
 export function markChatRead(chat: ChatSummary): void {
-  readChat(chat.guid).catch(() => showToast("Couldn't mark as read. Try again."));
+  conversationState().then((state) => state.read(chat)).catch(() => showToast("Couldn't mark as read. Try again."));
 }
 
 export function markChatUnread(chat: ChatSummary, onSuccess?: () => void): void {
   const undoToken = beginUndoAction();
-  writeFlags({ change: "unread", chatGuid: chat.guid }, { kind: "markUnread" }, () => {
+  conversationState().then((state) => state.markUnread(chat)).then(() => {
     commitUndoAction(undoToken, () => markChatRead(chat));
     onSuccess?.();
   }).catch(() => showToast("Couldn't mark as unread. Try again."));

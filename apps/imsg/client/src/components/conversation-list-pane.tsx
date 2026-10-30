@@ -560,7 +560,7 @@ const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, 
             </View>
           )
         ) : (
-          <ChatRow chat={row.chat} handle={handle} selected={selected} keyboardFocused={keyboardFocused} onOpen={onOpen} agentLens={agentLens} today={row.today} />
+          <ChatRow chat={row.chat} handle={handle} selected={selected} keyboardFocused={keyboardFocused} onOpen={onOpen} agentLens={agentLens} today={row.today} leaving={gone} />
         )}
       </Collapse>
     </View>

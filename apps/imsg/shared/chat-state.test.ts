@@ -15,12 +15,10 @@ import type { ChatFlags, ChatSummary, Message } from "./types";
 
 function makeState(overrides: Partial<ChatState> = {}): ChatState {
   return {
-    chatGuid: "chat-1",
-    dismissedUnrespondedGuid: null,
-    dismissedWaitingGuid: null,
-    mutedUnresponded: 0,
-    pinned: 0,
-    markedUnread: 0,
+    mutedUnresponded: false,
+    pinned: false,
+    markedUnread: false,
+    readAt: 0,
     ...overrides,
   };
 }
@@ -153,13 +151,13 @@ describe("computeFlags", () => {
   });
 
   test("legacy mutedUnresponded values no longer suppress inbound triage", () => {
-    const flags = computeFlags(makeState({ mutedUnresponded: 1 }), makeLast({ isFromMe: false }), 0);
+    const flags = computeFlags(makeState({ mutedUnresponded: true }), makeLast({ isFromMe: false }), 0);
     expect(flags.unresponded).toBe(true);
     expect(flags.mutedUnresponded).toBe(false);
   });
 
   test("markedUnread sets unread even with zero unread count", () => {
-    const flags = computeFlags(makeState({ markedUnread: 1 }), makeLast({ isFromMe: true }), 0);
+    const flags = computeFlags(makeState({ markedUnread: true }), makeLast({ isFromMe: true }), 0);
     expect(flags.unread).toBe(true);
   });
 
@@ -169,7 +167,7 @@ describe("computeFlags", () => {
   });
 
   test("pinned state sets the pinned flag", () => {
-    const flags = computeFlags(makeState({ pinned: 1 }), makeLast(), 0);
+    const flags = computeFlags(makeState({ pinned: true }), makeLast(), 0);
     expect(flags.pinned).toBe(true);
   });
 
@@ -528,7 +526,7 @@ describe("computeCounts", () => {
 // ---------------------------------------------------------------- applyMessage
 
 describe("applyMessage", () => {
-  test("inbound message sets unresponded/unread and moves to top", () => {
+  test("inbound message counts as unread and moves to top", () => {
     const chats = [
       makeChat({ guid: "other", lastMessage: { ...makeChat().lastMessage!, dateCreated: 5000 } }),
       makeChat({ guid: "chat-1", flags: makeFlags() }),
@@ -537,9 +535,6 @@ describe("applyMessage", () => {
     expect(result).not.toBeNull();
     const next = result!;
     expect(next[0]!.guid).toBe("chat-1");
-    expect(next[0]!.flags.unresponded).toBe(true);
-    expect(next[0]!.flags.waiting).toBe(false);
-    expect(next[0]!.flags.unread).toBe(true);
     expect(next[0]!.firstUnreadAt).toBe(6000);
     expect(next[0]!.unreadCount).toBe(1);
   });
@@ -552,12 +547,6 @@ describe("applyMessage", () => {
     expect(matchesFilters(next[0]!, "all", "known")).toBe(false);
     expect(matchesFilters(next[0]!, "all", "unknown")).toBe(true);
     expect(matchesFilters(next[0]!, "all", "all")).toBe(true);
-  });
-
-  test("inbound message ignores legacy mutedUnresponded flags", () => {
-    const chats = [makeChat({ guid: "chat-1", flags: makeFlags({ mutedUnresponded: true }) })];
-    const next = applyMessage(chats, "chat-1", makeMessage({ isFromMe: false, dateCreated: 6000 }))!;
-    expect(next[0]!.flags.unresponded).toBe(true);
   });
 
   test("qualifying inbound messages preserve the earliest unread timestamp", () => {
@@ -582,7 +571,7 @@ describe("applyMessage", () => {
     }
   });
 
-  test("outbound message sets waiting, clears unresponded, and clears the unread count", () => {
+  test("outbound message clears the unread count", () => {
     const chats = [
       makeChat({
         guid: "chat-1",
@@ -592,18 +581,8 @@ describe("applyMessage", () => {
       }),
     ];
     const next = applyMessage(chats, "chat-1", makeMessage({ isFromMe: true, dateCreated: 6000 }))!;
-    expect(next[0]!.flags.waiting).toBe(true);
-    expect(next[0]!.flags.unresponded).toBe(false);
-    expect(next[0]!.flags.unread).toBe(false);
     expect(next[0]!.unreadCount).toBe(0);
     expect(next[0]!.firstUnreadAt).toBeNull();
-  });
-
-  test("outbound message keeps a manual mark-unread", () => {
-    const chats = [makeChat({ guid: "chat-1", unreadCount: 0, flags: makeFlags({ unread: true }) })];
-    const next = applyMessage(chats, "chat-1", makeMessage({ isFromMe: true, dateCreated: 6000 }))!;
-    expect(next[0]!.flags.unread).toBe(true);
-    expect(next[0]!.unreadCount).toBe(0);
   });
 
   test("stale message returns the same array reference", () => {

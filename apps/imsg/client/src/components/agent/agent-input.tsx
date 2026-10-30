@@ -109,7 +109,7 @@ export function AgentInput({ running, history, choice, onChoice, onSend, onStop 
   const sendRef = useRef(send);
   sendRef.current = send;
 
-  useEffect(() => registerFocusTarget("agent-input", () => inputRef.current?.focus()), []);
+  useEffect(() => registerFocusTarget("agent-input", () => inputRef.current), []);
 
   useEffect(() => {
     if (Platform.OS !== "web") return;

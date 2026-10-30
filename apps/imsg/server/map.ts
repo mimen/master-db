@@ -1,8 +1,6 @@
 import type { BBAttachment, BBChat, BBHandle, BBMessage } from "./bb-types";
 import type { ChatSummary, Message, Participant, Reaction, SpecialContent } from "../shared/types";
 import type { MentionAnnotation } from "../shared/mentions";
-import type { ChatState } from "../shared/chat-state";
-import { computeFlags } from "../shared/chat-state";
 import { formatAddress } from "../shared/address";
 import type { CrmData, NameSource } from "./name-resolver";
 
@@ -271,11 +269,6 @@ function isRetracted(m: BBMessage): boolean {
   return Boolean(m.dateEdited) && !m.text && !m.attachments?.length;
 }
 
-/** A tapback or an unsent message: never a conversation's last message in Convex (refreshLastMessage). */
-export function isQuietMessage(m: BBMessage): boolean {
-  return isTapback(m) || isRetracted(m);
-}
-
 /**
  * Converts a raw DESC message window into ascending, normal messages with
  * tapbacks folded into `reactions` and reply previews resolved in-window.
@@ -391,12 +384,14 @@ function chatCrmField(
   return normalizeCrm(contacts.personCrm(only.address));
 }
 
+/** A conversation as the Mini sees it in BlueBubbles. Triage flags are Convex's, so it carries none. */
+export type DirectoryChat = Omit<ChatSummary, "flags">;
+
 export function mapChat(
   chat: BBChat,
-  state: ChatState | undefined,
   contacts: NameSource,
   scannedUnread?: UnreadSummary,
-): ChatSummary {
+): DirectoryChat {
   const last = chat.lastMessage ?? null;
   const participants = chat.participants ?? [];
   const isGroup = chat.guid.includes(";+;") || participants.length > 1;
@@ -420,9 +415,6 @@ export function mapChat(
   const lastFromMe = last?.isFromMe === true;
   const unreadCount = lastFromMe ? 0 : Math.max(scannedUnread?.count ?? 0, fallbackUnreadAt === null ? 0 : 1);
   const firstUnreadAt = lastFromMe ? null : scannedUnread?.count ? scannedUnread.firstUnreadAt : fallbackUnreadAt;
-  const flagInput = last
-    ? { guid: last.guid, dateCreated: last.dateCreated ?? 0, isFromMe: last.isFromMe === true }
-    : null;
   const mappedParticipants = participants.map((p) => ({
     address: p.address,
     name: contacts.lookup(p.address),
@@ -440,7 +432,6 @@ export function mapChat(
     lastMessage: lastSummary,
     unreadCount,
     firstUnreadAt,
-    flags: computeFlags(state, flagInput, unreadCount),
     searchNames,
     crm: chatCrmField(chat.guid, isGroup, participants, contacts),
   };

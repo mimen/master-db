@@ -3,27 +3,25 @@ import type { ChatFlags, ChatSummary, Message, StateCounts, StateFilter, TypeFil
 
 /**
  * Chat State — the pure rules for a chat's flags: how Unresponded / Waiting /
- * Unread derive from the Overlay + last message, how a new message flips them
- * (the SSE fast path), and which lens a chat matches. The single implementation
- * shared by the server and the client.
+ * Unread derive from Comma's triage state + last message, and which lens a chat
+ * matches. Convex computes the flags with these, and the client filters with them.
  */
 
-/** Per-chat Overlay row: app-local state BlueBubbles knows nothing about. */
+/** A conversation's triage state, as Convex keeps it: app-local state BlueBubbles knows nothing about. */
 export interface ChatState {
-  chatGuid: string;
   /** Last-message GUID at the moment "unresponded" was dismissed. */
-  dismissedUnrespondedGuid: string | null;
+  dismissedUnrespondedGuid?: string;
   /** Last-message GUID at the moment "waiting on them" was dismissed. */
-  dismissedWaitingGuid: string | null;
-  /** Chat never appears in the unresponded filter (group mute). */
-  mutedUnresponded: number;
-  pinned: number;
-  /** Epoch ms of our last mark-read — survives restarts. Apple never
-   * back-fills dateRead on old group messages, so the raw scan alone would
-   * resurrect them as unread forever. */
-  readAt?: number;
+  dismissedWaitingGuid?: string;
+  /** Recorded, but Needs you no longer honors it. */
+  mutedUnresponded: boolean;
+  pinned: boolean;
+  /** Epoch ms of the last read in Comma. Apple never back-fills dateRead on
+   * old group messages, so chat.db's count alone would resurrect them as
+   * unread forever. */
+  readAt: number;
   /** Manually marked unread; cleared on next mark-read. */
-  markedUnread: number;
+  markedUnread: boolean;
 }
 
 interface LastMessageLike {
@@ -43,10 +41,21 @@ export function computeFlags(
   return {
     unresponded,
     waiting,
-    unread: unreadCount > 0 || state?.markedUnread === 1,
+    unread: unreadCount > 0 || state?.markedUnread === true,
     mutedUnresponded: false,
-    pinned: state?.pinned === 1,
+    pinned: state?.pinned === true,
   };
+}
+
+/** A conversation's flags and unread count as Convex lists it. A read at or after the last message zeroes the count. */
+export function conversationFlags(
+  state: ChatState | undefined,
+  last: LastMessageLike | null,
+  lastMessageAt: number,
+  unread: number,
+): { flags: ChatFlags; unreadCount: number } {
+  const unreadCount = (state?.readAt ?? 0) >= lastMessageAt ? 0 : unread;
+  return { flags: computeFlags(state, last, unreadCount), unreadCount };
 }
 
 /** A conversation is known when any participant matched a contact. Convex computes `known` with this too. */
@@ -180,19 +189,19 @@ export function computeCounts(chats: ChatSummary[], type: TypeFilter): StateCoun
 }
 
 /**
- * The SSE fast path: applies a message we already know about directly to a
- * summary list, ahead of a full rebuild — new last message, flag flips
- * (inbound starts Unresponded; outbound starts Waiting), chat moved to the top.
+ * The Mini directory's socket fast path: applies a message we already know about
+ * directly to a summary list, ahead of a full rebuild — new last message, unread
+ * count, chat moved to the top.
  *
  * Returns the input array unchanged when the message is stale (older than the
  * chat's last message), or null when the chat isn't in the list — the caller
  * decides whether that means "ignore" or "rebuild".
  */
-export function applyMessage(
-  chats: ChatSummary[],
+export function applyMessage<Chat extends Omit<ChatSummary, "flags">>(
+  chats: Chat[],
   chatGuid: string,
   message: Message,
-): ChatSummary[] | null {
+): Chat[] | null {
   const index = chats.findIndex((c) => c.guid === chatGuid);
   const chat = index >= 0 ? chats[index] : undefined;
   if (!chat) return null;
@@ -210,7 +219,7 @@ export function applyMessage(
     : qualifiesForUnreadAge
       ? Math.min(chat.firstUnreadAt ?? message.dateCreated, message.dateCreated)
       : chat.firstUnreadAt;
-  const updated: ChatSummary = {
+  const updated: Chat = {
     ...chat,
     isSpam: message.isSpam === true,
     firstUnreadAt,
@@ -222,12 +231,6 @@ export function applyMessage(
       isFromMe: message.isFromMe,
       senderName: message.sender?.name ?? message.sender?.address ?? null,
       hasAttachments: message.attachments.length > 0,
-    },
-    flags: {
-      ...chat.flags,
-      unresponded: !message.isFromMe,
-      waiting: message.isFromMe,
-      unread: message.isFromMe ? chat.flags.unread && chat.unreadCount === 0 : true,
     },
   };
   const next = [...chats];

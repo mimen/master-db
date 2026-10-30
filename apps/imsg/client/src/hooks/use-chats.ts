@@ -7,7 +7,7 @@ import { conversationToChat, withAgents, withDrafts } from "@/lib/convex-adapter
 import { commaApi } from "@/lib/convex-api";
 import { publishKnownConversations } from "@/lib/convex-commands";
 import { setDesktopBadgeCount } from "@/lib/desktop-shell";
-import { usePendingFlags } from "@/lib/pending-flags";
+import { usePendingRenames } from "@/lib/pending-renames";
 import { useAgentSettings } from "@/lib/settings";
 import { computeCounts, matchesFilters } from "@shared/chat-state";
 import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@shared/types";
@@ -38,7 +38,13 @@ export function useConvexChats(): { chats: ChatSummary[] | null } {
   useEffect(() => {
     if (status === "CanLoadMore") loadMore(100);
   }, [status, loadMore]);
-  const chats = useMemo(() => results.map(conversationToChat), [results]);
+  // An optimistic update hands back the untouched rows themselves, so they keep their summaries and rows skip rendering.
+  const summaries = useRef(new WeakMap<(typeof results)[number], ChatSummary>());
+  const chats = useMemo(() => results.map((row) => {
+    let chat = summaries.current.get(row);
+    if (!chat) summaries.current.set(row, chat = conversationToChat(row));
+    return chat;
+  }), [results]);
   // Read once per mount: the snapshot bridges the gap until the live list is complete.
   const [snapshot] = useState(() => readChatSnapshot(webStore()));
   useEffect(() => {
@@ -67,7 +73,7 @@ export function ChatDirectoryProvider({ children }: { readonly children: ReactNo
     joined.current = withAgents(drafted, agentChats, joined.current);
     return joined.current;
   }, [drafted, agentChats]);
-  const shown = usePendingFlags(chats);
+  const shown = usePendingRenames(chats);
   useEffect(() => publishKnownConversations(chats ?? []), [chats]);
   return createElement(ChatDirectoryContext.Provider, { value: shown }, children);
 }

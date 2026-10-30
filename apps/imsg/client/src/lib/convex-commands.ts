@@ -61,15 +61,20 @@ export function publishKnownConversations(chats: readonly { guid: string; conver
 function newClientKey(): string {
   return `command-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
+/** The conversation a chat belongs to; a listed one needs no round trip. */
+export async function conversationIdVia(client: Pick<CommandClient, "query">, chatGuid: string): Promise<GenericId<"comma_conversations">> {
+  const conversation = knownConversations.get(chatGuid) ?? (await client.query(commaApi.resolveChat, { chatGuid }))?._id;
+  if (!conversation) throw new Error("Conversation is not mirrored yet");
+  return conversation as GenericId<"comma_conversations">;
+}
+
 async function enqueueCommandVia(client: CommandClient, chatGuid: string | null, payload: CommandPayload, clientKey = newClientKey()): Promise<GenericId<"comma_outbox">> {
   const global = payload.kind === "createChat" || payload.kind === "clearSuggestionLearning";
   if (!chatGuid && !global) throw new Error("This command requires a chat");
-  const knownId = chatGuid ? knownConversations.get(chatGuid) : undefined;
-  const conversation = knownId ? { _id: knownId } : chatGuid ? await client.query(commaApi.resolveChat, { chatGuid }) : null;
-  if (chatGuid && !conversation) throw new Error("Conversation is not mirrored yet");
+  const conversationId = chatGuid ? await conversationIdVia(client, chatGuid) : null;
   const id = await client.mutation(commaOutbox.enqueue, {
     clientKey,
-    ...(conversation ? { conversationId: conversation._id as GenericId<"comma_conversations"> } : {}),
+    ...(conversationId ? { conversationId } : {}),
     payload,
   }, { optimisticUpdate: sendMovesSidebar });
   if (typeof id !== "string") throw new Error("Enqueue did not return a command ID");
@@ -86,6 +91,13 @@ export async function runCommandVia<P extends CommandPayload>(client: ResultComm
   const commandId = await enqueueCommandVia(client, chatGuid, payload, options.clientKey);
   options.onQueued?.();
   options.signal?.throwIfAborted();
+  return watchCommandVia<P["kind"]>(client, commandId, payload.kind, options.signal);
+}
+
+/** Resolves with a queued command's result once it is terminal, or rejects with why it failed. */
+export function watchCommandVia<K extends CommandPayload["kind"]>(client: Pick<ResultCommandClient, "watchQuery">,
+  commandId: GenericId<"comma_outbox">, kind: K, signal?: AbortSignal): Promise<ResultFor<K>> {
+  const options = { signal };
   return new Promise((resolve, reject) => {
     let settled = false;
     let unsubscribe: (() => void) | undefined;
@@ -106,7 +118,7 @@ export async function runCommandVia<P extends CommandPayload>(client: ResultComm
           const receipt = watch.localQueryResult();
           if (receipt === undefined) return;
           if (receipt === null) throw new Error("Command not found");
-          const result = resultFromReceipt<P["kind"]>(receipt, payload.kind);
+          const result = resultFromReceipt<K>(receipt, kind);
           if (result === undefined) return;
           settled = true; cleanup(); resolve(result);
         } catch (error) { fail(error); }

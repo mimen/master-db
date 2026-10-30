@@ -106,7 +106,7 @@ http.route({
 
 /**
  * Comma bridge ingest. The Mini's bridge mirrors chat.db/BlueBubbles here.
- * POST /comma/ingest/<conversations|messages|attachments|transcript|scheduled|overlay|sync>
+ * POST /comma/ingest/<conversations|messages|attachments|transcript|scheduled|sync>
  * and POST /comma/ingest-upload-url. Auth: Bearer COMMA_BRIDGE_SECRET.
  */
 http.route({ pathPrefix: "/comma/ingest/", method: "POST", handler: handleCommaIngest });

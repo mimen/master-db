@@ -109,7 +109,7 @@ describe("claim and complete", () => {
   test("an expired lease makes a send unknown but returns an idempotent kind to pending", async () => {
     const { t, as, c } = await setup();
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
-    await as.mutation(api.comma.outbox.enqueue, { clientKey: "p", conversationId: c, payload: { kind: "pin", value: true } });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "p", conversationId: c, payload: { kind: "markRead" } });
     const claimed = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1000, leaseMs: 100, limit: 10 });
     expect(claimed.map((r) => r.clientKey).sort()).toEqual(["p", "s"]);
     await t.mutation(internal.comma.outbox.claimOutbox, { now: 5000, leaseMs: 100, limit: 0 });
@@ -241,14 +241,14 @@ test("global/new-chat commands enqueue without a conversation; other kinds requi
 
 test("getCommand authenticates and returns only the receipt, including validated typed results", async () => {
   const { t, as, c } = await setup();
-  const commandId = await as.mutation(api.comma.outbox.enqueue, { clientKey: "typed", conversationId: c, payload: { kind: "pin", value: true } });
+  const commandId = await as.mutation(api.comma.outbox.enqueue, { clientKey: "typed", conversationId: c, payload: { kind: "markRead" } });
   await expect(t.query(api.comma.outbox.getCommand, { commandId })).rejects.toThrow();
   const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1000, leaseMs: 100, limit: 1 });
   const args = { clientKey: "typed", claimToken: claim.claimToken!, status: "sent" as const };
   await expect(t.mutation(internal.comma.outbox.completeOutbox, { ...args, result: { kind: "mute", ok: true } })).rejects.toThrow("Result kind");
-  await expect(t.mutation(internal.comma.outbox.completeOutbox, { ...args, result: { kind: "pin", ok: false } as never })).rejects.toThrow();
-  await t.mutation(internal.comma.outbox.completeOutbox, { ...args, result: { kind: "pin", ok: true } });
-  expect(await as.query(api.comma.outbox.getCommand, { commandId })).toEqual({ commandId, clientKey: "typed", status: "sent", result: { kind: "pin", ok: true }, updatedAt: expect.any(Number) });
+  await expect(t.mutation(internal.comma.outbox.completeOutbox, { ...args, result: { kind: "markRead", ok: false } as never })).rejects.toThrow();
+  await t.mutation(internal.comma.outbox.completeOutbox, { ...args, result: { kind: "markRead", ok: true } });
+  expect(await as.query(api.comma.outbox.getCommand, { commandId })).toEqual({ commandId, clientKey: "typed", status: "sent", result: { kind: "markRead", ok: true }, updatedAt: expect.any(Number) });
   await t.run((ctx) => ctx.db.delete(commandId));
   expect(await as.query(api.comma.outbox.getCommand, { commandId })).toBeNull();
 });
@@ -342,6 +342,9 @@ describe("agent chats follow the conversation", () => {
   }
   const rows = (t: T, ids: Id<"comma_agent_chats">[]) => t.run(async (ctx) => Promise.all(ids.map((id) => ctx.db.get(id))));
   const commands = (t: T) => t.run(async (ctx) => (await ctx.db.query("comma_agent_commands").collect()).map(({ chatId, command }) => [chatId, command.kind]));
+  const withLastMessage = (t: T, c: Id<"comma_conversations">) => t.run((ctx) => ctx.db.patch(c, {
+    lastMessage: { guid: "m", text: "hi", dateCreated: 1, isFromMe: false, senderName: null, hasAttachments: false },
+  }));
 
   test("settling a conversation settles a working, a waiting and an idle chat, stopping only the waiting one and closing only the idle one", async () => {
     const { t, as, c } = await setup();
@@ -350,6 +353,7 @@ describe("agent chats follow the conversation", () => {
     ]);
     const question = await t.run((ctx) => ctx.db.insert("comma_agent_items", { chatId: waiting!, key: "q", ordinal: 1, createdAt: 1, updatedAt: 1,
       entry: { kind: "question", requestId: "q", status: "pending", questions: [{ question: "Which?", multiSelect: false, options: [] }] } }));
+    await withLastMessage(t, c);
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "settle-1", conversationId: c, payload: { kind: "settle", messageGuid: "m" } });
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "settle-1", conversationId: c, payload: { kind: "settle", messageGuid: "m" } });
     const settled = await rows(t, [working!, waiting!, idle!]);
@@ -365,6 +369,7 @@ describe("agent chats follow the conversation", () => {
       { state: "idle", settledAt: 60, settledWithConversation: true },
       { state: "idle" }, { state: "idle" },
     ]);
+    await withLastMessage(t, c);
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "settle", conversationId: c, payload: { kind: "settle" } });
     await t.run((ctx) => ctx.db.patch(open!, { settledAt: undefined, settledWithConversation: undefined }));
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "unsettle", conversationId: c, payload: { kind: "unsettle" } });
@@ -378,6 +383,7 @@ describe("agent chats follow the conversation", () => {
   test("undoing a settle that closed no chat leaves an earlier settle's chat settled", async () => {
     const { t, as, c } = await setup();
     const [monday] = await chats(t, c, [{ state: "idle" }]);
+    await withLastMessage(t, c);
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "settle-monday", conversationId: c, payload: { kind: "settle" } });
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "settle-tuesday", conversationId: c, payload: { kind: "settle" } });
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "undo-tuesday", conversationId: c, payload: { kind: "unsettle" } });

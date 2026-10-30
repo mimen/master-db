@@ -36,9 +36,7 @@ export function useConversationListKeyboard(args: {
 
   useEffect(
     () =>
-      registerFocusTarget("list-search", () =>
-        stateRef.current.search.inputRef.current?.focus(),
-      ),
+      registerFocusTarget("list-search", () => stateRef.current.search.inputRef.current),
     [],
   );
 

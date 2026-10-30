@@ -412,7 +412,7 @@ export function Composer({
   // The composer is a focus target: desktop reply-intent selections and the empty lens's
   // Nudge request it (docs/keyboard-design.md). Type-anywhere is gone: it can't coexist with
   // glide-mode single keys, and its char-append was wrong for IME/dead-key/emoji input anyway.
-  useEffect(() => registerFocusTarget("composer", () => inputRef.current?.focus()), [chatGuid]);
+  useEffect(() => registerFocusTarget("composer", () => inputRef.current), [chatGuid]);
 
   // Desktop web: Enter sends, Shift+Enter newlines (RN multiline swallows
   // submit on web). Guards: IME composition, key repeat, in-flight send.

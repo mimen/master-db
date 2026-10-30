@@ -16,7 +16,7 @@ const serviceRank: Record<string, number> = { iMessage: 0, RCS: 1, SMS: 2 };
 export function toConversationInputs(bbChats: BBChat[], names: NameSource = unnamed): ConversationInput[] {
   const groups = new Map<string, BBChat[]>();
   for (const chat of bbChats) {
-    const summary = mapChat(chat, undefined, names);
+    const summary = mapChat(chat, names);
     const key = conversationKey({
       isGroup: summary.isGroup,
       primaryChatGuid: chat.guid,
@@ -31,7 +31,7 @@ export function toConversationInputs(bbChats: BBChat[], names: NameSource = unna
       (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0) ||
       (serviceRank[a.guid.split(";")[0]] ?? 9) - (serviceRank[b.guid.split(";")[0]] ?? 9) ||
       a.guid.localeCompare(b.guid));
-    const primary = mapChat(siblings[0], undefined, names);
+    const primary = mapChat(siblings[0], names);
     return {
       conversationKey: key,
       chats: siblings.map((chat) => ({ chatGuid: chat.guid, lastMessageAt: chat.lastMessage?.dateCreated ?? 0 })),

@@ -1,7 +1,7 @@
 import { paginationOptsValidator, paginationResultValidator, type SearchFilterFinalizer } from "convex/server";
 import { v } from "convex/values";
 
-import { computeFlags } from "../../apps/imsg/shared/chat-state";
+import { conversationFlags } from "../../apps/imsg/shared/chat-state";
 import type { Id } from "../_generated/dataModel";
 import { query, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
@@ -105,20 +105,8 @@ export async function withConversationState(
     .withIndex("by_conversationId", (q) => q.eq("conversationId", conversation._id))
     .unique();
   // A mark-read in Comma lands here before chat.db catches up.
-  const unreadCount = (state?.readAt ?? 0) >= conversation.lastMessageAt ? 0 : conversation.unread?.count ?? 0;
-  const flags = computeFlags(
-    state ? {
-      chatGuid: conversation.primaryChatGuid,
-      dismissedUnrespondedGuid: state.dismissedUnrespondedGuid ?? null,
-      dismissedWaitingGuid: state.dismissedWaitingGuid ?? null,
-      mutedUnresponded: Number(state.mutedUnresponded),
-      markedUnread: Number(state.markedUnread),
-      pinned: Number(state.pinned),
-      readAt: state.readAt,
-    } : undefined,
-    conversation.lastMessage ?? null,
-    unreadCount,
-  );
+  const { flags, unreadCount } = conversationFlags(state ?? undefined, conversation.lastMessage ?? null,
+    conversation.lastMessageAt, conversation.unread?.count ?? 0);
   const people = await Promise.all(conversation.participants.map((participant) => read.person(participant.address)));
   const participants = await Promise.all(conversation.participants.map(async (participant, index) => {
     const person = people[index];

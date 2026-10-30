@@ -2,13 +2,15 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import Svg, { Path } from "react-native-svg";
 import { settleActionFor } from "@shared/chat-state";
 import type { ChatSummary } from "@shared/types";
-import { memo, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Reanimated, {
+  ReduceMotion,
   runOnJS,
   useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   type SharedValue,
 } from "react-native-reanimated";
 
@@ -17,6 +19,7 @@ import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useRowSettle } from "@/hooks/use-triage-actions";
 import { markOpenStart } from "@/lib/open-timing";
 import { useTheme } from "@/hooks/use-theme";
+import { Springs } from "@/constants/springs";
 import { TriageGeometry } from "@/constants/triage-theme";
 import { markChatRead, markChatUnread } from "@/lib/chat-actions";
 import { pressAnchor } from "@/lib/action-sheet";
@@ -109,6 +112,7 @@ function ChatRowInner({
   onOpen,
   agentLens = false,
   today,
+  leaving = false,
 }: {
   chat: ChatSummary;
   /** The handle that separates this row from another with the same name. */
@@ -121,6 +125,8 @@ function ChatRowInner({
   agentLens?: boolean;
   /** The Today lens: a rank column (empty for New since) and the build's one-line reason. */
   today?: { rank: number | null; reason: string | null };
+  /** Folding out of the list. */
+  leaving?: boolean;
 }) {
   const theme = useTheme();
   const { wide: compact } = useLayoutMode();
@@ -193,6 +199,14 @@ function ChatRowInner({
       if (armed && wasArmed === false) runOnJS(hapticCommit)();
     },
   );
+  // A committed swipe waits for its change: a row that leaves the list folds away still slid out, and one that stays
+  // slides home when it re-renders. Springing home on release showed a settled row back in place before it folded.
+  const slideHome = useCallback(() => {
+    if (!dragging.value && offset.value !== 0) offset.value = withSpring(0, { ...Springs.smooth, reduceMotion: ReduceMotion.System });
+  }, [dragging, offset]);
+  useEffect(() => {
+    if (!leaving) slideHome();
+  }, [chat, leaving, slideHome]);
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
 
   const fill = selected ? theme.rowSelected : hovered || focusedWithin ? theme.rowHover : "transparent";

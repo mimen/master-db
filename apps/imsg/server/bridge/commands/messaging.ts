@@ -1,6 +1,6 @@
 import { UnknownSendError } from "../../commands";
 import { deleteMirroredChat } from "./messaging-ingest";
-import { accept, requireChat, type HandlerMap } from "./types";
+import { accept, ownedByConvex, requireChat, type HandlerMap } from "./types";
 
 export const messagingHandlers = {
   send: { execute: async (ctx, payload) => {
@@ -24,34 +24,12 @@ export const messagingHandlers = {
     accept(await ctx.commands.delete(payload.messageGuid, requireChat(ctx)));
     return { kind: "delete", ok: true };
   } },
+  // Convex has already read the conversation; this only sends iMessage's read receipt.
   markRead: { execute: async (ctx) => {
     accept({ ok: await ctx.commands.markRead(requireChat(ctx)), error: "BlueBubbles mark read failed" });
     return { kind: "markRead", ok: true };
   } },
-  markUnread: { execute: async (ctx) => {
-    ctx.commands.directory.markUnread(requireChat(ctx));
-    return { kind: "markUnread", ok: true };
-  } },
-  pin: { execute: async (ctx, payload) => {
-    ctx.commands.directory.setPinned(requireChat(ctx), payload.value);
-    return { kind: "pin", ok: true };
-  } },
-  mute: { execute: async (ctx, payload) => {
-    ctx.writer.deps.db.setMutedUnresponded(requireChat(ctx), payload.value);
-    ctx.commands.directory.invalidate();
-    return { kind: "mute", ok: true };
-  } },
-  settle: { execute: async (ctx, payload) => {
-    const conversationChats = [...ctx.writer.conversationIds].filter(([, id]) => id === ctx.row.conversationId).map(([chat]) => chat);
-    accept(await ctx.commands.directory.settle(requireChat(ctx), payload.messageGuid, conversationChats));
-    return { kind: "settle", ok: true };
-  } },
-  unsettle: { execute: async (ctx) => {
-    const chatGuid = requireChat(ctx);
-    accept(await ctx.commands.directory.undismiss(chatGuid, "unresponded"));
-    accept(await ctx.commands.directory.undismiss(chatGuid, "waiting"));
-    return { kind: "unsettle", ok: true };
-  } },
+  markUnread: ownedByConvex(), pin: ownedByConvex(), mute: ownedByConvex(), settle: ownedByConvex(), unsettle: ownedByConvex(),
   rename: { execute: async (ctx, payload) => {
     accept(await ctx.commands.rename(requireChat(ctx), payload.name));
     return { kind: "rename", ok: true };

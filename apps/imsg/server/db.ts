@@ -1,5 +1,4 @@
 import { Database } from "bun:sqlite";
-import type { ChatState } from "../shared/chat-state";
 import type { TodaySession } from "./today/session";
 
 export interface SuggestionCacheRow {
@@ -42,11 +41,12 @@ const TODAY_SESSION_TTL_MS = 7 * 86_400_000;
 
 export class OverlayDb {
   private db: Database;
-  private overlayListeners = new Set<(chatGuid: string) => void>();
 
   constructor(path: string) {
     this.db = new Database(path, { create: true });
     this.db.exec("PRAGMA journal_mode = WAL;");
+    // chat_state, triage_clear_event and triage_open_item held Comma's triage state until Convex took it
+    // over. Nothing writes them now; they stay as the rollback copy.
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS chat_state (
         chat_guid TEXT PRIMARY KEY,
@@ -169,38 +169,6 @@ export class OverlayDb {
         opened_at INTEGER NOT NULL
       );
     `);
-  }
-
-  onOverlayChange(listener: (chatGuid: string) => void): () => void {
-    this.overlayListeners.add(listener);
-    return () => { this.overlayListeners.delete(listener); };
-  }
-
-  private overlayChanged(chatGuid: string): void {
-    for (const listener of this.overlayListeners) {
-      try { listener(chatGuid); }
-      catch (error) { console.error(`Overlay change listener failed: ${String(error)}`); }
-    }
-  }
-
-  overlaySnapshot() {
-    return {
-      chatState: [...this.getAll().values()].map((state) => ({
-        chatGuid: state.chatGuid,
-        dismissedUnrespondedGuid: state.dismissedUnrespondedGuid ?? undefined,
-        dismissedWaitingGuid: state.dismissedWaitingGuid ?? undefined,
-        mutedUnresponded: state.mutedUnresponded === 1,
-        markedUnread: state.markedUnread === 1,
-        pinned: state.pinned === 1,
-        readAt: state.readAt ?? 0,
-      })),
-      triageEvents: this.db.query<{ chatGuid: string; messageGuid: string; reason: "reply" | "dismiss"; clearedAt: number }, []>(
-        `SELECT chat_guid AS chatGuid, message_guid AS messageGuid, reason, cleared_at AS clearedAt FROM triage_clear_event`,
-      ).all(),
-      triageOpen: this.db.query<{ chatGuid: string; messageGuid: string; openedAt: number }, []>(
-        `SELECT chat_guid AS chatGuid, message_guid AS messageGuid, opened_at AS openedAt FROM triage_open_item`,
-      ).all(),
-    };
   }
 
   bridgeVersion(guid: string, fingerprint: string, baseVersion: number): number {
@@ -415,52 +383,6 @@ export class OverlayDb {
     })();
   }
 
-  setOpenTriageItem(chatGuid: string, messageGuid: string, openedAt: number): void {
-    this.db
-      .query(
-        `INSERT INTO triage_open_item (chat_guid, message_guid, opened_at) VALUES (?, ?, ?)
-         ON CONFLICT(chat_guid) DO UPDATE SET
-           message_guid = excluded.message_guid, opened_at = excluded.opened_at`,
-      )
-      .run(chatGuid, messageGuid, openedAt);
-    this.overlayChanged(chatGuid);
-  }
-
-  getOpenTriageItem(chatGuid: string): { messageGuid: string; openedAt: number } | null {
-    const row = this.db
-      .query("SELECT message_guid, opened_at FROM triage_open_item WHERE chat_guid = ?")
-      .get(chatGuid) as { message_guid: string; opened_at: number } | undefined;
-    return row ? { messageGuid: row.message_guid, openedAt: row.opened_at } : null;
-  }
-
-  clearOpenTriageItem(chatGuid: string): void {
-    this.db.query("DELETE FROM triage_open_item WHERE chat_guid = ?").run(chatGuid);
-    this.overlayChanged(chatGuid);
-  }
-
-  recordTriageClear(
-    chatGuid: string,
-    messageGuid: string,
-    reason: "dismiss" | "reply",
-    clearedAt: number = Date.now(),
-  ): boolean {
-    const result = this.db
-      .query(
-        `INSERT OR IGNORE INTO triage_clear_event
-         (chat_guid, message_guid, reason, cleared_at) VALUES (?, ?, ?, ?)`,
-      )
-      .run(chatGuid, messageGuid, reason, clearedAt);
-    if (result.changes > 0) this.overlayChanged(chatGuid);
-    return result.changes > 0;
-  }
-
-  deleteTriageClear(chatGuid: string, messageGuid: string): void {
-    this.db
-      .query("DELETE FROM triage_clear_event WHERE chat_guid = ? AND message_guid = ?")
-      .run(chatGuid, messageGuid);
-    this.overlayChanged(chatGuid);
-  }
-
   // ----------------------------------------------------- comma media queue
 
   private mediaTable(): void {
@@ -531,78 +453,5 @@ export class OverlayDb {
          ON CONFLICT(attachment_guid) DO UPDATE SET text = excluded.text`,
       )
       .run(attachmentGuid, text);
-  }
-
-  getAll(): Map<string, ChatState> {
-    const rows = this.db
-      .query(
-        `SELECT chat_guid, dismissed_unresponded_guid,
-                dismissed_waiting_guid, muted_unresponded, marked_unread, pinned, read_at
-         FROM chat_state`,
-      )
-      .all() as Array<{
-      chat_guid: string;
-      dismissed_unresponded_guid: string | null;
-      dismissed_waiting_guid: string | null;
-      muted_unresponded: number;
-      marked_unread: number;
-      pinned: number;
-      read_at: number;
-    }>;
-    const map = new Map<string, ChatState>();
-    for (const row of rows) {
-      map.set(row.chat_guid, {
-        chatGuid: row.chat_guid,
-        dismissedUnrespondedGuid: row.dismissed_unresponded_guid,
-        dismissedWaitingGuid: row.dismissed_waiting_guid,
-        mutedUnresponded: row.muted_unresponded,
-        markedUnread: row.marked_unread,
-        pinned: row.pinned,
-        readAt: row.read_at,
-      });
-    }
-    return map;
-  }
-
-  private upsert(chatGuid: string, column: string, value: string | number | null): void {
-    this.db
-      .query(
-        `INSERT INTO chat_state (chat_guid, ${column}) VALUES (?, ?)
-         ON CONFLICT(chat_guid) DO UPDATE SET ${column} = excluded.${column}`,
-      )
-      .run(chatGuid, value);
-    this.overlayChanged(chatGuid);
-  }
-
-  dismissUnresponded(chatGuid: string, lastMessageGuid: string): void {
-    this.upsert(chatGuid, "dismissed_unresponded_guid", lastMessageGuid);
-  }
-
-  dismissWaiting(chatGuid: string, lastMessageGuid: string): void {
-    this.upsert(chatGuid, "dismissed_waiting_guid", lastMessageGuid);
-  }
-
-  clearDismissal(chatGuid: string, kind: "unresponded" | "waiting"): void {
-    this.upsert(
-      chatGuid,
-      kind === "unresponded" ? "dismissed_unresponded_guid" : "dismissed_waiting_guid",
-      null,
-    );
-  }
-
-  setMutedUnresponded(chatGuid: string, muted: boolean): void {
-    this.upsert(chatGuid, "muted_unresponded", muted ? 1 : 0);
-  }
-
-  setMarkedUnread(chatGuid: string, unread: boolean): void {
-    this.upsert(chatGuid, "marked_unread", unread ? 1 : 0);
-  }
-
-  setPinned(chatGuid: string, pinned: boolean): void {
-    this.upsert(chatGuid, "pinned", pinned ? 1 : 0);
-  }
-
-  setReadAt(chatGuid: string, at: number): void {
-    this.upsert(chatGuid, "read_at", at);
   }
 }

@@ -31,3 +31,7 @@ export function accept(result: { ok: boolean; error?: string }): void {
 export function notImplemented<K extends CommandKind>(longRunning = false): CommandHandler<K> {
   return { longRunning, execute: async () => { throw new Error("not implemented"); } };
 }
+/** Convex applies triage kinds at enqueue. Only a row queued before it did can reach the Mini, and it fails here. */
+export function ownedByConvex<K extends CommandKind>(): CommandHandler<K> {
+  return { execute: async () => { throw new Error("Convex applies this command; the Mini never executes it"); } };
+}

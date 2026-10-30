@@ -19,7 +19,7 @@ import { api, attachmentThumbnailUrl } from "@/lib/api";
 import { ContextMenuArea } from "@/components/context-menu-area";
 import { type PopoverAnchor, useActionSheet } from "@/lib/action-sheet";
 import { copyHandleAction } from "@/lib/copy-handle";
-import { pinChat, writeFlags } from "@/lib/chat-actions";
+import { pinChat, renameChat } from "@/lib/chat-actions";
 import { contactService } from "@/lib/contact-service";
 import { useAddChatTag, useWhoIs } from "@/lib/identity";
 import { useLightbox } from "@/lib/lightbox";
@@ -150,7 +150,7 @@ export function ChatInfoContent({
     if (!next || next === info.displayName) return;
     const previous = fetched?.displayName ?? null;
     setInfo((current) => current && { ...current, displayName: next });
-    writeFlags({ change: "rename", chatGuid: guid, name: next }, { kind: "rename", name: next }).catch((error: unknown) => {
+    renameChat(guid, next).catch((error: unknown) => {
       setInfo((current) => current && { ...current, displayName: previous });
       showToast(messagingCommandError(error, "Couldn't rename the conversation. Try again."));
     });
