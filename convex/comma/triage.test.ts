@@ -199,6 +199,73 @@ describe("reply clears", () => {
     await ingest(t, c, { guid: "real-1", at: Date.now() + 1, fromMe: true, clientKey: "k1" });
     expect((await events(t)).map((event) => [event.messageGuid, event.reason])).toEqual([["in-1", "reply"]]);
   });
+  test("a reply ingested with a newer inbound message in one batch still logs the clear", async () => {
+    const { t, c } = await setup();
+    await ingest(t, c, { guid: "in-a", at: 10, fromMe: false });
+    await ingest(t, c, { guid: "out-b", at: 20, fromMe: true }, { guid: "in-c", at: 30, fromMe: false });
+    expect(await events(t)).toEqual([{ messageGuid: "in-a", reason: "reply", clearedAt: 20 }]);
+  });
+
+  test("a reply ingested before the inbound message it answered logs once that message lands", async () => {
+    const { t, c } = await setup();
+    await ingest(t, c, { guid: "out-b", at: 20, fromMe: true });
+    await ingest(t, c, { guid: "in-a", at: 10, fromMe: false });
+    expect(await events(t)).toEqual([{ messageGuid: "in-a", reason: "reply", clearedAt: 20 }]);
+  });
+});
+
+describe("a settle on a send still in flight", () => {
+  test("holds when the send lands and is the last message before the settle runs", async () => {
+    const { t, as, c } = await setup();
+    await ingest(t, c, { guid: "in-1", at: 10, fromMe: false });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "k1", conversationId: c, payload: { kind: "send", text: "on it" } });
+    await ingest(t, c, { guid: "real-1", at: Date.now() + 1, fromMe: true, clientKey: "k1" });
+    await as.mutation(api.comma.triage.settle, { conversationId: c, anchor: "temp-k1" });
+    expect((await row(as, c)).flags).toMatchObject({ unresponded: false, waiting: false });
+  });
+
+  test("never dismisses an inbound message that arrived after the send", async () => {
+    const { t, as, c } = await setup();
+    await ingest(t, c, { guid: "in-1", at: 10, fromMe: false });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "k1", conversationId: c, payload: { kind: "send", text: "on it" } });
+    const later = Date.now() + 1;
+    await ingest(t, c, { guid: "real-1", at: later, fromMe: true, clientKey: "k1" }, { guid: "in-2", at: later + 1, fromMe: false });
+    await expect(as.mutation(api.comma.triage.settle, { conversationId: c, anchor: "temp-k1" })).rejects.toThrow("latest message changed");
+    expect((await row(as, c)).flags.unresponded).toBe(true);
+  });
+});
+
+describe("a triage command queued before Convex owned it", () => {
+  const queue = (t: T, c: ConversationId, clientKey: string, payload: CommaOutboxPayload) => t.run((ctx) => ctx.db.insert("comma_outbox", {
+    clientKey, conversationId: c, payload, status: "pending", attempts: 0, createdAt: 50, updatedAt: 50,
+  }));
+
+  test("applies in Convex at claim time and never reaches the Mini", async () => {
+    const { t, as, c } = await setup();
+    await ingest(t, c, { guid: "in-1", at: 10, fromMe: false });
+    await queue(t, c, "old-pin", { kind: "pin", value: true });
+    await queue(t, c, "old-settle", { kind: "settle", messageGuid: "in-1" });
+    await queue(t, c, "old-read", { kind: "markRead" });
+    expect((await claimable(t)).map((claim) => claim.payload.kind)).toEqual(["markRead"]);
+    const conversation = await row(as, c);
+    expect(conversation.flags).toMatchObject({ pinned: true, unresponded: false });
+    expect(await t.run(async (ctx) => (await ctx.db.query("comma_conversation_state").first())?.readAt)).toBe(50);
+    const statuses = await as.query(api.comma.outbox.outboxStatusFor, { clientKeys: ["old-pin", "old-settle"] });
+    expect(statuses.map((s) => s.status)).toEqual(["sent", "sent"]);
+  });
+
+  test("a stale anchor fails only its own command", async () => {
+    const { t, as, c } = await setup();
+    await ingest(t, c, { guid: "in-1", at: 10, fromMe: false }, { guid: "in-2", at: 20, fromMe: false });
+    await queue(t, c, "old-settle", { kind: "settle", messageGuid: "in-1" });
+    await queue(t, c, "old-pin", { kind: "pin", value: true });
+    expect(await claimable(t)).toEqual([]);
+    const statuses = await as.query(api.comma.outbox.outboxStatusFor, { clientKeys: ["old-settle", "old-pin"] });
+    expect(statuses).toEqual([
+      { clientKey: "old-settle", status: "failed", error: "latest message changed" },
+      { clientKey: "old-pin", status: "sent" },
+    ]);
+  });
 });
 
 describe("enqueue from a client before comma/triage", () => {

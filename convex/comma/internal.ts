@@ -14,7 +14,7 @@ import {
 
 import { conversationKey } from "./conversationKey";
 import { tempGuid } from "./tempMessage";
-import { carryTempAnchor, logReply } from "./triage";
+import { carryTempAnchor, logReplies } from "./triage";
 
 /**
  * Bridge write path for the Comma mirror. The bridge on the Mini calls these
@@ -223,6 +223,7 @@ export const upsertMessages = internalMutation({
     let skipped = 0;
     const touchedConversations = new Set<Id<"comma_conversations">>();
     const touchedTargets = new Set<string>();
+    const real: typeof messages = [];
     for (const message of messages) {
       const existing = await ctx.db
         .query("comma_messages")
@@ -251,15 +252,14 @@ export const upsertMessages = internalMutation({
         }
       }
       written++;
+      if (!message.guid.startsWith("temp-") && !message.isTapback && !message.retracted) real.push(message);
       touchedConversations.add(message.conversationId);
       // A tapback refolds its target; a normal message folds tapbacks that arrived first.
       touchedTargets.add(message.isTapback && message.tapbackTargetGuid ? message.tapbackTargetGuid : message.guid);
     }
     for (const targetGuid of touchedTargets) await refoldTarget(ctx, targetGuid);
-    for (const conversationId of touchedConversations) {
-      await refreshLastMessage(ctx, conversationId);
-      await logReply(ctx, conversationId);
-    }
+    for (const conversationId of touchedConversations) await refreshLastMessage(ctx, conversationId);
+    await logReplies(ctx, real);
     return { written, skipped };
   },
 });

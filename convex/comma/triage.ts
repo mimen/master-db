@@ -47,6 +47,17 @@ async function conversationOf(ctx: MutationCtx, conversationId: ConversationId):
   return conversation;
 }
 
+/** A send's temp anchor still names the last message once that send lands as it: the user saw that send. */
+async function anchorsLast(ctx: MutationCtx, anchor: string, lastGuid: string): Promise<boolean> {
+  if (anchor === lastGuid) return true;
+  if (!anchor.startsWith("temp-")) return false;
+  const clientKey = anchor.slice("temp-".length);
+  const sent = await ctx.db.query("comma_outbox").withIndex("by_clientKey", (q) => q.eq("clientKey", clientKey)).unique();
+  if (sent?.resultGuid === lastGuid) return true;
+  const real = await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", lastGuid)).unique();
+  return real?.clientKey === clientKey;
+}
+
 /**
  * Settles the conversation on its last message, the one every client shows and computeFlags compares. With an
  * anchor, a different last message rejects the settle, so a message the user has not seen is never dismissed.
@@ -54,7 +65,7 @@ async function conversationOf(ctx: MutationCtx, conversationId: ConversationId):
 export async function settleConversation(ctx: MutationCtx, conversationId: ConversationId, anchor?: string): Promise<void> {
   const last = (await conversationOf(ctx, conversationId)).lastMessage;
   if (!last) throw new ConvexError("chat has no last message");
-  if (anchor !== undefined && anchor !== last.guid) throw new ConvexError("latest message changed");
+  if (anchor !== undefined && !(await anchorsLast(ctx, anchor, last.guid))) throw new ConvexError("latest message changed");
   await writeState(ctx, conversationId, last.isFromMe ? { dismissedWaitingGuid: last.guid } : { dismissedUnrespondedGuid: last.guid });
   await logClear(ctx, conversationId, last.guid, "dismiss", Date.now());
   await settleConversationChats(ctx, conversationId);
@@ -94,29 +105,36 @@ export async function carryTempAnchor(ctx: MutationCtx, conversationId: Conversa
   for (const event of await eventsFor(ctx, conversationId, tempGuid).collect()) await ctx.db.patch(event._id, { messageGuid: realGuid });
 }
 
-/** How far back a reply looks for the inbound message it answered; a longer run of sends has long since logged it. */
-const REPLY_LOOKBACK = 50;
+type Ingested = Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe">;
+
+/** How many rows a neighbour search reads past tapbacks, unsent messages and temps before it gives up. */
+const NEIGHBOR_SCAN = 10;
+
+/** The real message just before or after `message` in its conversation. */
+async function neighbor(ctx: MutationCtx, message: Ingested, side: "before" | "after"): Promise<Doc<"comma_messages"> | null> {
+  const rows = await ctx.db.query("comma_messages")
+    .withIndex("by_conversation_date", (q) => side === "before"
+      ? q.eq("conversationId", message.conversationId).lt("dateCreated", message.dateCreated)
+      : q.eq("conversationId", message.conversationId).gt("dateCreated", message.dateCreated))
+    .order(side === "before" ? "desc" : "asc")
+    .take(NEIGHBOR_SCAN);
+  return rows.find((row) => !row.isTapback && !row.retracted && !row.guid.startsWith("temp-")) ?? null;
+}
 
 /**
- * A real outbound message newer than the last inbound one means that inbound message was answered. Unless a settle
- * already cleared it, the clear log records the reply at the time of the first send after it. Ingest replays
- * messages, so this runs on every batch and writes at most once per inbound message.
+ * An inbound message whose next real message is an outbound one was answered, and the clear log records the reply
+ * at that send's time. Both neighbours of each ingested message are checked: ingest can land a reply before its
+ * inbound message, or in one batch with newer messages. Ingest replays messages, and an inbound message a settle
+ * already cleared logs nothing, so each inbound message is logged at most once. Reads grow with the batch only.
  */
-export async function logReply(ctx: MutationCtx, conversationId: ConversationId): Promise<void> {
-  let reply: Doc<"comma_messages"> | null = null;
-  let scanned = 0;
-  for await (const message of ctx.db.query("comma_messages")
-    .withIndex("by_conversation_date", (q) => q.eq("conversationId", conversationId)).order("desc")) {
-    if (++scanned > REPLY_LOOKBACK) return;
-    if (message.isTapback || message.retracted) continue;
-    if (message.isFromMe) {
-      if (!message.guid.startsWith("temp-")) reply = message;
-      continue;
-    }
-    if (!reply) return;
-    if ((await stateOf(ctx, conversationId))?.dismissedUnrespondedGuid === message.guid) return;
-    await logClear(ctx, conversationId, message.guid, "reply", reply.dateCreated);
-    return;
+export async function logReplies(ctx: MutationCtx, ingested: readonly Ingested[]): Promise<void> {
+  for (const message of ingested) {
+    const inbound = message.isFromMe ? await neighbor(ctx, message, "before") : message;
+    const reply = message.isFromMe ? message : await neighbor(ctx, message, "after");
+    if (!inbound || inbound.isFromMe || !reply?.isFromMe) continue;
+    if (await eventsFor(ctx, inbound.conversationId, inbound.guid).first()) continue;
+    if ((await stateOf(ctx, inbound.conversationId))?.dismissedUnrespondedGuid === inbound.guid) continue;
+    await ctx.db.insert("comma_triage_events", { conversationId: inbound.conversationId, messageGuid: inbound.guid, reason: "reply", clearedAt: reply.dateCreated });
   }
 }
 
