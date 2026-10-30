@@ -1,7 +1,14 @@
 import type { Message, ServerEvent } from "@shared/types";
 
-export function sortByDate(messages: Message[]): Message[] {
-  return [...messages].sort((a, b) => a.dateCreated - b.dateCreated);
+const undelivered = (m: Message): boolean => m.pending === true || m.failed === true;
+
+/**
+ * Delivered messages by date, then the sends still queued or failed in the order they were sent.
+ * A send lands with the time the Mac sent it, later than the sends queued behind it, so date
+ * alone would drop each one below the rest of its burst until all of them land.
+ */
+export function sortThread(messages: Message[]): Message[] {
+  return [...messages].sort((a, b) => Number(undelivered(a)) - Number(undelivered(b)) || a.dateCreated - b.dateCreated);
 }
 
 /** `next` under `prev`'s row identity, so replacing a message never remounts its row. */
@@ -35,7 +42,7 @@ export function upsertMessage(current: Message[], message: Message): Message[] {
   }
   const temp = pendingTempFor(current, message);
   const rest = temp ? current.filter((m) => m !== temp) : current;
-  return sortByDate([...rest, carryKey(temp, message)]);
+  return sortThread([...rest, carryKey(temp, message)]);
 }
 
 /** The send settled: the temp's row becomes the real message, whichever of response or echo landed first. */
@@ -43,10 +50,10 @@ export function settleTemp(current: Message[], tempGuid: string, message: Messag
   const temp = current.find((m) => m.guid === tempGuid);
   const rest = current.filter((m) => m.guid !== tempGuid);
   const index = rest.findIndex((m) => m.guid === message.guid);
-  if (index < 0) return sortByDate([...rest, carryKey(temp, message)]);
+  if (index < 0) return sortThread([...rest, carryKey(temp, message)]);
   const next = [...rest];
   next[index] = carryKey(temp ?? rest[index], message);
-  return sortByDate(next);
+  return sortThread(next);
 }
 
 /** This session's own optimistic send, still pending or failed: no fetch can contain it. */
@@ -68,7 +75,7 @@ export function mergeWindow(current: Message[], batch: Message[]): Message[] {
   });
   const newest = batch.reduce((max, m) => Math.max(max, m.dateCreated), -Infinity);
   const local = current.filter((m) => !claimed.has(m) && (isOwnUnsettledSend(m) || m.dateCreated > newest));
-  return sortByDate([...merged, ...local]);
+  return sortThread([...merged, ...local]);
 }
 
 /**

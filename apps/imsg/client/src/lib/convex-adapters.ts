@@ -4,6 +4,7 @@ import { knownParticipants } from "@shared/chat-state";
 import type { AttachmentSummary, ChatSummary, Message, ScheduledMessage } from "@shared/types";
 import type { AgentChatSummary } from "./agent-api";
 import type { commaApi } from "./convex-api";
+import { sortThread } from "./message-window";
 
 export type ConvexConversation = FunctionReturnType<typeof commaApi.listConversations>["page"][number];
 export type ConvexMessage = FunctionReturnType<typeof commaApi.listMessages>["page"][number];
@@ -178,6 +179,5 @@ export function mergeConvexMessages(remote: readonly Message[], local: readonly 
     // A queued send's Convex row is `temp-<clientKey>`; adopt the local bubble's identity so it never remounts.
     return own?.clientKey ? { ...m, guid: m.guid.startsWith("temp-") ? own.guid : m.guid, clientKey: own.clientKey } : m;
   });
-  return [...merged, ...local.filter((m) => !claimed.has(m) && (m.pending || m.failed || m.clientKey))]
-    .sort((a, b) => a.dateCreated - b.dateCreated);
+  return sortThread([...merged, ...local.filter((m) => !claimed.has(m) && (m.pending || m.failed || m.clientKey))]);
 }

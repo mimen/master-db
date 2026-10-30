@@ -55,7 +55,7 @@ describe("a send settles into the optimistic row it started as", () => {
   test("an echo whose text the server rewrote still settles into the temp's row", () => {
     const rewritten = { ...sent, text: "on my way " };
     const echoed = upsertMessage([older, temp], rewritten);
-    expect(rows(echoed)).toEqual([["m-1", "m-1", false], ["temp-1", "temp-1", true], ["real-1", "real-1", false]]);
+    expect(rows(echoed)).toEqual([["m-1", "m-1", false], ["real-1", "real-1", false], ["temp-1", "temp-1", true]]);
     expect(rows(settleTemp(echoed, "temp-1", rewritten))).toEqual([["m-1", "m-1", false], ["temp-1", "real-1", false]]);
   });
 
@@ -81,7 +81,15 @@ describe("a send settles into the optimistic row it started as", () => {
 
   test("an inbound message with the same text leaves the pending send alone", () => {
     const inbound = message("in-1", "on my way", 5_100, { isFromMe: false });
-    expect(rows(upsertMessage([temp], inbound))).toEqual([["temp-1", "temp-1", true], ["in-1", "in-1", false]]);
+    expect(rows(upsertMessage([temp], inbound))).toEqual([["in-1", "in-1", false], ["temp-1", "temp-1", true]]);
+  });
+});
+
+describe("a burst of sends in an anchored window", () => {
+  test("a send that settles stays above the sends still queued behind it", () => {
+    const second = message("temp-2", "running late", 5_100, { pending: true, clientKey: "temp-2" });
+    const landed = settleTemp([older, temp, second], "temp-1", { ...sent, dateCreated: 6_000 });
+    expect(rows(landed)).toEqual([["m-1", "m-1", false], ["temp-1", "real-1", false], ["temp-2", "temp-2", true]]);
   });
 });
 

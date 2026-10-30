@@ -218,3 +218,51 @@ describe("queued send dedupe", () => {
     expect(merged.map((m) => m.guid)).toEqual(["REAL"]);
   });
 });
+
+describe("a burst of sends resolving one at a time", () => {
+  // Each send is queued at about 5s; the bridge sends them in turn, and iMessage stamps each with
+  // the time it went out. X arrives before the first send goes out, Y between the first and the second.
+  const row = (guid: string, text: string, dateCreated: number, extra: Partial<ConvexMessage> = {}) =>
+    messageToMessage(message({ guid, text, dateCreated, ...extra }));
+  const older = row("m0", "see you at 8", 1_000);
+  const x = row("in-x", "X", 5_500);
+  const y = row("in-y", "Y", 6_500);
+  const queuedAt = { a: 5_000, b: 5_100, c: 5_200 };
+  const sentAt = { a: 6_000, b: 7_000, c: 8_000 };
+  type Key = keyof typeof queuedAt;
+  const temp = (key: Key, error = 0) => row(`temp-temp-${key}`, key, queuedAt[key], { isFromMe: true, clientKey: `temp-${key}`, error });
+  const real = (key: Key) => row(`out-${key}`, key, sentAt[key], { isFromMe: true });
+  const local = (key: Key): Message => ({ ...row(`temp-${key}`, key, queuedAt[key], { isFromMe: true }), clientKey: `temp-${key}`, pending: true });
+  const failed = (key: Key): Message => ({ ...local(key), pending: false, failed: true });
+  const settled = (key: Key): Message => ({ ...real(key), clientKey: `temp-${key}` });
+  const thread = (remote: Message[], own: Message[]) => mergeConvexMessages(remote, own).map((m) => `${m.text}${m.failed ? "!" : m.pending ? "…" : ""}`);
+
+  test("a send that lands stays above the sends still queued behind it", () => {
+    expect(thread([older, temp("a"), temp("b"), temp("c")], [local("a"), local("b"), local("c")]))
+      .toEqual(["see you at 8", "a…", "b…", "c…"]);
+    expect(thread([older, real("a"), temp("b"), temp("c")], [settled("a"), local("b"), local("c")]))
+      .toEqual(["see you at 8", "a", "b…", "c…"]);
+    expect(thread([older, real("a"), real("b"), temp("c")], [settled("a"), settled("b"), local("c")]))
+      .toEqual(["see you at 8", "a", "b", "c…"]);
+  });
+
+  test("a message that arrives mid-burst sits above the sends still queued", () => {
+    expect(thread([older, x, temp("a"), temp("b"), temp("c")], [local("a"), local("b"), local("c")]))
+      .toEqual(["see you at 8", "X", "a…", "b…", "c…"]);
+    expect(thread([older, x, real("a"), y, temp("b"), temp("c")], [settled("a"), local("b"), local("c")]))
+      .toEqual(["see you at 8", "X", "a", "Y", "b…", "c…"]);
+  });
+
+  test("a failed send keeps its place in the queue and stays below what lands after it", () => {
+    expect(thread([older, x, real("a"), temp("b", 1), temp("c")], [settled("a"), failed("b"), local("c")]))
+      .toEqual(["see you at 8", "X", "a", "b!", "c…"]);
+    expect(thread([older, x, real("a"), temp("b", 1), real("c")], [settled("a"), failed("b"), settled("c")]))
+      .toEqual(["see you at 8", "X", "a", "c", "b!"]);
+  });
+
+  test("once every send lands the thread is in iMessage's order", () => {
+    expect(thread([older, x, real("a"), y, real("b"), real("c")], [settled("a"), settled("b"), settled("c")]))
+      .toEqual(["see you at 8", "X", "a", "Y", "b", "c"]);
+    expect(thread([older, x, real("a"), y, real("b"), real("c")], [])).toEqual(["see you at 8", "X", "a", "Y", "b", "c"]);
+  });
+});
