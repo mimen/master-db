@@ -31,7 +31,9 @@ test("agent-list: badges in every lens, agent rows in Needs you, the Agents tab,
   page.on("request", (request) => {
     if (!request.url().endsWith("/__fixture/convex")) return;
     const body = request.postDataJSON() as { name?: string; args?: { payload?: { kind?: string } } } | null;
-    if (body?.name === "comma/outbox:enqueue" && body.args?.payload?.kind) enqueued.push(body.args.payload.kind);
+    const triage = /^comma\/triage:(\w+)$/.exec(body?.name ?? "")?.[1];
+    if (triage) enqueued.push(triage);
+    else if (body?.name === "comma/outbox:enqueue" && body.args?.payload?.kind) enqueued.push(body.args.payload.kind);
   });
   const effects: Record<string, unknown> = {};
   const rows = page.getByTestId("conversation-row");

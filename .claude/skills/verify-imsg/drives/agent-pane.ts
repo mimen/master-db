@@ -444,7 +444,7 @@ test("agent-pane: the pane's Settle settles only its chat, a settled chat reads 
   test.setTimeout(60_000);
   const page = desk.page;
   const calls = recordCalls(page);
-  const outbox = recordCalls(page, /^comma\/outbox:enqueue$/);
+  const triage = recordCalls(page, /^comma\/triage:settle$/);
   const guid = AGENT_CHAT_GUIDS.several;
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   const { pane, switcher, input } = await openPane(page, guid);
@@ -459,7 +459,7 @@ test("agent-pane: the pane's Settle settles only its chat, a settled chat reads 
   let chats = await chatsOf(desk.request, guid);
   expect(titled(chats, "Rideshare codes").settledAt).toBeDefined();
   expect(titled(chats, "Hotel block for the crew").settledAt, "the conversation's other open chat stays open").toBeUndefined();
-  expect(outbox.filter((call) => (call.args.payload as { kind: string }).kind === "settle"), "the conversation itself is not settled").toEqual([]);
+  expect(triage, "the conversation itself is not settled").toEqual([]);
   expect(calls.filter((call) => call.name === "comma/agent:settle").map((call) => call.args)).toEqual([{ chatId: rideshare._id }]);
   await page.screenshot({ path: shot("23-settled-from-pane") });
 
@@ -486,7 +486,7 @@ test("agent-pane: the pane's Settle settles only its chat, a settled chat reads 
   expect(calls.filter((call) => call.name === "comma/agent:ask").map((call) => call.args.chatId)).toEqual([dinner._id]);
   expect(calls.filter((call) => call.name === "comma/agent:reopen").map((call) => call.args)).toEqual([{ chatId: rideshare._id }]);
   await page.screenshot({ path: shot("25-asked-in-settled") });
-  writeFileSync(join(evidence, "side-effects-settle.json"), JSON.stringify({ calls, outbox, chats }, null, 2));
+  writeFileSync(join(evidence, "side-effects-settle.json"), JSON.stringify({ calls, triage, chats }, null, 2));
 });
 
 test("agent-pane: looking at Riley's ready chat marks it seen, so it reads open and the strip goes quiet", async ({ desk }) => {

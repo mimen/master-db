@@ -43,7 +43,9 @@ test("today-queue: opens on Today, strip rank, settle gap, Update, Regenerate fr
   page.on("request", (req) => {
     if (!req.url().includes("/__fixture/convex")) return;
     const body = req.postDataJSON() as { name?: string; args?: { mode?: string; payload?: { kind?: string } } } | null;
-    if (body?.name === "comma/outbox:enqueue" && body.args?.payload?.kind) enqueued.push(body.args.payload.kind);
+    const triage = /^comma\/triage:(\w+)$/.exec(body?.name ?? "")?.[1];
+    if (triage) enqueued.push(triage);
+    else if (body?.name === "comma/outbox:enqueue" && body.args?.payload?.kind) enqueued.push(body.args.payload.kind);
     if (body?.name === "comma/today:requestBuild") builds.push(body.args?.mode ?? "none");
   });
 

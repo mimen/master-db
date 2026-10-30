@@ -8,7 +8,8 @@ const SLOW_MS = Number(process.env.SETTLE_SLOW_MS ?? 1500);
 const WATCH_MS = SLOW_MS + 2500;
 const LENS = process.env.SETTLE_LENS === "today" ? /^Today/ : /^Needs you, \d+/;
 
-interface Frame { t: number; h: number }
+/** `h`: visible height, see startSampler. `x`: how far the row sits left of where it rests, in px. */
+interface Frame { t: number; h: number; x: number }
 
 /**
  * Every animation frame, how much of the conversation row labelled `name` the user can see, as a height: its visible
@@ -18,9 +19,10 @@ interface Frame { t: number; h: number }
  */
 async function startSampler(page: Page, name: string): Promise<void> {
   await page.evaluate((target) => {
-    const frames: { t: number; h: number }[] = [];
+    const frames: { t: number; h: number; x: number }[] = [];
     (window as unknown as { __frames: typeof frames }).__frames = frames;
     const t0 = performance.now();
+    let rest: number | null = null;
     const visible = (row: HTMLElement): number => {
       const box = row.getBoundingClientRect();
       let { top, bottom, left, right } = box;
@@ -42,23 +44,34 @@ async function startSampler(page: Page, name: string): Promise<void> {
     };
     const tick = () => {
       let h = 0;
+      let x = 0;
       for (const row of document.querySelectorAll<HTMLElement>('[data-testid="conversation-row"]')) {
-        if (row.getAttribute("aria-label")?.startsWith(target)) h = Math.max(h, visible(row));
+        if (!row.getAttribute("aria-label")?.startsWith(target)) continue;
+        const left = row.getBoundingClientRect().left;
+        rest ??= left;
+        h = Math.max(h, visible(row));
+        x = Math.round(rest - left);
       }
-      frames.push({ t: Math.round(performance.now() - t0), h: Math.round(h) });
+      frames.push({ t: Math.round(performance.now() - t0), h: Math.round(h), x });
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
   }, name);
 }
 
-/** Frames where the row is back at full height after it had dropped below half of it. */
+/**
+ * Frames where a settled row shows again: back at full height after it dropped below half of it, or, still visible,
+ * sliding 40px or more back toward its place after a swipe moved it out.
+ */
 function reappearances(frames: Frame[], fullHeight: number): Frame[] {
-  let left = false;
+  let shrunk = false;
+  let swipedTo = 0;
   const back: Frame[] = [];
   for (const frame of frames) {
-    if (frame.h < fullHeight / 2) left = true;
-    else if (left && frame.h >= fullHeight * 0.9) back.push(frame);
+    if (frame.h < fullHeight / 2) shrunk = true;
+    else if (shrunk && frame.h >= fullHeight * 0.9) back.push(frame);
+    swipedTo = Math.max(swipedTo, frame.x);
+    if (swipedTo >= 40 && swipedTo - frame.x >= 40 && frame.h >= fullHeight * 0.1) back.push(frame);
   }
   return back;
 }
@@ -75,7 +88,7 @@ function watchConvex(page: Page, t0: number): string[] {
 }
 
 async function slowSettle(page: Page): Promise<void> {
-  for (const name of ["comma/outbox:enqueue", "comma/triage:settle"]) {
+  for (const name of ["comma/outbox:enqueue", "comma/triage:settle", "comma/agent:settleConversationAgents"]) {
     const response = await page.request.post("/__fixture/latency", { data: { name, delayMs: SLOW_MS } });
     expect(response.ok()).toBe(true);
   }
@@ -115,6 +128,10 @@ test("settle-flicker: a sidebar settle never shows the row again", async ({ desk
   }, name, fullHeight);
   expect(frames.some((frame) => frame.h === 0), "the row left").toBe(true);
   expect(back, `row reappeared at ${back.map((f) => `${f.t}ms`).join(", ")}`).toEqual([]);
+
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.getByTestId("conversation-row").filter({ hasText: name }), "Undo brings it back").toHaveCount(1);
+  await page.screenshot({ path: join(evidence, "desk", "after-undo.png") });
 });
 
 test.describe("phone", () => {
