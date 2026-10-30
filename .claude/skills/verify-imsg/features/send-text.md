@@ -38,4 +38,4 @@ Preconditions:
 - The fixture clock is pinned to `FIXTURE_NOW`. Timing assertions about "slow" sends need the page clock shifted (see `e2e/fixture/send.playwright.ts`).
 - Mentions are carried in the same `send` command. Check the payload's `mentions`, not a separate request.
 - The fixture runs queued sends one at a time, as the bridge does, so a delayed burst lands one send per `delayMs`.
-- The fixture has no optimistic sidebar update. The preview reaches a new send on the next 500 ms poll, where production moves it on the frame of the send.
+- The fixture applies the optimistic sidebar update as Convex does, so the preview moves to each send on the frame it is typed. The drive checks that it never moves back to an earlier send.

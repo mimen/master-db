@@ -99,9 +99,10 @@ test("send-burst: a burst keeps send order in the thread and the newest send in 
     return [...arrived, ...sends.filter((text) => shown.includes(text))];
   };
   const misordered = samples.filter((sample) => JSON.stringify(sample.thread) !== JSON.stringify(expected(sample.thread)));
-  // The fixture has no optimistic sidebar update, so the preview catches up on its next poll.
+  // The optimistic sidebar update moves the preview to each send as it is typed; it must never move back.
   const newest = samples.findIndex((sample) => sample.preview.includes(sends[2]!));
-  const earlierSend = samples.filter((sample) => sends.slice(0, 2).some((text) => sample.preview.includes(text)));
+  const shownSend = samples.map((sample) => sends.findIndex((text) => sample.preview.includes(text)));
+  const earlierSend = samples.filter((_, i) => shownSend[i]! < Math.max(-1, ...shownSend.slice(0, i)));
   const lostNewest = samples.slice(newest).filter((sample) => !sample.preview.includes(sends[2]!));
   expect.soft(misordered, "every frame shows the inbound above the sends, and the sends in send order").toEqual([]);
   expect(newest, "the preview reaches the newest send").toBeGreaterThan(-1);
