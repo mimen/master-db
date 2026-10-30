@@ -188,11 +188,11 @@ describe("requestFocus survives a target remount", () => {
     // is still registered (ThreadView is keyed by guid, so it's about to
     // unmount). The request must still land on the replacement.
     let newFocused = 0;
-    const unregisterOld = registerFocusTarget("composer", () => undefined);
+    const unregisterOld = registerFocusTarget("composer", () => null);
 
     requestFocus("composer");
     unregisterOld(); // old ThreadView tears down
-    registerFocusTarget("composer", () => newFocused++); // replacement mounts
+    registerFocusTarget("composer", () => ({ focus: () => newFocused++ })); // replacement mounts
 
     await new Promise((r) => setTimeout(r, 10));
     expect(newFocused).toBe(1);
@@ -200,9 +200,43 @@ describe("requestFocus survives a target remount", () => {
 
   test("focuses an already-mounted target when nothing remounts", async () => {
     let focused = 0;
-    registerFocusTarget("composer", () => focused++);
+    registerFocusTarget("composer", () => ({ focus: () => focused++ }));
     requestFocus("composer");
     await new Promise((r) => setTimeout(r, 10));
     expect(focused).toBe(1);
+  });
+
+  test("never pulls focus out of a dialog opened after the request", async () => {
+    const element = (dialog: object | null) => ({ closest: () => dialog });
+    const palette = { contains: (node: unknown) => node === search };
+    const row = element(null);
+    const search = element(palette);
+    const page = globalThis as { document?: unknown };
+    let focused = 0;
+    registerFocusTarget("composer", () => ({ focus: () => focused++ }));
+    page.document = { activeElement: row };
+    try {
+      requestFocus("composer");
+      page.document = { activeElement: search }; // ⌘K lands before the deferred focus runs
+      await new Promise((r) => setTimeout(r, 10));
+      expect(focused, "the palette keeps its field").toBe(0);
+
+      requestFocus("composer"); // asked from inside the dialog, as a palette pick does
+      await new Promise((r) => setTimeout(r, 10));
+      expect(focused).toBe(1);
+
+      let paneFocused = 0;
+      const paneInput = { focus: () => paneFocused++ };
+      const pane = { contains: (node: unknown) => node === paneInput || node === inPane };
+      const inPane = element(pane);
+      page.document = { activeElement: row };
+      registerFocusTarget("agent-input", () => paneInput);
+      requestFocus("agent-input");
+      page.document = { activeElement: inPane }; // the pane opens and holds focus before its input is focused
+      await new Promise((r) => setTimeout(r, 10));
+      expect(paneFocused, "a target inside the new dialog still gets focus").toBe(1);
+    } finally {
+      delete page.document;
+    }
   });
 });
