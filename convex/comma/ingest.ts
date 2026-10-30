@@ -23,7 +23,6 @@ const ROUTES = {
   groupPhoto: internal.comma.groupPhotos.setGroupPhoto,
   mediaBacklog: internal.comma.internal.mediaBacklog,
   scheduled: internal.comma.internal.replaceScheduled,
-  overlay: internal.comma.internal.importOverlay,
   unread: (internal.comma.internal as typeof internal.comma.internal & { replaceUnread: import("convex/server").FunctionReference<"mutation", "internal"> }).replaceUnread,
   sync: internal.comma.internal.markSyncState,
   suggestions: internal.comma.internal.setSuggestions,

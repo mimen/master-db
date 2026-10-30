@@ -5,10 +5,11 @@ import { internalMutation, mutation, query, type MutationCtx } from "../_generat
 import { assertAllowed } from "../_lib/authed";
 import { commandReceipt, commandResult, outboxDoc, outboxPayload, outboxStatus, type CommaOutboxPayload } from "../schema/comma/validators";
 
-import { reopenConversationChats, settleConversationChats, settleDraftChat } from "./agent";
+import { settleDraftChat } from "./agent";
 import { sameSecret } from "./bridgeAuth";
 import { refoldTarget, refreshLastMessage } from "./internal";
 import { sendService, tempGuid } from "./tempMessage";
+import { carryTempAnchor, readConversation, setConversationFlag, settleConversation, unsettleConversation } from "./triage";
 
 /**
  * The command queue. Clients enqueue (Convex Auth); the Mini's bridge claims
@@ -31,17 +32,45 @@ export const AUTO_RETRY = {
 export const IDEMPOTENT_KINDS = new Set(Object.entries(AUTO_RETRY).filter(([, retry]) => retry).map(([kind]) => kind));
 export const GLOBAL_KINDS = new Set<CommaOutboxPayload["kind"]>(["createChat", "clearSuggestionLearning"]);
 
+type TriagePayload = Extract<CommaOutboxPayload, { kind: "settle" | "unsettle" | "pin" | "mute" | "markUnread" }>;
+
+const TRIAGE_KINDS: ReadonlySet<CommaOutboxPayload["kind"]> = new Set<TriagePayload["kind"]>(["settle", "unsettle", "pin", "mute", "markUnread"]);
+const isTriage = (payload: CommaOutboxPayload): payload is TriagePayload => TRIAGE_KINDS.has(payload.kind);
+
+async function triageCore(ctx: MutationCtx, conversationId: Id<"comma_conversations">, payload: TriagePayload): Promise<void> {
+  switch (payload.kind) {
+    case "settle": return await settleConversation(ctx, conversationId, payload.messageGuid);
+    case "unsettle": return await unsettleConversation(ctx, conversationId);
+    case "pin": return await setConversationFlag(ctx, conversationId, { pinned: payload.value });
+    case "mute": return await setConversationFlag(ctx, conversationId, { mutedUnresponded: payload.value });
+    case "markUnread": return await setConversationFlag(ctx, conversationId, { markedUnread: true });
+  }
+}
+
+/**
+ * A client from before comma/triage still enqueues triage kinds. They apply here through the same cores and
+ * complete at once, so the Mini never claims them; a read also queues the Mini's receipt as before.
+ */
+async function applyTriage(ctx: MutationCtx, clientKey: string, conversationId: Id<"comma_conversations">, payload: TriagePayload) {
+  const existing = await ctx.db.query("comma_outbox").withIndex("by_clientKey", (q) => q.eq("clientKey", clientKey)).unique();
+  if (existing) return existing._id;
+  await triageCore(ctx, conversationId, payload);
+  const now = Date.now();
+  return await ctx.db.insert("comma_outbox", {
+    clientKey, conversationId, payload, status: "sent", result: { kind: payload.kind, ok: true }, attempts: 0, createdAt: now, updatedAt: now,
+  });
+}
+
 export const enqueue = mutation({
   args: { clientKey: v.string(), conversationId: v.optional(v.id("comma_conversations")), payload: outboxPayload },
   returns: v.id("comma_outbox"),
   handler: async (ctx, args) => {
     await assertAllowed(ctx);
-    const { id, created } = await enqueueCommand(ctx, args);
     const { conversationId, payload } = args;
+    if (conversationId && isTriage(payload)) return await applyTriage(ctx, args.clientKey, conversationId, payload);
+    const { id, created } = await enqueueCommand(ctx, args);
     if (!created || !conversationId) return id;
-    // A conversation's triage gesture carries its agent chats with it.
-    if (payload.kind === "settle") await settleConversationChats(ctx, conversationId);
-    if (payload.kind === "unsettle") await reopenConversationChats(ctx, conversationId);
+    if (payload.kind === "markRead") await readConversation(ctx, conversationId, Date.now());
     if (payload.kind === "send" || payload.kind === "sendAttachment") {
       // The composer's own send takes its draft with it, and sending a drafted attachment sends the
       // whole draft. An agent send goes through enqueueCommand and leaves the user's draft alone.
@@ -229,6 +258,7 @@ export const completeOutbox = internalMutation({
       const real = resultGuid ? await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", resultGuid)).unique() : null;
       if (temp && status === "sent" && (real || !resultGuid)) {
         await ctx.db.delete(temp._id);
+        if (resultGuid) await carryTempAnchor(ctx, temp.conversationId, temp.guid, resultGuid);
         // An echo that beat this receipt left the temp as the newest row and the preview.
         await refreshLastMessage(ctx, temp.conversationId);
       }
