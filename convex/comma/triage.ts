@@ -110,15 +110,15 @@ type Ingested = Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCre
 /** How many rows a neighbour search reads past tapbacks, unsent messages and temps before it gives up. */
 const NEIGHBOR_SCAN = 10;
 
-/** The real message just before or after `message` in its conversation. */
+/** The real message just before or after `message`. A shared timestamp still counts: strict inequality dropped a reply sent in the same millisecond. */
 async function neighbor(ctx: MutationCtx, message: Ingested, side: "before" | "after"): Promise<Doc<"comma_messages"> | null> {
   const rows = await ctx.db.query("comma_messages")
     .withIndex("by_conversation_date", (q) => side === "before"
-      ? q.eq("conversationId", message.conversationId).lt("dateCreated", message.dateCreated)
-      : q.eq("conversationId", message.conversationId).gt("dateCreated", message.dateCreated))
+      ? q.eq("conversationId", message.conversationId).lte("dateCreated", message.dateCreated)
+      : q.eq("conversationId", message.conversationId).gte("dateCreated", message.dateCreated))
     .order(side === "before" ? "desc" : "asc")
-    .take(NEIGHBOR_SCAN);
-  return rows.find((row) => !row.isTapback && !row.retracted && !row.guid.startsWith("temp-")) ?? null;
+    .take(NEIGHBOR_SCAN + 1);
+  return rows.find((row) => row.guid !== message.guid && !row.isTapback && !row.retracted && !row.guid.startsWith("temp-")) ?? null;
 }
 
 /**

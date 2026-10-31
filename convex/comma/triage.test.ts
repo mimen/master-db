@@ -212,6 +212,12 @@ describe("reply clears", () => {
     await ingest(t, c, { guid: "in-a", at: 10, fromMe: false });
     expect(await events(t)).toEqual([{ messageGuid: "in-a", reason: "reply", clearedAt: 20 }]);
   });
+
+  test("a reply with the same timestamp as the inbound message still logs the clear", async () => {
+    const { t, c } = await setup();
+    await ingest(t, c, { guid: "in-1", at: 10, fromMe: false }, { guid: "out-1", at: 10, fromMe: true });
+    expect(await events(t)).toEqual([{ messageGuid: "in-1", reason: "reply", clearedAt: 10 }]);
+  });
 });
 
 describe("a settle on a send still in flight", () => {
