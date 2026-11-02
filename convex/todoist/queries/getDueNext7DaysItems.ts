@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "../../_generated/api";
 import { Doc } from "../../_generated/dataModel";
 import { authedQuery } from "../../_lib/authed";
+import { dueLocalDate } from "../helpers/dueLocalDate";
 
 export const getDueNext7DaysItems = authedQuery({
   args: {
@@ -61,8 +62,7 @@ export const getDueNext7DaysItems = authedQuery({
       const dueDate = item.due.date;
       if (!dueDate) return false;
 
-      // Extract date-only part for consistent comparison
-      const dateOnly = dueDate.includes('T') ? dueDate.split('T')[0] : dueDate;
+      const dateOnly = dueLocalDate(dueDate, args.timezoneOffsetMinutes ?? 0);
 
       // Upcoming means tomorrow through next 7 days (excluding today)
       return dateOnly > todayLocalDate && dateOnly <= next7DaysLocalDate;

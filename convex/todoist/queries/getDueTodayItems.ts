@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "../../_generated/api";
 import { Doc } from "../../_generated/dataModel";
 import { authedQuery } from "../../_lib/authed";
+import { dueLocalDate } from "../helpers/dueLocalDate";
 
 export const getDueTodayItems = authedQuery({
   args: {
@@ -54,9 +55,7 @@ export const getDueTodayItems = authedQuery({
       const dueDate = item.due.date;
       if (!dueDate) return false;
 
-      // Floating local time, no zone. `new Date` would read it in the server zone.
-      const dateOnly = dueDate.includes("T") ? dueDate.split("T")[0] : dueDate;
-      return dateOnly === todayLocalDate;
+      return dueLocalDate(dueDate, args.timezoneOffsetMinutes ?? 0) === todayLocalDate;
     });
 
     const sortedItems: Doc<"todoist_items">[] = dueTodayItems.sort((a: Doc<"todoist_items">, b: Doc<"todoist_items">) => {

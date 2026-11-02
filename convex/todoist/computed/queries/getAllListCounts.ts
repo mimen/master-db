@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "../../../_generated/api";
 import { Doc } from "../../../_generated/dataModel";
 import { authedQuery } from "../../../_lib/authed";
+import { dueLocalDate } from "../../helpers/dueLocalDate";
 
 /**
  * Unified count query that returns all list counts in a single call.
@@ -75,10 +76,7 @@ export const getAllListCounts = authedQuery({
     const next7Day = String(next7DaysLocal.getUTCDate()).padStart(2, '0');
     const next7DaysISO = `${next7Year}-${next7Month}-${next7Day}`;
 
-    // Helper to extract date-only part from date or datetime string
-    const extractDateOnly = (dateStr: string): string => {
-      return dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
-    };
+    const extractDateOnly = (dateStr: string): string => dueLocalDate(dateStr, args.timezoneOffsetMinutes ?? 0);
 
     // Helper to check if item matches time filter
     // Note: Items with @routine label are excluded from time filters
