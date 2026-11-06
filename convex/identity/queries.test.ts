@@ -13,6 +13,7 @@ import {
   listTagsRef,
   nameDirectoryRef,
   searchPeopleRef,
+  seedGroup,
   setChatFavoriteRef,
   topLinkedPeopleRef,
   TEST_KEY,
@@ -521,6 +522,8 @@ describe("nameDirectory", () => {
 describe("chatCrm", () => {
   test("projects favorite/priority/tags/events for a batch of chat guids", async () => {
     const t = convexTest(schema, modules);
+    const g1 = await seedGroup(t, ["g1"]);
+    await seedGroup(t, ["g2"]);
     await t.mutation(setChatFavoriteRef, { key: TEST_KEY, chatGuid: "g1", is_favorite: true });
     await seedChatTag(t, "g1", "planning");
     await t.mutation(linkEventRef, {
@@ -537,10 +540,13 @@ describe("chatCrm", () => {
       events: [{ id: "evt1", name: "Summer Bash", linkId: expect.any(String) }],
     });
     expect(results.g2).toBeUndefined();
+    const byId = await t.query(chatCrmRef, { key: TEST_KEY, conversationIds: [g1] });
+    expect(byId[g1]).toEqual(results.g1);
   });
 
   test("a chat with only a tag (no chat_crm row) still projects", async () => {
     const t = convexTest(schema, modules);
+    await seedGroup(t, ["g1"]);
     await seedChatTag(t, "g1", "planning");
 
     const results = await t.query(chatCrmRef, { key: TEST_KEY, chatGuids: ["g1"] });
@@ -549,6 +555,7 @@ describe("chatCrm", () => {
 
   test("omitting chatGuids returns every chat with any CRM data", async () => {
     const t = convexTest(schema, modules);
+    await seedGroup(t, ["g1"]);
     await t.mutation(setChatFavoriteRef, { key: TEST_KEY, chatGuid: "g1", is_favorite: true });
     await seedChatTag(t, "g2", "vip");
 

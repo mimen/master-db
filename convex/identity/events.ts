@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { action, mutation } from "../_generated/server";
 
 import { airtableNameSearchFormula } from "./airtableSearch";
+import { groupConversation, groupCrm, groupOwner } from "./groupCrm";
 import { requireIdentityAccess } from "./key";
 
 /**
@@ -64,7 +65,7 @@ export const searchEvents = action({
 
 /**
  * Link a person or GROUP chat to an Airtable event — exactly one of
- * personId/chatGuid must be set (see event_links.ts's docstring). Dedupes
+ * personId/conversationId/chatGuid must be set (see event_links.ts's docstring). Dedupes
  * against an existing link to the SAME event for the SAME owner (no-op write,
  * but refreshes the cached `event_name` if the event was renamed in Airtable
  * since the original link — same "cache can drift, re-linking refreshes it"
@@ -74,20 +75,22 @@ export const linkEvent = mutation({
   args: {
     key: v.optional(v.string()),
     personId: v.optional(v.id("people")),
+    conversationId: v.optional(v.id("comma_conversations")),
     chatGuid: v.optional(v.string()),
     airtable_event_id: v.string(),
     event_name: v.string(),
     start_date: v.optional(v.string()),
   },
-  handler: async (ctx, { key, personId, chatGuid, airtable_event_id, event_name, start_date }) => {
+  handler: async (ctx, { key, personId, conversationId, chatGuid, airtable_event_id, event_name, start_date }) => {
     await requireIdentityAccess(ctx, key);
-    if (Boolean(personId) === Boolean(chatGuid)) {
-      throw new Error("linkEvent requires exactly one of personId or chatGuid");
+    if ([personId, conversationId, chatGuid].filter((x) => x !== undefined).length !== 1) {
+      throw new Error("linkEvent requires exactly one of personId, conversationId or chatGuid");
     }
 
-    const existing = personId
-      ? await ctx.db.query("event_links").withIndex("by_person", (q) => q.eq("person_id", personId)).collect()
-      : await ctx.db.query("event_links").withIndex("by_chat", (q) => q.eq("chat_guid", chatGuid)).collect();
+    const group = personId ? null : await groupConversation(ctx, { conversationId, chatGuid });
+    const existing = group
+      ? await groupCrm.events(ctx, group)
+      : await ctx.db.query("event_links").withIndex("by_person", (q) => q.eq("person_id", personId)).collect();
     const match = existing.find((e) => e.airtable_event_id === airtable_event_id);
     if (match) {
       if (match.event_name !== event_name || (start_date && match.start_date !== start_date)) {
@@ -97,8 +100,7 @@ export const linkEvent = mutation({
     }
 
     const linkId = await ctx.db.insert("event_links", {
-      person_id: personId,
-      chat_guid: chatGuid,
+      ...(group ? groupOwner(group) : { person_id: personId }),
       airtable_event_id,
       event_name,
       start_date,

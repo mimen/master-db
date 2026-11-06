@@ -18,10 +18,11 @@ import { v } from "convex/values";
  * doesn't know a guid's DM/group-ness), but every mutation in
  * `convex/identity/crm.ts` that targets chats is the enforcement point.
  *
- * `chat_guid` is BlueBubbles' merged-conversation guid (the "primary" guid
- * after imsg's service-sibling merge — see apps/imsg's bridge/mapper.ts) —
- * Convex has no chats table of its own, this is the only place a chat guid
- * appears in the identity graph.
+ * `conversation_id` owns the row: the Comma conversation, whichever service
+ * chat it sends through. `chat_guid` is the chat that was the conversation's
+ * primary when the row was written, the key before conversations owned CRM;
+ * rows without `conversation_id` predate that and comma/migrations:rekeyGroupCrm
+ * moves them. See convex/identity/groupCrm.ts.
  *
  * Priority is P1–P5, ONE = HIGHEST — same numeric convention as
  * `people.priority` (see that field's docstring for the non-inverted,
@@ -30,8 +31,11 @@ import { v } from "convex/values";
  */
 export const chat_crm = defineTable({
   chat_guid: v.string(),
+  conversation_id: v.optional(v.id("comma_conversations")),
   is_favorite: v.optional(v.boolean()),
   priority: v.optional(v.number()),
   created_at: v.string(),
   updated_at: v.string(),
-}).index("by_chat_guid", ["chat_guid"]);
+})
+  .index("by_chat_guid", ["chat_guid"])
+  .index("by_conversation", ["conversation_id"]);

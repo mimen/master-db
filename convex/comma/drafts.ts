@@ -6,7 +6,7 @@ import { internalAction, internalMutation, internalQuery, mutation, type Mutatio
 import { assertAllowed } from "../_lib/authed";
 import { draftListItem, type DraftAttachment } from "../schema/comma/validators";
 
-import { conversationKey } from "./conversationKey";
+import { findConversation } from "./conversationLookup";
 
 async function draftFor(ctx: QueryCtx, conversationId: Id<"comma_conversations">): Promise<Doc<"comma_drafts"> | null> {
   return await ctx.db
@@ -61,20 +61,6 @@ export const removeDraftAttachment = mutation({
   },
 });
 
-async function resolveConversation(ctx: QueryCtx, to: { conversationId?: Id<"comma_conversations">; chatGuid?: string; address?: string }) {
-  if (to.conversationId) return await ctx.db.get(to.conversationId);
-  if (to.chatGuid) {
-    const chatGuid = to.chatGuid;
-    const alias = await ctx.db.query("comma_chat_aliases").withIndex("by_chatGuid", (q) => q.eq("chatGuid", chatGuid)).unique();
-    return alias ? await ctx.db.get(alias.conversationId) : null;
-  }
-  if (to.address) {
-    const key = conversationKey({ isGroup: false, primaryChatGuid: "", participants: [{ address: to.address, name: null }] });
-    return await ctx.db.query("comma_conversations").withIndex("by_conversationKey", (q) => q.eq("conversationKey", key)).unique();
-  }
-  return null;
-}
-
 /**
  * The agent's write path (Convex CLI, admin key). Replaces an earlier agent draft, but never a
  * draft the user typed unless forced. Attachments must come from storeAttachment so the normal
@@ -92,11 +78,8 @@ export const prepareDraft = internalMutation({
   },
   returns: v.object({ conversationId: v.id("comma_conversations"), draftId: v.id("comma_drafts"), replaced: v.boolean() }),
   handler: async (ctx, { text, note, attachments = [], force, ...to }) => {
-    if ([to.conversationId, to.chatGuid, to.address].filter((x) => x !== undefined).length !== 1) {
-      throw new Error("Pass exactly one of conversationId, chatGuid, address");
-    }
     if (!text.trim() && attachments.length === 0) throw new Error("A draft needs text or an attachment");
-    const conversation = await resolveConversation(ctx, to);
+    const conversation = await findConversation(ctx, to);
     if (!conversation) throw new Error(`No conversation for ${to.conversationId ?? to.chatGuid ?? to.address}`);
     const written = await writeAgentDraft(ctx, conversation._id, { text, note, attachments: await recordedAttachments(ctx, attachments), force });
     if (!written) throw new Error("The conversation has an unsent draft the user wrote. Pass force to replace it.");

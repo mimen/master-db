@@ -24,6 +24,8 @@ import { v } from "convex/values";
 export const event_links = defineTable({
   person_id: v.optional(v.id("people")),
   chat_guid: v.optional(v.string()),
+  /** Set with chat_guid on a group's rows; see chat_crm.ts. */
+  conversation_id: v.optional(v.id("comma_conversations")),
   airtable_event_id: v.string(),
   event_name: v.string(),
   // Airtable "Start Date", denormalized at link time like event_name.
@@ -32,4 +34,5 @@ export const event_links = defineTable({
 })
   .index("by_person", ["person_id"])
   .index("by_chat", ["chat_guid"])
+  .index("by_conversation", ["conversation_id"])
   .index("by_event", ["airtable_event_id"]);

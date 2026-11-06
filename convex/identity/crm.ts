@@ -1,8 +1,9 @@
 import { v } from "convex/values";
 
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import { mutation, type MutationCtx } from "../_generated/server";
 
+import { groupConversation, groupCrm, groupOwner } from "./groupCrm";
 import { requireIdentityAccess } from "./key";
 
 /**
@@ -19,8 +20,7 @@ import { requireIdentityAccess } from "./key";
  * INHERITED from the linked person (see apps/imsg/server/map.ts's `mapChat`
  * and chat_crm.ts's docstring, "MEMBERSHIP ≠ OWNERSHIP"). The chat-targeted
  * mutations below don't enforce that (they'll happily write a row for any
- * guid you pass), because Convex has no way to know a guid's DM/group-ness —
- * enforcement lives in the client, which only ever offers chat CRM editing on
+ * conversation you pass) — enforcement lives in the client, which only ever offers chat CRM editing on
  * a group's info screen (chat-info-content.tsx).
  *
  * Every mutation here follows the module's established no-op-write
@@ -120,30 +120,27 @@ export const setNotes = mutation({
 
 // ---------------------------------------------------------------- chat, CRM
 
-async function getChatCrmRow(ctx: MutationCtx, chatGuid: string) {
-  return ctx.db
-    .query("chat_crm")
-    .withIndex("by_chat_guid", (q) => q.eq("chat_guid", chatGuid))
-    .first();
-}
+/** A group is named by its conversation id, or by a chat GUID from a client that predates it. */
+const groupArgs = { conversationId: v.optional(v.id("comma_conversations")), chatGuid: v.optional(v.string()) };
 
 /** Toggle a GROUP chat's favorite flag — the chat-side twin of `setFavorite`.
  * Upserts the chat_crm row (created lazily on first non-default write). No-op
  * when the requested value already matches what's stored (including "no row
  * yet, and the request is `false`"). */
 export const setChatFavorite = mutation({
-  args: { key: v.optional(v.string()), chatGuid: v.string(), is_favorite: v.boolean() },
-  handler: async (ctx, { key, chatGuid, is_favorite }) => {
+  args: { key: v.optional(v.string()), ...groupArgs, is_favorite: v.boolean() },
+  handler: async (ctx, { key, is_favorite, ...ref }) => {
     await requireIdentityAccess(ctx, key);
-    const existing = await getChatCrmRow(ctx, chatGuid);
+    const conversation = await groupConversation(ctx, ref);
+    const existing = await groupCrm.crm(ctx, conversation);
     const current = existing?.is_favorite ?? false;
     if (current === is_favorite) return;
 
     const now = new Date().toISOString();
     if (existing) {
-      await ctx.db.patch(existing._id, { is_favorite, updated_at: now });
+      await ctx.db.patch(existing._id, { is_favorite, conversation_id: conversation._id, updated_at: now });
     } else {
-      await ctx.db.insert("chat_crm", { chat_guid: chatGuid, is_favorite, created_at: now, updated_at: now });
+      await ctx.db.insert("chat_crm", { ...groupOwner(conversation), is_favorite, created_at: now, updated_at: now });
     }
   },
 });
@@ -155,21 +152,22 @@ export const setChatFavorite = mutation({
 export const setChatPriority = mutation({
   args: {
     key: v.optional(v.string()),
-    chatGuid: v.string(),
+    ...groupArgs,
     priority: v.optional(v.union(v.number(), v.null())),
   },
-  handler: async (ctx, { key, chatGuid, priority }) => {
+  handler: async (ctx, { key, priority, ...ref }) => {
     await requireIdentityAccess(ctx, key);
     const next = priority == null ? undefined : clampPriority(priority);
-    const existing = await getChatCrmRow(ctx, chatGuid);
+    const conversation = await groupConversation(ctx, ref);
+    const existing = await groupCrm.crm(ctx, conversation);
     const current = existing?.priority ?? undefined;
     if (current === next) return;
 
     const now = new Date().toISOString();
     if (existing) {
-      await ctx.db.patch(existing._id, { priority: next, updated_at: now });
+      await ctx.db.patch(existing._id, { priority: next, conversation_id: conversation._id, updated_at: now });
     } else if (next !== undefined) {
-      await ctx.db.insert("chat_crm", { chat_guid: chatGuid, priority: next, created_at: now, updated_at: now });
+      await ctx.db.insert("chat_crm", { ...groupOwner(conversation), priority: next, created_at: now, updated_at: now });
     }
     // else: no row yet and clearing to unset — genuinely nothing to do.
   },
@@ -177,42 +175,45 @@ export const setChatPriority = mutation({
 
 /** Add a tag to a GROUP chat — the chat-side twin of `addTag`. */
 export const addChatTag = mutation({
-  args: { key: v.optional(v.string()), chatGuid: v.string(), tag: v.string() },
-  handler: async (ctx, { key, chatGuid, tag }) => {
+  args: { key: v.optional(v.string()), ...groupArgs, tag: v.string() },
+  handler: async (ctx, { key, tag, ...ref }) => {
     await requireIdentityAccess(ctx, key);
-    await addTagRow(ctx, { chat_guid: chatGuid }, tag);
+    await addTagRow(ctx, { conversation: await groupConversation(ctx, ref) }, tag);
   },
 });
 
 /** Remove a tag from a GROUP chat — the chat-side twin of `removeTag`. */
 export const removeChatTag = mutation({
-  args: { key: v.optional(v.string()), chatGuid: v.string(), tag: v.string() },
-  handler: async (ctx, { key, chatGuid, tag }) => {
+  args: { key: v.optional(v.string()), ...groupArgs, tag: v.string() },
+  handler: async (ctx, { key, tag, ...ref }) => {
     await requireIdentityAccess(ctx, key);
-    await removeTagRow(ctx, { chat_guid: chatGuid }, tag);
+    await removeTagRow(ctx, { conversation: await groupConversation(ctx, ref) }, tag);
   },
 });
 
 // ------------------------------------------------------------ shared tag ops
 
-type TagOwner = { person_id: Id<"people"> } | { chat_guid: string };
+type TagOwner = { person_id: Id<"people"> } | { conversation: Doc<"comma_conversations"> };
+
+async function ownerTags(ctx: MutationCtx, owner: TagOwner) {
+  return "person_id" in owner
+    ? await ctx.db.query("tags").withIndex("by_person", (q) => q.eq("person_id", owner.person_id)).collect()
+    : await groupCrm.tags(ctx, owner.conversation);
+}
 
 /** Shared add-tag logic for both owners — trims/lowercases, dedupes against
- * whatever rows the owner already has, no-ops if already present. Exactly one
- * of person_id/chat_guid is set on the inserted row (see tags.ts's docstring)
- * — callers pass exactly one via `TagOwner`, so this can't get it wrong. */
+ * whatever rows the owner already has, no-ops if already present. A row is
+ * either a person's or a group's (see tags.ts's docstring) — callers pass
+ * exactly one via `TagOwner`, so this can't get it wrong. */
 async function addTagRow(ctx: MutationCtx, owner: TagOwner, tag: string): Promise<void> {
   const normalized = tag.trim().toLowerCase();
   if (!normalized) throw new Error("Tag can't be empty");
 
-  const existing =
-    "person_id" in owner
-      ? await ctx.db.query("tags").withIndex("by_person", (q) => q.eq("person_id", owner.person_id)).collect()
-      : await ctx.db.query("tags").withIndex("by_chat", (q) => q.eq("chat_guid", owner.chat_guid)).collect();
+  const existing = await ownerTags(ctx, owner);
   if (existing.some((t) => t.tag === normalized)) return;
 
   await ctx.db.insert("tags", {
-    ...("person_id" in owner ? { person_id: owner.person_id } : { chat_guid: owner.chat_guid }),
+    ...("person_id" in owner ? { person_id: owner.person_id } : groupOwner(owner.conversation)),
     tag: normalized,
     created_at: new Date().toISOString(),
   });
@@ -222,10 +223,7 @@ async function addTagRow(ctx: MutationCtx, owner: TagOwner, tag: string): Promis
  * isn't present. */
 async function removeTagRow(ctx: MutationCtx, owner: TagOwner, tag: string): Promise<void> {
   const normalized = tag.trim().toLowerCase();
-  const existing =
-    "person_id" in owner
-      ? await ctx.db.query("tags").withIndex("by_person", (q) => q.eq("person_id", owner.person_id)).collect()
-      : await ctx.db.query("tags").withIndex("by_chat", (q) => q.eq("chat_guid", owner.chat_guid)).collect();
+  const existing = await ownerTags(ctx, owner);
   const match = existing.find((t) => t.tag === normalized);
   if (!match) return;
 

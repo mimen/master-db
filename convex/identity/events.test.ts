@@ -5,7 +5,7 @@ import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
-import { linkEventRef, TEST_KEY, unlinkEventRef } from "./testRefs.vitest";
+import { linkEventRef, seedGroup, TEST_KEY, unlinkEventRef } from "./testRefs.vitest";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 
@@ -49,6 +49,7 @@ describe("linkEvent", () => {
 
   test("links a GROUP chat to an event", async () => {
     const t = convexTest(schema, modules);
+    const conversationId = await seedGroup(t, ["iMessage;+;chat123"]);
     const result = await t.mutation(linkEventRef, {
       key: TEST_KEY,
       chatGuid: "iMessage;+;chat123",
@@ -57,7 +58,10 @@ describe("linkEvent", () => {
     });
     const link = await t.run((ctx) => ctx.db.get(result.linkId));
     expect(link?.chat_guid).toBe("iMessage;+;chat123");
+    expect(link?.conversation_id).toBe(conversationId);
     expect(link?.person_id).toBeUndefined();
+    const again = await t.mutation(linkEventRef, { key: TEST_KEY, conversationId, airtable_event_id: "evt2", event_name: "Fall Kickoff" });
+    expect(again.linkId).toBe(result.linkId);
   });
 
   test("rejects when both personId and chatGuid are given", async () => {

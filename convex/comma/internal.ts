@@ -12,7 +12,8 @@ import {
   type CommaReaction,
 } from "../schema/comma/validators";
 
-import { conversationKey } from "./conversationKey";
+import { choosePrimary, imessage } from "./conversationIdentity";
+import { findByChatGuid, findByKey } from "./conversationLookup";
 import { tempGuid } from "./tempMessage";
 import { carryTempAnchor, logReplies } from "./triage";
 
@@ -25,25 +26,6 @@ import { carryTempAnchor, logReplies } from "./triage";
  * mutation may write 8,192 documents and read 16,384, and each message write
  * can also touch its target, its conversation, and earlier tapbacks.
  */
-
-const SERVICE_RANK: Record<string, number> = { iMessage: 0, RCS: 1, SMS: 2 };
-
-function serviceOf(chatGuid: string): string {
-  return chatGuid.split(";")[0] ?? "";
-}
-
-/** Newest activity wins; ties prefer iMessage, then RCS, then SMS, then guid order. */
-export function choosePrimary(chats: { chatGuid: string; lastMessageAt: number }[]): string {
-  const ranked = [...chats].sort(
-    (a, b) =>
-      b.lastMessageAt - a.lastMessageAt ||
-      (SERVICE_RANK[serviceOf(a.chatGuid)] ?? 9) - (SERVICE_RANK[serviceOf(b.chatGuid)] ?? 9) ||
-      a.chatGuid.localeCompare(b.chatGuid),
-  );
-  const first = ranked[0];
-  if (!first) throw new Error("conversation has no chats");
-  return first.chatGuid;
-}
 
 /** Structural equality over Convex values, ignoring object key order. */
 function sameValue(a: unknown, b: unknown): boolean {
@@ -81,22 +63,18 @@ export const upsertConversations = internalMutation({
     for (const input of conversations) {
       const primaryChatGuid = choosePrimary(input.chats);
       const chatGuids = input.chats.map((chat) => chat.chatGuid).sort();
-      let existing = await ctx.db
-        .query("comma_conversations")
-        .withIndex("by_conversationKey", (q) => q.eq("conversationKey", input.conversationKey))
-        .unique();
+      let existing = await findByKey(ctx, imessage.platform, input.conversationKey);
       if (!existing) {
         for (const chatGuid of chatGuids) {
-          const alias = await ctx.db.query("comma_chat_aliases")
-            .withIndex("by_chatGuid", (q) => q.eq("chatGuid", chatGuid)).unique();
-          const candidate = alias ? await ctx.db.get(alias.conversationId) : null;
-          if (candidate && conversationKey(candidate) === input.conversationKey) {
+          const candidate = await findByChatGuid(ctx, chatGuid);
+          if (candidate && imessage.conversationKey(candidate) === input.conversationKey) {
             existing = candidate;
             break;
           }
         }
       }
       const fields = {
+        platform: imessage.platform,
         conversationKey: input.conversationKey,
         primaryChatGuid,
         chatGuids,
@@ -123,7 +101,7 @@ export const upsertConversations = internalMutation({
           .withIndex("by_chatGuid", (q) => q.eq("chatGuid", chatGuid))
           .unique();
         if (!alias) {
-          await ctx.db.insert("comma_chat_aliases", { chatGuid, conversationId, service: serviceOf(chatGuid) });
+          await ctx.db.insert("comma_chat_aliases", { chatGuid, conversationId, service: imessage.service(chatGuid) });
         } else if (alias.conversationId !== conversationId) {
           await ctx.db.patch(alias._id, { conversationId });
         }
@@ -471,6 +449,12 @@ export const mergeDuplicateConversations = internalMutation({
           ...(await ctx.db.query("comma_conversation_state").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).collect()),
         ];
         for (const row of moved) await ctx.db.patch(row._id, { conversationId: keep._id });
+        const crm = [
+          ...(await ctx.db.query("chat_crm").withIndex("by_conversation", (q) => q.eq("conversation_id", id)).collect()),
+          ...(await ctx.db.query("tags").withIndex("by_conversation", (q) => q.eq("conversation_id", id)).collect()),
+          ...(await ctx.db.query("event_links").withIndex("by_conversation", (q) => q.eq("conversation_id", id)).collect()),
+        ];
+        for (const row of crm) await ctx.db.patch(row._id, { conversation_id: keep._id });
         for (const alias of await ctx.db.query("comma_chat_aliases").withIndex("by_conversationId", (q) => q.eq("conversationId", dup._id)).collect()) {
           await ctx.db.patch(alias._id, { conversationId: keep._id });
         }

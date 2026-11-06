@@ -6,6 +6,7 @@ import { conversationFlags } from "../../apps/imsg/shared/chat-state";
 import type { Id } from "../_generated/dataModel";
 import { query, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
+import { groupCrm } from "../identity/groupCrm";
 import { personName } from "../identity/names";
 import {
   attachmentDoc,
@@ -22,6 +23,7 @@ import {
   type CommaMessageDoc,
 } from "../schema/comma/validators";
 
+import { findByChatGuid } from "./conversationLookup";
 import { resolveConversationNames } from "./names";
 import { normalizedAddress, personForNormalized } from "./photos";
 
@@ -55,11 +57,8 @@ async function conversationCrm(
 ) {
   let base: { is_favorite?: boolean; priority?: number; tags: string[] };
   if (conversation.isGroup) {
-    const row = await ctx.db.query("chat_crm")
-      .withIndex("by_chat_guid", (q) => q.eq("chat_guid", conversation.primaryChatGuid)).first();
-    const tags = await ctx.db.query("tags")
-      .withIndex("by_chat", (q) => q.eq("chat_guid", conversation.primaryChatGuid)).collect();
-    base = { is_favorite: row?.is_favorite, priority: row?.priority, tags: tags.map((t) => t.tag) };
+    const [crm, tags] = await Promise.all([groupCrm.crm(ctx, conversation), groupCrm.tags(ctx, conversation)]);
+    base = { is_favorite: crm?.is_favorite, priority: crm?.priority, tags: tags.map((t) => t.tag) };
   } else if (person) {
     const tags = await read.personTags(person._id);
     base = {
@@ -268,11 +267,7 @@ export const resolveChat = query({
   returns: v.union(conversationView, v.null()),
   handler: async (ctx, args) => {
     await assertAllowed(ctx);
-    const alias = await ctx.db
-      .query("comma_chat_aliases")
-      .withIndex("by_chatGuid", (q) => q.eq("chatGuid", args.chatGuid))
-      .unique();
-    const conversation = alias ? await ctx.db.get(alias.conversationId) : null;
+    const conversation = await findByChatGuid(ctx, args.chatGuid);
     return conversation ? await withConversationState(ctx, conversation) : null;
   },
 });

@@ -6,6 +6,12 @@ import { v, type Infer, type PropertyValidators } from "convex/values";
  * through auth-gated queries. Shapes follow apps/imsg/shared/types.ts.
  */
 
+/** The service that carries a conversation. iMessage is the only one so far. */
+export const platform = v.literal("imessage");
+
+/** Where a command executes: the platform and that platform's own thread id. Convex chooses it; a bridge only runs it. */
+export const route = v.object({ platform: v.literal("imessage"), chatGuid: v.string() });
+
 export const participant = v.object({
   address: v.string(),
   name: v.union(v.string(), v.null()),
@@ -51,7 +57,9 @@ export const tapback = v.object({
 });
 
 export const conversationFields = {
-  /** `dm:+E164`, `dm:email`, `g:identifier`, or `chat:guid`; see convex/comma/conversationKey.ts. */
+  /** Absent on rows written before platforms existed, which are all iMessage. */
+  platform: v.optional(platform),
+  /** Unique within a platform. `dm:+E164`, `dm:email`, `g:identifier`, or `chat:guid`; see convex/comma/conversationIdentity.ts. */
   conversationKey: v.string(),
   primaryChatGuid: v.string(),
   chatGuids: v.array(v.string()),
@@ -364,7 +372,7 @@ const okResult = <K extends string>(kind: K) => v.object({ kind: v.literal(kind)
 const messageResult = <K extends string>(kind: K) => v.object({ kind: v.literal(kind), message: commandMessage });
 export const commandResult = v.union(
   messageResult("send"), messageResult("sendContact"), messageResult("sendAttachment"), messageResult("createFaceTimeLink"),
-  v.object({ kind: v.literal("createChat"), chatGuid: v.string(), service: v.literal("iMessage"), isGroup: v.boolean(), participants: v.array(v.string()), message: commandMessage }),
+  v.object({ kind: v.literal("createChat"), conversationId: v.optional(v.id("comma_conversations")), chatGuid: v.string(), service: v.literal("iMessage"), isGroup: v.boolean(), participants: v.array(v.string()), message: commandMessage }),
   v.object({ kind: v.literal("schedule"), scheduled: commandScheduled }),
   v.object({ kind: v.literal("editScheduled"), scheduled: commandScheduled }),
   v.object({ kind: v.literal("transcribe"), transcript: transcriptState }),
@@ -381,6 +389,8 @@ export type CommandResult = Infer<typeof commandResult>;
 export const outboxFields = {
   clientKey: v.string(),
   conversationId: v.optional(v.id("comma_conversations")),
+  /** Stamped at enqueue for every conversation command; the bridge sends through exactly this. */
+  route: v.optional(route),
   payload: outboxPayload,
   /** Absent only on rows queued before lanes. */
   lane: v.optional(outboxLane),
@@ -475,6 +485,8 @@ export const suggestionDoc = withSystemFields("comma_suggestions", suggestionFie
 export const syncStateDoc = withSystemFields("comma_sync_state", syncStateFields);
 export const outboxDoc = withSystemFields("comma_outbox", outboxFields);
 
+export type CommaPlatform = Infer<typeof platform>;
+export type CommaRoute = Infer<typeof route>;
 export type CommaParticipant = Infer<typeof participant>;
 export type CommaReaction = Infer<typeof reaction>;
 export type CommaTapback = Infer<typeof tapback>;
