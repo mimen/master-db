@@ -71,7 +71,7 @@ import { SuggestionAlternates, type SuggestionSource, useReplySuggestions } from
 import { useSpring } from "@/constants/springs";
 
 interface ComposerProps {
-  chat: Pick<ChatSummary, "conversationId" | "imessage">;
+  chat: Pick<ChatSummary, "conversationId" | "route">;
   isGroup: boolean;
   participants: Participant[];
   replyTo: Message | null;
@@ -172,7 +172,7 @@ function GhostText({ text, shown, card, fontSize, color, onHeight }: {
 
 
 /** A voice memo on its way: the audio bubble draws now, and plays once the recorder hands over its file. */
-function tempVoiceMessage(chat: Pick<ChatSummary, "imessage" | "isGroup">, filename: string): Message {
+function tempVoiceMessage(chat: Pick<ChatSummary, "route" | "isGroup">, filename: string): Message {
   const temp = draftBubble(chat, { text: "" });
   return {
     ...temp,
@@ -329,7 +329,7 @@ export function Composer({
   const [scheduleAnchor, setScheduleAnchor] = useState<{ right: number; bottom: number } | null>(null);
   const containerRef = useRef<View>(null);
   const isSMS = conversationService(chat) === "SMS";
-  const can = useRouteSupport({ imessage: chat.imessage, isGroup });
+  const can = useRouteSupport({ route: chat.route, isGroup });
   const loadRemoteDraft = useCallback((draft: string) => {
     setText(draft);
     setSelection({ start: draft.length, end: draft.length });

@@ -97,7 +97,7 @@ test("send errors are mirrored and failed ingest retains the batch without throw
   await live.flush();
   const calls = ingest.calls.filter((call) => call.kind === "messages");
   expect(calls.map((call) => call.body.messages[0].sourceVersion)).toEqual([8001, 8001]);
-  expect(calls.at(-1)?.body.messages[0]).toMatchObject({ error: 42, text: "hello", attachmentGuids: ["a1"] });
+  expect(calls.at(-1)?.body.messages[0]).toMatchObject({ imessage: { error: 42 }, text: "hello", attachmentGuids: ["a1"] });
   expect(live.pending).toBe(0);
 });
 

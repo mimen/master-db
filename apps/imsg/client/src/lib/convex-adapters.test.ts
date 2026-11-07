@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import type { ConversationId, Message } from "@shared/types";
 
+import { attachmentRead, messageRead } from "../../../../../convex/comma/messageShape";
+
 import {
   attachmentSource,
   conversationToChat,
@@ -40,8 +42,9 @@ function conversation(overrides: Partial<ConvexConversation> = {}): ConvexConver
   } as ConvexConversation;
 }
 
+/** A row as Convex serves it: built flat, read the way comma/queries reads it. */
 function message(overrides: Partial<ConvexMessage> = {}): ConvexMessage {
-  return {
+  const row = {
     _id: "row1",
     _creationTime: 1,
     guid: "m1",
@@ -63,6 +66,7 @@ function message(overrides: Partial<ConvexMessage> = {}): ConvexMessage {
     attachments: [],
     ...overrides,
   } as ConvexMessage;
+  return { ...messageRead(row), attachments: row.attachments.map(attachmentRead) };
 }
 
 const attachment = {
@@ -80,7 +84,7 @@ const attachment = {
 describe("conversationToChat", () => {
   test("keys REST calls by the primary chat guid and keeps the conversation id", () => {
     const chat = conversationToChat(conversation());
-    expect(chat.imessage.chatGuid).toBe("iMessage;-;+15550001111");
+    expect(chat.route.imessage.chatGuid).toBe("iMessage;-;+15550001111");
     expect(chat.conversationId).toBe("c1" as ConversationId);
     expect(chat.flags.pinned).toBe(true);
   });
@@ -204,13 +208,13 @@ describe("queued sends", () => {
     const temp = message({ guid: "temp-k1", isFromMe: true, clientKey: "k1", sourceVersion: 0 } as Partial<ConvexMessage>);
     expect(messageToMessage({ ...temp, sendState: "notSent" }).sendState).toBe("notSent");
     expect(messageToMessage(temp).sendState).toBe("queued");
-    expect(messageToMessage({ ...temp, error: 1 }).sendState).toBe("failed");
+    expect(messageToMessage(message({ guid: "temp-k1", isFromMe: true, clientKey: "k1", sourceVersion: 0, error: 1 } as Partial<ConvexMessage>)).sendState).toBe("failed");
     expect(messageToMessage(message()).sendState).toBeUndefined();
   });
 
   test("a retried bubble outranks the stale row of the send it replaced", () => {
     const stale = messageToMessage(message({ guid: "temp-k1", isFromMe: true, clientKey: "k1", sendState: "notSent", error: 1 } as Partial<ConvexMessage>));
-    const revived = { ...stale, clientKey: "k2", sendState: "queued" as const, error: 0 };
+    const revived = { ...stale, clientKey: "k2", sendState: "queued" as const, imessage: { ...stale.imessage!, error: 0 } };
     expect(mergeConvexMessages([stale], [revived]).map((m) => [m.guid, m.clientKey, m.sendState])).toEqual([["temp-k1", "k2", "queued"]]);
   });
 });

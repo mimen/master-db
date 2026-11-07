@@ -9,7 +9,7 @@ import type { ChatSummary, ConversationId } from "@shared/types";
 import { ChatDirectoryContext, useConversation } from "./use-chat-directory";
 
 const known = {
-  conversationId: "conv-known" as ConversationId, imessage: { chatGuid: "iMessage;-;+1555" }, displayName: "Known",
+  conversationId: "conv-known" as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;-;+1555" } }, displayName: "Known",
   isGroup: false, known: true, isSpam: false, participants: [], unreadCount: 0, firstUnreadAt: null,
   lastMessage: { guid: "m1", text: "hi", dateCreated: 1234, isFromMe: false, senderName: null, hasAttachments: false },
   flags: { unresponded: true, waiting: false, unread: false, mutedUnresponded: false, pinned: false },
@@ -57,7 +57,7 @@ test("a conversation the directory lists reads without a query; one it lacks loa
     expect(watched).toEqual([]);
 
     await render("conv-fetched" as ConversationId);
-    expect(seen).toMatchObject({ conversationId: "conv-fetched", imessage: { chatGuid: "SMS;-;+1999" }, displayName: "Fetched" });
+    expect(seen).toMatchObject({ conversationId: "conv-fetched", route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "SMS;-;+1999" } }, displayName: "Fetched" });
     expect(new Set(watched)).toEqual(new Set(["comma/queries:getConversation conv-fetched"]));
   } finally {
     await act(async () => { root.unmount(); });

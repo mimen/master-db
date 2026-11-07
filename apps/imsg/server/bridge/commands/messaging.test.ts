@@ -94,7 +94,7 @@ test("createChat is global, verifies recipients and exact text, and mirrors befo
   const result = await messagingHandlers.createChat.execute(context, { kind: "createChat", addresses: ["+15550002222"], text: "hello" });
   expect(result).toMatchObject({ kind: "createChat", conversationId: expect.any(String), chatGuid: "iMessage;-;+15550002222", service: "iMessage", isGroup: false, participants: ["+15550002222"], message: { text: "hello" } });
   expect(h.ingest.calls.map((call) => call.kind)).toEqual(["conversations", "messages"]);
-  expect(h.ingest.calls.at(-1)?.body).toMatchObject({ messages: [{ guid: result.message.guid, chatGuid: result.chatGuid }] });
+  expect(h.ingest.calls.at(-1)?.body).toMatchObject({ messages: [{ guid: result.message.guid, imessage: { chatGuid: result.chatGuid } }] });
   for (const body of [{ addresses: [], text: "hi" }, { addresses: ["+15550001111", "+1 (555) 000-1111"], text: "hi" }, { addresses: ["x"], text: " hi " }]) {
     await expect(messagingHandlers.createChat.execute(context, { kind: "createChat", ...body })).rejects.toThrow();
   }

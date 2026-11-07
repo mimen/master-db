@@ -1,6 +1,6 @@
 import type {
   EventSuggestion,
-  Message,
+  BridgeMessage,
   ReplySuggestion,
   SuggestionModel,
   SuggestionStrategy,
@@ -179,7 +179,7 @@ const DAY_SIGNAL_RE = /\b(?:monday|tuesday|wednesday|thursday|friday|saturday|su
  */
 export function extractEventSuggestion(
   value: object,
-  messages: Message[],
+  messages: BridgeMessage[],
   now: Date,
 ): Omit<EventSuggestion, "inviteEmails"> | null {
   if (!isRecord(value) || !isRecord(value.event as object)) return null;
@@ -216,7 +216,7 @@ export function extractEventSuggestion(
 }
 
 export interface ValidateSuggestionOptions {
-  messages: Message[];
+  messages: BridgeMessage[];
   renderedGuids: Set<string>;
   reactionSuggestions: boolean;
 }
@@ -259,8 +259,8 @@ export function validateSuggestionSet(
 
 function validateOne(
   raw: RawSuggestion,
-  latestInbound: Message,
-  byGuid: Map<string, Message>,
+  latestInbound: BridgeMessage,
+  byGuid: Map<string, BridgeMessage>,
   options: ValidateSuggestionOptions,
   rejections: Map<string, number>,
 ): ReplySuggestion | null {
@@ -298,7 +298,7 @@ function validateOne(
   if (!passesEchoGate(raw.text, latestInbound.text)) return reject("echo");
   const outboundBasis = raw.basisMessageGuids
     .map((guid) => byGuid.get(guid))
-    .filter((message): message is Message => message?.isFromMe === true);
+    .filter((message): message is BridgeMessage => message?.isFromMe === true);
   if ((raw.introducesCommitment || hasOperationalPromise(raw.text)) && !commitmentIsGrounded(raw.text, outboundBasis)) return reject("commitment");
   if (!protectedTermsAreGrounded(raw.text, options.messages)) return reject("protected-term");
   if (!peopleAreGrounded(raw.text, options.messages)) return reject("person");
@@ -339,7 +339,7 @@ function hasOperationalPromise(text: string): boolean {
   return /\b(?:i|we)(?:'ll| will| can| am going to| are going to| gonna)\s+(?:send|confirm|pay|connect|check|call|book|share|follow|get|grab|coordinate|introduce)\b/i.test(text);
 }
 
-function commitmentIsGrounded(text: string, basis: Message[]): boolean {
+function commitmentIsGrounded(text: string, basis: BridgeMessage[]): boolean {
   if (basis.length === 0) return false;
   const verb = commitmentVerb(text);
   if (!verb) return false;
@@ -359,7 +359,7 @@ function commitmentVerb(text: string): string | null {
   return match?.[0] ?? null;
 }
 
-function protectedTermsAreGrounded(text: string, messages: Message[]): boolean {
+function protectedTermsAreGrounded(text: string, messages: BridgeMessage[]): boolean {
   const corpus = messages.map((message) => message.text.toLowerCase()).join(" ");
   const numbers = text.toLowerCase().match(/\b\d+(?:[/:.-]\d+)*\b/g) ?? [];
   const dates = text.toLowerCase().match(/\b(?:today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december)\b/g) ?? [];
@@ -374,7 +374,7 @@ function isDecisionRequest(text: string): boolean {
   return /\?|\b(?:need an answer|let me know|confirm whether|confirm if|decide|your call|are you in|do you want|yes or no|should we|can you confirm)\b/i.test(text);
 }
 
-function peopleAreGrounded(text: string, messages: Message[]): boolean {
+function peopleAreGrounded(text: string, messages: BridgeMessage[]): boolean {
   const referenced = [...text.matchAll(/\b(?:ask|tell|connect|introduce|call|check with|send to)\s+([a-z][a-z'-]{1,})\b/gi)]
     .map((match) => match[1]?.toLowerCase())
     .filter((name): name is string => Boolean(name) && !GENERIC_PEOPLE.has(name));
@@ -390,7 +390,7 @@ function claimsCompletedAction(text: string): boolean {
   return /\b(?:sent|confirmed|paid|booked|called|checked|shared|connected|handled|finished|completed)\b/i.test(text);
 }
 
-function completedActionIsGrounded(text: string, basis: Message[]): boolean {
+function completedActionIsGrounded(text: string, basis: BridgeMessage[]): boolean {
   const claimed = text.toLowerCase().match(/\b(?:sent|confirmed|paid|booked|called|checked|shared|connected|handled|finished|completed)\b/g) ?? [];
   return claimed.every((verb) => basis.some((message) => message.text.toLowerCase().includes(verb)));
 }

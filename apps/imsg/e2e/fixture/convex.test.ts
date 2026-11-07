@@ -3,7 +3,7 @@ import { createApp } from "../../server/app";
 import type { Config } from "../../server/config";
 import { OverlayDb } from "../../server/db";
 import { fixtureConversationId } from "../../shared/fixture-ids";
-import type { ChatSummary, Message } from "../../shared/types";
+import type { ChatSummary, BridgeMessage } from "../../shared/types";
 import type { CommaOutboxPayload } from "../../../../convex/schema/comma/validators";
 import { fixtureMessageWindow, registerConvexFixture } from "./convex";
 import { FixtureBlueBubbles } from "./fake-bluebubbles";
@@ -43,7 +43,7 @@ async function call<T>(name: string, args: Record<string, unknown> = {}): Promis
 }
 const query = <T>(name: string, args?: Record<string, unknown>) => call<T>(`comma/queries:${name}`, args);
 const conversation = (guid = CHAT_GUIDS.needs as string) => query<{ _id: string; primaryChatGuid: string; displayName: string; flags: ChatSummary["flags"] }>("resolveChat", { chatGuid: guid });
-const messages = (guid = CHAT_GUIDS.needs as string) => query<{ page: Array<Message & { attachments: unknown[]; clientKey?: string }> }>("listMessages", { conversationId: fixtureConversationId(guid), paginationOpts: { numItems: 100, cursor: null } });
+const messages = (guid = CHAT_GUIDS.needs as string) => query<{ page: Array<BridgeMessage & { attachments: unknown[]; clientKey?: string }> }>("listMessages", { conversationId: fixtureConversationId(guid), paginationOpts: { numItems: 100, cursor: null } });
 const command = (payload: CommaOutboxPayload, guid = CHAT_GUIDS.needs as string, clientKey: string = crypto.randomUUID()) => call<string>("comma/outbox:enqueue", { clientKey, conversationId: fixtureConversationId(guid), payload });
 
 test("Convex pagination and resolution use the fixture world", async () => {
@@ -259,7 +259,7 @@ test("link preview actions return deterministic public previews and null for blo
   }
 });
 
-const history = (bounds: { before?: number; after?: number; around?: number }) => call<Array<Message & { attachments: unknown[] }>>(
+const history = (bounds: { before?: number; after?: number; around?: number }) => call<Array<BridgeMessage & { attachments: unknown[] }>>(
   "comma/history:messageWindow", { conversationId: fixtureConversationId(CHAT_GUIDS.needs), ...bounds },
 );
 

@@ -51,8 +51,12 @@ export function formatAddress(raw: string): string {
  * different job than "do these two already-known handles match."
  */
 
-/** Last-10-digit suffix, the phone join key. Empty string if too short to be a confident match. */
+/**
+ * Last-10-digit suffix, the phone join key. Empty string if too short to be a confident match, or a
+ * scheme-prefixed handle (`slack:U0123456789`), whose digits are no phone number.
+ */
 export function phoneMatchKey(address: string): string {
+  if (/^[a-z]+:/.test(address)) return "";
   const digits = address.replace(/\D/g, "");
   return digits.length >= 7 ? digits.slice(-10) : "";
 }
@@ -81,7 +85,7 @@ export function matchesAnyAddress(candidate: string, known: string[]): boolean {
  * the name is already unique and needs no label.
  */
 export function disambiguators(
-  chats: readonly Pick<ChatSummary, "conversationId" | "displayName" | "isGroup" | "participants" | "imessage">[],
+  chats: readonly Pick<ChatSummary, "conversationId" | "displayName" | "isGroup" | "participants" | "route">[],
 ): Map<ConversationId, string> {
   const byName = new Map<string, typeof chats[number][]>();
   for (const chat of chats) {

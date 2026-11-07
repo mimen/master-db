@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import type { Message } from "@shared/types";
+import { fromBridgeMessage } from "@shared/imessage";
+import type { BridgeMessage, Message } from "@shared/types";
 import { hideSelfEchoes, mergeWindow, reconcileWindow, settleTemp, upsertMessage } from "./message-window";
 
 const CHAT = "iMessage;-;+16195550101";
 
-function message(guid: string, text: string, dateCreated: number, extra: Partial<Message> = {}): Message {
-  return {
+function message(guid: string, text: string, dateCreated: number, extra: Partial<BridgeMessage> = {}): Message {
+  return fromBridgeMessage({
     guid,
     chatGuid: CHAT,
     text,
@@ -27,7 +28,7 @@ function message(guid: string, text: string, dateCreated: number, extra: Partial
     edited: false,
     retracted: false,
     ...extra,
-  };
+  });
 }
 
 const older = message("m-1", "see you at 8", 1_000, { isFromMe: false });

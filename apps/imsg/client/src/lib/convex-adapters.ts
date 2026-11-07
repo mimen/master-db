@@ -17,7 +17,7 @@ export function conversationToChat(
 ): ChatSummary {
   return {
     conversationId: row._id,
-    imessage: { chatGuid: row.primaryChatGuid },
+    route: { platform: row.platform ?? "imessage", accountId: row.accountId ?? null, imessage: { chatGuid: row.primaryChatGuid } },
     displayName: row.displayName,
     isGroup: row.isGroup,
     hasGroupPhoto: row.hasGroupPhoto,
@@ -89,16 +89,17 @@ function visibleAttachments(attachments: ConvexMessage["attachments"]): ConvexMe
   const shown = attachments.filter((a) => !a.hideAttachment);
   const groups = new Map<string, ConvexMessage["attachments"]>();
   for (const a of shown) {
-    const key = (a.transferName ?? a.filename ?? a.guid).toLowerCase().replace(/\.(heic|heif)\.jpe?g$/, ".$1");
+    const key = (a.imessage?.transferName ?? a.filename ?? a.guid).toLowerCase().replace(/\.(heic|heif)\.jpe?g$/, ".$1");
     groups.set(key, [...(groups.get(key) ?? []), a]);
   }
   const dropped = new Set<ConvexMessage["attachments"][number]>();
-  const rank = (a: ConvexMessage["attachments"][number]) => Number(a.isOnDisk) * 2 + Number(a.mimeType === "image/jpeg");
+  const onDisk = (a: ConvexMessage["attachments"][number]) => a.imessage?.isOnDisk ?? true;
+  const rank = (a: ConvexMessage["attachments"][number]) => Number(onDisk(a)) * 2 + Number(a.mimeType === "image/jpeg");
   for (const [key, group] of groups) {
     const keep = group.reduce((best, a) =>
       rank(a) > rank(best) || (rank(a) === rank(best) && (a.width ?? 0) > (best.width ?? 0)) ? a : best);
     for (const a of group) {
-      if (a !== keep && (/\.(heic|heif)$/.test(key) || !a.isOnDisk)) dropped.add(a);
+      if (a !== keep && (/\.(heic|heif)$/.test(key) || !onDisk(a))) dropped.add(a);
     }
   }
   return shown.filter((a) => !dropped.has(a));
@@ -106,43 +107,44 @@ function visibleAttachments(attachments: ConvexMessage["attachments"]): ConvexMe
 
 export function messageToMessage(row: ConvexMessage | ConvexSearchMessage): Message {
   const attachments = "attachments" in row ? visibleAttachments(row.attachments) : [];
+  const imessage = row.imessage;
   return {
     guid: row.guid,
-    chatGuid: row.chatGuid,
+    platform: row.platform ?? "imessage",
     text: row.text,
     dateCreated: row.dateCreated,
     dateRead: row.dateRead ?? null,
     dateDelivered: row.dateDelivered ?? null,
     isFromMe: row.isFromMe,
-    service: row.service,
     sender: row.sender ?? null,
     attachments: attachments.map((a) => ({
       guid: a.guid,
       mimeType: a.mimeType ?? null,
-      filename: a.filename ?? a.transferName ?? null,
+      filename: a.filename ?? a.imessage?.transferName ?? null,
       width: a.width ?? null,
       height: a.height ?? null,
       totalBytes: a.totalBytes ?? null,
       thumbUrl: a.thumbUrl,
-      onMac: a.isOnDisk,
+      ...(a.imessage ? { onMac: a.imessage.isOnDisk } : {}),
       originalUrl: a.originalUrl,
     })),
     mentions: row.mentions,
-    special: row.special ?? null,
-    sendEffect: row.sendEffect ?? null,
     reactions: row.reactions,
     replyToGuid: row.replyToGuid ?? null,
     replyToPreview: row.replyToPreview ?? null,
     replyToFromMe: row.replyToFromMe ?? null,
-    isAssociatedMessage: row.isTapback,
     isGroupEvent: row.isGroupEvent,
-    isSpam: row.isSpam,
-    error: row.error,
     edited: row.edited,
     retracted: row.retracted,
     clientKey: row.clientKey,
     // A pending send's row; one written before rows carried sendState is in flight until it errors.
-    ...(isPendingGuid(row.guid) ? { sendState: row.sendState ?? (row.error ? "failed" : "queued") } : {}),
+    ...(isPendingGuid(row.guid) ? { sendState: row.sendState ?? (imessage?.error ? "failed" : "queued") } : {}),
+    ...(imessage ? {
+      imessage: {
+        chatGuid: imessage.chatGuid, service: imessage.service, special: imessage.special ?? null, sendEffect: imessage.sendEffect ?? null,
+        error: imessage.error, isAssociatedMessage: imessage.isAssociatedMessage, ...(imessage.isSpam !== undefined ? { isSpam: imessage.isSpam } : {}),
+      },
+    } : {}),
   };
 }
 

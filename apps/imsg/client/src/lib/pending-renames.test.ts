@@ -6,7 +6,7 @@ import { applyRenames, retireRenames, type PendingRenames } from "./pending-rena
 
 function chat(overrides: Partial<ChatSummary> = {}): ChatSummary {
   return {
-    conversationId: "c1" as ConversationId, imessage: { chatGuid: "iMessage;+;c1" }, displayName: "Alex", isGroup: true, known: true, isSpam: false, participants: [],
+    conversationId: "c1" as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;+;c1" } }, displayName: "Alex", isGroup: true, known: true, isSpam: false, participants: [],
     lastMessage: null, unreadCount: 0, firstUnreadAt: null,
     flags: { unresponded: false, waiting: false, unread: false, mutedUnresponded: false, pinned: false },
     ...overrides,

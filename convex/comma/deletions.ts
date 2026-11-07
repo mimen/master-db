@@ -3,6 +3,8 @@ import { v } from "convex/values";
 import { internalMutation } from "../_generated/server";
 
 import { choosePrimary } from "./conversationIdentity";
+import { findAlias, findMessage } from "./conversationLookup";
+import { isAssociated, messageImessage, scopeOf } from "./messageShape";
 
 const phases = ["messages", "reactions", "attachments", "scheduled", "suggestions", "events", "state", "drafts", "presence", "finalize"] as const;
 const phase = v.union(...phases.map((name) => v.literal(name)));
@@ -11,9 +13,10 @@ export const deleteChat = internalMutation({
   args: { chatGuid: v.string(), phase: v.optional(phase), cursor: v.optional(v.string()) },
   returns: v.object({ done: v.boolean(), phase: v.optional(phase), cursor: v.optional(v.string()) }),
   handler: async (ctx, args) => {
-    const alias = await ctx.db.query("comma_chat_aliases")
-      .withIndex("by_chatGuid", (q) => q.eq("chatGuid", args.chatGuid)).unique();
+    // The bridge deletes a chat by its iMessage GUID alone.
+    const alias = await findAlias(ctx, { platform: "imessage", accountId: null }, args.chatGuid);
     if (!alias) return { done: true };
+    const scope = scopeOf(alias);
     const conversationId = alias.conversationId;
     const aliases = await ctx.db.query("comma_chat_aliases")
       .withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId)).collect();
@@ -23,14 +26,13 @@ export const deleteChat = internalMutation({
     const next = (page: { isDone: boolean; continueCursor: string }) => page.isDone
       ? { done: false, phase: phases[phases.indexOf(current) + 1]! }
       : { done: false, phase: current, cursor: page.continueCursor };
-    const messageExists = async (guid: string) => Boolean(await ctx.db.query("comma_messages")
-      .withIndex("by_guid", (q) => q.eq("guid", guid)).unique());
+    const messageExists = async (guid: string) => Boolean(await findMessage(ctx, scope, guid));
 
     if (current === "messages") {
       const page = await ctx.db.query("comma_messages")
         .withIndex("by_conversation_date", (q) => q.eq("conversationId", conversationId)).paginate(pagination);
       for (const row of page.page) {
-        if (!siblings.length || row.chatGuid === args.chatGuid) await ctx.db.delete(row._id);
+        if (!siblings.length || messageImessage(row)?.chatGuid === args.chatGuid) await ctx.db.delete(row._id);
       }
       return next(page);
     }
@@ -91,9 +93,9 @@ export const deleteChat = internalMutation({
       .withIndex("by_conversation_date", (q) => q.eq("conversationId", conversationId)).order("desc");
     let newest = null;
     for await (const row of history) {
-      if (!row.isTapback && !row.retracted) { newest = row; break; }
+      if (!isAssociated(row) && !row.retracted) { newest = row; break; }
     }
-    const primaryChatGuid = newest?.chatGuid ?? choosePrimary(siblings.map((row) => ({ chatGuid: row.chatGuid, lastMessageAt: 0 })));
+    const primaryChatGuid = (newest && messageImessage(newest)?.chatGuid) ?? choosePrimary(siblings.map((row) => ({ chatGuid: row.chatGuid, lastMessageAt: 0 })));
     await ctx.db.patch(conversationId, {
       primaryChatGuid, chatGuids: siblings.map((row) => row.chatGuid).sort(),
       lastMessage: newest ? { guid: newest.guid, text: newest.text, dateCreated: newest.dateCreated,

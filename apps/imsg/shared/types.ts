@@ -52,7 +52,65 @@ export type SpecialContent =
   | { kind: "poll" }
   | { kind: "unknown"; label: string };
 
+/** The platforms Comma mirrors. */
+export type Platform = "imessage";
+
+/** An account's Convex id: one signed-in identity on a platform. */
+export type AccountId = GenericId<"comma_accounts">;
+
+/** What only an iMessage message has. */
+export interface IMessageDetails {
+  chatGuid: string;
+  /** "SMS" for green-bubble messages, "iMessage" otherwise. */
+  service: "iMessage" | "SMS";
+  /** Non-plain payload rendered as a card (vCard, location, Apple Cash…). */
+  special: SpecialContent | null;
+  /** Apple expressive send style, e.g. "com.apple.MobileSMS.expressivesend.impact". */
+  sendEffect: string | null;
+  /** BlueBubbles' send error code; 0 when none. */
+  error: number;
+  /** Apple's junk classification for this message, when supplied by BlueBubbles. */
+  isSpam?: boolean;
+  /** An associated message, such as a tapback. */
+  isAssociatedMessage?: boolean;
+}
+
+/** A message on any platform; its platform's own fields sit under that platform's key. */
 export interface Message {
+  guid: string;
+  platform: Platform;
+  text: string;
+  /** Epoch ms. */
+  dateCreated: number;
+  dateRead: number | null;
+  dateDelivered: number | null;
+  isFromMe: boolean;
+  sender: Participant | null;
+  attachments: AttachmentSummary[];
+  /** Mention ranges, when the platform carries them. */
+  mentions?: MentionAnnotation[];
+  reactions: Reaction[];
+  /** GUID of the message this one replies to (threaded reply), if any. */
+  replyToGuid: string | null;
+  /** Preview of the replied-to message, resolved server-side when available. */
+  replyToPreview: string | null;
+  /** Whether the replied-to message was sent by me (null when unresolved). */
+  replyToFromMe: boolean | null;
+  isGroupEvent: boolean;
+  edited: boolean;
+  retracted: boolean;
+  /** Set only on a send that has not landed yet; see pending-send.ts. */
+  sendState?: PendingSendState;
+  /** The outbox key of the send this message is or settled from, which also keeps its row's identity. */
+  clientKey?: string;
+  imessage?: IMessageDetails;
+}
+
+/**
+ * A message as the bridge's BlueBubbles mapper and the command results carry it: iMessage's flat shape. Clients
+ * turn one into a Message with fromBridgeMessage (shared/imessage.ts).
+ */
+export interface BridgeMessage {
   guid: string;
   chatGuid: string;
   text: string;
@@ -111,10 +169,21 @@ export interface ChatFlags {
 /** A conversation's Convex id: what the app selects, routes, keys and commands by. */
 export type ConversationId = GenericId<"comma_conversations">;
 
+/**
+ * Where a conversation's commands go: its platform and account, and that platform's own thread. Convex stamps the
+ * real route on each command; this is the client's copy, for what a route can do. `accountId` is null until the
+ * accounts backfill reaches the conversation.
+ */
+export type ChatRoute = {
+  platform: "imessage";
+  accountId: AccountId | null;
+  /** The chat GUID the conversation sends through. Parse it only through shared/imessage.ts. */
+  imessage: { chatGuid: string };
+};
+
 export interface ChatSummary {
   conversationId: ConversationId;
-  /** iMessage only: the chat GUID the conversation sends through. Parse it only through shared/imessage.ts. */
-  imessage: { chatGuid: string };
+  route: ChatRoute;
   displayName: string;
   isGroup: boolean;
   /** Whether BlueBubbles reports an uploaded group photo for this chat. */
@@ -337,8 +406,8 @@ export interface ContactSuggestion {
 }
 
 export type ServerEvent =
-  | { kind: "new-message"; chatGuid: string; message: Message }
-  | { kind: "updated-message"; chatGuid: string; message: Message }
+  | { kind: "new-message"; chatGuid: string; message: BridgeMessage }
+  | { kind: "updated-message"; chatGuid: string; message: BridgeMessage }
   | { kind: "reaction"; chatGuid: string; targetGuid: string; reaction: Reaction; remove: boolean }
   | { kind: "chats-changed" }
   | { kind: "typing"; chatGuid: string; display: boolean }

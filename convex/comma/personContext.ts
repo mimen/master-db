@@ -7,9 +7,11 @@ import { personName } from "../identity/names";
 import { normalizeEmail, normalizePhone } from "../identity/normalize";
 import { platform } from "../schema/comma/validators";
 
+import { soleAccountScope } from "./accounts";
 import { handleKey } from "./conversationIdentity";
 import { conversationPeople } from "./conversationInfo";
 import { findByKey } from "./conversationLookup";
+import { isAssociated } from "./messageShape";
 import { resolveConversationNames } from "./names";
 import { normalizedAddress } from "./photos";
 
@@ -63,7 +65,7 @@ const SCAN = 400;
 type Row = Doc<"comma_messages">;
 
 const shown = (row: Row) =>
-  !row.isTapback && !row.retracted && !row.isGroupEvent && (row.text.trim() !== "" || row.attachmentGuids.length > 0);
+  !isAssociated(row) && !row.retracted && !row.isGroupEvent && (row.text.trim() !== "" || row.attachmentGuids.length > 0);
 
 /** One index range read newest first, a row at a time, holding its newest unread line. */
 type Source = { rows: AsyncIterator<Row>; keep: (row: Row) => boolean; read: number; head: Row | null };
@@ -140,8 +142,9 @@ export async function personContext(ctx: QueryCtx, input: PersonContextInput) {
     }).order("desc"),
     (row) => !row.isFromMe && shown(row),
   ))))).flat();
-  // ponytail: one-to-one keys are looked up on iMessage, the only platform; loop the platforms when another lands.
-  const dms = (await Promise.all(dmKeys.map((key) => findByKey(ctx, platform.value, key))))
+  // ponytail: one-to-one keys are looked up on iMessage's account, the only one; loop the accounts when another lands.
+  const scope = await soleAccountScope(ctx, platform.value);
+  const dms = (await Promise.all(dmKeys.map((key) => findByKey(ctx, scope, key))))
     .filter((dm): dm is Doc<"comma_conversations"> => dm !== null && dm._id !== exclude);
   const both = [...new Set(dms.map((dm) => dm._id))].map((id) => source(
     ctx.db.query("comma_messages").withIndex("by_conversation_date", (q) => {

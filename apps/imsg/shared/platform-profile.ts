@@ -1,4 +1,4 @@
-import type { TapbackType } from "./types";
+import type { Platform, TapbackType } from "./types";
 
 /**
  * What a conversation's route can do, as data. Convex rejects a command its route's profile does not
@@ -10,7 +10,7 @@ import type { TapbackType } from "./types";
 export type RouteService = "iMessage" | "SMS" | "RCS";
 
 export interface ProfileRoute {
-  platform: "imessage";
+  platform: Platform;
   service: RouteService;
   isGroup: boolean;
 }
@@ -85,7 +85,7 @@ export function keyEmoji(key: string): string | null {
   return key.startsWith("emoji:") ? key.slice("emoji:".length) || null : null;
 }
 
-export const PROFILES = { imessage: IMESSAGE_PROFILE } satisfies Record<ProfileRoute["platform"], unknown>;
+export const PROFILES = { imessage: IMESSAGE_PROFILE } satisfies Record<Platform, unknown>;
 
 export type Support = { ok: true } | { ok: false; reason: string };
 

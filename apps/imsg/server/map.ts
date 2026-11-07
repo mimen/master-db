@@ -1,5 +1,5 @@
 import type { BBAttachment, BBChat, BBHandle, BBMessage } from "./bb-types";
-import type { ChatSummary, Message, Participant, Reaction, SpecialContent } from "../shared/types";
+import type { ChatSummary, BridgeMessage, Participant, Reaction, SpecialContent } from "../shared/types";
 import type { MentionAnnotation } from "../shared/mentions";
 import { formatAddress } from "../shared/address";
 import { firstEmoji } from "../shared/emoji";
@@ -208,7 +208,7 @@ export function mapMessage(
   contacts: NameSource,
   participants: readonly BBHandle[] = [],
   sourceChatGuid?: string,
-): Message {
+): BridgeMessage {
   const text = isTapback(m) ? summarizeLast(m) : cleanText(m);
   return {
     guid: m.guid,
@@ -264,7 +264,7 @@ export function buildThread(
   raw: BBMessage[],
   chatGuid: string,
   contacts: NameSource,
-): Message[] {
+): BridgeMessage[] {
   const tapbacks = new Map<string, FoldedTapback[]>();
   const chronological = raw.filter(isTapback).sort((a, b) => (a.dateCreated ?? 0) - (b.dateCreated ?? 0));
   for (const m of chronological) {
@@ -369,7 +369,7 @@ function chatCrmField(
 
 /** A conversation as the Mini sees it in BlueBubbles. Triage flags are Convex's, so it carries none. */
 /** A BlueBubbles chat as the bridge maps it, keyed by its own GUID. */
-export type MappedChat = Omit<ChatSummary, "flags" | "conversationId" | "imessage"> & { guid: string };
+export type MappedChat = Omit<ChatSummary, "flags" | "conversationId" | "route"> & { guid: string };
 
 export function mapChat(
   chat: BBChat,

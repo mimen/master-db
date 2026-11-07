@@ -5,7 +5,7 @@ import type { OverlayDb, SuggestionFeedbackRow } from "../db";
 import type {
   ContactSuggestion,
   EventSuggestion,
-  Message,
+  BridgeMessage,
   ReplySuggestions,
   SuggestionFeedbackRequest,
   SuggestionModel,
@@ -56,7 +56,7 @@ export interface AiThread {
   title: string;
   isGroup: boolean;
   participants: Array<{ address: string; name: string | null }>;
-  messages: Message[];
+  messages: BridgeMessage[];
 }
 
 /**
@@ -68,7 +68,7 @@ export function isStale(cachedGuid: string | null, currentGuid: string | null): 
   return cachedGuid !== currentGuid;
 }
 
-function lastGuid(messages: Message[]): string | null {
+function lastGuid(messages: BridgeMessage[]): string | null {
   return messages[messages.length - 1]?.guid ?? null;
 }
 
@@ -200,7 +200,7 @@ export class AiService {
   private async generateReplySuggestions(
     conversationId: ConversationId,
     peerName: string | null,
-    messages: Message[],
+    messages: BridgeMessage[],
     currentGuid: string,
     selectedModel: SuggestionModel,
     voice: ReturnType<typeof loadVoiceState>,
@@ -283,7 +283,7 @@ export class AiService {
    * Everyone on the other side of the thread with a known contact email —
    * first listed email per contact, so one human gets one invitation.
    */
-  private inviteEmails(messages: Message[]): string[] {
+  private inviteEmails(messages: BridgeMessage[]): string[] {
     const addresses = new Set<string>();
     for (const message of messages) {
       if (!message.isFromMe && message.sender?.address) addresses.add(message.sender.address);

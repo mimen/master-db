@@ -1,3 +1,4 @@
+import { hasSendError } from "@shared/imessage";
 import type { Message } from "@shared/types";
 
 /**
@@ -13,7 +14,7 @@ const ERROR_SETTLE_MS = 5 * 60_000;
 
 export function deliveryState(message: Message, latestInboundAt: number | null, now: number): DeliveryState {
   if (message.sendState === "failed" || message.sendState === "notSent") return message.sendState;
-  if (!message.isFromMe || message.error === 0) return "ok";
+  if (!message.isFromMe || !hasSendError(message)) return "ok";
   const evidence =
     message.dateDelivered !== null ||
     message.dateRead !== null ||

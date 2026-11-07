@@ -50,11 +50,11 @@ test("message fields preserve dates, errors, replies, edits and RCS", () => {
     dateDelivered: 1700000004000, threadOriginatorGuid: "parent", error: 12,
     handle: { address: "+15550001111" }, expressiveSendStyleId: "confetti", itemType: 1,
   }), id, 42000);
-  expect(row).toMatchObject({ conversationId: id, sourceVersion: 42000, service: "SMS", text: "hello",
+  expect(row).toMatchObject({ conversationId: id, sourceVersion: 42000, text: "hello",
     dateCreated: 1700000000000, dateEdited: 1700000001000, dateRetracted: 1700000002000,
     dateRead: 1700000003000, dateDelivered: 1700000004000, edited: true, retracted: true,
-    error: 12, replyToGuid: "parent", sendEffect: "confetti", isGroupEvent: true,
-    sender: { address: "+15550001111", name: null }, reactions: [], isTapback: false });
+    replyToGuid: "parent", isGroupEvent: true, sender: { address: "+15550001111", name: null },
+    imessage: { chatGuid: "RCS;-;+15550001111", service: "SMS", error: 12, sendEffect: "confetti", isAssociatedMessage: false } });
 });
 
 for (const [code, reaction, remove, text, emoji] of [
@@ -65,9 +65,8 @@ for (const [code, reaction, remove, text, emoji] of [
 ] as const) {
   test(`tapback ${code} is a raw row with an unprefixed target`, () => {
     const row = toMessageRow(message({ text, associatedMessageGuid: "bp:2/parent", associatedMessageType: code }), id, 42000);
-    expect(row).toMatchObject({ isTapback: true, text: "", tapbackTargetGuid: "parent", reactions: [],
-      tapback: { targetGuid: "parent", reaction, remove } });
-    expect(row.tapback?.emoji).toBe(emoji);
+    expect(row).toMatchObject({ text: "", imessage: { isAssociatedMessage: true, tapback: { targetGuid: "parent", reaction, remove } } });
+    expect(row.imessage.tapback?.emoji).toBe(emoji);
   });
 }
 
@@ -89,15 +88,14 @@ test("raw attachments retain hidden, unavailable and HEIC siblings", () => {
   expect(toMessageRow(raw, id, 42000).attachmentGuids).toEqual(["a1", "a2"]);
   expect(toAttachmentRows(raw, id, 42000)).toMatchObject([
     { guid: "a1", messageGuid: "m1", conversationId: id, sourceVersion: 42000,
-      filename: "photo.HEIC", transferName: "photo.HEIC", mimeType: "image/heic", uti: "public.heic",
-      transferState: 0, width: 100, height: 200, totalBytes: 400, isSticker: true,
-      hideAttachment: true, isOnDisk: false },
-    { guid: "a2", isOnDisk: true, transferState: 5, isSticker: false, hideAttachment: false },
+      filename: "photo.HEIC", mimeType: "image/heic", width: 100, height: 200, totalBytes: 400, hideAttachment: true,
+      imessage: { transferName: "photo.HEIC", uti: "public.heic", transferState: 0, isSticker: true, isOnDisk: false } },
+    { guid: "a2", hideAttachment: false, imessage: { isOnDisk: true, transferState: 5, isSticker: false } },
   ]);
 });
 
 test("special content reuses mapMessage", () => {
-  expect(toMessageRow(message({ balloonBundleId: "com.apple.ApplePay" }), id, 42000).special)
+  expect(toMessageRow(message({ balloonBundleId: "com.apple.ApplePay" }), id, 42000).imessage.special)
     .toEqual({ kind: "apple-cash" });
   expect(toMessageRow(message({ replyToGuid: "not-a-reply" }), id, 42000).replyToGuid).toBeUndefined();
 });

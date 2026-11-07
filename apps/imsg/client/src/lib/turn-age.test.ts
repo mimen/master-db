@@ -7,7 +7,7 @@ const H = 3_600_000;
 
 function chat(guid: string, flags: Partial<ChatSummary["flags"]>, lastAt: number, firstUnreadAt: number | null = null): ChatSummary {
   return {
-    conversationId: guid as ConversationId, imessage: { chatGuid: `iMessage;-;${guid}` }, displayName: guid, isGroup: false, known: true, isSpam: false, participants: [], unreadCount: 0, firstUnreadAt,
+    conversationId: guid as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: `iMessage;-;${guid}` } }, displayName: guid, isGroup: false, known: true, isSpam: false, participants: [], unreadCount: 0, firstUnreadAt,
     lastMessage: { guid: `${guid}-m`, text: "", dateCreated: lastAt, isFromMe: false, senderName: null, hasAttachments: false },
     flags: { unresponded: false, waiting: false, unread: false, mutedUnresponded: false, pinned: false, ...flags },
   };

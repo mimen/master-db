@@ -9,7 +9,7 @@ The client has no feature REST calls or Mini event-stream connection.
 
 **Conversation**:
 One thread in Comma, whatever carries it, named everywhere by its Convex id (`comma_conversations`).
-Its identity is a platform plus a key unique within that platform; iMessage is the only platform, and
+Its identity is a platform and account plus a key unique within that account; iMessage is the only platform, and
 its service siblings (the iMessage, SMS and RCS chats with one person or group) share one key. Convex
 owns the identity in `convex/comma/conversationIdentity.ts`: the key, the primary chat (newest
 activity, ties to iMessage, then RCS, then SMS), and lookups by chat GUID or handle. Group CRM
@@ -17,7 +17,7 @@ activity, ties to iMessage, then RCS, then SMS), and lookups by chat GUID or han
 _Avoid_: chat (for the merged thread), chat GUID (as an app-level id)
 
 **Route**:
-Where a command executes: a platform and that platform's thread id, for iMessage a chat GUID.
+Where a command executes: a platform, an account, and that platform's thread id, for iMessage a chat GUID.
 Enqueue stamps the conversation's primary chat on each outbox row; the bridge runs exactly the
 stamped route and never picks one.
 _Avoid_: send target, resolved chat
@@ -36,11 +36,25 @@ Private API for it. Enqueue rejects a command its route can't run (`convex/comma
 shows that control greyed with the same short reason ("SMS can't send reactions") instead of hiding it.
 _Avoid_: capability flags, service checks (`service === "SMS"`)
 
+**Account**:
+One signed-in identity on a platform (`comma_accounts`): the iMessage Mac today, later a Slack workspace or a
+mailbox. Conversations, chat aliases, messages, attachments, scheduled messages and sync cursors carry its `accountId`,
+so a conversation key or a message id only needs to be unique within its account. The bridge names its account at
+startup (`POST /comma/ingest/account`, seeded idempotently) and stamps it on every batch; a bridge that names none
+writes for iMessage's. A snapshot (unread, scheduled) replaces only its own account's state. Where a platform reports no
+from-me flag, a sender among the account's `selfHandles` is me. Rows from before accounts carry no `accountId` and count as
+their platform's only account's until the accounts backfill (`convex/comma/migrations.ts`) stamps them.
+_Avoid_: workspace, login (for the stored identity)
+
 **Message core**:
-What every platform's message has (`messageCoreFields` in `convex/schema/comma/validators.ts`): platform, id,
-conversation, sender, from-me, time, text, attachments, reply-to, edited and retracted. iMessage's own fields
-(`imessageMessageFields`: chat GUID, service, send effect, the tapback ingest turns into a reaction) are still top-level on every row.
-A message id is unique within its platform; other tables name a message by its **message key**, `platform:id`
+What every platform's message has (`messageCoreFields` in `convex/schema/comma/validators.ts`): platform, account, id,
+conversation, sender, from-me, time, text, attachments, reply-to, edited and retracted. iMessage's own fields (chat GUID,
+service, send error, send effect, special content, associated-message) live under `imessage`; attachments keep chat.db's
+fields (transfer name and state, UTI, sticker, on-disk) under their own `imessage`. Rows the backfill has not reached keep
+those fields flat, so every reader goes through `convex/comma/messageShape.ts`, and reads serve both forms until every
+client reads `imessage`. The bridge's flat BlueBubbles shape is `BridgeMessage` (`shared/types.ts`); clients turn one into a
+`Message` with `fromBridgeMessage`. A message id is unique within its account, and every lookup by id goes through
+`findMessage` (`convex/comma/conversationLookup.ts`); other tables name a message by its **message key**, `platform:id`
 (`messageKey` in `convex/comma/reactions.ts`).
 _Avoid_: guid (as a cross-platform id)
 

@@ -4,20 +4,26 @@ import { internalMutation, query, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 import { transcriptState as transcriptValidator, type CommaAttachmentDoc } from "../schema/comma/validators";
 
+import { findAttachment } from "./conversationLookup";
+import { attachmentName, attachmentOnDisk, isAssociated, type AccountScope } from "./messageShape";
+
+/** Clients and the bridge name an attachment by its iMessage guid alone. ponytail: pass a scope when a second platform's media renders. */
+const IMESSAGE_ANY: AccountScope = { platform: "imessage", accountId: null };
+
 function visibleGuids(attachments: CommaAttachmentDoc[]): Set<string> {
   const groups = new Map<string, CommaAttachmentDoc[]>();
   const shown = attachments.filter((a) => a.guid && !a.hideAttachment);
   for (const a of shown) {
-    const key = (a.transferName ?? a.filename ?? a.guid).toLowerCase().replace(/\.(heic|heif)\.jpe?g$/, ".$1");
+    const key = (attachmentName(a) ?? a.guid).toLowerCase().replace(/\.(heic|heif)\.jpe?g$/, ".$1");
     groups.set(key, [...(groups.get(key) ?? []), a]);
   }
   const dropped = new Set<string>();
-  const rank = (a: CommaAttachmentDoc) => (a.isOnDisk ? 2 : 0) + (a.mimeType === "image/jpeg" ? 1 : 0);
+  const rank = (a: CommaAttachmentDoc) => (attachmentOnDisk(a) ? 2 : 0) + (a.mimeType === "image/jpeg" ? 1 : 0);
   for (const [key, group] of groups) {
     if (group.length < 2) continue;
     const keep = group.reduce((best, a) => rank(a) > rank(best) || (rank(a) === rank(best) && (a.width ?? 0) > (best.width ?? 0)) ? a : best);
     for (const a of group) {
-      if (a !== keep && (/\.(heic|heif)$/.test(key) || !a.isOnDisk)) dropped.add(a.guid);
+      if (a !== keep && (/\.(heic|heif)$/.test(key) || !attachmentOnDisk(a))) dropped.add(a.guid);
     }
   }
   return new Set(shown.filter((a) => !dropped.has(a.guid)).map((a) => a.guid));
@@ -37,7 +43,7 @@ export const attachmentMedia = query({
   returns: v.union(v.object(mediaUrls), v.null()),
   handler: async (ctx, { guid }) => {
     await assertAllowed(ctx);
-    const attachment = await ctx.db.query("comma_attachments").withIndex("by_guid", (q) => q.eq("guid", guid)).unique();
+    const attachment = await findAttachment(ctx, IMESSAGE_ANY, guid);
     return attachment && !attachment.hideAttachment ? urls(ctx, attachment) : null;
   },
 });
@@ -47,7 +53,7 @@ export const attachmentChatGuid = query({
   returns: v.union(v.string(), v.null()),
   handler: async (ctx, { guid }) => {
     await assertAllowed(ctx);
-    const attachment = await ctx.db.query("comma_attachments").withIndex("by_guid", (q) => q.eq("guid", guid)).unique();
+    const attachment = await findAttachment(ctx, IMESSAGE_ANY, guid);
     if (!attachment) return null;
     const conversation = await ctx.db.get(attachment.conversationId);
     return conversation?.primaryChatGuid ?? null;
@@ -65,7 +71,7 @@ export const gallery = query({
     const items = [];
     const seen = new Set<string>();
     for await (const message of ctx.db.query("comma_messages").withIndex("by_conversation_date", (q) => q.eq("conversationId", conversationId)).order("desc")) {
-      if (message.isTapback || message.retracted) continue;
+      if (isAssociated(message) || message.retracted) continue;
       const attachments = await ctx.db.query("comma_attachments").withIndex("by_messageGuid", (q) => q.eq("messageGuid", message.guid)).collect();
       const visible = visibleGuids(attachments);
       for (const attachment of attachments) {
@@ -74,7 +80,7 @@ export const gallery = query({
         const isVideo = attachment.mimeType?.startsWith("video/") ?? false;
         if (!isImage && !isVideo) continue;
         seen.add(attachment.guid);
-        items.push({ ...await urls(ctx, attachment), mimeType: attachment.mimeType ?? null, filename: attachment.transferName ?? attachment.filename ?? null, isImage, isVideo, dateCreated: message.dateCreated });
+        items.push({ ...await urls(ctx, attachment), mimeType: attachment.mimeType ?? null, filename: attachmentName(attachment) ?? null, isImage, isVideo, dateCreated: message.dateCreated });
         if (items.length === cap) return items;
       }
     }
@@ -87,7 +93,7 @@ export const transcriptState = query({
   returns: transcriptValidator,
   handler: async (ctx, { attachmentGuid }): Promise<Infer<typeof transcriptValidator>> => {
     await assertAllowed(ctx);
-    const attachment = await ctx.db.query("comma_attachments").withIndex("by_guid", (q) => q.eq("guid", attachmentGuid)).unique();
+    const attachment = await findAttachment(ctx, IMESSAGE_ANY, attachmentGuid);
     if (!attachment) return { state: "unavailable", detail: "Attachment is not mirrored yet" };
     if (attachment.transcript !== undefined) return { state: "ready", text: attachment.transcript };
     if (attachment.transcriptState === "working") return { state: "working" };
@@ -119,7 +125,7 @@ export const bridgeMedia = internalMutation({
       await ctx.db.patch(upload._id, { commandId: command._id });
       return url;
     }
-    const attachment = await ctx.db.query("comma_attachments").withIndex("by_guid", (q) => q.eq("guid", request.attachmentGuid)).unique();
+    const attachment = await findAttachment(ctx, IMESSAGE_ANY, request.attachmentGuid);
     if (!attachment) return false;
     if (request.conversationId && attachment.conversationId !== request.conversationId) throw new Error("Attachment does not belong to conversation");
     // A late working notification must not overwrite a completed cached transcript.

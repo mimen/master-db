@@ -528,21 +528,31 @@ export declare const api: {
         Array<{
           _creationTime: number;
           _id: Id<"comma_messages">;
+          accountId?: Id<"comma_accounts">;
           attachmentGuids: Array<string>;
           attachments: Array<{
             _creationTime: number;
             _id: Id<"comma_attachments">;
+            accountId?: Id<"comma_accounts">;
             conversationId: Id<"comma_conversations">;
             filename?: string;
             guid: string;
             height?: number;
             hideAttachment: boolean;
-            isOnDisk: boolean;
-            isSticker: boolean;
+            imessage?: {
+              isOnDisk: boolean;
+              isSticker: boolean;
+              transferName?: string;
+              transferState?: number;
+              uti?: string;
+            };
+            isOnDisk?: boolean;
+            isSticker?: boolean;
             messageGuid: string;
             mimeType?: string;
             originalStorageId?: Id<"_storage">;
             originalUrl: string | null;
+            platform?: "imessage";
             sourceVersion: number;
             thumbStorageId?: Id<"_storage">;
             thumbUrl: string | null;
@@ -561,7 +571,7 @@ export declare const api: {
             uti?: string;
             width?: number;
           }>;
-          chatGuid: string;
+          chatGuid?: string;
           clientKey?: string;
           conversationId: Id<"comma_conversations">;
           dateCreated: number;
@@ -570,12 +580,26 @@ export declare const api: {
           dateRead?: number;
           dateRetracted?: number;
           edited: boolean;
-          error: number;
+          error?: number;
           guid: string;
+          imessage?: {
+            chatGuid: string;
+            error: number;
+            isAssociatedMessage: boolean;
+            isSpam?: boolean;
+            sendEffect?: string;
+            service: "iMessage" | "SMS";
+            special?:
+              | { kind: "contact"; name: string | null }
+              | { kind: "location" }
+              | { kind: "apple-cash" }
+              | { kind: "poll" }
+              | { kind: "unknown"; label: string };
+          };
           isFromMe: boolean;
           isGroupEvent: boolean;
           isSpam?: boolean;
-          isTapback: boolean;
+          isTapback?: boolean;
           mentions: Array<{ address: string; length: number; start: number }>;
           platform?: "imessage";
           reactions: Array<{
@@ -593,7 +617,7 @@ export declare const api: {
           sendEffect?: string;
           sendState?: "queued" | "sending" | "notSent" | "failed";
           sender?: { address: string; name: string | null };
-          service: "iMessage" | "SMS";
+          service?: "iMessage" | "SMS";
           sourceVersion: number;
           special?:
             | { kind: "contact"; name: string | null }
@@ -1763,7 +1787,11 @@ export declare const api: {
             | { kind: "suggestionFeedback"; ok: true }
             | { kind: "clearSuggestionLearning"; ok: true };
           resultGuid?: string;
-          route?: { chatGuid: string; platform: "imessage" };
+          route?: {
+            accountId?: Id<"comma_accounts">;
+            chatGuid: string;
+            platform: "imessage";
+          };
           status: "pending" | "claimed" | "sent" | "failed" | "unknown";
           updatedAt: number;
         }>
@@ -1799,6 +1827,7 @@ export declare const api: {
         {
           _creationTime: number;
           _id: Id<"comma_conversations">;
+          accountId?: Id<"comma_accounts">;
           chatGuids: Array<string>;
           contactsAvailable: boolean;
           conversationKey: string;
@@ -1924,6 +1953,7 @@ export declare const api: {
           page: Array<{
             _creationTime: number;
             _id: Id<"comma_conversations">;
+            accountId?: Id<"comma_accounts">;
             chatGuids: Array<string>;
             contactsAvailable: boolean;
             conversationKey: string;
@@ -2006,21 +2036,31 @@ export declare const api: {
           page: Array<{
             _creationTime: number;
             _id: Id<"comma_messages">;
+            accountId?: Id<"comma_accounts">;
             attachmentGuids: Array<string>;
             attachments: Array<{
               _creationTime: number;
               _id: Id<"comma_attachments">;
+              accountId?: Id<"comma_accounts">;
               conversationId: Id<"comma_conversations">;
               filename?: string;
               guid: string;
               height?: number;
               hideAttachment: boolean;
-              isOnDisk: boolean;
-              isSticker: boolean;
+              imessage?: {
+                isOnDisk: boolean;
+                isSticker: boolean;
+                transferName?: string;
+                transferState?: number;
+                uti?: string;
+              };
+              isOnDisk?: boolean;
+              isSticker?: boolean;
               messageGuid: string;
               mimeType?: string;
               originalStorageId?: Id<"_storage">;
               originalUrl: string | null;
+              platform?: "imessage";
               sourceVersion: number;
               thumbStorageId?: Id<"_storage">;
               thumbUrl: string | null;
@@ -2039,7 +2079,7 @@ export declare const api: {
               uti?: string;
               width?: number;
             }>;
-            chatGuid: string;
+            chatGuid?: string;
             clientKey?: string;
             conversationId: Id<"comma_conversations">;
             dateCreated: number;
@@ -2048,12 +2088,26 @@ export declare const api: {
             dateRead?: number;
             dateRetracted?: number;
             edited: boolean;
-            error: number;
+            error?: number;
             guid: string;
+            imessage?: {
+              chatGuid: string;
+              error: number;
+              isAssociatedMessage: boolean;
+              isSpam?: boolean;
+              sendEffect?: string;
+              service: "iMessage" | "SMS";
+              special?:
+                | { kind: "contact"; name: string | null }
+                | { kind: "location" }
+                | { kind: "apple-cash" }
+                | { kind: "poll" }
+                | { kind: "unknown"; label: string };
+            };
             isFromMe: boolean;
             isGroupEvent: boolean;
             isSpam?: boolean;
-            isTapback: boolean;
+            isTapback?: boolean;
             mentions: Array<{ address: string; length: number; start: number }>;
             platform?: "imessage";
             reactions: Array<{
@@ -2071,7 +2125,7 @@ export declare const api: {
             sendEffect?: string;
             sendState?: "queued" | "sending" | "notSent" | "failed";
             sender?: { address: string; name: string | null };
-            service: "iMessage" | "SMS";
+            service?: "iMessage" | "SMS";
             sourceVersion: number;
             special?:
               | { kind: "contact"; name: string | null }
@@ -2099,10 +2153,12 @@ export declare const api: {
         Array<{
           _creationTime: number;
           _id: Id<"comma_scheduled">;
+          accountId?: Id<"comma_accounts">;
           bbId: number;
           chatGuid: string;
           conversationId?: Id<"comma_conversations">;
           error?: string;
+          platform?: "imessage";
           sendAt: number;
           sentAt?: number;
           status:
@@ -2123,6 +2179,7 @@ export declare const api: {
         {
           _creationTime: number;
           _id: Id<"comma_conversations">;
+          accountId?: Id<"comma_accounts">;
           chatGuids: Array<string>;
           contactsAvailable: boolean;
           conversationKey: string;
@@ -2180,8 +2237,9 @@ export declare const api: {
         Array<{
           _creationTime: number;
           _id: Id<"comma_messages">;
+          accountId?: Id<"comma_accounts">;
           attachmentGuids: Array<string>;
-          chatGuid: string;
+          chatGuid?: string;
           clientKey?: string;
           conversationId: Id<"comma_conversations">;
           dateCreated: number;
@@ -2190,12 +2248,26 @@ export declare const api: {
           dateRead?: number;
           dateRetracted?: number;
           edited: boolean;
-          error: number;
+          error?: number;
           guid: string;
+          imessage?: {
+            chatGuid: string;
+            error: number;
+            isAssociatedMessage: boolean;
+            isSpam?: boolean;
+            sendEffect?: string;
+            service: "iMessage" | "SMS";
+            special?:
+              | { kind: "contact"; name: string | null }
+              | { kind: "location" }
+              | { kind: "apple-cash" }
+              | { kind: "poll" }
+              | { kind: "unknown"; label: string };
+          };
           isFromMe: boolean;
           isGroupEvent: boolean;
           isSpam?: boolean;
-          isTapback: boolean;
+          isTapback?: boolean;
           mentions: Array<{ address: string; length: number; start: number }>;
           platform?: "imessage";
           reactions: Array<{
@@ -2213,7 +2285,7 @@ export declare const api: {
           sendEffect?: string;
           sendState?: "queued" | "sending" | "notSent" | "failed";
           sender?: { address: string; name: string | null };
-          service: "iMessage" | "SMS";
+          service?: "iMessage" | "SMS";
           sourceVersion: number;
           special?:
             | { kind: "contact"; name: string | null }
@@ -2238,6 +2310,7 @@ export declare const api: {
         Array<{
           _creationTime: number;
           _id: Id<"comma_sync_state">;
+          accountId?: Id<"comma_accounts">;
           counts?: Record<string, number>;
           cursor?: string;
           key: string;
@@ -3968,6 +4041,19 @@ export declare const internal: {
     syncState: FunctionReference<"mutation", "internal", any, any>;
   };
   comma: {
+    accounts: {
+      ensure: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          externalId: string;
+          label: string;
+          platform: "imessage";
+          selfHandles?: Array<string>;
+        },
+        Id<"comma_accounts">
+      >;
+    };
     agent: {
       agentChat: FunctionReference<
         "mutation",
@@ -4421,11 +4507,13 @@ export declare const internal: {
         "mutation",
         "internal",
         {
+          accountId?: Id<"comma_accounts">;
           counts?: Record<string, number>;
           cursor?: string;
           key: string;
           lastEventAt?: number;
           lastReconcileAt?: number;
+          platform?: "imessage";
         },
         null
       >;
@@ -4460,6 +4548,7 @@ export declare const internal: {
         "mutation",
         "internal",
         {
+          accountId?: Id<"comma_accounts">;
           items: Array<{
             bbId: number;
             chatGuid: string;
@@ -4475,13 +4564,18 @@ export declare const internal: {
               | "expired";
             text: string;
           }>;
+          platform?: "imessage";
         },
         { deleted: number; upserted: number }
       >;
       replaceUnread: FunctionReference<
         "mutation",
         "internal",
-        { chats: Array<{ chatGuid: string; count: number; firstAt: number }> },
+        {
+          accountId?: Id<"comma_accounts">;
+          chats: Array<{ chatGuid: string; count: number; firstAt: number }>;
+          platform?: "imessage";
+        },
         { changed: number; unresolved: number }
       >;
       setAttachmentStorage: FunctionReference<
@@ -4538,34 +4632,70 @@ export declare const internal: {
         "mutation",
         "internal",
         {
-          attachments: Array<{
-            conversationId: Id<"comma_conversations">;
-            filename?: string;
-            guid: string;
-            height?: number;
-            hideAttachment: boolean;
-            isOnDisk: boolean;
-            isSticker: boolean;
-            messageGuid: string;
-            mimeType?: string;
-            originalStorageId?: Id<"_storage">;
-            sourceVersion: number;
-            thumbStorageId?: Id<"_storage">;
-            totalBytes?: number;
-            transcript?: string;
-            transcriptDetail?: string;
-            transcriptError?: string;
-            transcriptState?:
-              | "not-requested"
-              | "working"
-              | "ready"
-              | "unavailable"
-              | "failed";
-            transferName?: string;
-            transferState?: number;
-            uti?: string;
-            width?: number;
-          }>;
+          accountId?: Id<"comma_accounts">;
+          attachments: Array<
+            | {
+                conversationId: Id<"comma_conversations">;
+                filename?: string;
+                guid: string;
+                height?: number;
+                hideAttachment: boolean;
+                imessage: {
+                  isOnDisk: boolean;
+                  isSticker: boolean;
+                  transferName?: string;
+                  transferState?: number;
+                  uti?: string;
+                };
+                messageGuid: string;
+                mimeType?: string;
+                originalStorageId?: Id<"_storage">;
+                sourceVersion: number;
+                thumbStorageId?: Id<"_storage">;
+                totalBytes?: number;
+                transcript?: string;
+                transcriptDetail?: string;
+                transcriptError?: string;
+                transcriptState?:
+                  | "not-requested"
+                  | "working"
+                  | "ready"
+                  | "unavailable"
+                  | "failed";
+                width?: number;
+              }
+            | {
+                accountId?: Id<"comma_accounts">;
+                conversationId: Id<"comma_conversations">;
+                filename?: string;
+                guid: string;
+                height?: number;
+                hideAttachment: boolean;
+                isOnDisk: boolean;
+                isSticker: boolean;
+                messageGuid: string;
+                mimeType?: string;
+                originalStorageId?: Id<"_storage">;
+                platform?: "imessage";
+                sourceVersion: number;
+                thumbStorageId?: Id<"_storage">;
+                totalBytes?: number;
+                transcript?: string;
+                transcriptDetail?: string;
+                transcriptError?: string;
+                transcriptState?:
+                  | "not-requested"
+                  | "working"
+                  | "ready"
+                  | "unavailable"
+                  | "failed";
+                transferName?: string;
+                transferState?: number;
+                uti?: string;
+                width?: number;
+              }
+          >;
+          platform?: "imessage";
         },
         { skipped: number; written: number }
       >;
@@ -4573,6 +4703,7 @@ export declare const internal: {
         "mutation",
         "internal",
         {
+          accountId?: Id<"comma_accounts">;
           conversations: Array<{
             chats: Array<{ chatGuid: string; lastMessageAt: number }>;
             conversationKey: string;
@@ -4592,6 +4723,7 @@ export declare const internal: {
             participants: Array<{ address: string; name: string | null }>;
             rawDisplayName?: string;
           }>;
+          platform?: "imessage";
         },
         Record<string, Id<"comma_conversations">>
       >;
@@ -4599,55 +4731,110 @@ export declare const internal: {
         "mutation",
         "internal",
         {
-          messages: Array<{
-            attachmentGuids: Array<string>;
-            chatGuid: string;
-            clientKey?: string;
-            conversationId: Id<"comma_conversations">;
-            dateCreated: number;
-            dateDelivered?: number;
-            dateEdited?: number;
-            dateRead?: number;
-            dateRetracted?: number;
-            edited: boolean;
-            error: number;
-            guid: string;
-            isFromMe: boolean;
-            isGroupEvent: boolean;
-            isSpam?: boolean;
-            isTapback: boolean;
-            mentions: Array<{ address: string; length: number; start: number }>;
-            platform?: "imessage";
-            reactions?: Array<{
-              emoji?: string;
-              isFromMe: boolean;
-              senderAddress: string | null;
-              senderName: string | null;
-              type: string;
-            }>;
-            replyToFromMe?: boolean;
-            replyToGuid?: string;
-            replyToPreview?: string;
-            retracted: boolean;
-            sendEffect?: string;
-            sender?: { address: string; name: string | null };
-            service: "iMessage" | "SMS";
-            sourceVersion: number;
-            special?:
-              | { kind: "contact"; name: string | null }
-              | { kind: "location" }
-              | { kind: "apple-cash" }
-              | { kind: "poll" }
-              | { kind: "unknown"; label: string };
-            tapback?: {
-              emoji?: string;
-              reaction: string;
-              remove: boolean;
-              targetGuid: string;
-            };
-            tapbackTargetGuid?: string;
-            text: string;
-          }>;
+          accountId?: Id<"comma_accounts">;
+          messages: Array<
+            | {
+                attachmentGuids: Array<string>;
+                clientKey?: string;
+                conversationId: Id<"comma_conversations">;
+                dateCreated: number;
+                dateDelivered?: number;
+                dateEdited?: number;
+                dateRead?: number;
+                dateRetracted?: number;
+                edited: boolean;
+                guid: string;
+                imessage: {
+                  chatGuid: string;
+                  error: number;
+                  isAssociatedMessage: boolean;
+                  isSpam?: boolean;
+                  sendEffect?: string;
+                  service: "iMessage" | "SMS";
+                  special?:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string };
+                  tapback?: {
+                    emoji?: string;
+                    reaction: string;
+                    remove: boolean;
+                    targetGuid: string;
+                  };
+                };
+                isFromMe: boolean;
+                isGroupEvent: boolean;
+                mentions: Array<{
+                  address: string;
+                  length: number;
+                  start: number;
+                }>;
+                replyToFromMe?: boolean;
+                replyToGuid?: string;
+                replyToPreview?: string;
+                retracted: boolean;
+                sender?: { address: string; name: string | null };
+                sourceVersion: number;
+                text: string;
+              }
+            | {
+                accountId?: Id<"comma_accounts">;
+                attachmentGuids: Array<string>;
+                chatGuid: string;
+                clientKey?: string;
+                conversationId: Id<"comma_conversations">;
+                dateCreated: number;
+                dateDelivered?: number;
+                dateEdited?: number;
+                dateRead?: number;
+                dateRetracted?: number;
+                edited: boolean;
+                error: number;
+                guid: string;
+                isFromMe: boolean;
+                isGroupEvent: boolean;
+                isSpam?: boolean;
+                isTapback: boolean;
+                mentions: Array<{
+                  address: string;
+                  length: number;
+                  start: number;
+                }>;
+                platform?: "imessage";
+                reactions?: Array<{
+                  emoji?: string;
+                  isFromMe: boolean;
+                  senderAddress: string | null;
+                  senderName: string | null;
+                  type: string;
+                }>;
+                replyToFromMe?: boolean;
+                replyToGuid?: string;
+                replyToPreview?: string;
+                retracted: boolean;
+                sendEffect?: string;
+                sender?: { address: string; name: string | null };
+                service: "iMessage" | "SMS";
+                sourceVersion: number;
+                special?:
+                  | { kind: "contact"; name: string | null }
+                  | { kind: "location" }
+                  | { kind: "apple-cash" }
+                  | { kind: "poll" }
+                  | { kind: "unknown"; label: string };
+                tapback?: {
+                  emoji?: string;
+                  reaction: string;
+                  remove: boolean;
+                  targetGuid: string;
+                };
+                tapbackTargetGuid?: string;
+                text: string;
+              }
+          >;
+          platform?: "imessage";
         },
         { skipped: number; written: number }
       >;
@@ -4676,6 +4863,39 @@ export declare const internal: {
               };
         },
         string | boolean
+      >;
+    };
+    migrations: {
+      backfillAccountsPage: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          cursor: string | null;
+          dryRun: boolean;
+          limit?: number;
+          table:
+            | "comma_conversations"
+            | "comma_chat_aliases"
+            | "comma_messages"
+            | "comma_attachments"
+            | "comma_scheduled";
+        },
+        { changed: number; cursor: string; isDone: boolean; scanned: number }
+      >;
+      runAccountsBackfill: FunctionReference<
+        "action",
+        "internal",
+        { dryRun: boolean; limit?: number },
+        Array<{
+          changed: number;
+          scanned: number;
+          table:
+            | "comma_conversations"
+            | "comma_chat_aliases"
+            | "comma_messages"
+            | "comma_attachments"
+            | "comma_scheduled";
+        }>
       >;
     };
     outbox: {
@@ -5223,7 +5443,11 @@ export declare const internal: {
             | { kind: "suggestionFeedback"; ok: true }
             | { kind: "clearSuggestionLearning"; ok: true };
           resultGuid?: string;
-          route?: { chatGuid: string; platform: "imessage" };
+          route?: {
+            accountId?: Id<"comma_accounts">;
+            chatGuid: string;
+            platform: "imessage";
+          };
           status: "pending" | "claimed" | "sent" | "failed" | "unknown";
           updatedAt: number;
         }>

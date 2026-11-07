@@ -5,6 +5,7 @@ import { query, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 import { personName } from "../identity/names";
 
+import { soleAccountScope } from "./accounts";
 import { imessage, routeFor } from "./conversationIdentity";
 import { findByHandle, findConversation } from "./conversationLookup";
 import { personForAddress } from "./photos";
@@ -18,7 +19,7 @@ export const findChat = query({
   })),
   handler: async (ctx, args) => {
     await assertAllowed(ctx);
-    const found = await findByHandle(ctx, imessage.platform, args.address);
+    const found = await findByHandle(ctx, await soleAccountScope(ctx, imessage.platform), args.address);
     const conversation = found && !found.isGroup && found.participants.length === 1 ? found : null;
     const route = conversation && routeFor(conversation, args.service);
     return route ? { conversationId: conversation._id, chatGuid: route.chatGuid, service: imessage.sendService(route.chatGuid),

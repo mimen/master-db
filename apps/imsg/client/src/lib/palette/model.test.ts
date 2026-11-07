@@ -9,7 +9,7 @@ const cid = (id: string) => id as ConversationId;
 
 const chat = (over: Partial<ChatSummary>): ChatSummary => ({
   conversationId: cid("g"),
-  imessage: { chatGuid: "iMessage;-;+15550000000" },
+  route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;-;+15550000000" } },
   displayName: over.displayName ?? "Someone",
   isGroup: false,
   known: true,

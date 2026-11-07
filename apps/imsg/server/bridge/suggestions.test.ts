@@ -10,10 +10,10 @@ const CHAT = "iMessage;-;+15550001111";
 
 function message(guid: string, overrides: Partial<MessageRow> = {}): MessageRow {
   return {
-    guid, conversationId: "conversation-test", chatGuid: CHAT, dateCreated: 1000, isFromMe: false, text: "hey?",
-    service: "iMessage", error: 0, edited: false, retracted: false, isTapback: false, reactions: [],
-    isGroupEvent: false, mentions: [], attachmentGuids: [], sourceVersion: 1, ...overrides,
-  } as MessageRow;
+    guid, conversationId: "conversation-test" as MessageRow["conversationId"], dateCreated: 1000, isFromMe: false, text: "hey?",
+    edited: false, retracted: false, isGroupEvent: false, mentions: [], attachmentGuids: [], sourceVersion: 1,
+    imessage: { chatGuid: CHAT, service: "iMessage", error: 0, isAssociatedMessage: false }, ...overrides,
+  };
 }
 
 function chat(overrides: Partial<MappedChat> = {}): MappedChat {
@@ -75,7 +75,7 @@ test("groups, unknown senders, spam, and unmirrored chats are skipped", async ()
     [undefined, false],
   ] as const) {
     const h = harness(current);
-    h.bridge.observe([message("m1", { isSpam: spam })]);
+    h.bridge.observe([message("m1", { imessage: { chatGuid: CHAT, service: "iMessage", error: 0, isAssociatedMessage: false, isSpam: spam } })]);
     h.advance(SUGGESTION_PRECOMPUTE.debounceMs);
     await h.bridge.flush();
     expect(h.generations()).toBe(0);

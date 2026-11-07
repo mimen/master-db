@@ -6,6 +6,8 @@ import { commandMessage } from "../schema/comma/validators";
 import { people } from "../schema/identity/people";
 
 import { conversationPeople } from "./conversationInfo";
+import { shownInThread } from "./conversationLookup";
+import { messageImessage } from "./messageShape";
 import { resolveConversationNames } from "./names";
 import { personContext, personContextResult } from "./personContext";
 import { normalizedAddress, personForAddress } from "./photos";
@@ -82,7 +84,7 @@ export const agentContext = internalMutation({
         return beforeMessageAt === undefined ? after : after.lt("dateCreated", beforeMessageAt);
       })
       .order("desc")
-      .filter((q) => q.and(q.eq(q.field("isTapback"), false), q.eq(q.field("retracted"), false)))
+      .filter(shownInThread)
       .take(limit);
     const participants = await participantsOf(ctx, conversation);
     return {
@@ -110,25 +112,29 @@ export const aiThread = internalMutation({
     const rows = await ctx.db.query("comma_messages")
       .withIndex("by_conversation_date", (q) => q.eq("conversationId", conversationId))
       .order("desc")
-      .filter((q) => q.and(q.eq(q.field("isTapback"), false), q.eq(q.field("retracted"), false)))
+      .filter(shownInThread)
       .take(60);
     const named = resolveConversationNames(conversation, (await conversationPeople(ctx, conversation)).map(({ person }) => person));
     const participants = named.participants.map(({ address, name }) => ({ address, name }));
     const names = new Map(participants.map(({ address, name }) => [address, name]));
-    const messages = await Promise.all(rows.reverse().map(async (row) => ({
-      guid: row.guid, chatGuid: row.chatGuid, text: row.text, dateCreated: row.dateCreated,
-      dateRead: row.dateRead ?? null, dateDelivered: row.dateDelivered ?? null, isFromMe: row.isFromMe, service: row.service,
-      sender: row.sender ? { address: row.sender.address, name: names.get(row.sender.address) ?? row.sender.name } : null,
-      attachments: (await Promise.all(row.attachmentGuids.map((guid) => attachmentFor(ctx, guid)))).flatMap((a) => a ? [{
-        guid: a.guid, mimeType: a.mimeType ?? null, filename: a.transferName ?? a.filename ?? null,
-        width: a.width ?? null, height: a.height ?? null, totalBytes: a.totalBytes ?? null,
-      }] : []),
-      mentions: row.mentions, special: row.special ?? null, sendEffect: row.sendEffect ?? null,
-      reactions: (await reactionsOf(ctx, row)).map((reaction) =>
-        ({ ...reaction, senderName: reaction.senderAddress ? names.get(reaction.senderAddress) ?? null : null })),
-      replyToGuid: row.replyToGuid ?? null, replyToPreview: row.replyToPreview ?? null, replyToFromMe: row.replyToFromMe ?? null,
-      isGroupEvent: row.isGroupEvent, error: row.error, edited: row.edited, retracted: row.retracted,
-    })));
+    const messages = await Promise.all(rows.reverse().map(async (row) => {
+      // ponytail: the AI thread is iMessage's flat wire message; a second platform's rows need a neutral one.
+      const imessage = messageImessage(row);
+      return {
+        guid: row.guid, chatGuid: imessage?.chatGuid ?? conversation.primaryChatGuid, text: row.text, dateCreated: row.dateCreated,
+        dateRead: row.dateRead ?? null, dateDelivered: row.dateDelivered ?? null, isFromMe: row.isFromMe, service: imessage?.service ?? "iMessage",
+        sender: row.sender ? { address: row.sender.address, name: names.get(row.sender.address) ?? row.sender.name } : null,
+        attachments: (await Promise.all(row.attachmentGuids.map((guid) => attachmentFor(ctx, guid)))).flatMap((a) => a ? [{
+          guid: a.guid, mimeType: a.mimeType ?? null, filename: a.transferName ?? a.filename ?? null,
+          width: a.width ?? null, height: a.height ?? null, totalBytes: a.totalBytes ?? null,
+        }] : []),
+        mentions: row.mentions, special: imessage?.special ?? null, sendEffect: imessage?.sendEffect ?? null,
+        reactions: (await reactionsOf(ctx, row)).map((reaction) =>
+          ({ ...reaction, senderName: reaction.senderAddress ? names.get(reaction.senderAddress) ?? null : null })),
+        replyToGuid: row.replyToGuid ?? null, replyToPreview: row.replyToPreview ?? null, replyToFromMe: row.replyToFromMe ?? null,
+        isGroupEvent: row.isGroupEvent, error: imessage?.error ?? 0, edited: row.edited, retracted: row.retracted,
+      };
+    }));
     return { title: named.displayName, isGroup: conversation.isGroup, participants, messages };
   },
 });

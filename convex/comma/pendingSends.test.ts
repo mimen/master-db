@@ -56,7 +56,7 @@ describe("a pending send", () => {
     const { t, as, c } = await setup(chatGuid);
     await send(as, c, false);
     const bubble = await t.run((ctx) => ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "temp-k")).unique());
-    expect(bubble).toMatchObject({ chatGuid, service });
+    expect(bubble).toMatchObject({ imessage: { chatGuid, service } });
   });
 
   test("a failed or unknown outcome strands it as failed", async () => {
@@ -65,7 +65,7 @@ describe("a pending send", () => {
     const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10 });
     await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "k", claimToken: claim!.claimToken!, status: "unknown" });
     const [bubble] = await t.run((ctx) => ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "temp-k")).collect());
-    expect(bubble).toMatchObject({ sendState: "failed", error: 1 });
+    expect(bubble).toMatchObject({ sendState: "failed", imessage: { error: 1 } });
   });
 });
 

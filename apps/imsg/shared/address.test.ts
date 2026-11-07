@@ -43,6 +43,11 @@ test("phoneMatchKey returns empty for anything too short to be a confident match
   expect(phoneMatchKey("24273(smsfp)")).toBe("");
 });
 
+test("phoneMatchKey never reads a scheme-prefixed handle as a phone number", () => {
+  expect(phoneMatchKey("slack:U06195551234")).toBe("");
+  expect(addressesMatch("slack:U06195551234", "+16195551234")).toBe(false);
+});
+
 test("emailMatchKey lowercases; empty for non-email addresses", () => {
   expect(emailMatchKey("Jane@Example.com")).toBe("jane@example.com");
   expect(emailMatchKey("+16195551234")).toBe("");
@@ -76,7 +81,7 @@ test("matchesAnyAddress checks a candidate against a whole list", () => {
 
 describe("disambiguators", () => {
   const dm = (guid: string, displayName: string, address: string) =>
-    ({ conversationId: `c-${guid}` as ConversationId, imessage: { chatGuid: guid }, displayName, isGroup: false, participants: [{ address, name: displayName }] });
+    ({ conversationId: `c-${guid}` as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: guid } }, displayName, isGroup: false, participants: [{ address, name: displayName }] });
   test("labels only DMs whose display name repeats, with each one's own handle", () => {
     const chats = [
       dm("iMessage;-;+19259976370", "Sprout Imen", "+19259976370"),
@@ -92,7 +97,7 @@ describe("disambiguators", () => {
   });
 
   test("leaves groups alone, and ignores a name that repeats only across a group and a DM", () => {
-    const group = { conversationId: "c-crew" as ConversationId, imessage: { chatGuid: "iMessage;+;crew" }, displayName: "Alex Rivera", isGroup: true, participants: [] };
+    const group = { conversationId: "c-crew" as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;+;crew" } }, displayName: "Alex Rivera", isGroup: true, participants: [] };
     expect(disambiguators([group, dm("iMessage;-;+16195550101", "Alex Rivera", "+16195550101")])).toEqual(new Map());
   });
 });

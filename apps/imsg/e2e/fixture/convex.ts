@@ -10,6 +10,7 @@ import { profileRoute, unsupportedReason } from "../../../../convex/comma/routeS
 import { messageService } from "../../shared/platform-profile";
 import { NOT_SENT_AFTER_MS, NOT_SENT_ERROR, pendingGuid } from "../../shared/pending-send";
 import { fromTapback, messageKey, reactionWrites, shownReactions } from "../../../../convex/comma/reactions";
+import { attachmentRead, messageRead } from "../../../../convex/comma/messageShape";
 import type { FixtureRouteControls } from "../../server/app";
 import { buildThread, isGenuineUnreadInbound, mapChat, mapMessage, type UnreadSummary } from "../../server/map";
 import { toConversationInputs, toMessageRow } from "../../server/bridge/mapper";
@@ -20,7 +21,7 @@ import { ChatCommands } from "../../server/commands";
 import { WhisperService } from "../../server/whisper";
 import type { ConversationId } from "../../server/ai/service";
 import type { OverlayDb } from "../../server/db";
-import type { ChatSummary, Contact, ReplySuggestions, TranscriptState } from "../../shared/types";
+import type { BridgeMessage, ChatSummary, Contact, ReplySuggestions, TranscriptState } from "../../shared/types";
 import type { BBMessage } from "../../server/bb-types";
 import { createAgentFixture } from "./agent";
 import { createTodayFixture, type TodayMode } from "./today";
@@ -59,7 +60,8 @@ function reactionsByGuid(raw: BBMessage[], chatGuid: string, names: FixtureIdent
   const tapbacks = raw.filter((m) => m.associatedMessageGuid && m.associatedMessageType);
   let states: CommaReactionState[] = [];
   for (const m of [...tapbacks].sort((a, b) => (a.dateCreated ?? 0) - (b.dateCreated ?? 0))) {
-    const event = fromTapback(toMessageRow(m, id(chatGuid), 0));
+    const row = toMessageRow(m, id(chatGuid), 0);
+    const event = fromTapback({ ...row, platform: "imessage", tapback: row.imessage.tapback });
     if (!event) continue;
     for (const { row, state } of reactionWrites(states.filter((s) => s.targetKey === event.targetKey), event)) {
       states = row ? states.map((s) => (s === row ? state : s)) : [...states, state];
@@ -69,9 +71,14 @@ function reactionsByGuid(raw: BBMessage[], chatGuid: string, names: FixtureIdent
     .map((r) => ({ ...r, senderName: r.senderAddress ? names.lookup(r.senderAddress) : null }));
 }
 
-export function messageRow(message: Message, clientKey?: string): ConvexMessage {
+/** A row as production's read serves it: iMessage's fields under `imessage`, and flat for older clients. */
+function served(row: ConvexMessage): ConvexMessage {
+  return { ...messageRead(row), attachments: row.attachments.map(attachmentRead) };
+}
+
+export function messageRow(message: BridgeMessage, clientKey?: string): ConvexMessage {
   const conversationId = id<"comma_conversations">(message.chatGuid);
-  return {
+  return served({
     _id: id(message.guid), _creationTime: message.dateCreated,
     guid: message.guid, conversationId, chatGuid: message.chatGuid,
     dateCreated: message.dateCreated,
@@ -102,7 +109,7 @@ export function messageRow(message: Message, clientKey?: string): ConvexMessage 
       thumbUrl: a.mimeType?.startsWith("image/") ? `/__fixture/media/${encodeURIComponent(a.guid)}` : null,
       originalUrl: `/__fixture/media/${encodeURIComponent(a.guid)}`, sourceVersion: 1,
     })),
-  };
+  });
 }
 
 /** Gives every conversation in a result the id the client sees; the fixture's own rows use the chat GUID. */
@@ -311,7 +318,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     const reactions = reactionsByGuid([...raw.values()], chatGuid, names);
     return [...buildThread([...raw.values()], chatGuid, names)
       .map((message) => messageRow({ ...message, reactions: reactions(message.guid) }, bb.clientKeyFor(message.guid))),
-      ...[...temps.values()].filter((temp) => temp.conversationId === chatGuid)].sort((a, b) => b.dateCreated - a.dateCreated);
+      ...[...temps.values()].filter((temp) => temp.conversationId === chatGuid).map(served)].sort((a, b) => b.dateCreated - a.dateCreated);
   };
   const execute = async (chatGuid: string, payload: CommaOutboxPayload, clientKey: string): Promise<CommandResult | undefined> => {
     switch (payload.kind) {

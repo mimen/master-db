@@ -5,6 +5,7 @@ import { Pressable, StyleSheet } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import Video01Icon from "@hugeicons/core-free-icons/Video01Icon";
 import * as Linking from "expo-linking";
+import { fromBridgeMessage } from "@shared/imessage";
 import type { ConversationId, Message } from "@shared/types";
 import { faceTimeTargetUrl, type FaceTimeKind } from "@/lib/message-actions";
 import { useActionSheet } from "@/lib/action-sheet";
@@ -50,7 +51,7 @@ export function FaceTimeButton({
   const createGroupLink = async (): Promise<void> => {
     try {
       const result = await runCommand(conversationId, { kind: "createFaceTimeLink" });
-      onSent?.(result.message);
+      onSent?.(fromBridgeMessage(result.message));
       showToast("FaceTime link sent");
     } catch (error) {
       showToast(messagingCommandError(error, "Couldn't create a FaceTime link"));

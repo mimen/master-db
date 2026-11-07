@@ -31,7 +31,7 @@ import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { openAgentPane } from "@/lib/agent-pane";
 import { openChatInfo } from "@/lib/chat-info";
 import { openPersonPane } from "@/lib/person-pane";
-import { conversationRoute } from "@shared/imessage";
+import { conversationRoute, hasSendError } from "@shared/imessage";
 import { keyEmoji, PROFILES } from "@shared/platform-profile";
 import type { Message, Participant } from "@shared/types";
 import { useMessages, type JumpTarget } from "@/hooks/use-messages";
@@ -477,7 +477,7 @@ export function ThreadView({
           ? [copyHandleAction(message.sender.address, message.sender.name?.split(" ")[0])]
           : []),
         // A persisted error code is often stale, so this sends a new copy instead of an in-bubble retry.
-        ...(mine && message.text && message.error !== 0 && !message.sendState
+        ...(mine && message.text && hasSendError(message) && !message.sendState
           ? [
               {
                 label: "Send again",
@@ -550,7 +550,7 @@ export function ThreadView({
       isGroup={isGroup}
       isLatestOutgoing={item.message.guid === latestOutgoingGuid}
       // Only an outgoing message with an error code reads it, so an arrival leaves every other row alone.
-      latestInboundAt={item.message.isFromMe && item.message.error !== 0 ? latestInboundAt : null}
+      latestInboundAt={item.message.isFromMe && hasSendError(item.message) ? latestInboundAt : null}
       highlighted={item.message.guid === highlightGuid}
       unreadCount={item.unreadBoundary ? unreadCount : 0}
       onLongPress={openMessageSheet}

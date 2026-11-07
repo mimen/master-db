@@ -6,7 +6,9 @@ import { internalMutation, mutation, type MutationCtx } from "../_generated/serv
 import { assertAllowed } from "../_lib/authed";
 import type { CommaPendingSendState } from "../schema/comma/validators";
 
+import { findMessage } from "./conversationLookup";
 import { enqueueCommand } from "./enqueue";
+import { FLAT_MESSAGE_UNSET, isAssociated, messageImessage, scopeOf } from "./messageShape";
 import { carryTempAnchor } from "./triage";
 
 /**
@@ -18,13 +20,15 @@ import { carryTempAnchor } from "./triage";
 
 type ConversationId = Id<"comma_conversations">;
 
-async function pendingRow(ctx: MutationCtx, clientKey: string): Promise<Doc<"comma_messages"> | null> {
-  return await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", pendingGuid(clientKey))).unique();
-}
-
 async function sendRow(ctx: MutationCtx, clientKey: string): Promise<Doc<"comma_outbox"> | null> {
   const row = await ctx.db.query("comma_outbox").withIndex("by_clientKey", (q) => q.eq("clientKey", clientKey)).unique();
   return row?.payload.kind === "send" ? row : null;
+}
+
+/** The bubble of the send queued under `clientKey`, in its route's account. */
+async function pendingRow(ctx: MutationCtx, clientKey: string): Promise<Doc<"comma_messages"> | null> {
+  const route = (await sendRow(ctx, clientKey))?.route;
+  return await findMessage(ctx, scopeOf(route ?? {}), pendingGuid(clientKey));
 }
 
 /** The executor took the send, so it is on its way and can no longer be cancelled. */
@@ -40,7 +44,9 @@ export async function claimPendingSend(ctx: MutationCtx, clientKey: string): Pro
  */
 export async function strandPendingSend(ctx: MutationCtx, clientKey: string, sendState: Extract<CommaPendingSendState, "failed" | "notSent">): Promise<void> {
   const row = await pendingRow(ctx, clientKey);
-  if (row) await ctx.db.patch(row._id, { error: 1, dateCreated: Date.now(), sendState });
+  if (!row) return;
+  const imessage = messageImessage(row);
+  await ctx.db.patch(row._id, { dateCreated: Date.now(), sendState, ...(imessage ? { imessage: { ...imessage, error: 1 }, ...FLAT_MESSAGE_UNSET } : {}) });
 }
 
 /** A queued send nothing took in time never goes out: it fails as Not sent, and the user decides whether to retry. */
@@ -75,7 +81,7 @@ export async function completePendingSend(ctx: MutationCtx, clientKey: string, s
   const pending = await pendingRow(ctx, clientKey);
   if (!pending) return;
   if (status !== "sent") return await strandPendingSend(ctx, clientKey, "failed");
-  const real = resultGuid ? await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", resultGuid)).unique() : null;
+  const real = resultGuid ? await findMessage(ctx, scopeOf(pending), resultGuid) : null;
   if (resultGuid && !real) return;
   if (resultGuid) await retire(ctx, pending, resultGuid);
   else await ctx.db.delete(pending._id);
@@ -94,7 +100,7 @@ export async function refreshLastMessage(ctx: MutationCtx, conversationId: Id<"c
       .query("comma_messages")
       .withIndex("by_conversation_date", (q) => q.eq("conversationId", conversationId))
       .order("desc")) {
-      if (!message.isTapback && !message.retracted) {
+      if (!isAssociated(message) && !message.retracted) {
         newest = message;
         break;
       }

@@ -6,7 +6,7 @@ const cid = (id: string) => id as ConversationId;
 
 function chat(id: string, at: number, extra: Partial<ChatSummary> = {}): ChatSummary {
   return {
-    conversationId: cid(id), imessage: { chatGuid: `iMessage;-;${id}` }, displayName: id, isGroup: false, known: true, isSpam: false, participants: [], unreadCount: 0,
+    conversationId: cid(id), route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: `iMessage;-;${id}` } }, displayName: id, isGroup: false, known: true, isSpam: false, participants: [], unreadCount: 0,
     lastMessage: { guid: `${id}-m`, text: "", dateCreated: at, isFromMe: false, senderName: null, hasAttachments: false },
     flags: { unresponded: true, waiting: false, unread: false, mutedUnresponded: false, pinned: false },
     ...extra,

@@ -46,7 +46,7 @@ function makeFlags(overrides: Partial<ChatFlags> = {}): ChatFlags {
 function makeChat(overrides: Partial<ChatSummary> = {}): ChatSummary {
   return {
     conversationId: "chat-1" as ConversationId,
-    imessage: { chatGuid: "iMessage;-;chat-1" },
+    route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;-;chat-1" } },
     displayName: "Chat 1",
     isGroup: false,
     known: true,

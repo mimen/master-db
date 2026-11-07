@@ -9,8 +9,24 @@ import { v, type Infer, type PropertyValidators } from "convex/values";
 /** The service that carries a conversation. iMessage is the only one so far. */
 export const platform = v.literal("imessage");
 
-/** Where a command executes: the platform and that platform's own thread id. Convex chooses it; a bridge only runs it. */
-export const route = v.object({ platform: v.literal("imessage"), chatGuid: v.string() });
+/** One signed-in identity on a platform: an iMessage Mac, a Slack workspace, a mailbox. Credentials arrive with OAuth. */
+export const accountHealth = v.union(v.literal("ok"), v.literal("needsAttention"));
+export const accountFields = {
+  platform,
+  /** The platform's own id for the account, unique within the platform. */
+  externalId: v.string(),
+  label: v.string(),
+  /** The handles that are the user on this account; where a platform says nothing, a sender among them is "me". */
+  selfHandles: v.array(v.string()),
+  health: accountHealth,
+  createdAt: v.number(),
+};
+
+/**
+ * Where a command executes: the platform, the account, and that platform's own thread id. Convex chooses it; a
+ * bridge only runs it. `accountId` is absent on routes stamped before accounts and on conversations not yet backfilled.
+ */
+export const route = v.object({ platform: v.literal("imessage"), accountId: v.optional(v.id("comma_accounts")), chatGuid: v.string() });
 
 export const participant = v.object({
   address: v.string(),
@@ -73,7 +89,9 @@ export const tapback = v.object({
 export const conversationFields = {
   /** Every stored row has one. Optional because test fixtures across convex/comma still omit it. */
   platform: v.optional(platform),
-  /** Unique within a platform. `dm:+E164`, `dm:email`, `g:identifier`, or `chat:guid`; see convex/comma/conversationIdentity.ts. */
+  /** Absent on rows written before accounts; they are the platform's only account's until the backfill stamps them. */
+  accountId: v.optional(v.id("comma_accounts")),
+  /** Unique within an account. `dm:+E164`, `dm:email`, `g:identifier`, or `chat:guid`; see convex/comma/conversationIdentity.ts. */
   conversationKey: v.string(),
   primaryChatGuid: v.string(),
   chatGuids: v.array(v.string()),
@@ -93,15 +111,23 @@ export const conversationFields = {
 };
 
 export const chatAliasFields = {
+  /** Absent on rows written before accounts, which are all iMessage. */
+  platform: v.optional(platform),
+  accountId: v.optional(v.id("comma_accounts")),
   chatGuid: v.string(),
   conversationId: v.id("comma_conversations"),
   service: v.string(),
 };
 
-/** What any platform's message has. `guid` is unique within `platform`; other tables name a message by `messageKey`. */
+/**
+ * What any platform's message has. `guid` is the platform's message id, unique within its account; other tables
+ * name a message by `messageKey`. iMessage's own fields live in `imessage`.
+ */
 export const messageCoreFields = {
   /** Absent on rows written before platforms existed, which are all iMessage. */
   platform: v.optional(platform),
+  /** Absent on rows written before accounts; see conversationFields.accountId. */
+  accountId: v.optional(v.id("comma_accounts")),
   guid: v.string(),
   conversationId: v.id("comma_conversations"),
   dateCreated: v.number(),
@@ -126,10 +152,7 @@ export const messageCoreFields = {
   sourceVersion: v.number(),
 };
 
-/**
- * iMessage's own fields, still top-level on every row. Nesting them under an `imessage` side field
- * rewrites every stored message, so it waits for the second platform.
- */
+/** iMessage's own message fields, stored under `imessage`. */
 export const imessageMessageFields = {
   chatGuid: v.string(),
   service: v.union(v.literal("iMessage"), v.literal("SMS")),
@@ -138,16 +161,61 @@ export const imessageMessageFields = {
   isSpam: v.optional(v.boolean()),
   special: v.optional(specialContent),
   sendEffect: v.optional(v.string()),
-  /** True on an associated message such as a tapback. Ingest stores only the ones it cannot turn into a reaction. */
+  /** An associated message such as a tapback. Ingest stores only the ones it cannot turn into a reaction, and nothing shows them. */
+  isAssociatedMessage: v.boolean(),
+};
+export const imessageMessage = v.object(imessageMessageFields);
+
+/** The flat iMessage fields of the form bridges posted before accounts, which every row written before them carries. */
+const flatImessageMessageFields = {
+  chatGuid: imessageMessageFields.chatGuid,
+  service: imessageMessageFields.service,
+  error: imessageMessageFields.error,
+  isSpam: imessageMessageFields.isSpam,
+  special: imessageMessageFields.special,
+  sendEffect: imessageMessageFields.sendEffect,
   isTapback: v.boolean(),
-  /** The bridge still sends tapback.targetGuid here; nothing reads it. */
+  /** Nothing reads it. */
   tapbackTargetGuid: v.optional(v.string()),
   tapback: v.optional(tapback),
-  /** Rows ingested before comma_reactions keep their folded tapbacks; nothing reads them. Reactions are in comma_reactions. */
+  /** Folded tapbacks from before comma_reactions; nothing reads them. */
   reactions: v.optional(v.array(legacyReaction)),
 };
 
-export const messageFields = { ...messageCoreFields, ...imessageMessageFields };
+const { platform: _platform, accountId: _accountId, ...postedCoreFields } = messageCoreFields;
+
+/** One message as a bridge posts it. The call names the platform and account; a tapback becomes a reaction. */
+export const messageInput = v.object({
+  ...postedCoreFields,
+  imessage: v.object({ ...imessageMessageFields, tapback: v.optional(tapback) }),
+});
+
+/** The flat form bridges built before accounts post. Ingest converts it; drop once the Mini posts messageInput. */
+export const legacyMessageInput = v.object({ ...messageCoreFields, ...flatImessageMessageFields });
+
+/** Where a pending send stands; see apps/imsg/shared/pending-send.ts. */
+export const pendingSendState = v.union(v.literal("queued"), v.literal("sending"), v.literal("notSent"), v.literal("failed"));
+export type CommaPendingSendState = Infer<typeof pendingSendState>;
+
+/**
+ * A stored message: the core, its platform's side object, and, on rows the backfill has not reached, the flat
+ * iMessage fields instead. Read iMessage fields through messageShape.ts. Only a pending send's own row carries `sendState`.
+ */
+export const messageRowFields = {
+  ...messageCoreFields,
+  imessage: v.optional(imessageMessage),
+  chatGuid: v.optional(flatImessageMessageFields.chatGuid),
+  service: v.optional(flatImessageMessageFields.service),
+  error: v.optional(flatImessageMessageFields.error),
+  isSpam: flatImessageMessageFields.isSpam,
+  special: flatImessageMessageFields.special,
+  sendEffect: flatImessageMessageFields.sendEffect,
+  isTapback: v.optional(flatImessageMessageFields.isTapback),
+  tapbackTargetGuid: flatImessageMessageFields.tapbackTargetGuid,
+  tapback: flatImessageMessageFields.tapback,
+  reactions: flatImessageMessageFields.reactions,
+  sendState: v.optional(pendingSendState),
+};
 
 /**
  * One sender's reaction to one message: the newest state for that target, sender and key. A removal
@@ -170,29 +238,20 @@ export const reactionFields = {
 };
 export const reactionState = v.object(reactionFields);
 
-/** Where a pending send stands; see apps/imsg/shared/pending-send.ts. */
-export const pendingSendState = v.union(v.literal("queued"), v.literal("sending"), v.literal("notSent"), v.literal("failed"));
-export type CommaPendingSendState = Infer<typeof pendingSendState>;
-
-/** A stored message. Only a pending send's own row carries `sendState`; ingest never writes it. */
-export const messageRowFields = { ...messageFields, sendState: v.optional(pendingSendState) };
-
-export const attachmentFields = {
+export const attachmentCoreFields = {
+  /** Absent on rows written before platforms, which are all iMessage. */
+  platform: v.optional(platform),
+  accountId: v.optional(v.id("comma_accounts")),
   guid: v.string(),
   messageGuid: v.string(),
   conversationId: v.id("comma_conversations"),
   mimeType: v.optional(v.string()),
   filename: v.optional(v.string()),
-  transferName: v.optional(v.string()),
-  uti: v.optional(v.string()),
   width: v.optional(v.number()),
   height: v.optional(v.number()),
   totalBytes: v.optional(v.number()),
-  /** chat.db transfer_state; 5 means the file is on the Mini's disk. */
-  transferState: v.optional(v.number()),
-  isSticker: v.boolean(),
+  /** The platform says not to show it. */
   hideAttachment: v.boolean(),
-  isOnDisk: v.boolean(),
   thumbStorageId: v.optional(v.id("_storage")),
   originalStorageId: v.optional(v.id("_storage")),
   transcript: v.optional(v.string()),
@@ -200,6 +259,36 @@ export const attachmentFields = {
   transcriptError: v.optional(v.string()),
   transcriptDetail: v.optional(v.string()),
   sourceVersion: v.number(),
+};
+
+/** chat.db's own attachment fields, stored under `imessage`. */
+export const imessageAttachmentFields = {
+  transferName: v.optional(v.string()),
+  uti: v.optional(v.string()),
+  /** chat.db transfer_state; 5 means the file is on the Mini's disk. */
+  transferState: v.optional(v.number()),
+  isSticker: v.boolean(),
+  isOnDisk: v.boolean(),
+};
+export const imessageAttachment = v.object(imessageAttachmentFields);
+
+const { platform: _attachmentPlatform, accountId: _attachmentAccountId, ...postedAttachmentFields } = attachmentCoreFields;
+
+/** One attachment as a bridge posts it; the call names the platform and account. */
+export const attachmentInput = v.object({ ...postedAttachmentFields, imessage: imessageAttachment });
+
+/** The flat form bridges built before accounts post. Drop once the Mini posts attachmentInput. */
+export const legacyAttachmentInput = v.object({ ...attachmentCoreFields, ...imessageAttachmentFields });
+
+/** A stored attachment; rows the backfill has not reached keep chat.db's fields flat. Read them through messageShape.ts. */
+export const attachmentFields = {
+  ...attachmentCoreFields,
+  imessage: v.optional(imessageAttachment),
+  transferName: imessageAttachmentFields.transferName,
+  uti: imessageAttachmentFields.uti,
+  transferState: imessageAttachmentFields.transferState,
+  isSticker: v.optional(imessageAttachmentFields.isSticker),
+  isOnDisk: v.optional(imessageAttachmentFields.isOnDisk),
 };
 
 export const conversationStateFields = {
@@ -480,6 +569,9 @@ export const draftFields = {
 };
 
 export const scheduledFields = {
+  /** Absent on rows written before accounts, which are all iMessage. */
+  platform: v.optional(platform),
+  accountId: v.optional(v.id("comma_accounts")),
   bbId: v.number(),
   conversationId: v.optional(v.id("comma_conversations")),
   chatGuid: v.string(),
@@ -513,6 +605,8 @@ export const uploadFields = {
 };
 
 export const syncStateFields = {
+  /** The account whose sync this is; absent on global rows and on iMessage's rows from before accounts. */
+  accountId: v.optional(v.id("comma_accounts")),
   key: v.string(),
   cursor: v.optional(v.string()),
   lastEventAt: v.optional(v.number()),
@@ -525,6 +619,7 @@ function withSystemFields<T extends PropertyValidators, Table extends string>(ta
   return v.object({ _id: v.id(table), _creationTime: v.number(), ...fields });
 }
 
+export const accountDoc = withSystemFields("comma_accounts", accountFields);
 export const conversationDoc = withSystemFields("comma_conversations", conversationFields);
 export const messageDoc = withSystemFields("comma_messages", messageRowFields);
 export const attachmentDoc = withSystemFields("comma_attachments", attachmentFields);
@@ -556,7 +651,14 @@ export type CoreMessagingKind = Infer<typeof coreMessagingPayload>["kind"];
 export type IMessageOnlyKind = Infer<typeof imessagePayload>["kind"];
 export type AiKind = Infer<typeof aiPayload>["kind"];
 export type LegacyTriageKind = Infer<typeof legacyTriagePayload>["kind"];
+export type CommaAccountDoc = Infer<typeof accountDoc>;
 export type CommaConversationDoc = Infer<typeof conversationDoc>;
+export type CommaImessageMessage = Infer<typeof imessageMessage>;
+export type CommaImessageAttachment = Infer<typeof imessageAttachment>;
+export type CommaMessageInput = Infer<typeof messageInput>;
+export type CommaLegacyMessageInput = Infer<typeof legacyMessageInput>;
+export type CommaAttachmentInput = Infer<typeof attachmentInput>;
+export type CommaLegacyAttachmentInput = Infer<typeof legacyAttachmentInput>;
 export type CommaMessageDoc = Infer<typeof messageDoc>;
 export type CommaAttachmentDoc = Infer<typeof attachmentDoc>;
 export type CommaConversationStateDoc = Infer<typeof conversationStateDoc>;

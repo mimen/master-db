@@ -7,6 +7,7 @@ import { Image } from "expo-image";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { attachmentThumbnailUrl, attachmentUrl } from "@/lib/api";
 import { formatAddress } from "@shared/address";
+import { serviceOf } from "@shared/imessage";
 import type { ConversationId, Message, SpecialContent } from "@shared/types";
 import type { MentionAnnotation } from "@shared/mentions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
@@ -268,7 +269,8 @@ export const Bubble = memo(function Bubble({
   const [waited, setWaited] = useState(false);
   const slowSend = useSlowSend(message.sendState === "queued" || message.sendState === "sending") || waited;
   const mine = message.isFromMe;
-  const mineColor = message.service === "SMS" ? theme.sms : theme.bubbleMine;
+  const mineColor = serviceOf(message) === "SMS" ? theme.sms : theme.bubbleMine;
+  const special = message.imessage?.special ?? null;
   const senderName =
     message.sender?.name ?? (message.sender?.address ? formatAddress(message.sender.address) : "");
   const groupGutter = !mine && isGroupChat;
@@ -341,7 +343,7 @@ export const Bubble = memo(function Bubble({
           {url && <LinkPreviewCard url={url} mine={mine} />}
 
           <View>
-            {(message.text !== "" || message.special) && (
+            {(message.text !== "" || special) && (
               <Pressable
                 ref={contextRef as never}
                 testID="message-bubble"
@@ -361,7 +363,7 @@ export const Bubble = memo(function Bubble({
                   highlighted && { borderWidth: 2, borderColor: theme.accent },
                 ]}
               >
-                {message.special && <SpecialCard special={message.special} mine={mine} />}
+                {special && <SpecialCard special={special} mine={mine} />}
                 {message.text !== "" && (
                   <Text
                     selectable

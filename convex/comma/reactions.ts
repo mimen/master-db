@@ -33,6 +33,7 @@ export function sameReaction(a: Sender & { key: string }, b: Sender & { key: str
 
 /** The reaction an iMessage tapback row records, or null for any other row. */
 export function fromTapback(message: {
+  platform?: CommaPlatform;
   conversationId: CommaReactionState["conversationId"];
   isFromMe: boolean;
   sender?: { address: string };
@@ -42,10 +43,11 @@ export function fromTapback(message: {
   const { tapback } = message;
   if (!tapback) return null;
   const emoji = tapbackEmoji(tapback.reaction, tapback.emoji);
+  const platform = message.platform ?? "imessage";
   return {
-    platform: "imessage",
+    platform,
     conversationId: message.conversationId,
-    targetKey: messageKey("imessage", tapback.targetGuid),
+    targetKey: messageKey(platform, tapback.targetGuid),
     key: tapbackKey(tapback.reaction, tapback.emoji),
     ...(emoji ? { emoji } : {}),
     isFromMe: message.isFromMe,
