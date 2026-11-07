@@ -30,7 +30,7 @@ beforeEach(async () => {
   const db = new OverlayDb(":memory:");
   const bb = new FixtureBlueBubbles(fixtureSeed());
   const identity = new FixtureIdentity();
-  ai = new CountingAi(db);
+  ai = new CountingAi(db, identity);
   const config: Config = {
     bbUrl: "fixture://bluebubbles", bbPassword: "fixture", hostname: "127.0.0.1", port: 0,
     dbPath: ":memory:", convexSiteUrl: null, appleContactsIngestSecret: null,

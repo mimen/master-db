@@ -142,7 +142,7 @@ const { app, dispose } = await createApp({
   now: () => FIXTURE_NOW,
   names: identity,
   identity,
-  ai: new FixtureAi(db),
+  ai: new FixtureAi(db, identity),
   backgroundServices: false,
   staticRoot: Bun.env.IMSG_FIXTURE_DIST ?? join(fixtureDirectory, "dist"),
   configureFixtureRoutes: (fixtureApp, controls) => {

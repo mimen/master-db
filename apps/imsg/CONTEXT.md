@@ -30,6 +30,15 @@ Its `chat_state`, `triage_clear_event` and `triage_open_item` tables held triage
 Convex took it over; nothing writes them, and they stay as a rollback copy.
 _Avoid_: overlay DB rows (when meaning the concept)
 
+**Outbox lane**:
+The executor a queued command waits for, stamped on its `comma_outbox` row at enqueue: one lane per
+messaging platform (only `imessage` today) and an `ai` lane for suggestions, identify, suggestion
+feedback, clearing learning and transcription. The Mini drains each lane in its own loop, one command
+at a time, so a slow model call never holds back a send. AI work reads the conversation from Convex
+by conversation id, never from BlueBubbles. The lease, claim token, retry policy and receipts are
+shared by every lane.
+_Avoid_: queue (when meaning one lane), worker
+
 **Unresponded**:
 A chat whose last message is inbound — you owe a reply. Dismissable until the next
 inbound message; mutable per chat.
