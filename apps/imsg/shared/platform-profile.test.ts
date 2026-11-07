@@ -53,8 +53,19 @@ describe("support", () => {
   });
 });
 
-test("only the six tapbacks send, and none on SMS", () => {
+test("the six tapbacks and emoji: keys send, and none on SMS", () => {
   expect(reactionSupport(dm("iMessage"), "love")).toEqual({ ok: true });
+  expect(reactionSupport(dm("RCS"), "emoji:🫶🏽")).toEqual({ ok: true });
   expect(reactionSupport(dm("iMessage"), "emoji")).toEqual({ ok: false, reason: "iMessage can't send that reaction" });
+  expect(reactionSupport(dm("iMessage"), "emoji:")).toEqual({ ok: false, reason: "iMessage can't send that reaction" });
+  expect(reactionSupport(dm("iMessage"), "wave")).toEqual({ ok: false, reason: "iMessage can't send that reaction" });
   expect(reactionSupport(dm("SMS"), "love")).toEqual({ ok: false, reason: "SMS can't send reactions" });
+});
+
+test("emoji reactions need the Mac to advertise them; named tapbacks don't", () => {
+  const bridge = { privateApi: true, emojiReactions: false };
+  expect(reactionSupport(dm("iMessage"), "emoji:😍", bridge)).toEqual({ ok: false, reason: "The Mac's BlueBubbles can't send emoji reactions yet" });
+  expect(reactionSupport(dm("iMessage"), "love", bridge)).toEqual({ ok: true });
+  expect(support(dm("SMS"), "emojiReact", bridge)).toEqual({ ok: false, reason: "SMS can't send emoji reactions" });
+  expect(support(dm("iMessage"), "emojiReact", { privateApi: true, emojiReactions: true })).toEqual({ ok: true });
 });

@@ -23,7 +23,7 @@ import type { NameSource } from "./name-resolver";
 
 export interface FixtureRouteControls {
   readonly ai: AiServiceLike;
-  readonly health: () => { ok: boolean; privateApi: boolean; eventClients: number; commaBridge: ReturnType<ReturnType<typeof startBridge>["health"]> };
+  readonly health: () => { ok: boolean; privateApi: boolean; emojiReactions: boolean; eventClients: number; commaBridge: ReturnType<ReturnType<typeof startBridge>["health"]> };
 }
 
 export interface IdentityDirectory {
@@ -136,7 +136,7 @@ const commaBridge = startBridge({ config, bb, db, now, commands,
   avatarDirectory: deps.bridgeAvatarDirectory,
   capabilities: () => {
     const status = whisper.availability();
-    return { privateApi: bb.hasPrivateApi, suggestions: ai.available, reactionSuggestions: bb.hasPrivateApi,
+    return { privateApi: bb.hasPrivateApi, emojiReactions: bb.hasEmojiReactions, suggestions: ai.available, reactionSuggestions: bb.hasPrivateApi,
       whisperAvailable: status.available, ...(status.available ? {} : { whisperDetail: status.detail }) };
   },
   suggestions: { ai },
@@ -152,7 +152,7 @@ app.onError((err, c) => {
   return c.json({ error: err.message }, 500);
 });
 
-const health = () => ({ ok: true, privateApi: bb.hasPrivateApi, eventClients: 0, commaBridge: commaBridge.health() });
+const health = () => ({ ok: true, privateApi: bb.hasPrivateApi, emojiReactions: bb.hasEmojiReactions, eventClients: 0, commaBridge: commaBridge.health() });
 app.get("/api/health", (c) => c.json(health()));
 
 // Immutable release identity consumed by the thin desktop shell.

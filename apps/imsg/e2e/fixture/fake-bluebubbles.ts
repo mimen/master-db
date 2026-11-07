@@ -10,7 +10,17 @@ import type {
 import { FakeBlueBubbles, type FakeSeed } from "../../server/bluebubbles-fake";
 import type { BBEvent, BlueBubbles, MessageQueryOptions, Result } from "../../server/bluebubbles";
 
-export type FaultableMethod = Exclude<keyof BlueBubbles, "hasPrivateApi" | "onEvent">;
+export type FaultableMethod = Exclude<keyof BlueBubbles, "hasPrivateApi" | "hasEmojiReactions" | "onEvent">;
+
+const NAMED_TAPBACKS = new Set(["love", "like", "dislike", "laugh", "emphasize", "question"]);
+
+/** A reaction as BlueBubbles reports it: a named tapback by name, an emoji one as 2006/3006 with Messages' synthesized text. */
+function tapbackFields(reaction: string): Pick<BBMessage, "associatedMessageType" | "text"> {
+  const remove = reaction.startsWith("-");
+  const name = remove ? reaction.slice(1) : reaction;
+  if (NAMED_TAPBACKS.has(name) || /^\d+$/.test(name)) return { associatedMessageType: reaction };
+  return { associatedMessageType: remove ? "3006" : "2006", text: remove ? `Removed ${name} from “a message”` : `Reacted ${name} to “a message”` };
+}
 
 export class FixtureBlueBubbles implements BlueBubbles {
   private fake: FakeBlueBubbles;
@@ -21,6 +31,7 @@ export class FixtureBlueBubbles implements BlueBubbles {
   private readonly groupNames = new Map<string, string>();
   /** sendText's response latency, and whether the event stream echoes the send before it, as BlueBubbles does. */
   private sendTiming: { delayMs: number; echo: boolean } | null = null;
+  private emojiReactions: boolean | null = null;
 
   constructor(seed: FakeSeed) {
     this.fake = new FakeBlueBubbles(seed);
@@ -33,6 +44,7 @@ export class FixtureBlueBubbles implements BlueBubbles {
     this.deletedMessages.clear();
     this.groupNames.clear();
     this.sendTiming = null;
+    this.emojiReactions = null;
   }
 
   setSendTiming(timing: { delayMs: number; echo: boolean } | null): void {
@@ -71,7 +83,7 @@ export class FixtureBlueBubbles implements BlueBubbles {
     const message: BBMessage = {
       guid: `tapback-${crypto.randomUUID()}`, chats: [{ guid: chatGuid }],
       isFromMe: false, dateCreated: Date.now(), handle: { address: handle },
-      associatedMessageGuid: `p:0/${targetGuid}`, associatedMessageType: reaction,
+      associatedMessageGuid: `p:0/${targetGuid}`, ...tapbackFields(reaction),
     };
     this.fake.appendMessage(chatGuid, message);
     this.emit({ kind: "new-message", message });
@@ -89,6 +101,15 @@ export class FixtureBlueBubbles implements BlueBubbles {
 
   get hasPrivateApi(): boolean {
     return this.fake.hasPrivateApi;
+  }
+
+  get hasEmojiReactions(): boolean {
+    return this.emojiReactions ?? this.fake.hasEmojiReactions;
+  }
+
+  /** Overrides whether the fake Mac can send emoji tapbacks, as an older BlueBubbles reports. Null restores the seed. */
+  setEmojiReactions(enabled: boolean | null): void {
+    this.emojiReactions = enabled;
   }
 
   connect(): Promise<Result<BBServerInfo>> {
@@ -162,7 +183,7 @@ export class FixtureBlueBubbles implements BlueBubbles {
     const message: BBMessage = {
       guid: `reaction-${crypto.randomUUID()}`, chats: [{ guid: chatGuid }],
       isFromMe: true, dateCreated: Date.now(),
-      associatedMessageGuid: `p:${partIndex}/${messageGuid}`, associatedMessageType: reaction,
+      associatedMessageGuid: `p:${partIndex}/${messageGuid}`, ...tapbackFields(reaction),
     };
     this.fake.appendMessage(chatGuid, message);
     this.emit({ kind: "new-message", message });

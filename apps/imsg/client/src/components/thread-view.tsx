@@ -32,7 +32,7 @@ import { openAgentPane } from "@/lib/agent-pane";
 import { openChatInfo } from "@/lib/chat-info";
 import { openPersonPane } from "@/lib/person-pane";
 import { conversationRoute } from "@shared/imessage";
-import { PROFILES } from "@shared/platform-profile";
+import { keyEmoji, PROFILES } from "@shared/platform-profile";
 import type { Message, Participant } from "@shared/types";
 import { useMessages, type JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
@@ -429,25 +429,27 @@ export function ThreadView({
       const mine = message.isFromMe;
       const age = Date.now() - message.dateCreated;
       const react = can("react");
-      // The tray offers the route's reaction set from its platform profile.
-      const tapbacks = react && conversation
-        ? PROFILES[conversationRoute(conversation).platform].reactions.map((type) => {
-            const label = TAPBACK_LABEL[type] ?? type;
-            const active = message.reactions.some((r) => r.isFromMe && r.key === type);
-            return {
-              type,
-              label,
-              active,
-              onPress: () => {
-                const rollback = pend(message.guid, { kind: "react", key: type, remove: active });
-                hapticSelect();
-                runCommand(conversationId, { kind: "react", messageGuid: message.guid, reaction: type, remove: active }).catch(() => {
-                  rollback();
-                  showToast("Couldn't send the reaction. Try again.");
-                });
-              },
-            };
+      const sendReaction = (key: string, remove: boolean) => {
+        const rollback = pend(message.guid, { kind: "react", key, remove });
+        hapticSelect();
+        runCommand(conversationId, { kind: "react", messageGuid: message.guid, reaction: key, remove }).catch(() => {
+          rollback();
+          showToast("Couldn't send the reaction. Try again.");
+        });
+      };
+      const isMine = (key: string) => message.reactions.some((r) => r.isFromMe && r.key === key);
+      // The tray offers the route's reaction set from its platform profile, then my emoji reaction so it can be removed.
+      const named = react && conversation ? PROFILES[conversationRoute(conversation).platform].reactions : undefined;
+      const myEmoji = message.reactions.find((r) => r.isFromMe && keyEmoji(r.key));
+      const tapbacks = named
+        ? [...named, ...(myEmoji ? [myEmoji.key] : [])].map((key) => {
+            const active = isMine(key);
+            return { key, label: TAPBACK_LABEL[key] ?? keyEmoji(key) ?? key, active, onPress: () => sendReaction(key, active) };
           })
+        : undefined;
+      const emojiReact = can("emojiReact");
+      const emoji = named && emojiReact
+        ? { unavailable: reasonOf(emojiReact), onPick: (value: string) => sendReaction(`emoji:${value}`, isMine(`emoji:${value}`)) }
         : undefined;
       const edit = can("edit");
       const unsend = can("unsend");
@@ -531,7 +533,7 @@ export function ThreadView({
               })
           : []),
       ];
-      if (actions.length > 0 || tapbacks) showSheet({ actions, tapbacks, tapbacksUnavailable: reasonOf(react), anchor });
+      if (actions.length > 0 || tapbacks) showSheet({ actions, tapbacks, emoji, tapbacksUnavailable: reasonOf(react), anchor });
     },
     [can, conversation, conversationId, isGroup, pend, scrollToLatest, showSheet],
   );

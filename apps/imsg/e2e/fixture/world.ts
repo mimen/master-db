@@ -67,6 +67,7 @@ const contacts: BBContact[] = [
 export function fixtureSeed(): FakeSeed {
   return {
     privateApi: true,
+    emojiReactions: true,
     contacts,
     chats: [
       {

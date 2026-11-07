@@ -456,7 +456,7 @@ test("conversation and message names react to identity changes without a bridge 
     known: true, searchNames: ["name after", "nick"] });
   const messages = await t.query(api.comma.queries.listMessages, { conversationId, paginationOpts });
   expect(messages.page[0].sender?.name).toBe("Name After");
-  expect(messages.page[0].reactions.map((r) => [r.key, r.senderName])).toEqual([["like", null], ["😍", "Name After"]]);
+  expect(messages.page[0].reactions.map((r) => [r.key, r.senderName])).toEqual([["like", null], ["emoji:😍", "Name After"]]);
   const hits = await t.query(api.comma.queries.searchMessages, { query: "comet", conversationId });
   expect(hits.map((hit) => hit.sender?.name)).toEqual(["Name After"]);
 });

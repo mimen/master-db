@@ -17,7 +17,7 @@ import { CardShadow, Radii, Type } from "@/constants/theme";
 import { presentActions, type IconName } from "@/lib/action-presentation";
 import { useTheme } from "@/hooks/use-theme";
 import type { ThemeColors } from "@/components/ui/interaction";
-import { TapbackTray, type TrayTapback } from "@/components/tapback-tray";
+import { TapbackTray, type TrayEmoji, type TrayTapback } from "@/components/tapback-tray";
 
 export interface SheetAction {
   label: string;
@@ -52,6 +52,8 @@ interface SheetRequest {
   tapbacks?: TrayTapback[];
   /** Why the route can't react: the tray shows greyed with it. */
   tapbacksUnavailable?: string;
+  /** The tray's emoji picker. */
+  emoji?: TrayEmoji;
   /** Desktop right-click: viewport coords to anchor a compact popover at. */
   anchor?: PopoverAnchor;
 }
@@ -139,7 +141,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
         ) : variant === "dialog" ? (
           <Pressable style={styles.dialogBackdrop} onPress={() => setRequest(null)}>
             {rendered?.tapbacks && (
-              <TapbackTray tapbacks={rendered.tapbacks} unavailable={rendered.tapbacksUnavailable} onDone={() => setRequest(null)} />
+              <TapbackTray tapbacks={rendered.tapbacks} emoji={rendered.emoji} unavailable={rendered.tapbacksUnavailable} onDone={() => setRequest(null)} />
             )}
             <Pressable
               style={[styles.dialog, { backgroundColor: theme.popBg, borderColor: theme.divider, boxShadow: theme.popShadow }]}
@@ -178,7 +180,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
           >
             {rendered?.tapbacks && (
               <View style={styles.sheetTray}>
-                <TapbackTray tapbacks={rendered.tapbacks} unavailable={rendered.tapbacksUnavailable} size="touch" onDone={() => setRequest(null)} />
+                <TapbackTray tapbacks={rendered.tapbacks} emoji={rendered.emoji} unavailable={rendered.tapbacksUnavailable} size="touch" onDone={() => setRequest(null)} />
               </View>
             )}
             <View style={[styles.sheetGroup, { backgroundColor: theme.popBg }]}>
@@ -235,7 +237,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
 const POP_W = 240;
 const TAPBACK_GAP = 8;
 // Six 36pt buttons, 2pt gaps, 4pt padding.
-const TRAY_W = 6 * 36 + 5 * 2 + 8;
+const trayWidth = (buttons: number) => buttons * 36 + (buttons - 1) * 2 + 8;
 
 /** Desktop right-click menu: a tapback pill floating above a separate menu card. */
 function PopoverMenu({
@@ -252,7 +254,8 @@ function PopoverMenu({
   const c = useTheme();
   const { anchor, tapbacks, actions } = request;
   // ponytail: the greyed tray's reason is measured by estimate; measure it if long reasons clip at the edge.
-  const width = tapbacks ? Math.max(POP_W, TRAY_W + (request.tapbacksUnavailable ? 160 : 0)) : POP_W;
+  const buttons = (tapbacks?.length ?? 0) + (request.emoji ? 1 : 0);
+  const width = tapbacks ? Math.max(POP_W, trayWidth(buttons) + (request.tapbacksUnavailable ? 160 : 0)) : POP_W;
   const requestedLeft = anchor.align === "end" ? anchor.x - POP_W + 18 : anchor.x;
   const left = Math.max(8, Math.min(requestedLeft, winW - width - 8));
   // Anchors near the bottom (composer attach) open upward.
@@ -261,7 +264,7 @@ function PopoverMenu({
   const presented = presentActions(actions);
   return (
     <View style={[styles.popoverStack, { left }, place]}>
-      {tapbacks && <TapbackTray tapbacks={tapbacks} unavailable={request.tapbacksUnavailable} onDone={onDone} />}
+      {tapbacks && <TapbackTray tapbacks={tapbacks} emoji={request.emoji} unavailable={request.tapbacksUnavailable} onDone={onDone} />}
       {actions.length > 0 && (
         <View role="menu" style={[styles.menuCard, { backgroundColor: c.popBg, boxShadow: c.popShadow }]}>
           {actions.map((action, i) => {

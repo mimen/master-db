@@ -139,6 +139,8 @@ export interface BBContact {
 
 export interface BBServerInfo {
   private_api?: boolean;
+  /** Whether the server can send emoji tapbacks. Proposed upstream (bluebubbles-server#870); absent through 1.9.12. */
+  custom_emoji_reactions?: boolean;
   os_version?: string;
   server_version?: string;
 }

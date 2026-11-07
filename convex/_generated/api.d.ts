@@ -452,6 +452,7 @@ export declare const api: {
         "public",
         {},
         {
+          emojiReactions?: boolean;
           key: "mini";
           lastSeenAt: number;
           privateApi: boolean;
@@ -5697,6 +5698,7 @@ export declare const internal: {
                 updatedAt: number;
               }
             | {
+                emojiReactions?: boolean;
                 key: "mini";
                 kind: "bridgeState";
                 lastSeenAt: number;

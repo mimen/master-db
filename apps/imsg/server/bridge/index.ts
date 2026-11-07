@@ -72,7 +72,7 @@ export function startBridge(deps: {
       writer.onChats = (chats) => groupPhotos?.observe(chats);
       typing = new OutboundTyping(deps.bb, deps.now);
       state = new BridgeStatePublisher({ bb: deps.bb, ingest, now: deps.now,
-        capabilities: deps.capabilities ?? (() => ({ privateApi: deps.bb.hasPrivateApi, suggestions: deps.suggestions?.ai.available ?? false,
+        capabilities: deps.capabilities ?? (() => ({ privateApi: deps.bb.hasPrivateApi, emojiReactions: deps.bb.hasEmojiReactions, suggestions: deps.suggestions?.ai.available ?? false,
           reactionSuggestions: deps.bb.hasPrivateApi, whisperAvailable: false, whisperDetail: "Whisper capabilities were not supplied" })) });
       reconcile = new ReconcileBridge(writer, deps.config, { chatDbPath: deps.chatDbPath, now: deps.now });
       if (deps.suggestions) suggestions = new SuggestionsBridge({ ...deps.suggestions, db: deps.db, ingest, now: deps.now,

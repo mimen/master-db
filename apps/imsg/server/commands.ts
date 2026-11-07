@@ -6,6 +6,7 @@ import { buildMentionAttributedBody } from "./mention-body";
 import { createdChatError, messageBelongsToAnyChat, outboundAddressesError, outboundTextError } from "./message-verification";
 import { createAndSendFaceTimeLink } from "./facetime";
 import type { NameSource } from "./name-resolver";
+import { keyEmoji } from "../shared/platform-profile";
 
 type CommandResult<T> = { ok: true; value: T } | { ok: false; error: string; status: 400 | 501 | 502 };
 function failure(error: string, status: 400 | 501 | 502 = 502): CommandResult<never> {
@@ -44,6 +45,8 @@ export class ChatCommands {
 
   async react(messageGuid: string, body: { chatGuid: string; siblings: readonly string[]; reaction: string; remove?: boolean; partIndex?: number; suggested?: boolean }) {
     if (!this.bb.hasPrivateApi) return failure("private API disabled on BlueBubbles", 501);
+    const emoji = keyEmoji(body.reaction);
+    if (emoji && !this.bb.hasEmojiReactions) return failure("BlueBubbles can't send emoji reactions", 501);
     const partIndex = body.partIndex ?? 0;
     if (partIndex !== 0) return failure("message part is not reactable", 400);
     const current = await this.bb.messageWithReactions(messageGuid);
@@ -56,7 +59,8 @@ export class ChatCommands {
     if (!target || (body.suggested && target.isFromMe)) return failure("reaction target is not valid in this chat", 400);
     const active = target.reactions.some((reaction) => reaction.isFromMe && reaction.key === body.reaction);
     if (Boolean(body.remove) === !active) return { ok: true as const, value: undefined };
-    return checked(await this.sideEffect(() => this.bb.react(body.chatGuid, messageGuid, body.remove ? `-${body.reaction}` : body.reaction, partIndex)));
+    const wire = emoji ?? body.reaction;
+    return checked(await this.sideEffect(() => this.bb.react(body.chatGuid, messageGuid, body.remove ? `-${wire}` : wire, partIndex)));
   }
 
   async sendContact(chatGuid: string, body: { name: string; address: string; caption?: string }) {

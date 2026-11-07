@@ -166,7 +166,7 @@ describe("upsertMessages", () => {
     await t.mutation(internal.comma.internal.upsertMessages, { messages: [message(c, "m1")] });
     expect(await t.run((ctx) => ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "tb1")).unique())).toBeNull();
     expect(await shown(t, "m1")).toEqual([
-      { key: "😍", emoji: "😍", isFromMe: false, senderName: null, senderAddress: "+15550001111", type: "emoji" },
+      { key: "emoji:😍", emoji: "😍", isFromMe: false, senderName: null, senderAddress: "+15550001111", type: "emoji" },
     ]);
     expect((await t.run((ctx) => ctx.db.get(c)))?.platform).toBe("imessage");
     expect((await t.run((ctx) => ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "m1")).unique()))?.platform).toBe("imessage");

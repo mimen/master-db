@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { reactionGlyph, TAPBACK_LABEL, TAPBACKS, trayKey } from "./tapbacks";
+import { firstEmoji, reactionGlyph, TAPBACK_LABEL, TAPBACKS, trayKey } from "./tapbacks";
 
 describe("TAPBACKS", () => {
   test("keeps iMessage's tray order and names every tapback", () => {
@@ -8,6 +8,19 @@ describe("TAPBACKS", () => {
     expect(TAPBACK_LABEL.laugh).toBe("Laugh");
     expect(TAPBACK_LABEL.emoji).toBeUndefined();
   });
+});
+
+test("firstEmoji takes the first whole emoji typed, and nothing from plain text", () => {
+  expect(firstEmoji("🫶🏽")).toBe("🫶🏽");
+  expect(firstEmoji("hi 👩‍👩‍👧 there 🔥")).toBe("👩‍👩‍👧");
+  expect(firstEmoji("🇺🇸")).toBe("🇺🇸");
+  expect(firstEmoji("♥️")).toBe("♥️");
+  expect(firstEmoji("1️⃣")).toBe("1️⃣");
+  expect(firstEmoji("hello 1")).toBeNull();
+});
+
+test("an emoji reaction's glyph is its emoji", () => {
+  expect(reactionGlyph({ key: "emoji:😍", emoji: "😍" })).toBe("😍");
 });
 
 describe("trayKey", () => {

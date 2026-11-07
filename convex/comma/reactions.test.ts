@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import type { Id } from "../_generated/dataModel";
 import type { CommaReactionState } from "../schema/comma/validators";
 
-import { fromTapback, messageKey, sameReaction, shownReactions, supersedes } from "./reactions";
+import { currentKey, fromTapback, messageKey, reactionWrites, sameReaction, shownReactions, supersedes } from "./reactions";
 
 const conversationId = "c1" as Id<"comma_conversations">;
 const state = (overrides: Partial<CommaReactionState> = {}): CommaReactionState => ({
@@ -25,9 +25,9 @@ describe("fromTapback", () => {
       .toEqual(state({ key: "like", emoji: "👍" }));
   });
 
-  test("an emoji tapback is keyed by its emoji; an unreadable one by \"emoji\"", () => {
+  test("an emoji tapback is keyed emoji:<emoji>; an unreadable one by \"emoji\"", () => {
     expect(fromTapback({ ...row, tapback: { targetGuid: "m1", reaction: "emoji", emoji: "😍", remove: true } }))
-      .toEqual(state({ key: "😍", emoji: "😍", removed: true }));
+      .toEqual(state({ key: "emoji:😍", emoji: "😍", removed: true }));
     const { emoji: _emoji, ...unread } = state({ key: "emoji" });
     expect(fromTapback({ ...row, tapback: { targetGuid: "m1", reaction: "emoji", remove: false } })).toEqual(unread);
   });
@@ -62,4 +62,32 @@ describe("shownReactions", () => {
       { key: "like", emoji: "👍", isFromMe: false, senderName: null, senderAddress: "+15550001111", type: "like" },
     ]);
   });
+});
+
+test("shownReactions shows each sender's newest live reaction, as rows written before one per sender can hold two", () => {
+  const rows = [state({ at: 10 }), state({ at: 12, key: "emoji:😮", emoji: "😮" }), state({ at: 11, key: "like", isFromMe: true, senderAddress: undefined })];
+  expect(shownReactions(rows).map((r) => [r.key, r.isFromMe])).toEqual([["like", true], ["emoji:😮", false]]);
+});
+
+describe("reactionWrites", () => {
+  const fire = state({ key: "emoji:🔥", emoji: "🔥", at: 20 });
+
+  test("a sender's add leaves their other live reaction as a tombstone at the add's time", () => {
+    expect(reactionWrites([state()], fire)).toEqual([{ row: undefined, state: fire }, { row: state(), state: state({ at: 20, removed: true }) }]);
+  });
+
+  test("an add older than the sender's live reaction lands as a tombstone and leaves it", () => {
+    expect(reactionWrites([fire], state())).toEqual([{ row: undefined, state: state({ removed: true }) }]);
+  });
+
+  test("a removal touches only its own key; other senders are never touched", () => {
+    const peer = state({ senderAddress: "+15550002222" });
+    expect(reactionWrites([state(), peer], fire)).toHaveLength(2);
+    expect(reactionWrites([fire], state({ at: 30, removed: true }))).toEqual([{ row: undefined, state: state({ at: 30, removed: true }) }]);
+    expect(reactionWrites([fire], fire)).toEqual([]);
+  });
+});
+
+test("currentKey namespaces an emoji key written bare and leaves every other key", () => {
+  expect(["😍", "emoji:😍", "emoji", "love"].map(currentKey)).toEqual(["emoji:😍", "emoji:😍", "emoji", "love"]);
 });

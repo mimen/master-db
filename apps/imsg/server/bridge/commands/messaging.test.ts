@@ -12,10 +12,10 @@ import type { IMessageContext } from "./types";
 
 const CHAT = "iMessage;-;+15550001111";
 const GROUP = "iMessage;+;group";
-function harness(chatGuid = CHAT, privateApi = true) {
+function harness(chatGuid = CHAT, privateApi = true, emojiReactions = false) {
   const raw: BBMessage = { guid: "inbound", originalROWID: 1, text: "hi", isFromMe: false, dateCreated: 100,
     handle: { address: "+15550001111" }, chats: [{ guid: chatGuid }] };
-  const bb = new FakeBlueBubbles({ privateApi, chats: [{ guid: chatGuid,
+  const bb = new FakeBlueBubbles({ privateApi, emojiReactions, chats: [{ guid: chatGuid,
     participants: [{ address: "+15550001111" }], messages: [raw] }] });
   const send = bb.sendText.bind(bb);
   let rowid = 1;
@@ -56,6 +56,22 @@ test("suggested react keeps inbound, membership and part guards", async () => {
   await expect(messagingHandlers.react.execute(h.context, payload)).rejects.toThrow("not valid");
   await expect(messagingHandlers.react.execute(h.context, { ...payload, messageGuid: "inbound", partIndex: 1 })).rejects.toThrow("not reactable");
   await expect(messagingHandlers.react.execute({ ...h.context, chatGuid: "iMessage;-;other" }, { ...payload, messageGuid: "inbound" })).rejects.toThrow("not valid");
+});
+
+test("an emoji reaction sends its bare emoji, and only where BlueBubbles says it can", async () => {
+  const blocked = harness();
+  const payload = { kind: "react" as const, messageGuid: "inbound", reaction: "emoji:🫶🏽", remove: false };
+  await expect(messagingHandlers.react.execute(blocked.context, payload)).rejects.toThrow("can't send emoji reactions");
+
+  const h = harness(CHAT, true, true);
+  const react = spyOn(h.bb, "react");
+  const wire = (call: number) => (react.mock.calls[call] as unknown as unknown[] | undefined)?.slice(0, 3);
+  await messagingHandlers.react.execute(h.context, payload);
+  expect(wire(0)).toEqual([CHAT, "inbound", "🫶🏽"]);
+  h.bb.appendMessage(CHAT, { guid: "mine", isFromMe: true, dateCreated: 200, text: "Reacted 🫶🏽 to “hi”",
+    associatedMessageGuid: "p:0/inbound", associatedMessageType: "2006", chats: [{ guid: CHAT }] });
+  await messagingHandlers.react.execute(h.context, { ...payload, remove: true });
+  expect(wire(1)).toEqual([CHAT, "inbound", "-🫶🏽"]);
 });
 
 test("sendContact builds the vCard and preserves caption and message result", async () => {

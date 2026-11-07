@@ -19,7 +19,7 @@ export const participant = v.object({
 
 /** A reaction as every reader sees it, whatever platform carried it. */
 export const reaction = v.object({
-  /** The reaction's identity on its platform, and what a react command sends: an iMessage tapback name or an emoji tapback's emoji. */
+  /** The reaction's identity on its platform, and what a react command sends: an iMessage tapback name, or `emoji:` and an emoji tapback's emoji. */
   key: v.string(),
   /** How it looks, when it is a Unicode emoji. */
   emoji: v.optional(v.string()),
@@ -151,7 +151,8 @@ export const messageFields = { ...messageCoreFields, ...imessageMessageFields };
 
 /**
  * One sender's reaction to one message: the newest state for that target, sender and key. A removal
- * stays as a tombstone so an older add that arrives late cannot bring the reaction back.
+ * stays as a tombstone so an older add that arrives late cannot bring the reaction back. A sender has at
+ * most one live reaction per message, as in Messages: a newer one leaves their others as tombstones.
  */
 export const reactionFields = {
   platform,
@@ -503,7 +504,7 @@ export const presenceFields = {
   conversationId: v.id("comma_conversations"), peerTyping: v.boolean(), updatedAt: v.number(), expiresAt: v.number(),
 };
 export const bridgeStateFields = {
-  key: v.literal("mini"), privateApi: v.boolean(), suggestions: v.boolean(), reactionSuggestions: v.boolean(),
+  key: v.literal("mini"), privateApi: v.boolean(), emojiReactions: v.optional(v.boolean()), suggestions: v.boolean(), reactionSuggestions: v.boolean(),
   whisperAvailable: v.boolean(), whisperDetail: v.optional(v.string()), lastSeenAt: v.number(),
 };
 export const uploadFields = {
