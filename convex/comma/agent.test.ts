@@ -522,6 +522,7 @@ describe("POST /comma/ingest/agent*", () => {
       ["agentContext", { conversationId, limit: 40 }, { title: "Alex", participants: [{ name: "Alex", handles: ["+15550001111"] }], messages: [] }],
       ["agentSearch", { conversationId, query: "hi" }, []],
       ["agentPeople", { conversationId }, [{ address: "+15550001111", name: "Alex", handles: ["+15550001111"], personId: expect.any(String), tags: [], events: [] }]],
+      ["agentPersonContext", { conversationId, limit: 5, maxChars: 1000 }, { name: "Alex", lines: [], more: false }],
       ["agentAttachment", { guid: "missing" }, null],
       ["agentSend", { conversationId, clientKey: "c1", text: "hi" }, expect.any(String)],
     ];

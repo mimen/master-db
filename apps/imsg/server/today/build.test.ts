@@ -10,7 +10,7 @@ const NOW = 400 * DAY;
 const claim = { day: "2026-10-27", attempt: 1, startedAt: 1_000, mode: "fresh" as const, basis: null };
 
 function candidate(n: number, state: TodayCandidate["state"], ageDays = n / 1000): TodayCandidate {
-  return { conversationId: `conv${n}` as ConversationId, title: `Person ${n}`, isGroup: false, state, lastMessageAt: NOW - ageDays * DAY, unreadCount: 0 };
+  return { conversationId: `conv${n}` as ConversationId, title: `Person ${n}`, isGroup: false, platform: "imessage", state, lastMessageAt: NOW - ageDays * DAY, unreadCount: 0 };
 }
 
 const card = { summary: "Wants an answer.", ask: "Answer", due: "", stakes: "medium", settle: false, needsMore: false };
@@ -20,6 +20,7 @@ function fakes(candidates: TodayCandidate[], reduce: Answer, opts: { available?:
   const reduces: { prompt: string; options: StructuredOptions }[] = [];
   const cardCalls: string[] = [];
   const posts: string[] = [];
+  const personReads: TodayRoutes["agentPersonContext"][0][] = [];
   const logs: string[] = [];
   const store = opts.store ?? new OverlayDb(":memory:");
   const port: TodayBuildDeps["port"] = {
@@ -38,6 +39,12 @@ function fakes(candidates: TodayCandidate[], reduce: Answer, opts: { available?:
         return { title: "t", participants: [], messages } as TodayRoutes[K][1];
       }
       if (route === "agentPeople") return [] as TodayRoutes[K][1];
+      if (route === "agentPersonContext") {
+        const { conversationId } = body as TodayRoutes["agentPersonContext"][0];
+        personReads.push(body as TodayRoutes["agentPersonContext"][0]);
+        const line = { at: NOW - 3_600_000, conversationId: "crew" as ConversationId, conversation: "Launch Crew", kind: "group", platform: "imessage", fromMe: false, sender: "P", text: `also pinged from ${conversationId}` } as const;
+        return { name: "P", lines: [line], more: false } as TodayRoutes[K][1];
+      }
       throw new Error(`unexpected ${route}`);
     },
   };
@@ -59,7 +66,7 @@ function fakes(candidates: TodayCandidate[], reduce: Answer, opts: { available?:
     now: () => NOW,
     log: (line) => logs.push(line),
   };
-  return { deps, reduces, cardCalls, posts, logs, store };
+  return { deps, reduces, cardCalls, posts, personReads, logs, store };
 }
 
 const firstItem: Answer = (prompt) => ({
@@ -108,6 +115,16 @@ describe("buildToday", () => {
     if (!outcome.ok) throw new Error(outcome.error);
     expect(outcome.queue).toMatchObject({ snapshotAt: 1_000, model: "claude-opus-5-5", readCount: 2, openAtSnapshot: ["conv1"] });
     expect(outcome.queue.items, "each item stores the newest message the build read").toEqual([{ conversationId: "conv1" as ConversationId, rank: 1, group: "g", reason: "Clock today.", anchor: "conv1-m5" }]);
+  });
+
+  test("a DM's reduce block carries its person's other conversations; a group reads none, and cards never see them", async () => {
+    const group = { ...candidate(2, "needsYou"), isGroup: true };
+    const { deps, reduces, cardCalls, personReads } = fakes([candidate(1, "needsYou"), group], firstItem);
+    await buildToday(deps, claim);
+    expect(personReads).toEqual([{ conversationId: "conv1" as ConversationId, sinceAt: NOW - 7 * DAY, limit: 2, maxChars: 240 }]);
+    expect(reduces[0]?.prompt).toContain('elsewhere, newest first: 1h ago in group "Launch Crew" (imessage): they: also pinged from conv1');
+    expect(reduces[0]?.prompt.match(/elsewhere, newest first/g)).toHaveLength(1);
+    expect(cardCalls.join("\n")).not.toContain("also pinged");
   });
 
   test("a fresh build starts a session, saved only once todayFinish accepts the queue", async () => {

@@ -795,6 +795,7 @@ export const todayCandidate = v.object({
   conversationId: v.id("comma_conversations"),
   title: v.string(),
   isGroup: v.boolean(),
+  platform,
   state: v.union(v.literal("needsYou"), v.literal("waiting")),
   lastMessageAt: v.number(),
   unreadCount: v.number(),

@@ -293,22 +293,22 @@ describe("todayCandidates", () => {
       await ctx.db.insert("comma_conversations", conversation("spam", { isSpam: true }));
       await ctx.db.insert("comma_conversations", conversation("fresh", { lastMessageAt: now - 1000 }));
     });
-    const seen: { title: string; state: string }[] = [];
+    const seen: { title: string; state: string; platform: string }[] = [];
     let cursor: string | null = null;
     let pages = 0;
     for (;;) {
-      const result: { page: { title: string; state: string }[]; continueCursor: string; isDone: boolean } =
+      const result: { page: { title: string; state: string; platform: string }[]; continueCursor: string; isDone: boolean } =
         await t.mutation(internal.comma.today.todayCandidates, { cursor, numItems: 2 });
-      seen.push(...result.page.map(({ title, state }) => ({ title, state })));
+      seen.push(...result.page.map(({ title, state, platform }) => ({ title, state, platform })));
       pages++;
       if (result.isDone) break;
       cursor = result.continueCursor;
     }
     expect(pages).toBeGreaterThan(1);
     expect(seen).toEqual([
-      { title: "fresh", state: "needsYou" },
-      { title: "recent-wait", state: "waiting" },
-      { title: "old-needs", state: "needsYou" },
+      { title: "fresh", state: "needsYou", platform: "imessage" },
+      { title: "recent-wait", state: "waiting", platform: "imessage" },
+      { title: "old-needs", state: "needsYou", platform: "imessage" },
     ]);
   });
 });

@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { RetryWork } from "../bridge/retry";
 import { userContent } from "./attachments";
-import { newestMessageAt, PACKET_MESSAGES, systemAppend, withThreadDelta } from "./context";
+import { ELSEWHERE, newestMessageAt, PACKET_MESSAGES, systemAppend, withThreadDelta } from "./context";
 import type { Chat, ChatId, CommandRow, ConversationId, Port } from "./convex-port";
 import { resolveSelection, type Selection } from "./models";
 import { turnEndItem } from "./normalize";
@@ -173,13 +173,21 @@ export class Sessions {
 
   private async start(chatId: ChatId, chat: Chat, selection: Selection): Promise<Live> {
     const { port, now } = this.deps;
-    const context = await port.post("agentContext", { conversationId: chat.conversationId, limit: PACKET_MESSAGES });
+    const [context, elsewhere] = await Promise.all([
+      port.post("agentContext", { conversationId: chat.conversationId, limit: PACKET_MESSAGES }),
+      port.post("agentPersonContext", {
+        conversationId: chat.conversationId, sinceAt: now() - ELSEWHERE.days * 86_400_000, limit: ELSEWHERE.limit, maxChars: ELSEWHERE.maxChars,
+      }).catch((error: unknown) => {
+        this.log(`${chatId}: person context unavailable: ${String(error)}`);
+        return null;
+      }),
+    ]);
     const existing = chat.sessionId ?? this.sessionIds.get(chatId);
     const sessionId = existing ?? await this.deps.reserve(chatId, `Comma · ${context.title}`);
     this.sessionIds.set(chatId, sessionId);
     if (!existing) await port.post("agentChat", { chatId, sessionId });
     while (this.liveCount() >= MAX_LIVE) await this.evict();
-    const append = systemAppend({ addendum: this.deps.readAddendum(), conversationId: chat.conversationId, context, now: now(), timeZone: this.deps.timeZone });
+    const append = systemAppend({ addendum: this.deps.readAddendum(), conversationId: chat.conversationId, context, elsewhere, now: now(), timeZone: this.deps.timeZone });
     const session = new AgentSession({
       sessionId,
       selection,

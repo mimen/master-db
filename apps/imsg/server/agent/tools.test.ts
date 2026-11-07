@@ -91,4 +91,20 @@ describe("comma tools", () => {
     expect(h.calls[0]).toEqual({ route: "agentContext", body: { conversationId: "conv-1", beforeMessageAt: 5, limit: 10 } });
     expect(result.content[0]).toMatchObject({ text: expect.stringContaining("Jesse: list?") });
   });
+
+  test("read_person reads the named person beyond this thread, fenced, with the paging point", async () => {
+    const line = { conversationId: fakeId<"comma_conversations">("crew"), conversation: "Launch Crew", kind: "group" as const, platform: "imessage" as const, fromMe: false, sender: "Alex" };
+    const h = harness({ agentPersonContext: { name: "Alex", more: true, lines: [{ ...line, at: 200, text: "coming?" }, { ...line, at: 100, text: "hi" }] } });
+    const result = await h.call("read_person", { handle: "+15550001111", limit: 2 });
+    expect(h.calls[0]).toEqual({ route: "agentPersonContext", body: { conversationId: "conv-1", address: "+15550001111", beforeAt: undefined, limit: 2, maxChars: 12_000 } });
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toStartWith("<person_messages>\n[");
+    expect(text).toContain('Alex in group "Launch Crew" (imessage): coming?');
+    expect(text).toEndWith("</person_messages>\n\n(oldest shown: 100; more before it)");
+  });
+
+  test("read_person in a group without a person asks for one", async () => {
+    const result = await harness().call("read_person", { limit: 5 });
+    expect(result).toMatchObject({ isError: true, content: [{ text: expect.stringContaining("pass the person's handle or personId") }] });
+  });
 });

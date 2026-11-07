@@ -2,8 +2,8 @@ import { mkdir } from "node:fs/promises";
 import { basename, join, relative, resolve, isAbsolute } from "node:path";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { formatMessages } from "./context";
-import type { ChatId, ConversationId, Port, StorageId } from "./convex-port";
+import { formatMessages, personMessages } from "./context";
+import type { ChatId, ConversationId, Port, Routes, StorageId } from "./convex-port";
 
 type ToolResult = Awaited<ReturnType<Parameters<typeof tool>[3]>>;
 
@@ -58,6 +58,22 @@ export function commaTools(deps: ToolDeps) {
         const messages = await port.post("agentSearch", { conversationId, query: args.query });
         return text(messages.length ? formatMessages(messages, deps.timeZone) : "(no matches)");
       })),
+    tool("read_person", "Read one person's messages in Milad's other conversations (their other DMs and handles, groups, every platform), newest first, each naming its conversation. Name them with a handle from Participants or a personId from get_people; in a one-to-one thread omit both. Page back with the oldest timestamp shown.", {
+      handle: z.string().optional(),
+      personId: z.string().optional(),
+      beforeAt: z.number().optional().describe("Epoch milliseconds; omit for the newest"),
+      limit: z.number().int().min(1).max(100).default(30),
+    }, (args) => guarded(async () => {
+      const result = await port.post("agentPersonContext", {
+        conversationId, beforeAt: args.beforeAt, limit: args.limit, maxChars: 12_000,
+        ...(args.handle ? { address: args.handle } : {}),
+        ...(args.personId ? { personId: args.personId as NonNullable<Routes["agentPersonContext"][0]["personId"]> } : {}),
+      });
+      if (!result) throw new Error("This is a group thread: pass the person's handle or personId");
+      if (!result.lines.length) return text(`(no messages with ${result.name} in other conversations)`);
+      const oldest = result.lines.at(-1)!.at;
+      return text(`${personMessages(result.lines, deps.timeZone)}\n\n(oldest shown: ${oldest}${result.more ? "; more before it" : ""})`);
+    })),
     tool("get_people", "List this conversation's participants with handles, emails and CRM fields.", {},
       () => guarded(async () => text(JSON.stringify(await port.post("agentPeople", { conversationId }))))),
     tool("get_attachment", "Download an attachment from this thread into the scratch folder. Images are returned for you to see.", { guid: z.string() },
