@@ -1,3 +1,4 @@
+import { routeService, type ProfileRoute } from "./platform-profile";
 import type { ChatSummary } from "./types";
 
 /**
@@ -27,6 +28,11 @@ export const imessageChat = {
 /** The service a conversation sends through; green when SMS. */
 export function conversationService(chat: Pick<ChatSummary, "imessage">): "iMessage" | "SMS" {
   return imessageChat.service(chat.imessage.chatGuid) === "SMS" ? "SMS" : "iMessage";
+}
+
+/** The route a conversation's commands take, as its platform profile reads it. */
+export function conversationRoute(chat: Pick<ChatSummary, "imessage" | "isGroup">): ProfileRoute {
+  return { platform: "imessage", service: routeService(chat.imessage.chatGuid.split(";")[0] ?? ""), isGroup: chat.isGroup };
 }
 
 /** The other person's handle in a one-to-one conversation, or null for a group. */

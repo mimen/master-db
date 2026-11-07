@@ -28,6 +28,14 @@ state and last message, and which lens it matches. Convex computes flags with th
 client filters with them.
 _Avoid_: filter logic, flag logic
 
+**Platform profile**:
+What a route can do, as data in `shared/platform-profile.ts`: per platform, each feature (reactions and which
+tapbacks, reply, edit, unsend, typing, mentions, scheduling, attachments, FaceTime links, group management,
+deleting) lists the services that carry it, whether it exists only in a group, and whether BlueBubbles needs its
+Private API for it. Enqueue rejects a command its route can't run (`convex/comma/routeSupport.ts`), and the client
+shows that control greyed with the same short reason ("SMS can't send reactions") instead of hiding it.
+_Avoid_: capability flags, service checks (`service === "SMS"`)
+
 **Triage state**:
 Comma's own per-conversation state that BlueBubbles knows nothing about: dismissal anchors,
 pin, mute, marked-unread, the read time, and the clear log of settles and replies. Convex owns it
