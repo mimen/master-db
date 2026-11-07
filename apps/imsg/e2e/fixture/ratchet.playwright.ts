@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 import { census, REGIONS, type Shift } from "../bench/census";
 import { renderCounter, type Renders } from "../bench/renders";
 import { expect, test } from "../fixtures/desk";
@@ -13,6 +13,13 @@ test.use({
     await provide({ ...launchOptions, args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] });
   },
 });
+
+/** Continues a held request. The page can give one up while it is held, and then there is nothing to continue. */
+async function continueHeld(route: Route): Promise<void> {
+  await route.continue().catch((error: unknown) => {
+    if (!String(error).includes("Route is already handled")) throw error;
+  });
+}
 
 test("Contacts and its people list wait for the first visit, then stay mounted", async ({ desk }) => {
   const page = desk.page;
@@ -88,7 +95,7 @@ test("the queue header holds still while the conversation list loads late", asyn
       held = true;
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
-    await route.continue();
+    await continueHeld(route);
   });
   await page.goto("/", { waitUntil: "commit" });
   await page.waitForTimeout(2000);
@@ -127,7 +134,9 @@ async function elapsedToFrame(page: Page): Promise<number> {
     const ratchet = window as unknown as { __inputAt?: number; __shownAt?: number };
     return ratchet.__shownAt !== undefined && ratchet.__inputAt !== undefined ? ratchet.__shownAt - ratchet.__inputAt : false;
   }, undefined, { timeout: 5_000 });
-  return Number(await elapsed.jsonValue());
+  const ms = Number(await elapsed.jsonValue());
+  console.log(`${test.info().title}: ${ms.toFixed(1)} ms`);
+  return ms;
 }
 
 async function rowMenuItem(page: Page, name: string, item: string) {
@@ -153,6 +162,9 @@ test("ratchet: settling the open conversation moves the Needs you count within 5
 
 test("ratchet: a conversation marked unread reads as unread within 50 ms of the click", async ({ desk }) => {
   const page = desk.page;
+  // The seed leaves Alex's question unread, so read it first for the menu to offer Mark as unread.
+  await (await rowMenuItem(page, "Alex Rivera", "Mark as read")).click();
+  await expect(page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" })).toHaveAttribute("aria-label", /^Alex Rivera, (?!unread)/);
   const markUnread = await rowMenuItem(page, "Alex Rivera", "Mark as unread");
   await timeToFrame(page, "pointerdown", `() => [...document.querySelectorAll('[data-testid="conversation-row"]')]
     .some((row) => /^Alex Rivera, unread,/.test(row.getAttribute("aria-label") ?? ""))`);
@@ -193,7 +205,7 @@ test("ratchet: a sent voice message is in the thread within 50 ms of the click",
   // A real upload takes longer than a frame; on the bare fixture it can finish inside 50 ms.
   await page.route("**/__fixture/upload", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 300));
-    await route.continue();
+    await continueHeld(route);
   });
   const send = await recordVoice(page);
   await timeToFrame(page, "pointerdown", VOICE_BUBBLE);
@@ -277,7 +289,7 @@ test("ratchet: a new message shows it is sending within 50 ms of Send", async ({
   await page.route("**/__fixture/convex", async (route) => {
     const body = route.request().postDataJSON() as { name: string; args: { payload?: { kind: string } } };
     if (body.name === "comma/outbox:enqueue" && body.args.payload?.kind === "createChat") await new Promise((resolve) => setTimeout(resolve, 300));
-    await route.continue();
+    await continueHeld(route);
   });
   const send = await composeToAlex(page, "palette probe");
   // The palette's Sending ring paints on the click; the thread with the bubble mounts a frame later.
@@ -337,7 +349,7 @@ test("the queue header moves at most once when the fonts arrive after first pain
   await page.addInitScript(census, REGIONS);
   await page.route(/\.ttf$/, async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 700));
-    await route.continue();
+    await continueHeld(route);
   });
   await page.goto("/", { waitUntil: "commit" });
   await expect(page.getByTestId("conversation-row").first()).toBeVisible();
@@ -398,7 +410,7 @@ async function landOlderPage(desk: Desk): Promise<{ renders: Renders; moved: num
       asked = true;
       await gate;
     }
-    await route.continue();
+    await continueHeld(route);
   });
   const thread = await openSeededThread(desk);
   const list = await page.getByTestId("thread-message-list").boundingBox();
@@ -546,7 +558,7 @@ test("Details paints the conversation's people from the list before chatInfo ans
   await page.route("**/__fixture/convex", async (route) => {
     const body = route.request().postDataJSON() as { name: string };
     if (body.name === "comma/conversationInfo:chatInfo") await released;
-    await route.continue();
+    await continueHeld(route);
   });
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
@@ -564,7 +576,7 @@ test("a contact search hit for a listed conversation opens it without waiting on
   await page.route("**/__fixture/convex", async (route) => {
     const body = route.request().postDataJSON() as { name: string };
     while (held && body.name === "comma/conversationInfo:findChat") await new Promise((resolve) => setTimeout(resolve, 50));
-    await route.continue();
+    await continueHeld(route);
   });
   await page.goto("/search", { waitUntil: "domcontentloaded" });
   await page.getByPlaceholder("Search contacts and messages…").fill("Nina");
@@ -596,7 +608,7 @@ test("ratchet: a renamed group shows its new name within 50 ms of Save", async (
   await page.route("**/__fixture/convex", async (route) => {
     const body = route.request().postDataJSON() as { name: string; args: { payload?: { kind: string } } };
     if (body.name === "comma/outbox:enqueue" && body.args.payload?.kind === "rename") await new Promise((resolve) => setTimeout(resolve, 300));
-    await route.continue();
+    await continueHeld(route);
   });
   const save = await renameLaunchCrew(page);
   await timeToFrame(page, "pointerdown", renamedInDetails);
@@ -640,7 +652,7 @@ for (const action of ["Cancel", "Send"] as const) {
     await page.route("**/__fixture/convex", async (route) => {
       const body = route.request().postDataJSON() as { name: string; args: { payload?: { kind: string } } };
       if (body.name === "comma/outbox:enqueue" && body.args.payload?.kind === kind) await new Promise((resolve) => setTimeout(resolve, 300));
-      await route.continue();
+      await continueHeld(route);
     });
     const button = await scheduledAction(page, action);
     await timeToFrame(page, "pointerdown", scheduledCountCleared);
