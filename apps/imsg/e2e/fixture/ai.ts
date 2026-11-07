@@ -1,26 +1,47 @@
+import { Gateway } from "../../server/ai/gateway";
+import { AiService, type ConversationId } from "../../server/ai/service";
 import type { AiServiceLike } from "../../server/app";
 import type { Result } from "../../server/bluebubbles";
 import type { OverlayDb } from "../../server/db";
-import type { ConversationId } from "../../server/ai/service";
+import { buildThread } from "../../server/map";
 import type {
   ContactSuggestion,
   ReplySuggestions,
   SuggestionFeedbackRequest,
   SuggestionModel,
 } from "../../shared/types";
+import type { FixtureBlueBubbles } from "./fake-bluebubbles";
 import { FIXTURE_NOW, type FixtureIdentity } from "./world";
 
 export class FixtureAi implements AiServiceLike {
   readonly available = true;
+  /** When set, suggestions run the real AiService and Gateway against the fixture's model endpoint, which answers after this delay. */
+  modelDelayMs: number | null = null;
+  private readonly live: AiService | null;
 
   // A fixture conversation id is its chat guid, and a direct chat's guid ends in the address.
-  constructor(_db: OverlayDb, private readonly names?: Pick<FixtureIdentity, "lookup">) {}
+  constructor(db: OverlayDb, private readonly names?: FixtureIdentity, model?: { bb: FixtureBlueBubbles; gatewayUrl: string }) {
+    const config = { gatewayUrl: model?.gatewayUrl ?? "", gatewayKey: "fixture", fastModel: "fixture", vaultPath: "/nonexistent-vault" };
+    this.live = model && names ? new AiService({
+      config, db, gateway: new Gateway(config),
+      fetchThread: async (conversationId) => {
+        const raw = await model.bb.chatMessages(conversationId, { limit: Number.MAX_SAFE_INTEGER });
+        if (!raw.ok) return raw;
+        return { ok: true, value: { title: "Fixture", isGroup: false, participants: [], messages: buildThread(raw.value, conversationId, names) } };
+      },
+      recentOutboundText: async () => [],
+      reactionSuggestions: () => false,
+      contactEmails: () => [],
+      searchVault: async () => [],
+    }) : null;
+  }
 
   replySuggestions(
     conversationId: ConversationId,
-    _force: boolean,
+    force: boolean,
     selectedModel: SuggestionModel,
   ): Promise<Result<ReplySuggestions>> {
+    if (this.live && this.modelDelayMs !== null) return this.live.replySuggestions(conversationId, force, selectedModel);
     const target = conversationId.includes("50101") ? "needs-2" : "fixture-inbound";
     return Promise.resolve({
       ok: true,

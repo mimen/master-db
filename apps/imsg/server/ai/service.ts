@@ -48,6 +48,9 @@ export interface AiDeps {
 
 export type ConversationId = GenericId<"comma_conversations">;
 
+// Real threads take 8 to 10s through the Mini's gateway, so the deadline only catches a stuck call.
+const SUGGESTION_TIMEOUT_MS = 30_000;
+
 /** Newest-last messages with folded reactions, and the participants' names (null when unknown). */
 export interface AiThread {
   title: string;
@@ -325,7 +328,7 @@ export class AiService {
     return this.deps.gateway.completeStructured<object>(prompt, SUGGESTION_SCHEMA, {
       model: SUGGESTION_MODELS[model],
       maxTokens: 1200,
-      timeoutMs: model === "opus" ? 9_000 : 11_000,
+      timeoutMs: SUGGESTION_TIMEOUT_MS,
       ...(model === "opus" ? { effort: "low" as const } : {}),
     });
   }

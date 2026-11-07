@@ -134,6 +134,21 @@ describe("replySuggestions", () => {
     expect(db.getSuggestionCache("chat-1", "opus")?.anchor_guid).toBe("m5");
   });
 
+  test("both routes outlast the slowest production call measured on real threads (10.3s)", async () => {
+    const timeouts: Record<string, number> = {};
+    for (const model of ["opus", "terra"] as const) {
+      const { service } = makeService({ messages: [makeMessage({ guid: `m-${model}`, text: "when works?" })] });
+      const gateway = (service as unknown as { deps: { gateway: Gateway } }).deps.gateway;
+      (gateway as unknown as { completeStructured: unknown }).completeStructured = async (_prompt: string, _schema: object, options: { timeoutMs: number }) => {
+        timeouts[model] = options.timeoutMs;
+        return { ok: true, value: suggestionSet("what time works?") };
+      };
+      expect((await service.replySuggestions(CHAT_1, true, model)).ok).toBe(true);
+    }
+    expect(timeouts.opus).toBeGreaterThan(10_317);
+    expect(timeouts.terra).toBeGreaterThan(10_317);
+  });
+
   test("deduplicates concurrent generation by full route identity", async () => {
     const { service } = makeService({ messages: [makeMessage({ guid: "m5", text: "when works?" })] });
     let calls = 0;
