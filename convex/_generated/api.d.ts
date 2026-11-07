@@ -4148,7 +4148,7 @@ export declare const internal: {
       agentAttachment: FunctionReference<
         "mutation",
         "internal",
-        { guid: string },
+        { conversationId: Id<"comma_conversations">; guid: string },
         null | { mime: string | null; name: string | null; url: string | null }
       >;
       agentContext: FunctionReference<

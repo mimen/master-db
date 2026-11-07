@@ -8,7 +8,7 @@ import { people } from "../schema/identity/people";
 import { conversationPeople } from "./conversationInfo";
 import { resolveConversationNames } from "./names";
 import { personContext, personContextResult } from "./personContext";
-import { personForAddress } from "./photos";
+import { normalizedAddress, personForAddress } from "./photos";
 import { searchMessageRows } from "./queries";
 import { reactionsOf } from "./reactionStore";
 
@@ -144,7 +144,8 @@ export const agentSearch = internalMutation({
 
 /**
  * A person's messages in every other conversation, newest first. The person is `personId`, else whoever `address`
- * resolves to, else the one person of this conversation; null for a group named with neither.
+ * resolves to, else the one person of this conversation; null for a group named with neither. The person must be a
+ * participant of this conversation.
  */
 export const agentPersonContext = internalMutation({
   args: {
@@ -167,6 +168,12 @@ export const agentPersonContext = internalMutation({
     let person = personId ? await ctx.db.get(personId) : await personForAddress(ctx, address!);
     if (personId && !person) throw new Error("Person not found");
     for (let hops = 0; person?.merged_into && hops < 5; hops++) person = await ctx.db.get(person.merged_into);
+    const participants = await conversationPeople(ctx, conversation);
+    const personInThread = person?._id;
+    const inThread = personInThread
+      ? participants.some((participant) => participant.person?._id === personInThread)
+      : participants.some((participant) => normalizedAddress(participant.address) === normalizedAddress(address!));
+    if (!inThread) throw new Error("That person is not in this conversation");
     return await personContext(ctx, { person, address, excludeConversationId: conversationId, sinceAt, beforeAt, limit, maxChars });
   },
 });
@@ -195,12 +202,15 @@ export const agentPeople = internalMutation({
   },
 });
 
+/** An attachment of a message in `conversationId`; null for any other conversation's. */
 export const agentAttachment = internalMutation({
-  args: { guid: v.string() },
+  args: { conversationId: v.id("comma_conversations"), guid: v.string() },
   returns: v.union(v.null(), v.object({ url: nullableString, name: nullableString, mime: nullableString })),
-  handler: async (ctx, { guid }) => {
+  handler: async (ctx, { conversationId, guid }) => {
     const attachment = await attachmentFor(ctx, guid);
     if (!attachment) return null;
+    const message = await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", attachment.messageGuid)).first();
+    if (message?.conversationId !== conversationId) return null;
     return {
       url: attachment.originalStorageId ? await ctx.storage.getUrl(attachment.originalStorageId) : null,
       name: attachment.transferName ?? attachment.filename ?? null,

@@ -68,6 +68,7 @@ describe("comma tools", () => {
   test("get_attachment saves the file and returns images for the model to see", async () => {
     const h = harness({ agentAttachment: { url: "https://files/flyer", name: "flyer.png", mime: "image/png" } });
     const result = await h.call("get_attachment", { guid: "att-1" });
+    expect(h.calls[0]).toEqual({ route: "agentAttachment", body: { conversationId: "conv-1", guid: "att-1" } });
     expect(result.content[0]).toEqual({ type: "image", data: Buffer.from([137, 80, 78, 71]).toString("base64"), mimeType: "image/png" });
     expect(await Bun.file(join(h.scratchDir, "flyer.png")).bytes()).toEqual(new Uint8Array([137, 80, 78, 71]));
   });

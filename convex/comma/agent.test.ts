@@ -523,7 +523,7 @@ describe("POST /comma/ingest/agent*", () => {
       ["agentSearch", { conversationId, query: "hi" }, []],
       ["agentPeople", { conversationId }, [{ address: "+15550001111", name: "Alex", handles: ["+15550001111"], personId: expect.any(String), tags: [], events: [] }]],
       ["agentPersonContext", { conversationId, limit: 5, maxChars: 1000 }, { name: "Alex", lines: [], more: false }],
-      ["agentAttachment", { guid: "missing" }, null],
+      ["agentAttachment", { conversationId, guid: "missing" }, null],
       ["agentSend", { conversationId, clientKey: "c1", text: "hi" }, expect.any(String)],
     ];
     for (const [kind, body, result] of cases) {
