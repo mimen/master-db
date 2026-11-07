@@ -1,12 +1,12 @@
 import type { Message } from "@shared/types";
 
-const inFlight = (m: Message): boolean => m.pending === true && m.failed !== true;
+const inFlight = (m: Message): boolean => m.sendState === "queued" || m.sendState === "sending";
 
 /**
  * Messages by date, then the sends still in flight in the order they were sent. A send lands with
  * the time the Mac sent it, later than the sends queued behind it, so date alone would drop each
- * one below the rest of its burst until all of them land. A failed send has left the queue: it
- * takes the time it failed (failedSend) and sorts among the rest.
+ * one below the rest of its burst until all of them land. A send that did not go out has left the
+ * queue: it takes the time it stopped and sorts among the rest.
  */
 export function sortThread(messages: Message[]): Message[] {
   return [...messages].sort((a, b) => Number(inFlight(a)) - Number(inFlight(b)) || a.dateCreated - b.dateCreated);
@@ -25,8 +25,7 @@ function pendingTempFor(current: Message[], message: Message): Message | undefin
   if (!message.isFromMe) return undefined;
   return current.find(
     (m) =>
-      m.pending &&
-      m.guid.startsWith("temp-") &&
+      inFlight(m) &&
       m.text === message.text &&
       message.dateCreated >= m.dateCreated - TEMP_MATCH_SKEW_MS,
   );
@@ -57,9 +56,9 @@ export function settleTemp(current: Message[], tempGuid: string, message: Messag
   return sortThread(next);
 }
 
-/** This session's own optimistic send, still pending or failed: no fetch can contain it. */
+/** A send that has not landed: a fetch may not contain it yet. */
 function isOwnUnsettledSend(m: Message): boolean {
-  return (m.pending === true || m.failed === true) && m.clientKey?.startsWith("temp-") === true;
+  return m.sendState !== undefined;
 }
 
 /**

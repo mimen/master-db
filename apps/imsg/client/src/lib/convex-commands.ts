@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { OptimisticUpdate } from "convex/browser";
-import { optimisticallyUpdateValueInPaginatedQuery } from "convex/react";
 import type { FunctionArgs } from "convex/server";
 import type { GenericId } from "convex/values";
 import type { ConversationId } from "@shared/types";
-import { commaApi, commaOutbox } from "./convex-api";
+import { commaOutbox } from "./convex-api";
 import { resultFromReceipt, type CommandReceipt, type CommandResult, type ResultFor } from "./command-results";
 
 export type CommandPayload = FunctionArgs<typeof commaOutbox.enqueue>["payload"];
@@ -15,21 +14,6 @@ export interface CommandClient {
     options?: { optimisticUpdate?: OptimisticUpdate<FunctionArgs<typeof commaOutbox.enqueue>> }): Promise<unknown>;
 }
 
-/**
- * A send moves its conversation in the cached sidebar the moment it is enqueued, the way the
- * server's temp row moves it a round trip later. The list sorts by lastMessage, so patching the
- * row is enough; Convex drops the patch when the server's result arrives or the mutation fails.
- */
-export const sendMovesSidebar: OptimisticUpdate<FunctionArgs<typeof commaOutbox.enqueue>> = (store, { clientKey, conversationId, payload }) => {
-  if (payload.kind !== "send" || !conversationId) return;
-  const now = Date.now();
-  optimisticallyUpdateValueInPaginatedQuery(store, commaApi.listConversations, {}, (row) => row._id !== conversationId ? row : {
-    ...row,
-    lastMessage: { guid: `temp-${clientKey}`, text: payload.text, dateCreated: now, isFromMe: true, senderName: null, hasAttachments: false },
-    lastMessageAt: Math.max(row.lastMessageAt, now),
-    flags: { ...row.flags, unresponded: false, waiting: true },
-  });
-};
 export interface CommandWatch {
   onUpdate(callback: () => void): () => void;
   localQueryResult(): CommandReceipt | null | undefined;
@@ -56,7 +40,7 @@ async function enqueueCommandVia(client: CommandClient, conversationId: Conversa
     clientKey,
     ...(conversationId ? { conversationId } : {}),
     payload,
-  }, { optimisticUpdate: sendMovesSidebar });
+  });
   if (typeof id !== "string") throw new Error("Enqueue did not return a command ID");
   return id as GenericId<"comma_outbox">;
 }

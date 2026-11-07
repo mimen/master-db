@@ -34,7 +34,7 @@ function message(extra: Partial<Message> = {}): Message {
 
 describe("delivery state", () => {
   test("this session's failed send is failed", () => {
-    expect(deliveryState(message({ error: 0, failed: true }), null, NOW)).toBe("failed");
+    expect(deliveryState(message({ error: 0, sendState: "failed" }), null, NOW)).toBe("failed");
   });
 
   test("an old error with no evidence is uncertain", () => {

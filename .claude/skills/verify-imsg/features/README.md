@@ -42,3 +42,4 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Conversation identity](./conversation-identity.md) covers `/c/<id>` URLs, conversation ids in commands and queries, the `/chat/` redirect, and a group's CRM by id. Its drive is `drives/conversation-identity.ts`.
 - [Reactions](./reactions.md) covers a legacy-only reaction, react, change and remove through the tray, and a peer's reaction in the new form hiding the legacy fold. Its drive is `drives/reactions.ts`.
 - [Platform profile](./platform-profile.md) covers greyed reactions, Reply, Edit and Undo send on SMS, the tray's keyboard pick, Convex refusing an unsupported command, and an unchanged iMessage thread. Its drive is `drives/platform-profile.ts`.
+- [Pending send](./pending-send.md) covers Waiting to send with the Mini away or the browser offline, Cancel, sending on reconnect, Not sent after the deadline, and Retry. Its drive is `drives/pending-send.ts`.

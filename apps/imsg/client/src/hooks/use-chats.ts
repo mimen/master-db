@@ -7,6 +7,7 @@ import { conversationToChat, withAgents, withDrafts } from "@/lib/convex-adapter
 import { commaApi } from "@/lib/convex-api";
 import { setDesktopBadgeCount } from "@/lib/desktop-shell";
 import { usePendingRenames } from "@/lib/pending-renames";
+import { useDirectoryWithPendingSends } from "@/lib/pending-sends";
 import { useAgentSettings } from "@/lib/settings";
 import { computeCounts, matchesFilters } from "@shared/chat-state";
 import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@shared/types";
@@ -72,7 +73,7 @@ export function ChatDirectoryProvider({ children }: { readonly children: ReactNo
     joined.current = withAgents(drafted, agentChats, joined.current);
     return joined.current;
   }, [drafted, agentChats]);
-  const shown = usePendingRenames(chats);
+  const shown = usePendingRenames(useDirectoryWithPendingSends(chats));
   return createElement(ChatDirectoryContext.Provider, { value: shown }, children);
 }
 

@@ -41,7 +41,7 @@ if (process.env.COMMA_CHAT_DIRECTORY_CHILD !== "1") {
     usePaginatedQuery: () => ({ results, status: "Exhausted", loadMore: () => undefined }),
     useQuery: (ref: Parameters<typeof getFunctionName>[0]) => getFunctionName(ref) === "comma/agent:listAgentChats" ? agentChats : drafts,
     useConvexConnectionState: () => ({ isWebSocketConnected: true, hasEverConnected: true }),
-    optimisticallyUpdateValueInPaginatedQuery: () => undefined,
+    useConvexAuth: () => ({ isLoading: false, isAuthenticated: true }),
   }));
   const { ChatDirectoryProvider } = await import("./use-chats");
   const { useChatDirectory } = await import("./use-chat-directory");

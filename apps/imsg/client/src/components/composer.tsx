@@ -33,7 +33,7 @@ import { setTyping as sendTyping } from "@/lib/presence-api";
 import { messagingCommandError } from "@/lib/messaging-api";
 import { sendWithSuggestionFeedback } from "@/lib/ai-api";
 import { getDraft, setDraft } from "@/lib/drafts";
-import { failedSend, tempMessage } from "@/lib/local-sends";
+import { draftBubble, pendingSends, SendCancelledError } from "@/lib/pending-sends";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatAddress } from "@shared/address";
 import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
@@ -84,6 +84,8 @@ interface ComposerProps {
   /** Takes back an optimistic send that failed before it reached the outbox. */
   onWithdraw: (tempGuid: string) => void;
   onSent: (message: Message) => void;
+  /** A text send drew its bubble. */
+  onSending: () => void;
   /** Web: the pane that accepts dropped files into this composer. */
   dropTargetRef: RefObject<View | null>;
   onDragActiveChange: (active: boolean) => void;
@@ -170,10 +172,12 @@ function GhostText({ text, shown, card, fontSize, color, onHeight }: {
 
 
 /** A voice memo on its way: the audio bubble draws now, and plays once the recorder hands over its file. */
-function tempVoiceMessage(chat: Pick<ChatSummary, "imessage">, filename: string): Message {
-  const temp = tempMessage(chat, "");
+function tempVoiceMessage(chat: Pick<ChatSummary, "imessage" | "isGroup">, filename: string): Message {
+  const temp = draftBubble(chat, { text: "" });
   return {
     ...temp,
+    // An upload on its way, past cancelling.
+    sendState: "sending",
     attachments: [{ guid: `${temp.guid}-audio`, mimeType: "audio/mp4", filename, originalUrl: null, width: null, height: null, totalBytes: null }],
   };
 }
@@ -296,6 +300,7 @@ export function Composer({
   onSettled,
   onWithdraw,
   onSent,
+  onSending,
   dropTargetRef,
   onDragActiveChange,
   suggestions,
@@ -587,38 +592,26 @@ export function Composer({
     }
 
     const attribution = suggestionAttribution.current;
-    const temp = tempMessage(chat, trimmed, replyTo, outgoingMentions);
-    const reply = replyTo;
+    const landed = pendingSends.send({ ...chat, isGroup }, { text: trimmed, replyTo, mentions: outgoingMentions });
     clearText();
     setDraft(conversationId, "");
     onClearReply();
-    onOptimistic(temp);
+    onSending();
     playSend();
     hapticSend();
     setSendStatus("sending");
     try {
-      const message = await sendWithSuggestionFeedback(
-        () => api.sendText(conversationId, {
-          text: trimmed,
-          replyToGuid: reply?.guid,
-          mentions: outgoingMentions.length > 0 ? outgoingMentions : undefined,
-        }, { clientKey: temp.guid }),
+      await sendWithSuggestionFeedback(
+        () => landed,
         () => attribution
           ? api.recordSuggestionFeedback(conversationId, { ...attribution, finalText: trimmed })
           : Promise.resolve(),
       );
-      const withMentions =
-        outgoingMentions.length > 0 && (message.mentions ?? []).length === 0
-          ? { ...message, mentions: outgoingMentions }
-          : message;
-      // BlueBubbles can echo a freshly-sent SMS back as "iMessage" before it
-      // reclassifies — pin the service so the green bubble never flashes blue.
-      onSettled(temp.guid, isSMS ? { ...withMentions, service: "SMS" } : withMentions);
       setSendStatus("sent");
-    } catch {
+    } catch (error) {
       setSendStatus("idle");
+      if (error instanceof SendCancelledError) return;
       hapticFailure();
-      onSettled(temp.guid, failedSend(temp));
       if (sendFailureToast()) showToast("Couldn't send. Check the Mac mini connection.");
     }
   };
@@ -874,7 +867,7 @@ ${url}` : url;
     const outcome = voiceMemoOutcome(end, Date.now() - startedAt);
     // The bubble goes up on the release; the web recorder only hands over its file a beat later.
     const filename = `voice-${Date.now()}.m4a`;
-    const temp = outcome === "send" ? tempVoiceMessage(chat, filename) : null;
+    const temp = outcome === "send" ? tempVoiceMessage({ ...chat, isGroup }, filename) : null;
     if (temp) {
       onOptimistic(temp);
       setBusy(true);

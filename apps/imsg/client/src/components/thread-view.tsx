@@ -22,7 +22,7 @@ import { createInboundReadObserver } from "@/lib/message-observers";
 import { useActionSheet } from "@/lib/action-sheet";
 import { copyHandleAction } from "@/lib/copy-handle";
 import { setForwardText } from "@/lib/forward";
-import { failedSend, tempMessage } from "@/lib/local-sends";
+import { pendingSends, SendCancelledError } from "@/lib/pending-sends";
 import { onOpenThreadSearch } from "@/lib/thread-search";
 import { readChat } from "@/lib/chat-actions";
 import { useAgentEnabled } from "@/hooks/use-agent";
@@ -385,7 +385,7 @@ export function ThreadView({
   }, [firstUnreadAt, rows, jumpTarget]);
 
   const latestOutgoingGuid = useMemo(
-    () => rows.find((r) => r.message.isFromMe && !r.message.failed)?.message.guid ?? null,
+    () => rows.find((r) => r.message.isFromMe && r.message.sendState !== "failed" && r.message.sendState !== "notSent")?.message.guid ?? null,
     [rows],
   );
   const latestInboundAt = useMemo(
@@ -394,17 +394,21 @@ export function ThreadView({
   );
 
   const retry = useCallback(
-    (failed: Message) => {
-      const revived: Message = { ...failed, pending: true, failed: false };
-      replaceTemp(failed.guid, revived);
-      runCommand(conversationId, { kind: "send", text: failed.text, replyToGuid: failed.replyToGuid ?? undefined, mentions: failed.mentions })
-        .then(({ message }) => replaceTemp(revived.guid, message))
-        .catch((error: unknown) => {
-          replaceTemp(revived.guid, failedSend(revived));
-          showToast(messagingCommandError(error, "Send failed"));
-        });
+    (stranded: Message) => {
+      pendingSends.retry(conversationId, stranded).catch((error: unknown) => {
+        if (!(error instanceof SendCancelledError)) showToast(messagingCommandError(error, "Send failed"));
+      });
     },
-    [conversationId, replaceTemp],
+    [conversationId],
+  );
+
+  const cancelSend = useCallback(
+    (queued: Message) => {
+      pendingSends.cancel(conversationId, queued)
+        .then((cancelled) => { if (!cancelled) showToast("Already sending"); })
+        .catch((error: unknown) => showToast(messagingCommandError(error, "Couldn't cancel")));
+    },
+    [conversationId],
   );
 
   const showReactions = useCallback(
@@ -470,35 +474,31 @@ export function ThreadView({
           ? [copyHandleAction(message.sender.address, message.sender.name?.split(" ")[0])]
           : []),
         // A persisted error code is often stale, so this sends a new copy instead of an in-bubble retry.
-        ...(mine && message.text && message.error !== 0 && !message.pending && !message.failed
+        ...(mine && message.text && message.error !== 0 && !message.sendState
           ? [
               {
                 label: "Send again",
                 onPress: () => {
                   const chat = conversationRef.current;
                   if (!chat) return;
-                  const temp = { ...tempMessage(chat, message.text, null, message.mentions), replyToGuid: message.replyToGuid };
-                  upsert(temp);
+                  const replyTo = message.replyToGuid ? { guid: message.replyToGuid, text: message.replyToPreview ?? "", isFromMe: message.replyToFromMe ?? false } : null;
+                  pendingSends.send(chat, { text: message.text, replyTo, mentions: message.mentions }).catch((error: unknown) => {
+                    if (!(error instanceof SendCancelledError)) showToast(messagingCommandError(error, "Send failed"));
+                  });
                   scrollToLatest();
-                  runCommand(conversationId, { kind: "send", text: message.text, replyToGuid: message.replyToGuid ?? undefined, mentions: message.mentions }, { clientKey: temp.guid })
-                    .then(({ message: sent }) => replaceTemp(temp.guid, sent))
-                    .catch((error: unknown) => {
-                      replaceTemp(temp.guid, failedSend(temp));
-                      showToast(messagingCommandError(error, "Send failed"));
-                    });
                 },
               },
             ]
           : []),
         // While a send is confirming, show Edit and Undo send inert rather than hiding them.
-        ...(mine && message.text && message.pending
+        ...(mine && message.text && message.sendState
           ? [...gated(edit, { label: "Edit", disabled: true, separatorBefore: true, onPress: () => undefined }),
             ...gated(unsend, { label: "Undo send", disabled: true, note: "Available once it's sent", onPress: () => undefined })]
           : []),
-        ...(mine && message.text && age < EDIT_WINDOW_MS && !message.pending
+        ...(mine && message.text && age < EDIT_WINDOW_MS && !message.sendState
           ? gated(edit, { label: "Edit", note: formatWindowRemaining(EDIT_WINDOW_MS, age), separatorBefore: true, onPress: () => setEditing(message) })
           : []),
-        ...(mine && age < UNSEND_WINDOW_MS && !message.pending
+        ...(mine && age < UNSEND_WINDOW_MS && !message.sendState
           ? gated(unsend, {
                 label: "Undo send",
                 note: formatWindowRemaining(UNSEND_WINDOW_MS, age),
@@ -516,7 +516,7 @@ export function ThreadView({
           : []),
         // "Remove for you" — deletes locally (Mac's Messages DB), any age,
         // either side. The tool for clearing failed/Not Delivered sends.
-        ...(!message.pending
+        ...(!message.sendState
           ? gated(can("deleteMessage"), {
                 label: "Delete for Me",
                 separatorBefore: true,
@@ -533,7 +533,7 @@ export function ThreadView({
       ];
       if (actions.length > 0 || tapbacks) showSheet({ actions, tapbacks, tapbacksUnavailable: reasonOf(react), anchor });
     },
-    [can, conversation, conversationId, isGroup, pend, replaceTemp, scrollToLatest, showSheet, upsert],
+    [can, conversation, conversationId, isGroup, pend, scrollToLatest, showSheet],
   );
 
   const desk = headerChat !== null;
@@ -552,9 +552,10 @@ export function ThreadView({
       unreadCount={item.unreadBoundary ? unreadCount : 0}
       onLongPress={openMessageSheet}
       onRetry={retry}
+      onCancel={cancelSend}
       onShowReactions={showReactions}
     />
-  ), [columnW, conversationId, desk, highlightGuid, isGroup, latestInboundAt, latestOutgoingGuid, openMessageSheet, retry, showReactions, unreadCount]);
+  ), [cancelSend, columnW, conversationId, desk, highlightGuid, isGroup, latestInboundAt, latestOutgoingGuid, openMessageSheet, retry, showReactions, unreadCount]);
 
   // Keyboard height only. The safe-area strip belongs to the composer, whose
   // background fills it; lifting the whole thread by the inset left a dead gap under the bar.
@@ -770,6 +771,7 @@ export function ThreadView({
           onSettled={(tempGuid, message) => {
             replaceTemp(tempGuid, message);
           }}
+          onSending={scrollToLatest}
           onWithdraw={remove}
           onSent={(message) => {
             upsert(message);
@@ -809,6 +811,7 @@ interface ThreadRowProps {
   unreadCount: number;
   onLongPress: (message: Message, anchor?: { x: number; y: number }) => void;
   onRetry: (message: Message) => void;
+  onCancel: (message: Message) => void;
   onShowReactions: (message: Message) => void;
 }
 
@@ -825,6 +828,7 @@ const ThreadRow = memo(function ThreadRow({
   unreadCount,
   onLongPress,
   onRetry,
+  onCancel,
   onShowReactions,
 }: ThreadRowProps) {
   const theme = useTheme();
@@ -847,6 +851,7 @@ const ThreadRow = memo(function ThreadRow({
       highlighted={highlighted}
       onLongPress={onLongPress}
       onRetry={onRetry}
+      onCancel={onCancel}
       onShowReactions={onShowReactions}
     />
   );

@@ -3,7 +3,7 @@ import { formatBubbleTime, formatReceiptTime } from "@/lib/format";
 
 /** The status your newest sent bubble carries; null while a send is still quick, since iMessage stays silent then. */
 function latestStatus(message: Message, slowSend: boolean): string | null {
-  if (message.pending) return slowSend ? "Sending…" : null;
+  if (message.sendState) return slowSend ? "Sending…" : null;
   if (message.dateRead !== null) return `Read ${formatReceiptTime(message.dateRead)}`;
   return message.dateDelivered !== null ? "Delivered" : "Sent";
 }

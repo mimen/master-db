@@ -1,5 +1,6 @@
 import type { FunctionReturnType } from "convex/server";
 import { agentAttention, mostUrgent } from "@shared/agent-attention";
+import { isPendingGuid } from "@shared/pending-send";
 import type { AttachmentSummary, ChatSummary, Message, ScheduledMessage } from "@shared/types";
 import type { AgentChatSummary } from "./agent-api";
 import type { commaApi } from "./convex-api";
@@ -140,8 +141,8 @@ export function messageToMessage(row: ConvexMessage | ConvexSearchMessage): Mess
     edited: row.edited,
     retracted: row.retracted,
     clientKey: row.clientKey,
-    // A queued send's optimistic row, before the bridge's echo replaces it.
-    ...(row.guid.startsWith("temp-") ? (row.error ? { failed: true } : { pending: true }) : {}),
+    // A pending send's row; one written before rows carried sendState is in flight until it errors.
+    ...(isPendingGuid(row.guid) ? { sendState: row.sendState ?? (row.error ? "failed" : "queued") } : {}),
   };
 }
 
@@ -170,14 +171,16 @@ export function mergeConvexMessages(remote: readonly Message[], local: readonly 
   const claimed = new Set<Message>();
   // A temp row whose send already settled locally to a real guid is a leftover: the real row
   // owns it, and BlueBubbles echoes rarely carry the clientKey that would otherwise retire it.
-  const settledKeys = new Set(local.filter((m) => m.clientKey && !m.guid.startsWith("temp-")).map((m) => m.clientKey));
+  const settledKeys = new Set(local.filter((m) => m.clientKey && !isPendingGuid(m.guid)).map((m) => m.clientKey));
   const remoteGuids = new Set(remote.map((m) => m.guid));
-  const merged = remote.filter((m) => !(m.guid.startsWith("temp-") && m.clientKey && settledKeys.has(m.clientKey) &&
+  const merged = remote.filter((m) => !(isPendingGuid(m.guid) && m.clientKey && settledKeys.has(m.clientKey) &&
     local.some((own) => own.clientKey === m.clientKey && remoteGuids.has(own.guid)))).map((m) => {
     const own = byGuid.get(m.guid) ?? (m.clientKey ? byKey.get(m.clientKey) : undefined);
     if (own) claimed.add(own);
-    // A queued send's Convex row is `temp-<clientKey>`; adopt the local bubble's identity so it never remounts.
-    return own?.clientKey ? { ...m, guid: m.guid.startsWith("temp-") ? own.guid : m.guid, clientKey: own.clientKey } : m;
+    // A retry sends the bubble again under a new key, so the old send's row is stale until Convex replaces it.
+    if (own && isPendingGuid(m.guid) && m.clientKey && own.clientKey !== m.clientKey) return own;
+    // A pending send's row keeps the local bubble's identity, so it never remounts.
+    return own?.clientKey ? { ...m, guid: isPendingGuid(m.guid) ? own.guid : m.guid, clientKey: own.clientKey } : m;
   });
-  return sortThread([...merged, ...local.filter((m) => !claimed.has(m) && (m.pending || m.failed || m.clientKey))]);
+  return sortThread([...merged, ...local.filter((m) => !claimed.has(m) && (m.sendState || m.clientKey))]);
 }

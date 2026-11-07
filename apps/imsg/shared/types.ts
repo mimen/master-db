@@ -1,6 +1,7 @@
 import type { GenericId } from "convex/values";
 import type { AgentAttention } from "./agent-attention";
 import type { MentionAnnotation } from "./mentions";
+import type { PendingSendState } from "./pending-send";
 
 export type StateFilter = "today" | "all" | "unread" | "unresponded" | "waiting" | "drafts" | "agents" | "settled";
 
@@ -85,10 +86,9 @@ export interface Message {
   error: number;
   edited: boolean;
   retracted: boolean;
-  /** Client-only optimistic-send states; never set by the server. */
-  pending?: boolean;
-  failed?: boolean;
-  /** Client-only row identity: the temp guid of the optimistic send this message settled from. */
+  /** Set only on a send that has not landed yet; see pending-send.ts. */
+  sendState?: PendingSendState;
+  /** The outbox key of the send this message is or settled from, which also keeps its row's identity. */
   clientKey?: string;
 }
 

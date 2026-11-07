@@ -3,10 +3,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { mergeConvexMessages, messageToMessage } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { messageWindow } from "@/lib/history-api";
-import { localSends, useLocalSends } from "@/lib/local-sends";
+import { pendingSends, usePendingSends } from "@/lib/pending-sends";
 import { reconcileWindow, sortThread, hideSelfEchoes } from "@/lib/message-window";
 import { afterPaint, markOpenRendered } from "@/lib/open-timing";
 import { applyPendingEdits, retirePendingEdits, type PendingEdit, type PendingEdits } from "@/lib/pending-edits";
+import { isPendingGuid } from "@shared/pending-send";
 import type { ConversationId, Message } from "@shared/types";
 import { useConversation } from "./use-chat-directory";
 import { useMessageWindow } from "./use-message-window";
@@ -36,9 +37,8 @@ export interface UseMessagesResult {
 
 /**
  * Convex read path for an open thread. History comes live from the comma
- * mirror; this session's own sends live in a local overlay until their echo
- * (matched by clientKey or guid) arrives, so the optimistic bubble never
- * blinks.
+ * mirror; this session's own sends live in pendingSends until their echo
+ * (matched by clientKey or guid) arrives, so the bubble never blinks.
  */
 function useConvexMessages(conversationId: ConversationId | null, newest: readonly Message[]): UseMessagesResult {
   const { results, status, loadMore } = usePaginatedQuery(
@@ -46,7 +46,7 @@ function useConvexMessages(conversationId: ConversationId | null, newest: readon
     conversationId ? { conversationId } : "skip",
     { initialNumItems: 50 },
   );
-  const local = useLocalSends(conversationId);
+  const local = usePendingSends(conversationId);
   useEffect(() => {
     if (conversationId && status !== "LoadingFirstPage") afterPaint(() => markOpenRendered(conversationId, true));
   }, [conversationId, status]);
@@ -57,18 +57,18 @@ function useConvexMessages(conversationId: ConversationId | null, newest: readon
   // message could reappear from its old local acknowledgement after retraction.
   useEffect(() => {
     if (!conversationId) return;
-    const confirmed = mirrored.filter((message) => !message.guid.startsWith("temp-"));
-    localSends.retain(conversationId, (message) => !confirmed.some((row) => row.guid === message.guid ||
+    const confirmed = mirrored.filter((message) => !isPendingGuid(message.guid));
+    pendingSends.retain(conversationId, (message) => !confirmed.some((row) => row.guid === message.guid ||
       (message.clientKey && row.clientKey === message.clientKey)));
   }, [conversationId, mirrored, local]);
   const upsert = useCallback((message: Message) => {
-    if (conversationId) localSends.upsert(conversationId, message);
+    if (conversationId) pendingSends.upsert(conversationId, message);
   }, [conversationId]);
   const replaceTemp = useCallback((tempGuid: string, message: Message) => {
-    if (conversationId) localSends.settle(conversationId, tempGuid, message);
+    if (conversationId) pendingSends.settle(conversationId, tempGuid, message);
   }, [conversationId]);
   const remove = useCallback((guid: string) => {
-    if (conversationId) localSends.retain(conversationId, (m) => m.guid !== guid);
+    if (conversationId) pendingSends.retain(conversationId, (m) => m.guid !== guid);
   }, [conversationId]);
   const noop = useCallback(() => undefined, []);
   const loadOlder = useCallback(() => {
