@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import type { TodaySession } from "./today/session";
 
 export interface SuggestionCacheRow {
-  chat_guid: string;
+  conversation_id: string;
   selected_model: string;
   anchor_guid: string;
   recipe_version: number;
@@ -14,7 +14,7 @@ export interface SuggestionCacheRow {
 
 export interface SuggestionFeedbackRow {
   id: string;
-  chat_guid: string;
+  conversation_id: string;
   suggestion_id: string;
   kind: string;
   strategy: string;
@@ -88,7 +88,7 @@ export class OverlayDb {
     // so web and Expo clients with different preferences never share a shelf.
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS suggestion_result_cache (
-        chat_guid TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
         selected_model TEXT NOT NULL,
         anchor_guid TEXT NOT NULL,
         recipe_version INTEGER NOT NULL,
@@ -96,13 +96,13 @@ export class OverlayDb {
         edit_revision INTEGER NOT NULL,
         payload TEXT NOT NULL,
         created_at INTEGER NOT NULL,
-        PRIMARY KEY (chat_guid, selected_model)
+        PRIMARY KEY (conversation_id, selected_model)
       );
     `);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS suggestion_feedback (
         id TEXT PRIMARY KEY,
-        chat_guid TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
         suggestion_id TEXT NOT NULL,
         kind TEXT NOT NULL,
         strategy TEXT NOT NULL,
@@ -119,6 +119,18 @@ export class OverlayDb {
     this.db.exec(
       "CREATE INDEX IF NOT EXISTS idx_suggestion_feedback_sent ON suggestion_feedback(sent_at DESC);",
     );
+    // Suggestions were keyed by BlueBubbles chat before they read Convex. A cached shelf under a chat key can
+    // never hit again; feedback keeps its old key, which only scopes a deleted chat's cleanup.
+    try {
+      this.db.exec("ALTER TABLE suggestion_result_cache RENAME COLUMN chat_guid TO conversation_id; DELETE FROM suggestion_result_cache;");
+    } catch {
+      // already keyed by conversation
+    }
+    try {
+      this.db.exec("ALTER TABLE suggestion_feedback RENAME COLUMN chat_guid TO conversation_id;");
+    } catch {
+      // already keyed by conversation
+    }
     // Version 3 invalidates the old string-array cache and removes its private text.
     this.db.exec("DROP TABLE IF EXISTS suggestion_cache;");
     this.pruneSuggestionFeedback();
@@ -235,16 +247,16 @@ export class OverlayDb {
       .run(key, value);
   }
 
-  getSuggestionCache(chatGuid: string, selectedModel: string): SuggestionCacheRow | null {
+  getSuggestionCache(conversationId: string, selectedModel: string): SuggestionCacheRow | null {
     return (
       (this.db
         .query(
-          `SELECT chat_guid, selected_model, anchor_guid, recipe_version,
+          `SELECT conversation_id, selected_model, anchor_guid, recipe_version,
                   voice_revision, edit_revision, payload, created_at
            FROM suggestion_result_cache
-           WHERE chat_guid = ? AND selected_model = ?`,
+           WHERE conversation_id = ? AND selected_model = ?`,
         )
-        .get(chatGuid, selectedModel) as SuggestionCacheRow | undefined) ?? null
+        .get(conversationId, selectedModel) as SuggestionCacheRow | undefined) ?? null
     );
   }
 
@@ -252,10 +264,10 @@ export class OverlayDb {
     this.db
       .query(
         `INSERT INTO suggestion_result_cache (
-           chat_guid, selected_model, anchor_guid, recipe_version,
+           conversation_id, selected_model, anchor_guid, recipe_version,
            voice_revision, edit_revision, payload, created_at
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(chat_guid, selected_model) DO UPDATE SET
+         ON CONFLICT(conversation_id, selected_model) DO UPDATE SET
            anchor_guid = excluded.anchor_guid,
            recipe_version = excluded.recipe_version,
            voice_revision = excluded.voice_revision,
@@ -264,7 +276,7 @@ export class OverlayDb {
            created_at = excluded.created_at`,
       )
       .run(
-        row.chat_guid,
+        row.conversation_id,
         row.selected_model,
         row.anchor_guid,
         row.recipe_version,
@@ -279,14 +291,14 @@ export class OverlayDb {
     this.db
       .query(
         `INSERT INTO suggestion_feedback (
-           id, chat_guid, suggestion_id, kind, strategy, vibe,
+           id, conversation_id, suggestion_id, kind, strategy, vibe,
            selected_model, served_model, recipe_version, suggested_text,
            final_text, selected_at, sent_at
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         row.id,
-        row.chat_guid,
+        row.conversation_id,
         row.suggestion_id,
         row.kind,
         row.strategy,
@@ -316,7 +328,7 @@ export class OverlayDb {
   listSuggestionFeedback(limit = 20): SuggestionFeedbackRow[] {
     return this.db
       .query(
-        `SELECT id, chat_guid, suggestion_id, kind, strategy, vibe,
+        `SELECT id, conversation_id, suggestion_id, kind, strategy, vibe,
                 selected_model, served_model, recipe_version, suggested_text,
                 final_text, selected_at, sent_at
          FROM suggestion_feedback
@@ -325,9 +337,12 @@ export class OverlayDb {
       .all(Math.min(Math.max(limit, 1), 200)) as SuggestionFeedbackRow[];
   }
 
-  deleteSuggestionFeedbackForChat(chatGuid: string): void {
-    this.db.query("DELETE FROM suggestion_feedback WHERE chat_guid = ?").run(chatGuid);
-    this.db.query("DELETE FROM suggestion_result_cache WHERE chat_guid = ?").run(chatGuid);
+  /** A deleted chat's learning goes with it, under its conversation key and the chat key feedback from before carries. */
+  deleteSuggestionLearningFor(keys: string[]): void {
+    for (const key of keys) {
+      this.db.query("DELETE FROM suggestion_feedback WHERE conversation_id = ?").run(key);
+      this.db.query("DELETE FROM suggestion_result_cache WHERE conversation_id = ?").run(key);
+    }
   }
 
   clearSuggestionLearning(): void {

@@ -38,7 +38,7 @@ function harness(current: MappedChat | undefined, during: (bridge: SuggestionsBr
     db, ingest,
     ai: {
       available: true,
-      replySuggestions: (_chat, _peer, _refresh, _model) => {
+      replySuggestions: (_conversation, _refresh, _model) => {
         generations++;
         during(bridge);
         return Promise.resolve({ ok: true as const, value: result("m1") });

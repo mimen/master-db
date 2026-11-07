@@ -2,9 +2,12 @@ import { describe, expect, test } from "bun:test";
 import type { AiConfig } from "../config";
 import { OverlayDb } from "../db";
 import type { Message, SuggestionFeedbackRequest } from "../../shared/types";
-import { AiService, isStale, serializeSuggestionCache } from "./service";
+import { AiService, isStale, serializeSuggestionCache, type AiThread, type ConversationId } from "./service";
 import { Gateway } from "./gateway";
 
+
+const CHAT_1 = "chat-1" as ConversationId;
+const CHAT_2 = "chat-2" as ConversationId;
 
 function makeConfig(): AiConfig {
   return {
@@ -42,9 +45,12 @@ function makeMessage(overrides: Partial<Message> = {}): Message {
 }
 
 /** A Gateway whose network calls are replaced by canned completions. */
-function fakeGateway(reply: string, structured: object = suggestionSet("what time works?"), onGenerate?: () => void): Gateway {
+function fakeGateway(reply: string, structured: object = suggestionSet("what time works?"), onGenerate?: () => void, prompts: string[] = []): Gateway {
   const gateway = new Gateway(makeConfig());
-  (gateway as unknown as { complete: unknown }).complete = async () => ({ ok: true, value: reply });
+  (gateway as unknown as { complete: unknown }).complete = async (prompt: string) => {
+    prompts.push(prompt);
+    return { ok: true, value: reply };
+  };
   (gateway as unknown as { completeStructured: unknown }).completeStructured = async () => {
     onGenerate?.();
     return { ok: true, value: structured };
@@ -79,25 +85,23 @@ function makeService(options: {
   fetchError?: string;
   contactEmails?: (address: string) => string[];
   onGenerate?: () => void;
+  participants?: AiThread["participants"];
 }) {
   const db = options.db ?? new OverlayDb(":memory:");
+  const prompts: string[] = [];
   const service = new AiService({
     config: makeConfig(),
     db,
-    gateway: fakeGateway(options.reply ?? "[]", options.structured, options.onGenerate),
-    fetchMessages: async () => options.fetchError
+    gateway: fakeGateway(options.reply ?? "[]", options.structured, options.onGenerate, prompts),
+    fetchThread: async () => options.fetchError
       ? { ok: false, error: options.fetchError }
-      : { ok: true, value: options.messages ?? [] },
-    fetchMessageWithReactions: async (_chatGuid, messageGuid) => {
-      const message = options.messages?.find((item) => item.guid === messageGuid);
-      return message ? { ok: true, value: message } : { ok: false, error: "not found" };
-    },
+      : { ok: true, value: { title: "Sarah", isGroup: false, participants: options.participants ?? [{ address: "+15551234567", name: "Sarah" }], messages: options.messages ?? [] } },
     recentOutboundText: async () => [],
     reactionSuggestions: () => true,
     contactEmails: options.contactEmails ?? (() => []),
     searchVault: async () => [],
   });
-  return { service, db };
+  return { service, db, prompts };
 }
 
 describe("isStale", () => {
@@ -120,7 +124,7 @@ describe("replySuggestions", () => {
       messages: [makeMessage({ guid: "m5", text: "when works?" })],
       structured: suggestionSet("what time works?"),
     });
-    const result = await service.replySuggestions("chat-1", "Sarah", false, "opus");
+    const result = await service.replySuggestions(CHAT_1, false, "opus");
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.suggestions[0]?.text).toBe("what time works?");
@@ -140,8 +144,8 @@ describe("replySuggestions", () => {
       return { ok: true, value: suggestionSet("what time works?") };
     };
     const [first, second] = await Promise.all([
-      service.replySuggestions("chat-1", null, true, "opus"),
-      service.replySuggestions("chat-1", null, true, "opus"),
+      service.replySuggestions(CHAT_1, true, "opus"),
+      service.replySuggestions(CHAT_1, true, "opus"),
     ]);
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(true);
@@ -151,7 +155,7 @@ describe("replySuggestions", () => {
   test("regenerates route-specific cache when the anchor changes", async () => {
     const db = new OverlayDb(":memory:");
     db.setSuggestionCache({
-      chat_guid: "chat-1",
+      conversation_id: "chat-1",
       selected_model: "opus",
       anchor_guid: "m5",
       recipe_version: 3,
@@ -168,7 +172,7 @@ describe("replySuggestions", () => {
       }),
     });
     const { service } = makeService({ messages: [makeMessage({ guid: "m6" })], db });
-    const result = await service.replySuggestions("chat-1", null, false, "opus");
+    const result = await service.replySuggestions(CHAT_1, false, "opus");
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.stale).toBe(false);
@@ -187,7 +191,7 @@ describe("replySuggestions", () => {
         value: calls === 1 ? suggestionSet("does monday work?") : suggestionSet("what day works best?"),
       };
     };
-    const result = await service.replySuggestions("chat-1", null, true, "terra");
+    const result = await service.replySuggestions(CHAT_1, true, "terra");
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.suggestions[0]?.text).toBe("what day works best?");
     expect(calls).toBe(2);
@@ -200,7 +204,7 @@ describe("replySuggestions", () => {
       ok: true,
       value: suggestionSet("does monday work?"),
     });
-    const result = await service.replySuggestions("chat-1", null, true, "terra");
+    const result = await service.replySuggestions(CHAT_1, true, "terra");
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.noReply).toBe(false);
@@ -226,7 +230,7 @@ describe("replySuggestions", () => {
       },
       contactEmails: (address) => (address === "+15551234567" ? ["sarah@example.com"] : []),
     });
-    const result = await service.replySuggestions("chat-1", "Sarah", true, "opus");
+    const result = await service.replySuggestions(CHAT_1, true, "opus");
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.event).toEqual({
@@ -241,14 +245,14 @@ describe("replySuggestions", () => {
 
   test("propagates message-read failures instead of caching silence", async () => {
     const { service, db } = makeService({ fetchError: "bluebubbles unavailable" });
-    const result = await service.replySuggestions("chat-1", null, false, "opus");
+    const result = await service.replySuggestions(CHAT_1, false, "opus");
     expect(result).toEqual({ ok: false, error: "bluebubbles unavailable" });
     expect(db.getSuggestionCache("chat-1", "opus")).toBeNull();
   });
 
   test("returns no reply without calling a model when Milad sent last", async () => {
     const { service } = makeService({ messages: [makeMessage({ guid: "m5", isFromMe: true })] });
-    const result = await service.replySuggestions("chat-1", null, false, "terra");
+    const result = await service.replySuggestions(CHAT_1, false, "terra");
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.noReply).toBe(true);
@@ -266,7 +270,7 @@ describe("replySuggestions", () => {
         ? { ok: false, error: { kind: "provider", message: "quota", status: 429, retryAfterMs: 60_000 } }
         : { ok: true, value: suggestionSet("what time works?") };
     };
-    const result = await service.replySuggestions("chat-1", null, true, "opus");
+    const result = await service.replySuggestions(CHAT_1, true, "opus");
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.servedModel).toBe("terra");
@@ -283,7 +287,7 @@ describe("replySuggestions", () => {
       calls++;
       return { ok: false, error: { kind: "shared", message: "gateway down", status: 503, retryAfterMs: null } };
     };
-    const result = await service.replySuggestions("chat-1", null, true, "opus");
+    const result = await service.replySuggestions(CHAT_1, true, "opus");
     expect(result).toEqual({ ok: false, error: "gateway down" });
     expect(calls).toBe(1);
   });
@@ -295,12 +299,24 @@ describe("identify", () => {
       messages: [makeMessage()],
       reply: '{"name":"Sarah Chen","confidence":"medium","reasoning":"talks about AUF"}',
     });
-    const result = await service.identify("chat-1", "+15551234567", null);
+    const result = await service.identify(CHAT_1);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.name).toBe("Sarah Chen");
       expect(result.value.confidence).toBe("medium");
     }
+  });
+
+  test("asks about the conversation's first participant under the name Convex knows", async () => {
+    const { service, prompts } = makeService({
+      messages: [makeMessage()],
+      participants: [{ address: "+15559876543", name: "Sam Ortiz" }, { address: "+15551234567", name: null }],
+      reply: '{"name":"Sam Ortiz","confidence":"high","reasoning":"contact"}',
+    });
+    expect((await service.identify(CHAT_1)).ok).toBe(true);
+    expect(prompts[0]).toContain("+15559876543");
+    expect(prompts[0]).toContain("Sam Ortiz");
+    expect(await makeService({ participants: [] }).service.identify(CHAT_1)).toEqual({ ok: false, error: "no participant address" });
   });
 });
 
@@ -308,15 +324,15 @@ describe("Convex suggestion commands", () => {
   test("keeps separate model caches and bypasses only the selected cache on refresh", async () => {
     let generations = 0;
     const { service, db } = makeService({ messages: [makeMessage({ text: "when works?" })], onGenerate: () => { generations++; } });
-    await service.replySuggestions("chat-1", "Sarah", false, "opus");
-    await service.replySuggestions("chat-1", "Sarah", false, "terra");
+    await service.replySuggestions(CHAT_1, false, "opus");
+    await service.replySuggestions(CHAT_1, false, "terra");
     expect(generations).toBe(2);
     expect(db.getSuggestionCache("chat-1", "opus")).not.toBeNull();
     const terra = db.getSuggestionCache("chat-1", "terra");
     expect(terra).not.toBeNull();
-    await service.replySuggestions("chat-1", "Sarah", false, "opus");
+    await service.replySuggestions(CHAT_1, false, "opus");
     expect(generations).toBe(2);
-    await service.replySuggestions("chat-1", "Sarah", true, "opus");
+    await service.replySuggestions(CHAT_1, true, "opus");
     expect(generations).toBe(3);
     expect(db.getSuggestionCache("chat-1", "terra")).toEqual(terra);
   });
@@ -324,7 +340,7 @@ describe("Convex suggestion commands", () => {
   test("returns stale and skips caching when the anchor changes during generation", async () => {
     const messages = [makeMessage({ text: "when works?" })];
     const { service, db } = makeService({ messages, onGenerate: () => { messages.push(makeMessage({ guid: "m2", text: "actually never mind" })); } });
-    const result = await service.replySuggestions("chat-1", "Sarah", false, "opus");
+    const result = await service.replySuggestions(CHAT_1, false, "opus");
     expect(result).toMatchObject({ ok: true, value: { stale: true, basedOnMessageGuid: "m1" } });
     expect(db.getSuggestionCache("chat-1", "opus")).toBeNull();
   });
@@ -332,31 +348,31 @@ describe("Convex suggestion commands", () => {
   test("a clear fences in-flight generation and clears learning across chats and models", async () => {
     let clear = () => {};
     const { service, db } = makeService({ messages: [makeMessage({ text: "when works?" })], onGenerate: () => clear() });
-    await service.replySuggestions("chat-1", "Sarah", false, "terra");
-    await service.replySuggestions("chat-2", "Sarah", false, "opus");
-    service.recordSuggestionFeedback("chat-1", feedback(), "feedback-1");
+    await service.replySuggestions(CHAT_1, false, "terra");
+    await service.replySuggestions(CHAT_2, false, "opus");
+    service.recordSuggestionFeedback(CHAT_1, feedback(), "feedback-1");
     clear = () => service.clearSuggestionLearning("clear-1");
-    const result = await service.replySuggestions("chat-1", "Sarah", true, "opus");
+    const result = await service.replySuggestions(CHAT_1, true, "opus");
     expect(result).toMatchObject({ ok: true, value: { stale: true } });
     expect(db.getSuggestionCache("chat-1", "opus")).toBeNull();
     expect(db.getSuggestionCache("chat-1", "terra")).toBeNull();
     expect(db.getSuggestionCache("chat-2", "opus")).toBeNull();
     expect(db.listSuggestionFeedback()).toEqual([]);
-    service.recordSuggestionFeedback("chat-1", feedback(), "feedback-2");
+    service.recordSuggestionFeedback(CHAT_1, feedback(), "feedback-2");
     service.clearSuggestionLearning("clear-1");
     expect(db.listSuggestionFeedback()).toHaveLength(1);
   });
 
   test("rejects abandoned lineage and deduplicates text and reaction feedback after restart", () => {
     const { service, db } = makeService({ messages: [] });
-    expect(service.recordSuggestionFeedback("chat-1", { ...feedback(), finalText: "pizza delivery arrived" }, "abandoned")).toEqual({ ok: false, error: "suggestion attribution was abandoned" });
+    expect(service.recordSuggestionFeedback(CHAT_1, { ...feedback(), finalText: "pizza delivery arrived" }, "abandoned")).toEqual({ ok: false, error: "suggestion attribution was abandoned" });
     expect(db.listSuggestionFeedback()).toEqual([]);
-    expect(service.recordSuggestionFeedback("chat-1", feedback(), "feedback-1").ok).toBe(true);
+    expect(service.recordSuggestionFeedback(CHAT_1, feedback(), "feedback-1").ok).toBe(true);
     const restarted = makeService({ db, messages: [] }).service;
-    expect(restarted.recordSuggestionFeedback("chat-1", feedback(), "feedback-1").ok).toBe(true);
+    expect(restarted.recordSuggestionFeedback(CHAT_1, feedback(), "feedback-1").ok).toBe(true);
     const reaction = { ...feedback(), suggestion: { ...feedback().suggestion, kind: "reaction" as const, reaction: "like" as const } };
-    restarted.recordReactionFeedback("chat-1", reaction, "reaction-1");
-    restarted.recordReactionFeedback("chat-1", reaction, "reaction-1");
+    restarted.recordReactionFeedback(CHAT_1, reaction, "reaction-1");
+    restarted.recordReactionFeedback(CHAT_1, reaction, "reaction-1");
     expect(db.listSuggestionFeedback()).toHaveLength(2);
   });
 });

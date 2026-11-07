@@ -355,7 +355,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       case "deleteChat":
         if (payload.chatGuid !== chatGuid) throw new FixtureError("Chat alias is not in this conversation", 400);
         accept(await commands.deleteChat(payload.chatGuid));
-        db.deleteSuggestionFeedbackForChat(payload.chatGuid);
+        db.deleteSuggestionLearningFor([payload.chatGuid]);
         deletedChats.add(payload.chatGuid);
         break;
       case "createFaceTimeLink": {

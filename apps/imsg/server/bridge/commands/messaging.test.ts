@@ -8,7 +8,7 @@ import { FakeIngest } from "../fake-ingest";
 import { MessageWriter } from "../live";
 import { ReconcileBridge } from "../reconcile";
 import { messagingHandlers } from "./messaging";
-import type { CommandContext } from "./types";
+import type { IMessageContext } from "./types";
 
 const CHAT = "iMessage;-;+15550001111";
 const GROUP = "iMessage;+;group";
@@ -29,8 +29,8 @@ function harness(chatGuid = CHAT, privateApi = true) {
   const commands = new ChatCommands(bb, names);
   const ingest = new FakeIngest();
   const writer = new MessageWriter({ bb, db, ingest });
-  const context: CommandContext = { chatGuid, commands, writer, signal: new AbortController().signal,
-    row: { clientKey: "key" } as CommandContext["row"], withLeaseRenewal: (work) => work() };
+  const context: IMessageContext = { chatGuid, commands, writer, signal: new AbortController().signal,
+    row: { clientKey: "key" } as IMessageContext["row"], withLeaseRenewal: (work) => work() };
   return { bb, db, commands, ingest, writer, context, raw };
 }
 
@@ -133,7 +133,7 @@ test("deleteChat removes feedback and the requested alias and does not reappear 
   spyOn(h.bb, "queryChats").mockImplementation(async (...args) => deleted ? { ok: true, value: [] } : originalChats(...args));
   spyOn(h.bb, "queryMessages").mockImplementation(async (...args) => deleted ? { ok: true, value: [{ ...h.raw, chats: [] }] } : originalMessages(...args));
   spyOn(h.bb, "deleteChat").mockImplementation(async () => { deleted = true; return { ok: true, value: undefined }; });
-  const feedback = spyOn(h.db, "deleteSuggestionFeedbackForChat");
+  const feedback = spyOn(h.db, "deleteSuggestionLearningFor");
   await h.writer.refreshChats();
   const post = h.ingest.post.bind(h.ingest);
   const deletions: string[] = [];
@@ -143,7 +143,7 @@ test("deleteChat removes feedback and the requested alias and does not reappear 
   }) as typeof h.ingest.post;
   expect(await messagingHandlers.deleteChat.execute(h.context, { kind: "deleteChat", chatGuid: CHAT })).toEqual({ kind: "deleteChat", ok: true });
   expect(deletions).toEqual([CHAT]);
-  expect(feedback).toHaveBeenCalledWith(CHAT);
+  expect(feedback).toHaveBeenCalledWith([h.context.row.conversationId, CHAT]);
   expect(h.writer.conversationIds.has(CHAT)).toBe(false);
   h.ingest.calls.length = 0;
   const bridge = new ReconcileBridge(h.writer, { dbPath: "/nonexistent/overlay", bbUrl: "test", convexSiteUrl: "test" }, { chatDbPath: "/nonexistent/chat.db" });

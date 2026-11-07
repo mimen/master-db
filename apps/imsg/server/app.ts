@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { BlueBubbles } from "./bluebubbles";
 import { startBridge } from "./bridge";
 import { createAiHandlers } from "./bridge/commands/ai";
-import type { ConvexIngest } from "./bridge/convex-ingest";
+import { ConvexIngest } from "./bridge/convex-ingest";
 import type { Config } from "./config";
 import { registerConvexTokenRoute, type ConvexAuthClient } from "./convex-token";
 import { registerDesktopReleaseRoutes } from "./desktop-version";
@@ -12,7 +12,6 @@ import { OverlayDb } from "./db";
 import { IdentityMirror } from "./identity-mirror";
 import { IdentitySync } from "./identity-sync";
 import { NameResolver } from "./name-resolver";
-import { buildThread } from "./map";
 import { ChatCommands } from "./commands";
 import { WhisperService } from "./whisper";
 import { precompressedStatic } from "./compression";
@@ -87,21 +86,14 @@ const identitySync = new IdentitySync(bb, config, () => void identity.refresh())
 const whisper = new WhisperService(config.whisper, bb, db);
 
 const gateway = new Gateway(config.ai);
+const convexReads = deps.bridgeIngest ?? new ConvexIngest(config);
 const ai = deps.ai ?? new AiService({
   config: config.ai,
   db,
   gateway,
-  fetchMessages: async (chatGuid) => {
-    const result = await bb.chatMessages(chatGuid, { limit: 60, sort: "DESC" });
-    return result.ok
-      ? { ok: true, value: buildThread(result.value, chatGuid, names) }
-      : result;
-  },
-  fetchMessageWithReactions: async (chatGuid, messageGuid) => {
-    const result = await bb.messageWithReactions(messageGuid);
-    if (!result.ok) return result;
-    const message = buildThread(result.value, chatGuid, names).find((item) => item.guid === messageGuid);
-    return message ? { ok: true, value: message } : { ok: false, error: "reaction target not found" };
+  fetchThread: async (conversationId) => {
+    try { return { ok: true, value: await convexReads.post("aiThread", { conversationId }) }; }
+    catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
   },
   recentOutboundText: async () => {
     const result = await bb.queryMessages({ limit: 200, offset: 0, from: "me" });
@@ -148,7 +140,7 @@ const commaBridge = startBridge({ config, bb, db, now, commands,
       whisperAvailable: status.available, ...(status.available ? {} : { whisperDetail: status.detail }) };
   },
   suggestions: { ai },
-  handlers: createAiHandlers({ ai, refreshContacts: () => identity.refresh(), lookupName: (address) => names.lookup(address), now }),
+  handlers: createAiHandlers({ ai, whisper, now }),
   today: { gateway, profile: () => loadProfile(config.ai.vaultPath) } });
 
 // ------------------------------------------------------------------- routes

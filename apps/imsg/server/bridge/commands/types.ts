@@ -1,29 +1,50 @@
-import type { CommandResult, CommaOutboxPayload } from "../../../../../convex/schema/comma/validators";
+import type {
+  AiKind, CommandResult, CommaOutboxPayload, CoreMessagingKind, IMessageOnlyKind, LegacyTriageKind,
+} from "../../../../../convex/schema/comma/validators";
 import type { ChatCommands } from "../../commands";
+import type { ConvexIngest } from "../convex-ingest";
 import type { OutboxRow } from "../outbox";
 import type { MessageWriter } from "../live";
 
 export type CommandKind = CommaOutboxPayload["kind"];
+/** The kinds the iMessage lane executes: every messaging kind, iMessage's own, and the legacy triage kinds it refuses. */
+export type IMessageKind = CoreMessagingKind | IMessageOnlyKind | LegacyTriageKind;
 export type ResultFor<K extends CommandKind> = Extract<CommandResult, { kind: K }>;
-export interface CommandContext {
-  /** Null only for createChat and clearSuggestionLearning. */
-  chatGuid: string | null;
+
+interface LaneContext {
   row: OutboxRow;
-  commands: ChatCommands;
-  writer: MessageWriter;
   signal: AbortSignal;
   /** Starts periodic renewal, also for a handler that opts in dynamically. */
   withLeaseRenewal<T>(work: () => Promise<T>): Promise<T>;
 }
-export interface CommandHandler<K extends CommandKind> {
-  longRunning?: boolean;
-  execute(context: CommandContext, payload: Extract<CommaOutboxPayload, { kind: K }>): Promise<ResultFor<K>>;
+export interface IMessageContext extends LaneContext {
+  /** Null only for createChat. */
+  chatGuid: string | null;
+  commands: ChatCommands;
+  writer: MessageWriter;
 }
-export type HandlerMap = { [K in CommandKind]: CommandHandler<K> };
+/** Model work reads and writes Convex by conversation and never reaches BlueBubbles. */
+export interface AiContext extends LaneContext {
+  /** Null only for clearSuggestionLearning. */
+  conversationId: OutboxRow["conversationId"] | null;
+  ingest: Pick<ConvexIngest, "post">;
+}
 
-export function requireChat(context: CommandContext): string {
+export interface CommandHandler<K extends CommandKind, C = K extends AiKind ? AiContext : IMessageContext> {
+  longRunning?: boolean;
+  execute(context: C, payload: Extract<CommaOutboxPayload, { kind: K }>): Promise<ResultFor<K>>;
+}
+export type IMessageHandlers = { [K in IMessageKind]: CommandHandler<K> };
+export type AiHandlers = { [K in AiKind]: CommandHandler<K> };
+export type HandlerMap = IMessageHandlers & AiHandlers;
+
+export function requireChat(context: IMessageContext): string {
   if (!context.chatGuid) throw new Error("Command requires a conversation");
   return context.chatGuid;
+}
+export function requireConversation(context: AiContext): NonNullable<AiContext["conversationId"]> {
+  if (!context.conversationId) throw new Error("Command requires a conversation");
+  return context.conversationId;
 }
 export function accept(result: { ok: boolean; error?: string }): void {
   if (!result.ok) throw new Error(result.error ?? "BlueBubbles operation failed");

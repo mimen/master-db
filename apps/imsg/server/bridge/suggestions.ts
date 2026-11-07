@@ -114,7 +114,7 @@ export class SuggestionsBridge {
     if (!chat || !this.isLatest(message) || message.isSpam ||
       (SUGGESTION_PRECOMPUTE.directMessagesOnly && (chat.isGroup || chat.participants.length !== 1)) ||
       (SUGGESTION_PRECOMPUTE.knownContactsOnly && !chat.participants[0]?.name?.trim())) return;
-    const cached = await this.deps.ai.cachedReplySuggestions?.(message.chatGuid, message.guid, "opus");
+    const cached = await this.deps.ai.cachedReplySuggestions?.(message.conversationId, message.guid, "opus");
     let result = cached;
     if (!result) {
       this.resetDay();
@@ -125,7 +125,7 @@ export class SuggestionsBridge {
       this.generatedToday++;
       this.lastAt = this.now();
       this.saveBudget();
-      const generated = await this.deps.ai.replySuggestions(message.chatGuid, chat.displayName, false, "opus");
+      const generated = await this.deps.ai.replySuggestions(message.conversationId, false, "opus");
       if (!generated.ok) throw new Error(generated.error);
       result = generated.value;
     }

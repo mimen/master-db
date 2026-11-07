@@ -56,7 +56,7 @@ function seedOverlay(): void {
     if (!last || last.isFromMe) continue;
     for (const selectedModel of ["opus", "terra"] as const) {
       db.setSuggestionCache({
-        chat_guid: chat.guid,
+        conversation_id: chat.guid,
         selected_model: selectedModel,
         anchor_guid: last.guid,
         recipe_version: 3,
