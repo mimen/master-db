@@ -109,7 +109,8 @@ export function SyncDialog({ isOpen, onClose }: SyncDialogProps) {
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [isOpen, onClose, isSyncing, handleSync])
 
-  const formatSyncTime = (timestamp: string) => {
+  const formatSyncTime = (timestamp: string | undefined) => {
+    if (!timestamp) return { relative: "Never", absolute: "" }
     const date = new Date(timestamp)
     return {
       relative: formatDistanceToNow(date, { addSuffix: true }),
