@@ -33,6 +33,9 @@ function conversation(overrides: Partial<ConvexConversation> = {}): ConvexConver
     updatedAt: 10,
     flags,
     unreadCount: 3,
+    known: true,
+    contactsAvailable: true,
+    searchNames: ["alex", "lex"],
     ...overrides,
   } as ConvexConversation;
 }
@@ -79,8 +82,13 @@ describe("conversationToChat", () => {
     const chat = conversationToChat(conversation());
     expect(chat.guid).toBe("iMessage;-;+15550001111");
     expect(chat.conversationId).toBe("c1");
-    expect(chat.known).toBe(true);
     expect(chat.flags.pinned).toBe(true);
+  });
+
+  test("takes known, contact availability and search names from Convex, not from participant names", () => {
+    const stranger = conversationToChat(conversation({ known: false, contactsAvailable: false, searchNames: [] }));
+    expect(stranger).toMatchObject({ known: false, contactsAvailable: false, searchNames: [] });
+    expect(conversationToChat(conversation())).toMatchObject({ known: true, contactsAvailable: true, searchNames: ["alex", "lex"] });
   });
 
   test("preserves Convex flags and unread counts, including a manual unread mark", () => {
