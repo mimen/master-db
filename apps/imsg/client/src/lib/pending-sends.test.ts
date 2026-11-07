@@ -1,19 +1,54 @@
-import { afterEach, describe, expect, jest, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test";
 import { getFunctionName } from "convex/server";
 import { NOT_SENT_AFTER_MS, NOT_SENT_ERROR } from "@shared/pending-send";
 import type { ChatSummary, ConversationId, Message } from "@shared/types";
 import type { CommandReceipt } from "./command-results";
-import { pendingSends, resetPendingSendsForTests, SendCancelledError, withPendingSends, type SendClient } from "./pending-sends";
+import { pendingSends, resetPendingSendsForTests, SendCancelledError, withPendingSends, type KeptSend, type SendClient, type SendStore } from "./pending-sends";
 
 const ALEX = "conv-alex" as ConversationId;
 const alex = { conversationId: ALEX, isGroup: false, imessage: { chatGuid: "iMessage;-;+16195550101" } };
 
+/** The device's storage, shared by every tab, with locks that queue the way navigator.locks does. */
+function device() {
+  const records = new Map<string, string>();
+  const locks = new Map<string, Promise<void>>();
+  const later = async () => { for (let i = 0; i < 3; i++) await Promise.resolve(); };
+  const store: SendStore = {
+    all: async () => [...records.values()].map((raw) => JSON.parse(raw) as KeptSend),
+    get: async (clientKey) => { const raw = records.get(clientKey); return raw ? JSON.parse(raw) as KeptSend : null; },
+    put: async (send) => { await later(); records.set(send.bubble.clientKey!, JSON.stringify(send)); },
+    drop: async (clientKey) => { await later(); records.delete(clientKey); },
+    lock: (name, hold) => {
+      const run = (locks.get(name) ?? Promise.resolve()).then(hold);
+      locks.set(name, run.catch(() => undefined));
+      return run;
+    },
+  };
+  return {
+    store,
+    records,
+    /** Another live tab owning `clientKey`'s send; calling the result closes that tab. */
+    otherTabHolds(clientKey: string): () => void {
+      let close = () => {};
+      void store.lock(`comma-send-${clientKey}`, () => new Promise<void>((release) => { close = release; }));
+      return () => close();
+    },
+  };
+}
+
+let disk = device();
+beforeEach(() => {
+  disk = device();
+  resetPendingSendsForTests(disk.store);
+});
 afterEach(() => {
-  resetPendingSendsForTests();
+  resetPendingSendsForTests(disk.store);
   jest.useRealTimers();
 });
 
-const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
+const flush = async () => { for (let i = 0; i < 50; i++) await Promise.resolve(); };
+/** The tab closes and opens again on the same device: memory and locks go, storage stays. */
+const reload = async () => { await flush(); resetPendingSendsForTests(disk.store); };
 
 /** An in-memory outbox with the Convex functions pendingSends calls, and a connection the test flips. */
 function outbox(connected = true) {
@@ -205,5 +240,141 @@ describe("withPendingSends", () => {
     expect(withPendingSends(shownByConvex, new Map([["a" as ConversationId, [bubble]]]))).toBe(shownByConvex);
     const older = [chat("a", 1)];
     expect(withPendingSends(older, new Map([["a" as ConversationId, [{ ...bubble, guid: "REAL", sendState: undefined }]]]))).toBe(older);
+  });
+});
+
+describe("a send kept on the device", () => {
+  test("is stored from the gesture until Convex has it, and then the device lets it go", async () => {
+    const box = outbox(false);
+    void pendingSends.send(alex, { text: "hi" }, box.client).catch(() => undefined);
+    await flush();
+    const key = keyOf();
+    expect([...disk.records.keys()]).toEqual([key]);
+    box.setOnline(true);
+    await flush();
+    expect(box.calls).toEqual([`comma/outbox:enqueue:${key}`]);
+    expect([...disk.records.keys()]).toEqual([]);
+  });
+
+  test("a tab waiting behind this one gets the lock only after the record is gone, so it never sends it too", async () => {
+    const box = outbox(false);
+    void pendingSends.send(alex, { text: "hi" }, box.client).catch(() => undefined);
+    await flush();
+    const key = keyOf();
+    const found: unknown[] = [];
+    void disk.store.lock(`comma-send-${key}`, async () => { found.push(await disk.store.get(key)); });
+    box.setOnline(true);
+    await flush();
+    expect(found).toEqual([null]);
+  });
+
+  test("an offline send survives a reload with its key and time, and reconnect sends exactly one copy", async () => {
+    const offline = outbox(false);
+    void pendingSends.send(alex, { text: "hi" }, offline.client).catch(() => undefined);
+    await flush();
+    const before = pendingSends.read(ALEX)[0]!;
+    await reload();
+    expect(pendingSends.read(ALEX)).toEqual([]);
+
+    const box = outbox(false);
+    await pendingSends.restore(box.client);
+    await flush();
+    expect(pendingSends.read(ALEX).map((m) => [m.guid, m.clientKey, m.dateCreated, m.sendState]))
+      .toEqual([[before.guid, before.clientKey, before.dateCreated, "queued"]]);
+    expect(box.calls).toEqual([]);
+    box.setOnline(true);
+    await flush();
+    expect(box.calls).toEqual([`comma/outbox:enqueue:${before.clientKey}`]);
+    box.finish(before.clientKey!, sent("REAL"));
+    await flush();
+    expect(shown()).toEqual([["REAL", "landed"]]);
+    expect(disk.records.size).toBe(0);
+  });
+
+  test("a send that reached Convex just before the reload is not queued again: its key finds the same command", async () => {
+    const box = outbox(true);
+    let enqueued = false;
+    const enqueue = box.client.mutation.bind(box.client);
+    // The enqueue lands in Convex but the tab closes before its answer arrives.
+    box.client.mutation = (async (ref: never, args: never) => { enqueued = true; await enqueue(ref, args); return new Promise(() => {}); }) as never;
+    void pendingSends.send(alex, { text: "hi" }, box.client).catch(() => undefined);
+    await flush();
+    const key = keyOf();
+    expect(enqueued).toBe(true);
+    expect([...disk.records.keys()]).toEqual([key]);
+    await reload();
+
+    box.client.mutation = enqueue as never;
+    await pendingSends.restore(box.client);
+    await flush();
+    expect(box.rows.size).toBe(1);
+    box.finish(key, sent("REAL"));
+    await flush();
+    expect(shown()).toEqual([["REAL", "landed"]]);
+  });
+
+  test("cancel after a reload takes it back for good, and it never reaches Convex", async () => {
+    void pendingSends.send(alex, { text: "hi" }, outbox(false).client).catch(() => undefined);
+    await reload();
+    const box = outbox(false);
+    await pendingSends.restore(box.client);
+    await flush();
+    expect(await pendingSends.cancel(ALEX, pendingSends.read(ALEX)[0]!, box.client)).toBe(true);
+    await flush();
+    expect(shown()).toEqual([]);
+    expect(disk.records.size).toBe(0);
+    box.setOnline(true);
+    await reload();
+    await pendingSends.restore(box.client);
+    await flush();
+    expect(box.calls).toEqual([]);
+    expect(shown()).toEqual([]);
+  });
+
+  test("restored past its deadline it is Not sent and stays unsent on reconnect, until Retry sends it under its own key", async () => {
+    jest.useFakeTimers();
+    void pendingSends.send(alex, { text: "hi" }, outbox(false).client).catch(() => undefined);
+    await flush();
+    const key = keyOf();
+    await reload();
+    jest.advanceTimersByTime(NOT_SENT_AFTER_MS);
+    const box = outbox(true);
+    await pendingSends.restore(box.client);
+    await flush();
+    expect(shown()).toEqual([[`temp-${key}`, "notSent"]]);
+    expect(box.calls).toEqual([]);
+    await reload();
+    await pendingSends.restore(box.client);
+    await flush();
+    expect(shown()).toEqual([[`temp-${key}`, "notSent"]]);
+
+    const retried = pendingSends.retry(ALEX, pendingSends.read(ALEX)[0]!, box.client);
+    await flush();
+    expect(box.calls).toEqual([`comma/outbox:enqueue:${key}`]);
+    box.finish(key, sent("REAL"));
+    expect((await retried).guid).toBe("REAL");
+    await flush();
+    expect(disk.records.size).toBe(0);
+  });
+
+  test("a send another open tab owns stays that tab's; this tab adopts it only once that tab closes without sending it", async () => {
+    void pendingSends.send(alex, { text: "mine" }, outbox(false).client).catch(() => undefined);
+    void pendingSends.send(alex, { text: "theirs" }, outbox(false).client).catch(() => undefined);
+    await flush();
+    const [mine, theirs] = pendingSends.read(ALEX).map((m) => m.clientKey!);
+    await reload();
+    const closeMine = disk.otherTabHolds(mine!);
+    const closeTheirs = disk.otherTabHolds(theirs!);
+
+    const box = outbox(true);
+    await pendingSends.restore(box.client);
+    await flush();
+    expect(shown()).toEqual([]);
+    disk.records.delete(mine!);
+    closeMine();
+    closeTheirs();
+    await flush();
+    expect(pendingSends.read(ALEX).map((m) => m.text)).toEqual(["theirs"]);
+    expect(box.calls).toEqual([`comma/outbox:enqueue:${theirs}`]);
   });
 });
