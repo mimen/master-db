@@ -78,7 +78,7 @@ export function commaTools(deps: ToolDeps) {
       () => guarded(async () => text(JSON.stringify(await port.post("agentPeople", { conversationId }))))),
     tool("get_attachment", "Download an attachment from this thread into the scratch folder. Images are returned for you to see.", { guid: z.string() },
       (args) => guarded(async () => {
-        const attachment = await port.post("agentAttachment", { guid: args.guid });
+        const attachment = await port.post("agentAttachment", { conversationId, guid: args.guid });
         if (!attachment) throw new Error(`No attachment ${args.guid} in this thread`);
         if (!attachment.url) throw new Error(`Attachment ${args.guid} has not been copied to Comma's storage yet`);
         const { bytes, mime: served } = await download(deps, attachment.url);

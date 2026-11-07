@@ -121,9 +121,20 @@ describe("agentPersonContext", () => {
   });
 
   test("an address with no person still reads by that address", async () => {
-    const { read, crew } = await setup();
-    expect(await read({ conversationId: crew, address: STRANGER })).toMatchObject({
+    const { t, read } = await setup();
+    const withStranger = await t.run((ctx) => ctx.db.insert("comma_conversations", {
+      platform: "imessage", conversationKey: "g:stranger", primaryChatGuid: "g:stranger", chatGuids: [], displayName: "stored", isGroup: true,
+      participants: [{ address: STRANGER, name: null }, { address: SAM, name: null }], lastMessageAt: 1, isSpam: false, hasGroupPhoto: false, updatedAt: 1,
+    }));
+    expect(await read({ conversationId: withStranger, address: STRANGER })).toMatchObject({
       name: "(555) 000-9999", lines: [{ text: "who dis", kind: "dm", sender: "(555) 000-9999" }],
     });
+  });
+
+  test("refuses a person who is not in this conversation", async () => {
+    const { read, crew, strangerDm, personId } = await setup();
+    await expect(read({ conversationId: crew, address: STRANGER })).rejects.toThrow("not in this conversation");
+    await expect(read({ conversationId: strangerDm, personId })).rejects.toThrow("not in this conversation");
+    await expect(read({ conversationId: strangerDm, address: ALEX_EMAIL })).rejects.toThrow("not in this conversation");
   });
 });

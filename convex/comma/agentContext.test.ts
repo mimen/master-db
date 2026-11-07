@@ -108,11 +108,32 @@ test("agentPeople returns each participant with their CRM fields", async () => {
 });
 
 test("agentAttachment returns a storage URL with the file's name and type", async () => {
-  const { t } = await setup();
-  expect(await t.mutation(internal.comma.agentContext.agentAttachment, { guid: "att1" })).toEqual({
+  const { t, conversationId } = await setup();
+  expect(await t.mutation(internal.comma.agentContext.agentAttachment, { conversationId, guid: "att1" })).toEqual({
     url: expect.stringMatching(/^https?:/), name: "door.png", mime: "image/png",
   });
-  expect(await t.mutation(internal.comma.agentContext.agentAttachment, { guid: "nope" })).toBeNull();
+  expect(await t.mutation(internal.comma.agentContext.agentAttachment, { conversationId, guid: "nope" })).toBeNull();
+});
+
+test("agentAttachment returns null for another conversation's attachment", async () => {
+  const { t, conversationId } = await setup();
+  const otherId = await t.run(async (ctx) => {
+    const otherId = await ctx.db.insert("comma_conversations", {
+      conversationKey: "dm", primaryChatGuid: "other", chatGuids: ["other"], displayName: "Sam", isGroup: false,
+      participants: [{ address: SAM, name: null }], lastMessageAt: 1, isSpam: false, hasGroupPhoto: false, updatedAt: 1,
+    });
+    const storageId = await ctx.storage.store(new Blob(["pdf"], { type: "application/pdf" }));
+    // The attachment row claims this conversation; its message says otherwise, and the message wins.
+    await ctx.db.insert("comma_attachments", {
+      guid: "private", conversationId, messageGuid: "o1", isSticker: false, hideAttachment: false, isOnDisk: true, sourceVersion: 1,
+      originalStorageId: storageId, mimeType: "application/pdf", transferName: "lease.pdf",
+    });
+    await ctx.db.insert("comma_messages", message(otherId, "o1", 50, { attachmentGuids: ["private"], sender: { address: SAM, name: null } }));
+    return otherId;
+  });
+  expect(await t.mutation(internal.comma.agentContext.agentAttachment, { conversationId, guid: "private" })).toBeNull();
+  expect(await t.mutation(internal.comma.agentContext.agentAttachment, { conversationId: otherId, guid: "att1" })).toBeNull();
+  expect(await t.mutation(internal.comma.agentContext.agentAttachment, { conversationId: otherId, guid: "private" })).toMatchObject({ name: "lease.pdf" });
 });
 
 describe("aiThread", () => {
