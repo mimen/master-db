@@ -3,7 +3,7 @@ import type { GenericId } from "convex/values";
 import type { CommandReceipt, CommandResult } from "./command-results";
 import { UnknownCommandError } from "./command-results";
 import { runCommandVia, type ResultCommandClient, type CommandPayload } from "./convex-commands";
-import { createMessagingApi, enqueueTextSendVia, messagingCommandError } from "./messaging-api";
+import { createMessagingApi, messagingCommandError } from "./messaging-api";
 
 const message = { guid: "message", chatGuid: "chat", text: "sent", dateCreated: 1, dateRead: null, dateDelivered: null,
   isFromMe: true, service: "iMessage" as const, sender: null, attachments: [], mentions: [], special: null,
@@ -81,18 +81,4 @@ test("failed and unknown results never acknowledge a send, navigate, or report s
     }
     expect(succeeded).toBe(false);
   }
-});
-
-test("the immediate queue accepts mentions and preserves the supplied client key and reply part", async () => {
-  let queued: unknown;
-  const client: ResultCommandClient = {
-    query: async () => ({ _id: "conversation" }),
-    mutation: async (_ref, args) => { queued = args; return "command"; },
-    watchQuery: () => { throw new Error("must not wait for a receipt"); },
-  };
-  const body = { text: "Hi Alex", replyToGuid: "reply", replyToPart: 2, mentions: [{ start: 3, length: 4, address: "recipient" }] };
-  expect(await enqueueTextSendVia(client, "chat", "original-key", body)).toBe(true);
-  expect(queued).toEqual({ clientKey: "original-key", conversationId: "conversation", payload: { kind: "send", ...body } });
-  client.query = async () => null;
-  await expect(enqueueTextSendVia(client, "missing", "key", body)).rejects.toThrow("not mirrored");
 });

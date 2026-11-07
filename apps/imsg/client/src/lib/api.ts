@@ -1,7 +1,7 @@
 import { messageToMessage } from "./convex-adapters";
-import { commaApi, commaOutbox } from "./convex-api";
-import { runCommand, type CommandClient } from "./convex-commands";
-import { createMessagingApi, enqueueTextSendVia } from "./messaging-api";
+import { commaApi } from "./convex-api";
+import { runCommand } from "./convex-commands";
+import { createMessagingApi } from "./messaging-api";
 import { convexClient } from "./identity";
 import { searchMessages } from "./history-api";
 import { contactSearchArgs, identityApi } from "./identity-api";
@@ -14,7 +14,6 @@ import type {
   ContactSuggestion,
   Message,
   ScheduledMessage,
-  SendTextRequest,
   TranscriptState,
 } from "@shared/types";
 
@@ -28,9 +27,6 @@ async function scheduledChatGuid(id: number): Promise<string> {
 const messagingApi = createMessagingApi(runCommand);
 
 export const api = {
-  async enqueueTextSend(chatGuid: string, clientKey: string, body: SendTextRequest): Promise<boolean> {
-    return enqueueTextSendVia(convexClient as unknown as CommandClient, chatGuid, clientKey, body);
-  },
   sendText: messagingApi.sendText,
   contacts(q: string): Promise<Contact[]> {
     return convexClient.query(identityApi.searchContacts, contactSearchArgs(q));
