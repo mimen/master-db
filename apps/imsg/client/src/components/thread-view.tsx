@@ -439,7 +439,8 @@ export function ThreadView({
       };
       const isMine = (key: string) => message.reactions.some((r) => r.isFromMe && r.key === key);
       // The tray offers the route's reaction set from its platform profile, then my emoji reaction so it can be removed.
-      const named = react && conversation ? PROFILES[conversationRoute(conversation).platform].reactions : undefined;
+      const opened = conversationRef.current;
+      const named = react && opened ? PROFILES[conversationRoute(opened).platform].reactions : undefined;
       const myEmoji = message.reactions.find((r) => r.isFromMe && keyEmoji(r.key));
       const tapbacks = named
         ? [...named, ...(myEmoji ? [myEmoji.key] : [])].map((key) => {
@@ -535,7 +536,7 @@ export function ThreadView({
       ];
       if (actions.length > 0 || tapbacks) showSheet({ actions, tapbacks, emoji, tapbacksUnavailable: reasonOf(react), anchor });
     },
-    [can, conversation, conversationId, isGroup, pend, scrollToLatest, showSheet],
+    [can, conversationId, isGroup, pend, scrollToLatest, showSheet],
   );
 
   const desk = headerChat !== null;

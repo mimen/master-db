@@ -13,6 +13,7 @@ import { fromTapback, messageKey, reactionWrites, shownReactions } from "../../.
 import type { FixtureRouteControls } from "../../server/app";
 import { buildThread, isGenuineUnreadInbound, mapChat, mapMessage, type UnreadSummary } from "../../server/map";
 import { toConversationInputs, toMessageRow } from "../../server/bridge/mapper";
+import { BRIDGE_HEARTBEAT_MS } from "../../server/bridge/state";
 import { mapScheduledMessage } from "../../server/scheduled";
 import { ScheduledSendNow } from "../../server/scheduled-send-now";
 import { ChatCommands } from "../../server/commands";
@@ -156,7 +157,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
    * The Mini as the outbox sees it. While it is away a send stays queued, cancellable, until it comes back or the
    * Not sent deadline passes, as production's outbox holds it.
    */
-  const mini = { online: true, heartbeat: true, notSentAfterMs: NOT_SENT_AFTER_MS, held: new Map<string, { release: () => void; timer: ReturnType<typeof setTimeout> }>() };
+  const mini = { online: true, heartbeat: true, beatAt: new Date().getTime(), notSentAfterMs: NOT_SENT_AFTER_MS, held: new Map<string, { release: () => void; timer: ReturnType<typeof setTimeout> }>() };
   const strand = (clientKey: string, error: string) => {
     const receipt = receipts.get(clientKey);
     if (receipt) receipts.set(clientKey, { ...receipt, status: "failed", error, updatedAt: Date.now() });
@@ -512,8 +513,11 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return row ? { ...row, peerTyping: row.peerTyping && row.expiresAt > new Date().getTime() } : null;
     },
     "comma/bridgeState:bridgeState": async () => {
-      // On the wall clock the browser judges it by; a Mini that is away last beat ten minutes ago.
-      const lastSeenAt = new Date().getTime() - (mini.heartbeat ? 0 : 10 * 60_000);
+      // On the wall clock the browser judges it by, once a minute like the bridge, so a poll is not a new state.
+      // A Mini that is away last beat ten minutes ago.
+      const now = new Date().getTime();
+      if (mini.heartbeat && now - mini.beatAt >= BRIDGE_HEARTBEAT_MS) mini.beatAt = now;
+      const lastSeenAt = mini.beatAt - (mini.heartbeat ? 0 : 10 * 60_000);
       return { key: "mini", ...health(), ...miniAi(), whisperAvailable: false, whisperDetail: "Fixture transcription unavailable", lastSeenAt };
     },
     "comma/uploads:generateAttachmentUploadUrl": async () => "/__fixture/upload",
@@ -726,6 +730,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     if (body.notSentAfterMs !== undefined) mini.notSentAfterMs = body.notSentAfterMs ?? NOT_SENT_AFTER_MS;
     if (body.online !== undefined) mini.online = body.online;
     mini.heartbeat = body.heartbeat ?? mini.online;
+    if (mini.heartbeat) mini.beatAt = new Date().getTime();
     if (mini.online) releaseHeld();
     return c.json({ ok: true });
   });
@@ -749,7 +754,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   });
   return () => {
     for (const { timer } of mini.held.values()) clearTimeout(timer);
-    mini.held.clear(); mini.online = true; mini.heartbeat = true; mini.notSentAfterMs = NOT_SENT_AFTER_MS; sendPayloads.clear();
+    mini.held.clear(); mini.online = true; mini.heartbeat = true; mini.beatAt = new Date().getTime(); mini.notSentAfterMs = NOT_SENT_AFTER_MS; sendPayloads.clear();
     turns.clear(); names.reset(); agent.reset(); today.reset(); triage.reset(); latency.clear(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
     for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };
 }
