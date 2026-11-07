@@ -247,6 +247,14 @@ async function settleDelayedSend(page: Page) {
   await expect(page.getByTestId("thread-view").getByText(/^(Sent|Delivered|Read .*)$/)).toBeVisible();
 }
 
+/**
+ * Forward also closes the picker and opens another thread, the heaviest frame of these ratchets. On GitHub's
+ * macos-latest runner, 43c15e78 (before #61) measured 45 to 107 ms, median 67, over 9 runs (run 42419120618), where
+ * a laptop measures 24 to 30 ms, so the runner alone breaks 50 ms. 150 ms still fails a forward that waits for
+ * the 300 ms held send instead of showing on the click.
+ */
+const FORWARD_LIMIT_MS = process.env.CI ? 150 : 50;
+
 test("ratchet: a forwarded message is in the destination thread within 50 ms of the click", async ({ desk }) => {
   // A real bridge takes longer than a frame; the bare fixture can answer inside 50 ms.
   expect((await desk.request.post("/__fixture/send-timing", { data: { delayMs: 300 } })).ok()).toBe(true);
@@ -254,7 +262,7 @@ test("ratchet: a forwarded message is in the destination thread within 50 ms of 
   const jordan = await forwardToJordan(page);
   await timeToFrame(page, "pointerdown", FORWARDED);
   await jordan.click();
-  expect(await elapsedToFrame(page)).toBeLessThanOrEqual(50);
+  expect(await elapsedToFrame(page)).toBeLessThanOrEqual(FORWARD_LIMIT_MS);
   await settleDelayedSend(page);
 });
 
