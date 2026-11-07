@@ -132,6 +132,17 @@ describe("request shape", () => {
     expect(requests).toEqual([{ path: "/v1/messages", timeout: 600_000 }]);
   });
 
+  test("a call that outlives its deadline fails as a timeout, not a bare abort", async () => {
+    const server = Bun.serve({ port: 0, fetch: () => new Promise<Response>(() => {}) });
+    try {
+      const gateway = new Gateway({ ...config, gatewayUrl: `http://127.0.0.1:${server.port}` });
+      const result = await gateway.completeStructured("x", { type: "object" }, { model: "claude-opus-5", maxTokens: 10, timeoutMs: 50 });
+      expect(result).toEqual({ ok: false, error: { kind: "timeout", message: "model timed out after 0.05s", status: null, retryAfterMs: null } });
+    } finally {
+      server.stop(true);
+    }
+  });
+
   test("fast completions send no cache marker", async () => {
     const gateway = new Gateway(config);
     const bodies = capture(gateway);

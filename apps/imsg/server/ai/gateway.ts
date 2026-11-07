@@ -218,6 +218,8 @@ export class Gateway {
       const { usage } = response;
       return { ...parsed, usage: { input: usage.input_tokens + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0), output: usage.output_tokens } };
     } catch (error) {
+      // The SDK reports its caller's deadline as a bare "Request was aborted."
+      if (timeout.aborted) return failure("timeout", `model timed out after ${options.timeoutMs / 1000}s`, null, null);
       const parsed = failureFrom(error);
       if (
         structured &&
