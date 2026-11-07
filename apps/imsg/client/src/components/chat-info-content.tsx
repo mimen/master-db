@@ -25,10 +25,13 @@ import { useAddChatTag, useWhoIs } from "@/lib/identity";
 import { useLightbox } from "@/lib/lightbox";
 import { showToast } from "@/lib/toast";
 import type { ChatSummary, Contact, ContactSuggestion, ConversationId } from "@shared/types";
+import type { Support } from "@shared/platform-profile";
 import { formatAddress } from "@shared/address";
 import { useTypeRamp } from "@/hooks/use-type";
 import { useAiStatus } from "@/hooks/use-ai";
 import { useChatDirectory, useConversation } from "@/hooks/use-chat-directory";
+import { useRouteSupport } from "@/hooks/use-route-support";
+import { gated, reasonOf } from "@/lib/route-support";
 import { ChatAvatar, GroupPhotoAvatar, PersonAvatar } from "./avatar";
 import { ChatCrmSection } from "./chat-crm-section";
 import { useGuestLists } from "@/hooks/use-guest-lists";
@@ -71,6 +74,7 @@ export function ChatInfoContent({
   const openLightbox = useLightbox();
   const chats = useChatDirectory();
   const summary = useConversation(conversationId) ?? null;
+  const can = useRouteSupport(summary);
   const [fetched, setInfo] = useState<{
     displayName: string | null;
     isGroup: boolean;
@@ -159,16 +163,20 @@ export function ChatInfoContent({
       anchor,
       actions: [
         copyHandleAction(p.address),
-        {
+        ...gated(can("participants"), {
           label: "Remove from conversation",
           destructive: true,
           onPress: () =>
             runCommand(conversationId, { kind: "participant", address: p.address, action: "remove" }).then(load).catch((error: unknown) => showToast(messagingCommandError(error, `Couldn't remove ${p.name ?? formatAddress(p.address)}. Try again.`))),
-        },
+        }),
       ],
     });
   };
 
+  const rename = can("rename");
+  const members = can("participants");
+  const leave = can("leaveGroup");
+  const remove = can("deleteChat");
   const peer = info.isGroup ? null : info.participants[0];
   const peerName = peer ? peer.name ?? formatAddress(peer.address) : null;
   const crm = summary?.crm;
@@ -226,7 +234,7 @@ export function ChatInfoContent({
         <View style={styles.hero}>
           {summary ? <ChatAvatar chat={summary} size={64} /> : peer ? <PersonAvatar address={peer.address} name={peerName ?? ""} size={64} /> : <GroupPhotoAvatar conversationId={conversationId} size={64} />}
         </View>
-        {info.isGroup && renaming ? (
+        {rename?.ok && renaming ? (
           <View style={styles.renameRow}>
             <TextInput
               value={name}
@@ -248,11 +256,14 @@ export function ChatInfoContent({
           </View>
         ) : (
           <Pressable
-            accessibilityRole={info.isGroup ? "button" : undefined}
-            accessibilityLabel={info.isGroup ? "Rename group" : undefined}
-            disabled={!info.isGroup}
+            accessibilityRole={rename ? "button" : undefined}
+            accessibilityLabel={rename ? "Rename group" : undefined}
+            accessibilityHint={reasonOf(rename)}
+            accessibilityState={{ disabled: !rename?.ok }}
+            disabled={!rename}
             style={styles.titleRow}
             onPress={() => {
+              if (rename && !rename.ok) return showToast(rename.reason);
               if (!fetched) setName(info.displayName ?? "");
               setRenaming(true);
             }}
@@ -261,9 +272,10 @@ export function ChatInfoContent({
               {info.isGroup ? info.displayName || `${info.participants.length} people` : peerName ?? "Details"}
             </Text>
             {crm?.is_favorite && <Ionicons name="star" size={16} color={theme.text} accessibilityLabel="Favorite" />}
-            {info.isGroup && <Ionicons name="pencil" size={14} color={theme.icon} />}
+            {rename && <Ionicons name="pencil" size={14} color={rename.ok ? theme.icon : theme.disabled} />}
           </Pressable>
         )}
+        {reasonOf(rename) && <Text style={[styles.subtitle, { color: theme.textTertiary, fontSize: type.caption }]}>{reasonOf(rename)}</Text>}
         {info.isGroup ? (
           <Text style={[styles.subtitle, { color: theme.textSecondary, fontSize: type.secondary }]}>
             {`You and ${info.participants.length} ${info.participants.length === 1 ? "other" : "others"}`}
@@ -352,7 +364,7 @@ export function ChatInfoContent({
             title="Members"
             divider={theme.divider}
             labelColor={theme.textSecondary}
-            action={addingParticipant ? undefined : { label: "Add person", onPress: () => setAddingParticipant(true) }}
+            action={addingParticipant || !members ? undefined : { label: "Add person", unavailable: reasonOf(members), onPress: () => setAddingParticipant(true) }}
           >
             {info.participants.map((p) => {
               const service = contactService(p.address, chats);
@@ -465,24 +477,8 @@ export function ChatInfoContent({
         )}
 
         <View style={[styles.section, styles.danger, { borderTopColor: theme.divider }]}>
-          {info.isGroup && (
-            <Pressable
-              accessibilityRole="button"
-              style={({ hovered, pressed }) => [styles.dangerRow, (hovered || pressed) && { backgroundColor: theme.rowHover }]}
-              onPress={confirmLeave}
-            >
-              <Ionicons name="exit-outline" size={17} color={theme.destructive} />
-              <Text style={[styles.dangerText, { color: theme.destructive, fontSize: type.body }]}>Leave conversation</Text>
-            </Pressable>
-          )}
-          <Pressable
-            accessibilityRole="button"
-            style={({ hovered, pressed }) => [styles.dangerRow, (hovered || pressed) && { backgroundColor: theme.rowHover }]}
-            onPress={confirmDelete}
-          >
-            <Ionicons name="trash-outline" size={17} color={theme.destructive} />
-            <Text style={[styles.dangerText, { color: theme.destructive, fontSize: type.body }]}>Delete conversation</Text>
-          </Pressable>
+          {leave && <DangerRow icon="exit-outline" label="Leave conversation" support={leave} theme={theme} onPress={confirmLeave} />}
+          {remove && <DangerRow icon="trash-outline" label="Delete conversation" support={remove} theme={theme} onPress={confirmDelete} />}
           <Text style={[styles.dangerNote, { color: theme.textTertiary, fontSize: type.caption }]}>Removes it from Messages on all your devices.</Text>
         </View>
       </ScrollView>
@@ -498,26 +494,62 @@ function Section({
   children,
 }: {
   title: string;
-  action?: { label: string; onPress: () => void };
+  action?: { label: string; unavailable?: string; onPress: () => void };
   divider: string;
   labelColor: string;
   children: React.ReactNode;
 }) {
   const type = useTypeRamp();
+  const theme = useTheme();
   return (
     <View style={[styles.section, { borderTopColor: divider }]}>
       <View style={styles.sectionHead}>
         <Text accessibilityRole="header" style={[styles.sectionTitle, { color: labelColor, fontSize: type.secondary }]}>{title}</Text>
         {action && (
-          <Pressable accessibilityRole="button" accessibilityLabel={action.label} onPress={action.onPress} hitSlop={6}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={action.label}
+            accessibilityHint={action.unavailable}
+            accessibilityState={{ disabled: !!action.unavailable }}
+            onPress={() => action.unavailable ? showToast(action.unavailable) : action.onPress()}
+            hitSlop={6}
+          >
             {({ hovered, pressed }) => (
-              <Text style={[styles.sectionAction, { color: labelColor, fontSize: type.secondary }, (hovered || pressed) && { textDecorationLine: "underline" }]}>{action.label}</Text>
+              <Text style={[styles.sectionAction, { color: action.unavailable ? theme.disabled : labelColor, fontSize: type.secondary }, !action.unavailable && (hovered || pressed) && { textDecorationLine: "underline" }]}>{action.label}</Text>
             )}
           </Pressable>
         )}
       </View>
+      {action?.unavailable && <Text style={[styles.sectionNote, { color: theme.textTertiary, fontSize: type.caption }]}>{action.unavailable}</Text>}
       {children}
     </View>
+  );
+}
+
+/** A destructive row, greyed with the route's reason when it can't run here. */
+function DangerRow({ icon, label, support, theme, onPress }: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  support: Support;
+  theme: ThemeColors;
+  onPress: () => void;
+}) {
+  const type = useTypeRamp();
+  const color = support.ok ? theme.destructive : theme.disabled;
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityHint={reasonOf(support)}
+        accessibilityState={{ disabled: !support.ok }}
+        style={({ hovered, pressed }) => [styles.dangerRow, support.ok && (hovered || pressed) && { backgroundColor: theme.rowHover }]}
+        onPress={() => support.ok ? onPress() : showToast(support.reason)}
+      >
+        <Ionicons name={icon} size={17} color={color} />
+        <Text style={[styles.dangerText, { color, fontSize: type.body }]}>{label}</Text>
+      </Pressable>
+      {!support.ok && <Text style={[styles.dangerNote, { color: theme.textTertiary, fontSize: type.caption }]}>{support.reason}</Text>}
+    </>
   );
 }
 
@@ -633,6 +665,7 @@ const styles = StyleSheet.create({
   tagText: { fontSize: 12, fontWeight: "500" },
   tagInput: { minWidth: 60, paddingVertical: 0 },
   section: { borderTopWidth: 1, marginTop: 18, paddingBottom: 6, paddingTop: 14 },
+  sectionNote: { marginBottom: 8, marginTop: -4 },
   sectionHead: { alignItems: "baseline", flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
   sectionTitle: { fontWeight: "600" },
   sectionAction: { fontWeight: "500" },

@@ -34,6 +34,8 @@ export interface SuggestionSource {
   enabled: boolean;
   awaitingReply: boolean;
   reactionSuggestions: boolean;
+  /** Why the route can't react; a reaction suggestion's confirm then shows greyed with it. */
+  reactionUnavailable?: string;
   reactionPreview: (messageGuid: string) => string;
   /** Shows an intent on a server-held message at once; the returned rollback undoes it. */
   pend?: (messageGuid: string, edit: PendingEdit) => () => void;
@@ -54,7 +56,7 @@ const SKELETON_DELAY_MS = 600;
 
 export function useReplySuggestions(
   conversationId: ConversationId,
-  { enabled, awaitingReply, reactionSuggestions, reactionPreview, pend }: SuggestionSource,
+  { enabled, awaitingReply, reactionSuggestions, reactionUnavailable, reactionPreview, pend }: SuggestionSource,
 ): ReplySuggestionsState {
   const mode = useSuggestionMode();
   const selectedModel = useSuggestionModel();
@@ -145,6 +147,7 @@ export function useReplySuggestions(
       title: `${emoji}  ${target}`,
       actions: [{
         label: `React ${emoji}`,
+        ...(reactionUnavailable ? { disabled: true, note: reactionUnavailable } : {}),
         onPress: () => {
           const rollback = pend?.(suggestion.targetMessageGuid!, { kind: "react", type: suggestion.reaction!, remove: false });
           void runCommand(conversationId, {

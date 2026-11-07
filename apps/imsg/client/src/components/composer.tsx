@@ -49,6 +49,8 @@ import { useType } from "@/hooks/use-type";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { TriageGeometry } from "@/constants/triage-theme";
 import { useComposerDraft } from "@/hooks/use-composer-draft";
+import { useRouteSupport } from "@/hooks/use-route-support";
+import { gated } from "@/lib/route-support";
 import { HOVER_DIM, PRESS_DIM, Radii } from "@/constants/theme";
 import {
   browserFilesToAttachments,
@@ -72,7 +74,6 @@ interface ComposerProps {
   chat: Pick<ChatSummary, "conversationId" | "imessage">;
   isGroup: boolean;
   participants: Participant[];
-  privateApi: boolean;
   replyTo: Message | null;
   editing: Message | null;
   onClearReply: () => void;
@@ -286,7 +287,6 @@ export function Composer({
   chat,
   isGroup,
   participants,
-  privateApi,
   replyTo,
   editing,
   onClearReply,
@@ -324,6 +324,7 @@ export function Composer({
   const [scheduleAnchor, setScheduleAnchor] = useState<{ right: number; bottom: number } | null>(null);
   const containerRef = useRef<View>(null);
   const isSMS = conversationService(chat) === "SMS";
+  const can = useRouteSupport({ imessage: chat.imessage, isGroup });
   const loadRemoteDraft = useCallback((draft: string) => {
     setText(draft);
     setSelection({ start: draft.length, end: draft.length });
@@ -447,6 +448,7 @@ export function Composer({
   }, []);
 
   const setTyping = (active: boolean) => {
+    if (!can("typing")?.ok) return;
     const now = Date.now();
     if (typingActive.current === active && (!active || now - typingSentAt.current < 2500)) return;
     typingActive.current = active;
@@ -518,7 +520,7 @@ export function Composer({
   const send = async () => {
     const outgoing = trimMentionAnnotations(text, mentions);
     const trimmed = outgoing.text;
-    const outgoingMentions = isGroup && privateApi && !isSMS ? outgoing.mentions : [];
+    const outgoingMentions = can("mentions")?.ok ? outgoing.mentions : [];
     const staged = pendingRef.current;
     if (!trimmed && staged.length === 0) return;
     // Staged attachments guard themselves: replacePending empties pendingRef synchronously.
@@ -819,14 +821,15 @@ ${url}` : url;
     // Loaded on use, as in the agent pane, so neither surface pulls the pickers into the first visit.
     type Pickers = typeof import("@/lib/attachment-pickers");
     const pick = (name: keyof Pickers) => () => void import("@/lib/attachment-pickers").then((pickers) => pickers[name]()).then(stage);
-    const actions = [{ label: "Photo or Video Library", onPress: pick("pickPhotos") }];
-    if (Platform.OS !== "web") {
-      actions.unshift({ label: "Take Photo or Video", onPress: pick("takePhoto") });
-      actions.push({ label: "Paste Image", onPress: pick("pasteNativeImage") });
-    }
-    actions.push({ label: "Current Location", onPress: () => void addCurrentLocation() });
-    actions.push({ label: "Contact", onPress: () => void setContactPickerOpen(true) });
-    actions.push({ label: "File", onPress: pick("pickFiles") });
+    const media = can("attachments");
+    const actions = [
+      ...(Platform.OS !== "web" ? gated(media, { label: "Take Photo or Video", onPress: pick("takePhoto") }) : []),
+      ...gated(media, { label: "Photo or Video Library", onPress: pick("pickPhotos") }),
+      ...(Platform.OS !== "web" ? gated(media, { label: "Paste Image", onPress: pick("pasteNativeImage") }) : []),
+      { label: "Current Location", onPress: () => void addCurrentLocation() },
+      ...gated(can("contactCard"), { label: "Contact", onPress: () => void setContactPickerOpen(true) }),
+      ...gated(media, { label: "File", onPress: pick("pickFiles") }),
+    ];
     // Desktop: popover mounted at the + button (opens upward); mobile keeps the sheet.
     if (Platform.OS === "web" && typeof window !== "undefined" && window.innerWidth >= 768 && attachBtnRef.current) {
       attachBtnRef.current.measureInWindow((x, y) => showSheet({ actions, anchor: { x, y } }));
@@ -843,6 +846,11 @@ ${url}` : url;
 
   const startRecording = async () => {
     if (recordStartedAt.current !== null) return;
+    const voice = can("voiceMemo");
+    if (voice && !voice.ok) {
+      showToast(voice.reason);
+      return;
+    }
     try {
       const perm = await AudioModule.requestRecordingPermissionsAsync();
       if (!perm.granted) {
@@ -899,6 +907,11 @@ ${url}` : url;
   const openScheduleSheet = () => {
     const trimmed = text.trim();
     if (!trimmed || pending.length > 0) return;
+    const schedule = can("schedule");
+    if (schedule && !schedule.ok) {
+      showToast(schedule.reason);
+      return;
+    }
     const actions = [
       ...scheduleOptions().map((option) => ({
         label: option.label,

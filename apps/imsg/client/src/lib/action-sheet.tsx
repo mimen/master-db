@@ -50,6 +50,8 @@ interface SheetRequest {
   actions: SheetAction[];
   /** The tapback tray, floated above the actions. */
   tapbacks?: TrayTapback[];
+  /** Why the route can't react: the tray shows greyed with it. */
+  tapbacksUnavailable?: string;
   /** Desktop right-click: viewport coords to anchor a compact popover at. */
   anchor?: PopoverAnchor;
 }
@@ -137,7 +139,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
         ) : variant === "dialog" ? (
           <Pressable style={styles.dialogBackdrop} onPress={() => setRequest(null)}>
             {rendered?.tapbacks && (
-              <TapbackTray tapbacks={rendered.tapbacks} onDone={() => setRequest(null)} />
+              <TapbackTray tapbacks={rendered.tapbacks} unavailable={rendered.tapbacksUnavailable} onDone={() => setRequest(null)} />
             )}
             <Pressable
               style={[styles.dialog, { backgroundColor: theme.popBg, borderColor: theme.divider, boxShadow: theme.popShadow }]}
@@ -163,6 +165,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                   <Text style={[styles.dialogLabel, { color: actionColor(theme, action) }]}>
                     {action.label}
                   </Text>
+                  {action.note && <Text style={[styles.dialogNote, { color: theme.popTertiary }]}>{action.note}</Text>}
                 </Pressable>
               ))}
             </Pressable>
@@ -175,7 +178,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
           >
             {rendered?.tapbacks && (
               <View style={styles.sheetTray}>
-                <TapbackTray tapbacks={rendered.tapbacks} size="touch" onDone={() => setRequest(null)} />
+                <TapbackTray tapbacks={rendered.tapbacks} unavailable={rendered.tapbacksUnavailable} size="touch" onDone={() => setRequest(null)} />
               </View>
             )}
             <View style={[styles.sheetGroup, { backgroundColor: theme.popBg }]}>
@@ -206,6 +209,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                     >
                       {action.label}
                     </Text>
+                    {action.note && <Text style={[styles.actionNote, { color: theme.popTertiary }]}>{action.note}</Text>}
                   </Pressable>
                 </View>
               ))}
@@ -247,7 +251,8 @@ function PopoverMenu({
 }) {
   const c = useTheme();
   const { anchor, tapbacks, actions } = request;
-  const width = tapbacks ? Math.max(POP_W, TRAY_W) : POP_W;
+  // ponytail: the greyed tray's reason is measured by estimate; measure it if long reasons clip at the edge.
+  const width = tapbacks ? Math.max(POP_W, TRAY_W + (request.tapbacksUnavailable ? 160 : 0)) : POP_W;
   const requestedLeft = anchor.align === "end" ? anchor.x - POP_W + 18 : anchor.x;
   const left = Math.max(8, Math.min(requestedLeft, winW - width - 8));
   // Anchors near the bottom (composer attach) open upward.
@@ -256,7 +261,7 @@ function PopoverMenu({
   const presented = presentActions(actions);
   return (
     <View style={[styles.popoverStack, { left }, place]}>
-      {tapbacks && <TapbackTray tapbacks={tapbacks} onDone={onDone} />}
+      {tapbacks && <TapbackTray tapbacks={tapbacks} unavailable={request.tapbacksUnavailable} onDone={onDone} />}
       {actions.length > 0 && (
         <View role="menu" style={[styles.menuCard, { backgroundColor: c.popBg, boxShadow: c.popShadow }]}>
           {actions.map((action, i) => {
@@ -381,6 +386,10 @@ const styles = StyleSheet.create({
   dialogLabel: {
     fontSize: 15,
   },
+  dialogNote: {
+    fontSize: 12,
+    paddingBottom: 4,
+  },
   sheetWrap: {
     alignSelf: "center",
     gap: 8,
@@ -412,6 +421,11 @@ const styles = StyleSheet.create({
   },
   actionLabel: {
     fontSize: 20,
+    textAlign: "center",
+  },
+  actionNote: {
+    fontSize: 13,
+    paddingBottom: 6,
     textAlign: "center",
   },
   cancelButton: {

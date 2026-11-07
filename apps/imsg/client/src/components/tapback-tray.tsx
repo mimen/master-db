@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Reanimated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
 import Svg, { Circle, G, Path } from "react-native-svg";
 import type { TapbackType } from "@shared/types";
@@ -7,6 +7,7 @@ import { Springs } from "@/constants/springs";
 import { useTheme } from "@/hooks/use-theme";
 import { focusRing, focusVisible, type InteractionState } from "@/components/ui/interaction";
 import { trayKey } from "@/lib/tapbacks";
+import { showToast } from "@/lib/toast";
 
 export interface TrayTapback {
   type: TapbackType;
@@ -70,9 +71,12 @@ export function TapbackGlyph({ type, size, color }: { type: TapbackType; size: n
 export function TapbackTray({
   tapbacks,
   size = "compact",
+  unavailable,
   onDone,
 }: {
   tapbacks: readonly TrayTapback[];
+  /** Why this conversation can't react. The tray stays, greyed with the reason, and a pick only repeats it. */
+  unavailable?: string;
   /** `touch` is the phone sheet's 44pt target; `compact` the desktop popover's. */
   size?: "compact" | "touch";
   onDone: () => void;
@@ -82,6 +86,10 @@ export function TapbackTray({
   const shown = useSharedValue(reduceMotion ? 1 : 0);
   const buttons = useRef<(View | null)[]>([]);
   const pick = (tapback: TrayTapback) => {
+    if (unavailable) {
+      showToast(unavailable);
+      return;
+    }
     onDone();
     tapback.onPress();
   };
@@ -127,6 +135,7 @@ export function TapbackTray({
     <Reanimated.View
       role="toolbar"
       aria-label="Tapbacks"
+      aria-disabled={unavailable ? true : undefined}
       style={[styles.tray, { backgroundColor: theme.popBg, boxShadow: theme.popShadow }, entrance]}
     >
       {tapbacks.map((tapback, i) => (
@@ -137,25 +146,33 @@ export function TapbackTray({
           }}
           accessibilityRole="button"
           accessibilityLabel={tapback.active ? `Remove ${tapback.label}` : tapback.label}
+          accessibilityHint={unavailable}
+          accessibilityState={{ disabled: !!unavailable }}
           aria-selected={tapback.active}
           onPress={() => pick(tapback)}
           style={(state: InteractionState) => [
             button,
-            tapback.active
+            tapback.active && !unavailable
               ? { backgroundColor: theme.accent }
               : (state.hovered || state.pressed) && { backgroundColor: theme.popSelected },
             state.pressed && { transform: [{ scale: 0.9 }] },
             focusVisible(state) && focusRing(theme),
           ]}
         >
-          <TapbackGlyph type={tapback.type} size={glyph} color={tapback.active ? theme.onAccent : theme.icon} />
+          <TapbackGlyph type={tapback.type} size={glyph} color={unavailable ? theme.disabled : tapback.active ? theme.onAccent : theme.icon} />
         </Pressable>
       ))}
+      {unavailable && <Text style={[styles.reason, { color: theme.popTertiary }]}>{unavailable}</Text>}
     </Reanimated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  reason: {
+    alignSelf: "center",
+    fontSize: 11.5,
+    paddingHorizontal: 8,
+  },
   tray: {
     borderRadius: 999,
     flexDirection: "row",

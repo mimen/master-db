@@ -33,7 +33,6 @@ import { openChatInfo } from "@/lib/chat-info";
 import { openPersonPane } from "@/lib/person-pane";
 import type { Message, Participant } from "@shared/types";
 import { useMessages, type JumpTarget } from "@/hooks/use-messages";
-import { usePrivateApi } from "@/hooks/use-health";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
 import { CardShadow, HOVER_DIM, Radii } from "@/constants/theme";
@@ -58,6 +57,8 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import { TriageGeometry } from "@/constants/triage-theme";
 import { toolbarTitle } from "@/lib/header-font";
 import { TypingIndicator } from "./typing-indicator";
+import { useRouteSupport } from "@/hooks/use-route-support";
+import { gated, reasonOf } from "@/lib/route-support";
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
 const UNSEND_WINDOW_MS = 2 * 60 * 1000;
@@ -135,7 +136,6 @@ export function ThreadView({
 }: ThreadViewProps) {
   const theme = useTheme();
   const type = useType();
-  const privateApi = usePrivateApi();
   const aiStatus = useAiStatus();
   const agentEnabled = useAgentEnabled();
   const showSheet = useActionSheet();
@@ -146,6 +146,7 @@ export function ThreadView({
   // Read at tap time, so a new last message does not hand every row a new long-press handler.
   const conversationRef = useRef(conversation);
   conversationRef.current = conversation;
+  const can = useRouteSupport(conversation);
   const { messages, loading, failed, retry: retryLoad, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, remove, pend, newestMessages } =
     useMessages(conversationId, jumpTarget);
   messagesRef.current = messages;
@@ -421,7 +422,8 @@ export function ThreadView({
     (message: Message, anchor?: { x: number; y: number }) => {
       const mine = message.isFromMe;
       const age = Date.now() - message.dateCreated;
-      const tapbacks = privateApi
+      const react = can("react");
+      const tapbacks = react
         ? TAPBACKS.map(({ type, label }) => {
             const active = message.reactions.some((r) => r.isFromMe && r.type === type);
             return {
@@ -439,8 +441,10 @@ export function ThreadView({
             };
           })
         : undefined;
+      const edit = can("edit");
+      const unsend = can("unsend");
       const actions = [
-        ...(privateApi ? [{ label: "Reply", onPress: () => setReplyTo(message) }] : []),
+        ...gated(can("reply"), { label: "Reply", onPress: () => setReplyTo(message) }),
         ...(message.text
           ? [
               {
@@ -483,16 +487,15 @@ export function ThreadView({
             ]
           : []),
         // While a send is confirming, show Edit and Undo send inert rather than hiding them.
-        ...(mine && privateApi && message.text && message.pending
-          ? [{ label: "Edit", disabled: true, separatorBefore: true, onPress: () => undefined },
-            { label: "Undo send", disabled: true, note: "Available once it's sent", onPress: () => undefined }]
+        ...(mine && message.text && message.pending
+          ? [...gated(edit, { label: "Edit", disabled: true, separatorBefore: true, onPress: () => undefined }),
+            ...gated(unsend, { label: "Undo send", disabled: true, note: "Available once it's sent", onPress: () => undefined })]
           : []),
-        ...(mine && privateApi && message.text && age < EDIT_WINDOW_MS && !message.pending
-          ? [{ label: "Edit", note: formatWindowRemaining(EDIT_WINDOW_MS, age), separatorBefore: true, onPress: () => setEditing(message) }]
+        ...(mine && message.text && age < EDIT_WINDOW_MS && !message.pending
+          ? gated(edit, { label: "Edit", note: formatWindowRemaining(EDIT_WINDOW_MS, age), separatorBefore: true, onPress: () => setEditing(message) })
           : []),
-        ...(mine && privateApi && age < UNSEND_WINDOW_MS && !message.pending
-          ? [
-              {
+        ...(mine && age < UNSEND_WINDOW_MS && !message.pending
+          ? gated(unsend, {
                 label: "Undo send",
                 note: formatWindowRemaining(UNSEND_WINDOW_MS, age),
                 // Edit is hidden past its window or on a text-less message, so this opens the block.
@@ -505,14 +508,12 @@ export function ThreadView({
                     showToast("Couldn't unsend. Messages can only be unsent for about 2 minutes.");
                   });
                 },
-              },
-            ]
+              })
           : []),
         // "Remove for you" — deletes locally (Mac's Messages DB), any age,
         // either side. The tool for clearing failed/Not Delivered sends.
-        ...(privateApi && !message.pending
-          ? [
-              {
+        ...(!message.pending
+          ? gated(can("deleteMessage"), {
                 label: "Delete for Me",
                 separatorBefore: true,
                 destructive: true,
@@ -523,13 +524,12 @@ export function ThreadView({
                     showToast("Couldn't delete the message. Try again.");
                   });
                 },
-              },
-            ]
+              })
           : []),
       ];
-      if (actions.length > 0 || tapbacks) showSheet({ actions, tapbacks, anchor });
+      if (actions.length > 0 || tapbacks) showSheet({ actions, tapbacks, tapbacksUnavailable: reasonOf(react), anchor });
     },
-    [conversationId, isGroup, pend, privateApi, replaceTemp, scrollToLatest, showSheet, upsert],
+    [can, conversationId, isGroup, pend, replaceTemp, scrollToLatest, showSheet, upsert],
   );
 
   const desk = headerChat !== null;
@@ -747,13 +747,13 @@ export function ThreadView({
             enabled: aiStatus?.suggestions === true && !editing,
             awaitingReply,
             reactionSuggestions: aiStatus?.reactionSuggestions === true,
+            reactionUnavailable: reasonOf(can("react")),
             reactionPreview,
           }}
           strip={<StateStrip conversationId={conversationId} messages={messages} historyComplete={!hasMore} />}
           chat={conversation}
           isGroup={isGroup}
           participants={participants}
-          privateApi={privateApi}
           replyTo={replyTo}
           editing={editing}
           onClearReply={() => setReplyTo(null)}
