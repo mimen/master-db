@@ -7,6 +7,11 @@ export type SuggestionSlots =
   /** On-demand mode before the first request. */
   | { kind: "offer" }
   | { kind: "failed" }
+  /**
+   * The first answer is not in yet: an empty row holds the alternates' height, so their arrival does not
+   * push the thread up under a click aimed at a bubble.
+   */
+  | { kind: "pending" }
   /** A slow model call: placeholders hold the alternates row. */
   | { kind: "loading" }
   | {
@@ -36,7 +41,8 @@ export function suggestionSlots(input: {
   if (!input.enabled || !input.awaitingReply || input.mode === "off") return { kind: "hidden" };
   if (input.mode === "on-demand" && !input.resolved && !loading && !input.failed) return { kind: "offer" };
   if (input.failed && !loading) return { kind: "failed" };
-  if (loading && !stale) return input.showSkeleton ? { kind: "loading" } : { kind: "hidden" };
+  if (loading && !stale) return input.showSkeleton ? { kind: "loading" } : { kind: "pending" };
+  if (!input.resolved && !input.failed) return { kind: "pending" };
   if (suggestions.length === 0 && !input.hasEvent) return { kind: "hidden" };
   const ghost = stale ? null : suggestions.find((suggestion) => suggestion.kind === "text") ?? null;
   return {

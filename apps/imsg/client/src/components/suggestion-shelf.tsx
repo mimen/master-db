@@ -233,6 +233,7 @@ export function SuggestionAlternates({ state, wide }: { state: ReplySuggestionsS
 
   if (slots.kind === "hidden") return null;
   const Row = wide ? DeskRow : PhoneRow;
+  if (slots.kind === "pending") return <Row>{null}</Row>;
 
   if (slots.kind === "offer") {
     return <Row><Alternate wide={wide} icon="sparkles" label="Suggest replies" accent onPress={load} /></Row>;
