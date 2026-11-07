@@ -267,8 +267,15 @@ describe("custom-emoji tapbacks", () => {
     const thread = buildThread([emojiTapback({}), target], chat, names);
     expect(thread.map((m) => m.guid)).toEqual([target.guid]);
     expect(thread[0]?.reactions).toEqual([
-      { key: "😍", emoji: "😍", isFromMe: false, senderName: "Marla", senderAddress: "+16195550101" },
+      { key: "emoji:😍", emoji: "😍", isFromMe: false, senderName: "Marla", senderAddress: "+16195550101" },
     ]);
+  });
+
+  test("a sender's newer tapback replaces their earlier one, whichever kind; others keep theirs", () => {
+    const like = emojiTapback({ guid: "R0", dateCreated: 1500, text: "Liked “Hahaha”", associatedMessageType: "like" });
+    const mine = emojiTapback({ guid: "R3", dateCreated: 1600, text: "Reacted 🔥 to “Hahaha”", isFromMe: true, handle: null });
+    const thread = buildThread([emojiTapback({}), mine, like, target], chat, names);
+    expect(thread[0]?.reactions.map((r) => [r.key, r.isFromMe])).toEqual([["emoji:🔥", true], ["emoji:😍", false]]);
   });
 
   test("reload drops a 2006 once the same sender's 3006 removes it", () => {

@@ -35,7 +35,7 @@ export interface AttachmentSummary {
 }
 
 export interface Reaction {
-  /** The reaction's identity on its platform, and what a react command sends: an iMessage tapback name ("love") or an emoji tapback's emoji. */
+  /** The reaction's identity on its platform, and what a react command sends: an iMessage tapback name ("love"), or `emoji:` and an emoji tapback's emoji ("emoji:😍"). */
   key: string;
   /** How it looks, when it is a Unicode emoji; absent when it could not be read. */
   emoji?: string;

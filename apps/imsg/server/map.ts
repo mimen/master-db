@@ -2,6 +2,7 @@ import type { BBAttachment, BBChat, BBHandle, BBMessage } from "./bb-types";
 import type { ChatSummary, Message, Participant, Reaction, SpecialContent } from "../shared/types";
 import type { MentionAnnotation } from "../shared/mentions";
 import { formatAddress } from "../shared/address";
+import { tapbackKey } from "../shared/platform-profile";
 import type { CrmData, NameSource } from "./name-resolver";
 
 /** SMS (green bubble) messages come over a non-iMessage service. */
@@ -133,10 +134,9 @@ interface FoldedTapback {
   who: Participant | null;
 }
 
-/** A classic tapback is keyed by its name; an emoji tapback by its emoji, or "emoji" when it could not be read. */
 function reactionOf({ tapback, isFromMe, who }: FoldedTapback): Reaction {
   return {
-    key: tapback.type === "emoji" ? tapback.emoji ?? "emoji" : tapback.type,
+    key: tapbackKey(tapback.type, tapback.emoji),
     ...(tapback.emoji ? { emoji: tapback.emoji } : {}),
     isFromMe,
     senderName: who?.name ?? null,
@@ -144,10 +144,14 @@ function reactionOf({ tapback, isFromMe, who }: FoldedTapback): Reaction {
   };
 }
 
-/** `a` is the incoming tapback; one without a parsed emoji matches any emoji from the same sender. */
-function sameReaction(a: FoldedTapback, b: FoldedTapback): boolean {
+/**
+ * What `a`, the incoming tapback, replaces. A sender keeps one reaction per message, so an add replaces all of
+ * theirs; a removal only its own, where one without a parsed emoji matches any emoji.
+ */
+function replaces(a: FoldedTapback, b: FoldedTapback): boolean {
   const sameSender = a.isFromMe ? b.isFromMe : !b.isFromMe && a.who?.address === b.who?.address;
-  return sameSender && a.tapback.type === b.tapback.type && (!a.tapback.emoji || a.tapback.emoji === b.tapback.emoji);
+  if (!sameSender || !a.tapback.remove) return sameSender;
+  return a.tapback.type === b.tapback.type && (!a.tapback.emoji || a.tapback.emoji === b.tapback.emoji);
 }
 
 function isGroupEvent(m: BBMessage): boolean {
@@ -274,7 +278,7 @@ export function buildThread(
     const target = stripPartPrefix(m.associatedMessageGuid);
     const address = m.handle?.address ?? null;
     const folded = { tapback, isFromMe: m.isFromMe === true, who: address ? { address, name: contacts.lookup(address) } : null };
-    const rest = (tapbacks.get(target) ?? []).filter((r) => !sameReaction(folded, r));
+    const rest = (tapbacks.get(target) ?? []).filter((r) => !replaces(folded, r));
     tapbacks.set(target, tapback.remove ? rest : [...rest, folded]);
   }
 

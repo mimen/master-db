@@ -31,7 +31,7 @@ test("desktop: right-click opens the tray, the keyboard picks Like, and the reac
   await bubble.click({ button: "right" });
 
   const tray = page.getByRole("toolbar", { name: "Tapbacks" });
-  await expect(tray.getByRole("button")).toHaveText(["", "", "", "", "", ""]);
+  await expect(tray.getByRole("button")).toHaveText(["", "", "", "", "", "", ""]);
   await expect(tray.getByRole("button", { name: "Love", exact: true })).toBeFocused();
   await page.keyboard.press("ArrowRight");
   await expect(tray.getByRole("button", { name: "Like", exact: true })).toBeFocused();

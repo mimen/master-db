@@ -1,3 +1,4 @@
+import { keyEmoji } from "@shared/platform-profile";
 import type { Message } from "@shared/types";
 
 /** What the user asked to happen to a message the server already holds, shown until the server shows it too. */
@@ -26,8 +27,11 @@ function reflects(message: Message | undefined, edit: PendingEdit): boolean {
 function apply(message: Message, edit: PendingEdit): Message | null {
   switch (edit.kind) {
     case "react": {
-      const others = message.reactions.filter((r) => !(r.isFromMe && r.key === edit.key));
-      return { ...message, reactions: edit.remove ? others : [...others, { key: edit.key, isFromMe: true, senderName: null, senderAddress: null }] };
+      // I keep one reaction per message, so an add replaces whichever I had.
+      const others = message.reactions.filter((r) => !(r.isFromMe && (!edit.remove || r.key === edit.key)));
+      const emoji = keyEmoji(edit.key);
+      const mine = { key: edit.key, ...(emoji ? { emoji } : {}), isFromMe: true, senderName: null, senderAddress: null };
+      return { ...message, reactions: edit.remove ? others : [...others, mine] };
     }
     case "retract": return null;
     case "edit": return { ...message, text: edit.text, edited: true };

@@ -55,10 +55,8 @@ test("reactions: react, change, remove; a peer's reactions come and go", async (
   await expect.poll(mine).toEqual(["like"]);
   await page.screenshot({ path: join(evidence, "2-react-like.png") });
 
-  // Change: the tray toggles each tapback, so a change is Laugh on and Like off.
+  // Change: as in Messages, a new tapback replaces my earlier one.
   await pick("Laugh");
-  await expect.poll(mine).toEqual(["like", "laugh"]);
-  await pick("Remove Like");
   await expect.poll(mine).toEqual(["laugh"]);
   await expect(chip("Like")).toHaveCount(0);
   await expect(chip("Laugh")).toBeVisible();
@@ -70,23 +68,22 @@ test("reactions: react, change, remove; a peer's reactions come and go", async (
   await expect.poll(mine).toEqual([]);
   await expect(chip("Laugh")).toHaveCount(0);
 
-  // Alex adds a second reaction, then takes back the love.
+  // Alex's emphasize replaces their love, then Alex takes it back.
   expect((await tapback("needs-1", "emphasize")).ok()).toBe(true);
   await expect(chip("Emphasize")).toBeVisible();
-  await expect(chip("Love")).toBeVisible();
-  expect((await tapback("needs-1", "-love")).ok()).toBe(true);
   await expect(chip("Love")).toHaveCount(0);
-  await expect(chip("Emphasize")).toBeVisible();
-  stored.peerAfterRemoval = await reactionsOn(MINE);
-  expect(stored.peerAfterRemoval).toEqual([expect.objectContaining({ key: "emphasize", emoji: "‼️", isFromMe: false, senderName: "Alex Rivera" })]);
-  await page.screenshot({ path: join(evidence, "4-peer-new-form.png") });
+  stored.peerReplaced = await reactionsOn(MINE);
+  expect(stored.peerReplaced).toEqual([expect.objectContaining({ key: "emphasize", emoji: "‼️", isFromMe: false, senderName: "Alex Rivera" })]);
+  await page.screenshot({ path: join(evidence, "4-peer-replaced.png") });
+  expect((await tapback("needs-1", "-emphasize")).ok()).toBe(true);
+  await expect(chip("Emphasize")).toHaveCount(0);
+  expect(await reactionsOn(MINE)).toEqual([]);
 
   writeFileSync(join(evidence, "aria.txt"), await thread.ariaSnapshot());
   writeFileSync(join(evidence, "side-effects.json"), JSON.stringify({ enqueued, stored }, null, 2));
   expect(enqueued).toEqual([
     expect.objectContaining({ kind: "react", messageGuid: "needs-2", reaction: "like", remove: false }),
     expect.objectContaining({ kind: "react", messageGuid: "needs-2", reaction: "laugh", remove: false }),
-    expect.objectContaining({ kind: "react", messageGuid: "needs-2", reaction: "like", remove: true }),
     expect.objectContaining({ kind: "react", messageGuid: "needs-2", reaction: "laugh", remove: true }),
   ]);
 });

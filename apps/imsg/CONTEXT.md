@@ -45,11 +45,16 @@ A message id is unique within its platform; other tables name a message by its *
 _Avoid_: guid (as a cross-platform id)
 
 **Reaction**:
-One sender's reaction to one message: a key (an iMessage tapback name like `love`, or an emoji tapback's emoji;
-what a react command sends), an optional emoji, and the sender. `comma_reactions` holds each sender's newest state
-per message and key, removals included, so an older event arriving late never undoes a newer one. Ingest turns an
-iMessage tapback into a reaction and stores no message row for it. The tray offers the route's reaction set from its
-platform profile.
+One sender's reaction to one message: a key (an iMessage tapback name like `love`, or `emoji:` and an emoji
+tapback's emoji, as `emoji:😍`; what a react command sends), an optional emoji, and the sender. As in Messages, a
+sender has one reaction per message: a new one replaces theirs, whatever its kind. `comma_reactions` holds each
+sender's newest state per message and key, removals included, so an older event arriving late never undoes a newer
+one; a sender's replaced reactions stay as removals. Rows written before keys were namespaced read as `emoji:`, and
+reads show only a sender's newest. Ingest turns an iMessage tapback into a reaction and stores no message row for it.
+The tray offers the route's reaction set from its platform profile, and an emoji picker where the route has
+`emojiReact`. Sending an emoji also needs the Mac's BlueBubbles to say it can (`custom_emoji_reactions` in its server
+info, proposed upstream and absent through 1.9.12); the bridge state carries it as `emojiReactions`, and the picker
+greys with the reason until then.
 _Avoid_: tapback (outside iMessage-specific code), tapback row
 
 **Triage state**:

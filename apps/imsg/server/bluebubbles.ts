@@ -66,6 +66,7 @@ export interface MessageQueryOptions {
 export interface BlueBubbles {
   connect(): Promise<Result<BBServerInfo>>;
   readonly hasPrivateApi: boolean;
+  readonly hasEmojiReactions: boolean;
   queryChats(limit?: number, offset?: number): Promise<Result<BBChat[]>>;
   chatMessages(
     chatGuid: string,
@@ -124,6 +125,7 @@ function tempGuid(): string {
 
 export class BlueBubblesClient implements BlueBubbles {
   private privateApi = false;
+  private emojiReactions = false;
   private socket: Socket | null = null;
   private listeners = new Set<(event: BBEvent) => void>();
 
@@ -252,12 +254,19 @@ export class BlueBubblesClient implements BlueBubbles {
 
   async connect(): Promise<Result<BBServerInfo>> {
     const info = await this.get<BBServerInfo>("/api/v1/server/info");
-    if (info.ok) this.privateApi = info.value.private_api === true;
+    if (info.ok) {
+      this.privateApi = info.value.private_api === true;
+      this.emojiReactions = info.value.custom_emoji_reactions === true;
+    }
     return info;
   }
 
   get hasPrivateApi(): boolean {
     return this.privateApi;
+  }
+
+  get hasEmojiReactions(): boolean {
+    return this.emojiReactions;
   }
 
   private sendMethod(): "private-api" | "apple-script" {
@@ -376,7 +385,7 @@ export class BlueBubblesClient implements BlueBubbles {
     return this.sendAttachmentForm(chatGuid, filename, bytes, { isAudioMessage: "false" });
   }
 
-  /** reaction: love|like|dislike|laugh|emphasize|question, "-"-prefixed to remove. Private API only. */
+  /** reaction: love|like|dislike|laugh|emphasize|question, or an emoji where hasEmojiReactions; "-"-prefixed to remove. Private API only. */
   react(chatGuid: string, messageGuid: string, reaction: string, partIndex = 0): Promise<Result<unknown>> {
     return this.post("/api/v1/message/react", {
       chatGuid,

@@ -9,7 +9,7 @@ import { fixtureChatGuid, fixtureConversationId } from "../../shared/fixture-ids
 import { profileRoute, unsupportedReason } from "../../../../convex/comma/routeSupport";
 import { messageService } from "../../shared/platform-profile";
 import { NOT_SENT_AFTER_MS, NOT_SENT_ERROR, pendingGuid } from "../../shared/pending-send";
-import { fromTapback, messageKey, sameReaction, shownReactions, supersedes } from "../../../../convex/comma/reactions";
+import { fromTapback, messageKey, reactionWrites, shownReactions } from "../../../../convex/comma/reactions";
 import type { FixtureRouteControls } from "../../server/app";
 import { buildThread, isGenuineUnreadInbound, mapChat, mapMessage, type UnreadSummary } from "../../server/map";
 import { toConversationInputs, toMessageRow } from "../../server/bridge/mapper";
@@ -56,13 +56,13 @@ export function conversationRow(chat: ChatSummary): Conversation {
  */
 function reactionsByGuid(raw: BBMessage[], chatGuid: string, names: FixtureIdentity): (guid: string) => CommaReaction[] {
   const tapbacks = raw.filter((m) => m.associatedMessageGuid && m.associatedMessageType);
-  const states: CommaReactionState[] = [];
+  let states: CommaReactionState[] = [];
   for (const m of [...tapbacks].sort((a, b) => (a.dateCreated ?? 0) - (b.dateCreated ?? 0))) {
     const event = fromTapback(toMessageRow(m, id(chatGuid), 0));
     if (!event) continue;
-    const at = states.findIndex((state) => state.targetKey === event.targetKey && sameReaction(state, event));
-    if (at < 0) states.push(event);
-    else if (supersedes(event, states[at])) states[at] = event;
+    for (const { row, state } of reactionWrites(states.filter((s) => s.targetKey === event.targetKey), event)) {
+      states = row ? states.map((s) => (s === row ? state : s)) : [...states, state];
+    }
   }
   return (guid) => shownReactions(states.filter((state) => state.targetKey === messageKey("imessage", guid)))
     .map((r) => ({ ...r, senderName: r.senderAddress ? names.lookup(r.senderAddress) : null }));

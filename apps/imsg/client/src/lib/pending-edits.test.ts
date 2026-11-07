@@ -30,6 +30,11 @@ describe("applyPendingEdits", () => {
     expect(shown?.reactions.map((r) => [r.key, r.isFromMe])).toEqual([["love", false], ["laugh", false], ["like", true]]);
   });
 
+  test("a new reaction of mine replaces my earlier one, and an emoji reaction carries its emoji", () => {
+    const [shown] = applyPendingEdits([message({ reactions: [theirLove, myLike] })], edits(["m1", { kind: "react", key: "emoji:🔥", remove: false }]));
+    expect(shown?.reactions).toEqual([theirLove, { ...myLike, key: "emoji:🔥", emoji: "🔥" }]);
+  });
+
   test("removing my reaction leaves another sender's reaction of the same type", () => {
     const theirLike = { ...theirLove, key: "like" };
     const [shown] = applyPendingEdits([message({ reactions: [theirLike, myLike] })], edits(["m1", { kind: "react", key: "like", remove: true }]));

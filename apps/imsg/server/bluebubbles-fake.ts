@@ -22,6 +22,8 @@ export interface FakeSeed {
   contacts?: BBContact[];
   /** Whether the fake reports the private API as available (defaults to true). */
   privateApi?: boolean;
+  /** Whether the fake reports it can send emoji tapbacks (defaults to false, as BlueBubbles 1.9.12 does). */
+  emojiReactions?: boolean;
   scheduledMessages?: BBScheduledMessage[];
   faceTimeLink?: string;
   attachments?: Record<string, { meta: BBAttachment; bytes: Uint8Array; status?: number }>;
@@ -34,6 +36,7 @@ export interface FakeSeed {
  */
 export class FakeBlueBubbles implements BlueBubbles {
   private readonly privateApi: boolean;
+  private readonly emojiReactions: boolean;
   private readonly chatMeta = new Map<
     string,
     { displayName: string | null; participants: NonNullable<BBChat["participants"]> }
@@ -60,6 +63,7 @@ export class FakeBlueBubbles implements BlueBubbles {
 
   constructor(seed: FakeSeed) {
     this.privateApi = seed.privateApi ?? true;
+    this.emojiReactions = seed.emojiReactions ?? false;
     this.contactList = seed.contacts ?? [];
     this.faceTimeLink = seed.faceTimeLink ?? "https://facetime.apple.com/join#fake";
     this.attachmentFiles = seed.attachments ?? {};
@@ -141,12 +145,16 @@ export class FakeBlueBubbles implements BlueBubbles {
   connect(): Promise<Result<BBServerInfo>> {
     return Promise.resolve({
       ok: true,
-      value: { private_api: this.privateApi, server_version: "fake" },
+      value: { private_api: this.privateApi, custom_emoji_reactions: this.emojiReactions, server_version: "fake" },
     });
   }
 
   get hasPrivateApi(): boolean {
     return this.privateApi;
+  }
+
+  get hasEmojiReactions(): boolean {
+    return this.emojiReactions;
   }
 
   queryChats(limit = 1000, offset = 0): Promise<Result<BBChat[]>> {

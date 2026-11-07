@@ -175,6 +175,12 @@ const { app, dispose } = await createApp({
       return c.json({ ok: true, message });
     });
 
+    fixtureApp.post("/__fixture/emoji-reactions", async (c) => {
+      const body = (await c.req.json()) as { enabled?: boolean | null };
+      bb.setEmojiReactions(body.enabled ?? null);
+      return c.json({ ok: true });
+    });
+
     fixtureApp.post("/__fixture/typing", async (c) => {
       const body = (await c.req.json()) as { chatGuid?: string; display?: boolean };
       if (!body.chatGuid || typeof body.display !== "boolean") {

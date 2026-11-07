@@ -1,20 +1,28 @@
-import { useEffect, useRef } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import Reanimated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
 import Svg, { Circle, G, Path } from "react-native-svg";
+import { keyEmoji } from "@shared/platform-profile";
 import type { TapbackType } from "@shared/types";
 import { Springs } from "@/constants/springs";
 import { useTheme } from "@/hooks/use-theme";
 import { focusRing, focusVisible, type InteractionState } from "@/components/ui/interaction";
-import { trayKey } from "@/lib/tapbacks";
+import { firstEmoji, QUICK_EMOJI, trayKey } from "@/lib/tapbacks";
 import { showToast } from "@/lib/toast";
 
 export interface TrayTapback {
-  type: TapbackType;
+  /** The reaction key it sends: a tapback name, or `emoji:` and an emoji. */
+  key: string;
   /** Spoken name, e.g. "Love". */
   label: string;
   active: boolean;
   onPress: () => void;
+}
+
+/** The tray's emoji picker. `unavailable` greys its button with the reason. */
+export interface TrayEmoji {
+  onPick: (emoji: string) => void;
+  unavailable?: string;
 }
 
 const ROUND = { strokeLinecap: "round", strokeLinejoin: "round", fill: "none" } as const;
@@ -62,19 +70,34 @@ export function TapbackGlyph({ type, size, color }: { type: TapbackType; size: n
   );
 }
 
+function SmileyPlus({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
+      <G {...ROUND} stroke={color} strokeWidth={1.9}>
+        <Path d="M20.4 12.6A8.4 8.4 0 1 1 11.4 3.6" />
+        <Path d="M8.2 14.4c.9 1.3 2.2 2 3.8 2s2.9-.7 3.8-2M18.5 2.8v6M15.5 5.8h6" />
+      </G>
+      <Circle cx={9} cy={10} r={1.2} fill={color} />
+      <Circle cx={15} cy={10} r={1.2} fill={color} />
+    </Svg>
+  );
+}
+
 /**
- * The tapback tray: one capsule of the six tapbacks. It springs up from below, and Reduce
- * Motion lands it at rest. On the web the arrows move between tapbacks, Enter picks, and
- * Escape closes. No per-button `entering` animation: Reanimated hides those nodes until
- * the animation starts, and the browser drops the opening focus() on a hidden button.
+ * The tapback tray: one capsule of the route's tapbacks, my emoji reaction when I have one, and a button that
+ * opens the emoji picker. It springs up from below, and Reduce Motion lands it at rest. On the web the arrows
+ * move between buttons, Enter picks, and Escape closes. No per-button `entering` animation: Reanimated hides
+ * those nodes until the animation starts, and the browser drops the opening focus() on a hidden button.
  */
 export function TapbackTray({
   tapbacks,
+  emoji,
   size = "compact",
   unavailable,
   onDone,
 }: {
   tapbacks: readonly TrayTapback[];
+  emoji?: TrayEmoji;
   /** Why this conversation can't react. The tray stays, greyed with the reason, and a pick only repeats it. */
   unavailable?: string;
   /** `touch` is the phone sheet's 44pt target; `compact` the desktop popover's. */
@@ -85,17 +108,30 @@ export function TapbackTray({
   const reduceMotion = useReducedMotion();
   const shown = useSharedValue(reduceMotion ? 1 : 0);
   const buttons = useRef<(View | null)[]>([]);
-  const pick = (tapback: TrayTapback) => {
-    if (unavailable) {
-      showToast(unavailable);
+  const [picking, setPicking] = useState(false);
+  const emojiUnavailable = unavailable ?? emoji?.unavailable;
+  const count = tapbacks.length + (emoji ? 1 : 0);
+  const pick = (index: number) => {
+    const tapback = tapbacks[index];
+    const reason = tapback ? unavailable : emojiUnavailable;
+    if (reason) {
+      showToast(reason);
+      return;
+    }
+    if (!tapback) {
+      setPicking(true);
       return;
     }
     onDone();
     tapback.onPress();
   };
-  const keyState = useRef({ tapbacks, pick, onDone });
+  const pickEmoji = (value: string) => {
+    onDone();
+    emoji?.onPick(value);
+  };
+  const keyState = useRef({ tapbacks, count, picking, pick, onDone });
   useEffect(() => {
-    keyState.current = { tapbacks, pick, onDone };
+    keyState.current = { tapbacks, count, picking, pick, onDone };
   });
 
   useEffect(() => {
@@ -110,13 +146,14 @@ export function TapbackTray({
     // Enter and Escape act on the tray instead of the conversation list.
     const onKey = (event: KeyboardEvent): void => {
       const s = keyState.current;
+      if (s.picking && event.key !== "Escape") return;
       const focused = nodes().findIndex((node) => node === document.activeElement);
-      const result = trayKey(event.key, focused, s.tapbacks.length);
+      const result = trayKey(event.key, focused, s.count);
       if (!result) return;
       event.preventDefault();
       event.stopPropagation();
       if (result.kind === "move") nodes()[result.index]?.focus();
-      else if (result.kind === "pick") s.pick(s.tapbacks[result.index]!);
+      else if (result.kind === "pick") s.pick(result.index);
       else s.onDone();
     };
     window.addEventListener("keydown", onKey, true);
@@ -130,6 +167,18 @@ export function TapbackTray({
   const touch = size === "touch";
   const button = touch ? styles.touch : styles.compact;
   const glyph = touch ? 24 : 20;
+  const buttonStyle = (active: boolean, greyed: boolean) => (state: InteractionState) => [
+    button,
+    active && !greyed
+      ? { backgroundColor: theme.accent }
+      : (state.hovered || state.pressed) && { backgroundColor: theme.popSelected },
+    state.pressed && { transform: [{ scale: 0.9 }] },
+    focusVisible(state) && focusRing(theme),
+  ];
+
+  if (picking && emoji) {
+    return <EmojiPicker size={size} onPick={pickEmoji} />;
+  }
 
   return (
     <Reanimated.View
@@ -138,36 +187,110 @@ export function TapbackTray({
       aria-disabled={unavailable ? true : undefined}
       style={[styles.tray, { backgroundColor: theme.popBg, boxShadow: theme.popShadow }, entrance]}
     >
-      {tapbacks.map((tapback, i) => (
+      {tapbacks.map((tapback, i) => {
+        const shownEmoji = keyEmoji(tapback.key);
+        const color = unavailable ? theme.disabled : tapback.active ? theme.onAccent : theme.icon;
+        return (
+          <Pressable
+            key={tapback.key}
+            ref={(node) => {
+              buttons.current[i] = node;
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={tapback.active ? `Remove ${tapback.label}` : tapback.label}
+            accessibilityHint={unavailable}
+            accessibilityState={{ disabled: !!unavailable }}
+            aria-selected={tapback.active}
+            onPress={() => pick(i)}
+            style={buttonStyle(tapback.active, !!unavailable)}
+          >
+            {shownEmoji
+              ? <Text style={[styles.emoji, { fontSize: glyph - 2, opacity: unavailable ? 0.4 : 1 }]}>{shownEmoji}</Text>
+              : <TapbackGlyph type={tapback.key as TapbackType} size={glyph} color={color} />}
+          </Pressable>
+        );
+      })}
+      {emoji && (
         <Pressable
-          key={tapback.type}
           ref={(node) => {
-            buttons.current[i] = node;
+            buttons.current[tapbacks.length] = node;
           }}
           accessibilityRole="button"
-          accessibilityLabel={tapback.active ? `Remove ${tapback.label}` : tapback.label}
-          accessibilityHint={unavailable}
-          accessibilityState={{ disabled: !!unavailable }}
-          aria-selected={tapback.active}
-          onPress={() => pick(tapback)}
-          style={(state: InteractionState) => [
-            button,
-            tapback.active && !unavailable
-              ? { backgroundColor: theme.accent }
-              : (state.hovered || state.pressed) && { backgroundColor: theme.popSelected },
-            state.pressed && { transform: [{ scale: 0.9 }] },
-            focusVisible(state) && focusRing(theme),
-          ]}
+          accessibilityLabel="More reactions"
+          accessibilityHint={emojiUnavailable}
+          accessibilityState={{ disabled: !!emojiUnavailable }}
+          onPress={() => pick(tapbacks.length)}
+          style={buttonStyle(false, !!emojiUnavailable)}
         >
-          <TapbackGlyph type={tapback.type} size={glyph} color={unavailable ? theme.disabled : tapback.active ? theme.onAccent : theme.icon} />
+          <SmileyPlus size={glyph} color={emojiUnavailable ? theme.disabled : theme.icon} />
         </Pressable>
-      ))}
+      )}
       {unavailable && <Text style={[styles.reason, { color: theme.popTertiary }]}>{unavailable}</Text>}
     </Reanimated.View>
   );
 }
 
+/** Quick emoji, then a field for any other: the phone's emoji keyboard, or the Mac's character viewer (⌃⌘Space). */
+function EmojiPicker({ size, onPick }: { size: "compact" | "touch"; onPick: (emoji: string) => void }) {
+  const theme = useTheme();
+  const touch = size === "touch";
+  const cell = touch ? styles.touch : styles.compact;
+  return (
+    <View role="dialog" aria-label="Emoji reactions" style={[styles.picker, { backgroundColor: theme.popBg, boxShadow: theme.popShadow }]}>
+      <TextInput
+        autoFocus
+        accessibilityLabel="Any emoji"
+        placeholder="Type or paste any emoji"
+        placeholderTextColor={theme.popTertiary}
+        style={[styles.field, { color: theme.text, borderColor: theme.divider }]}
+        onChangeText={(text) => {
+          const picked = firstEmoji(text);
+          if (picked) onPick(picked);
+        }}
+      />
+      <View style={styles.grid}>
+        {QUICK_EMOJI.map((value) => (
+          <Pressable
+            key={value}
+            accessibilityRole="button"
+            accessibilityLabel={value}
+            onPress={() => onPick(value)}
+            style={(state: InteractionState) => [
+              cell,
+              (state.hovered || state.pressed) && { backgroundColor: theme.popSelected },
+              focusVisible(state) && focusRing(theme),
+            ]}
+          >
+            <Text style={[styles.emoji, { fontSize: touch ? 22 : 18 }]}>{value}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  emoji: {
+    textAlign: "center",
+  },
+  field: {
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    fontSize: 14,
+    marginBottom: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 2,
+  },
+  picker: {
+    borderRadius: 18,
+    padding: 8,
+    width: 8 * 36 + 7 * 2 + 16,
+  },
   reason: {
     alignSelf: "center",
     fontSize: 11.5,
