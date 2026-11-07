@@ -1,6 +1,5 @@
 import type { FunctionReturnType } from "convex/server";
 import { agentAttention, mostUrgent } from "@shared/agent-attention";
-import { knownParticipants } from "@shared/chat-state";
 import type { AttachmentSummary, ChatSummary, Message, ScheduledMessage } from "@shared/types";
 import type { AgentChatSummary } from "./agent-api";
 import type { commaApi } from "./convex-api";
@@ -23,14 +22,14 @@ export function conversationToChat(
     hasGroupPhoto: row.hasGroupPhoto,
     groupPhotoUrl: row.groupPhotoUrl,
     participants: row.participants,
-    known: knownParticipants(row.participants),
-    contactsAvailable: true,
+    known: row.known,
+    contactsAvailable: row.contactsAvailable,
     isSpam: row.isSpam,
     lastMessage: row.lastMessage ?? null,
     unreadCount: row.unreadCount,
     firstUnreadAt: row.unreadCount ? row.unread?.firstAt ?? null : null,
     flags: row.flags,
-    searchNames: [],
+    searchNames: row.searchNames,
     ...(row.crm ? { crm: row.crm } : {}),
   };
 }

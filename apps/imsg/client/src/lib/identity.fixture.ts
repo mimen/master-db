@@ -1,6 +1,11 @@
 import { useSyncExternalStore } from "react";
 
-export { convexClient } from "./convex.fixture";
+import { makeFunctionReference } from "convex/server";
+
+import { convexClient } from "./convex.fixture";
+
+export { convexClient };
+
 import type {
   AirtableEventRow,
   AirtableHumanRow,
@@ -27,6 +32,10 @@ export type {
   Priority,
   WhoIsResult,
 } from "./identity";
+
+const renamePersonRef = makeFunctionReference<"mutation", {
+  personId: string; display_name?: string; first_name?: string; last_name?: string; nickname?: string; organization?: string;
+}, null>("identity/mutations:renamePerson");
 
 type FixturePerson = ContactListRow & {
   notes?: string;
@@ -266,7 +275,7 @@ export function useRenamePerson(): (args: {
   nickname?: string;
   organization?: string;
 }) => Promise<null> {
-  return async ({ personId, display_name, ...parts }) =>
+  return async ({ personId, display_name, ...parts }) => {
     patch(personId, (p) => {
       const first = parts.first_name ?? p.first_name;
       const last = parts.last_name ?? p.last_name;
@@ -276,6 +285,13 @@ export function useRenamePerson(): (args: {
         display_name: display_name?.trim() || [first, last].filter(Boolean).join(" ") || p.display_name,
       };
     });
+    const renamed = people.find((p) => p._id === personId);
+    if (!renamed) return null;
+    // The server fixture names conversations, so the rename has to reach it; the no-op update refreshes live queries on return.
+    const { display_name: name, first_name, last_name, nickname, organization } = renamed;
+    return await convexClient.mutation(renamePersonRef, { personId, display_name: name, first_name, last_name, nickname, organization },
+      { optimisticUpdate: () => {} });
+  };
 }
 
 export function useSetFavorite(): (args: { personId: string; is_favorite: boolean }) => Promise<null> {

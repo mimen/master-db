@@ -3,6 +3,8 @@ import type { BBContact, BBMessage } from "../../server/bb-types";
 import type { FakeSeed } from "../../server/bluebubbles-fake";
 import type { IdentityDirectory } from "../../server/app";
 import type { CrmData, NameSource } from "../../server/name-resolver";
+import { stripServiceSuffix } from "../../shared/address";
+import { nameTerms, personName, type NamedPerson } from "../../../../convex/identity/names";
 import type { AgentEntry } from "../../client/src/lib/agent-api";
 import type { SeedAgentChat } from "./agent";
 
@@ -274,16 +276,43 @@ const groupCrm = new Map<string, CrmData>([
   }],
 ]);
 
+interface FixturePerson extends NamedPerson {
+  id: string;
+  addresses: string[];
+}
+
+/** The fixture's identity graph, keyed like the client's identity fixture so a rename there lands here. */
+function fixturePeople(): FixturePerson[] {
+  const ids = new Map(contacts.map((contact) => [contact.phoneNumbers?.[0]?.address, contact.id]));
+  return [...names].map(([address, display_name]) => ({ id: ids.get(address) ?? `fixture-${address}`, display_name, addresses: [address] }));
+}
+
 export class FixtureIdentity implements NameSource, IdentityDirectory {
   readonly available = true;
+  private people = fixturePeople();
+
+  person(address: string): FixturePerson | null {
+    const bare = stripServiceSuffix(address);
+    return this.people.find((person) => person.addresses.includes(bare)) ?? null;
+  }
 
   lookup(address: string): string | null {
-    return names.get(address) ?? null;
+    return personName(this.person(address));
   }
 
   searchTerms(address: string): string[] {
-    const name = this.lookup(address);
-    return name ? [name.toLowerCase()] : [];
+    const person = this.person(address);
+    return person ? nameTerms(person) : [];
+  }
+
+  /** identity/mutations:renamePerson over the fixture graph. */
+  rename({ personId, ...fields }: { personId: string } & NamedPerson): null {
+    this.people = this.people.map((person) => (person.id === personId ? { ...person, ...fields } : person));
+    return null;
+  }
+
+  reset(): void {
+    this.people = fixturePeople();
   }
 
   chatCrm(chatGuid: string): CrmData | undefined {
@@ -297,14 +326,11 @@ export class FixtureIdentity implements NameSource, IdentityDirectory {
   search(query: string, limit: number): Array<{ address: string; name: string; is_favorite?: boolean }> {
     const needle = query.trim().toLowerCase();
     if (!needle) return [];
-    return [...names]
-      .filter(([address, name]) => address.includes(needle) || name.toLowerCase().includes(needle))
+    return this.people
+      .flatMap((person) => person.addresses.map((address) => ({ address, name: person.display_name ?? address })))
+      .filter(({ address, name }) => address.includes(needle) || name.toLowerCase().includes(needle))
       .slice(0, limit)
-      .map(([address, name]) => ({
-        address,
-        name,
-        is_favorite: personCrm.get(address)?.is_favorite,
-      }));
+      .map((hit) => ({ ...hit, is_favorite: personCrm.get(hit.address)?.is_favorite }));
   }
 
   refresh(): Promise<void> {

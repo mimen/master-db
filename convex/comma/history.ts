@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { query } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 
-import { messageView, withMessageAttachments } from "./queries";
+import { listReader, messageView, withMessageAttachments } from "./queries";
 
 export const messageWindow = query({
   args: {
@@ -34,6 +34,7 @@ export const messageWindow = query({
         .then(([older, newer]) => [...older.reverse(), ...newer])
       : args.before !== undefined ? (await window("before", args.before)).reverse()
         : await window("after", args.after!);
-    return await Promise.all(rows.map((message) => withMessageAttachments(ctx, message)));
+    const read = listReader(ctx);
+    return await Promise.all(rows.map((message) => withMessageAttachments(ctx, message, read)));
   },
 });

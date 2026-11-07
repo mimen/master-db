@@ -1,7 +1,6 @@
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 
-import { knownParticipants } from "../../apps/imsg/shared/chat-state";
 import { todayCandidateState, todayWindow } from "../../apps/imsg/shared/today";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
@@ -165,7 +164,7 @@ export const todayCandidates = internalMutation({
     const page: TodayCandidate[] = [];
     for (const conversation of result.page) {
       const view = await withConversationState(ctx, conversation, read);
-      const state = todayCandidateState({ ...view, known: knownParticipants(view.participants) }, now);
+      const state = todayCandidateState(view, now);
       if (!state) continue;
       page.push({
         conversationId: view._id, title: view.displayName, isGroup: view.isGroup, state,

@@ -8,7 +8,7 @@ import { ALLOWED_EMAIL } from "../_lib/authed";
 import schema from "../schema";
 import type { TodayQueue } from "../schema/comma/validators";
 
-import { commaModules } from "./testModules.vitest";
+import { commaModules, namePerson } from "./testModules.vitest";
 
 const SECRET = "bridge-secret";
 const previous = process.env.COMMA_BRIDGE_SECRET;
@@ -33,8 +33,8 @@ function conversation(key: string, over: Partial<Doc<"comma_conversations">> = {
   const at = over.lastMessageAt ?? Date.now() - 60_000;
   return {
     conversationKey: `dm:${key}`, primaryChatGuid: `iMessage;-;${key}`, chatGuids: [`iMessage;-;${key}`],
-    displayName: key, isGroup: false, participants: [{ address: key, name: key }],
-    lastMessage: { guid: `last-${key}`, text: "hi", dateCreated: at, isFromMe: false, senderName: key, hasAttachments: false },
+    displayName: key, isGroup: false, participants: [{ address: key, name: null }],
+    lastMessage: { guid: `last-${key}`, text: "hi", dateCreated: at, isFromMe: false, senderName: null, hasAttachments: false },
     lastMessageAt: at, isSpam: false, hasGroupPhoto: false, updatedAt: at, ...over,
   };
 }
@@ -285,6 +285,7 @@ describe("todayCandidates", () => {
       lastMessageAt: at, lastMessage: { guid: `last-${key}`, text: "you", dateCreated: at, isFromMe: true, senderName: null, hasAttachments: false },
     });
     await t.run(async (ctx) => {
+      for (const key of ["old-needs", "recent-wait", "stale-wait", "spam", "fresh"]) await namePerson(ctx, key, key);
       await ctx.db.insert("comma_conversations", conversation("old-needs", { lastMessageAt: now - 60 * DAY }));
       await ctx.db.insert("comma_conversations", outbound("recent-wait", now - 2 * DAY));
       await ctx.db.insert("comma_conversations", outbound("stale-wait", now - 31 * DAY));

@@ -28,14 +28,15 @@ function fixture() {
       directory: { summaries: async () => ({ ok: true, chats: [{ guid: "chat", displayName: "Alex", isGroup: false }] }) },
       bb: { getChat: async () => ({ ok: true, value: { participants: [{ address: "+15550001111" }] } }) },
     },
-    writer: { deps: { names: { lookup: () => "Known Alex" }, ingest: {
+    writer: { deps: { ingest: {
       post: async <K extends keyof Bodies>(_kind: K, body: Bodies[K]): Promise<Results[K]> => {
         publications.push((body as unknown as { update: ShelfUpdate }).update);
         return publish as Results[K];
       },
     } } },
   } as unknown as CommandContext;
-  const handlers = createAiHandlers({ ai, now: () => 1, refreshContacts: async () => { calls.push(["refreshContacts"]); } });
+  const handlers = createAiHandlers({ ai, now: () => 1, refreshContacts: async () => { calls.push(["refreshContacts"]); },
+    lookupName: () => "Known Alex" });
   return { handlers, context, publications, calls, setPublished: (value: boolean) => { publish = value; }, setStale: () => { stale = true; } };
 }
 

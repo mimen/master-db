@@ -4,6 +4,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { query, type QueryCtx } from "../_generated/server";
 
 import { requireIdentityAccess } from "./key";
+import { nameTerms } from "./names";
 import { normalizeEmail, normalizePhone } from "./normalize";
 
 /** A single event association, projected for the client — see
@@ -100,30 +101,6 @@ async function personCrmMaps(ctx: QueryCtx): Promise<{
  * special-case a non-numeric value. */
 function numericPriority(p: Doc<"people">["priority"]): number | undefined {
   return typeof p === "number" ? p : undefined;
-}
-
-/**
- * A person's full searchable name-term set: display name, structured parts,
- * organization, and the combined "first last" — deduped and lowercased so
- * name-search callers (the imsg Identity Mirror) can match a person by ANY
- * name they've ever gone by, not just their current display_name. Blank
- * fields are omitted; a person with only a display_name still gets one term.
- */
-function nameTerms(p: Doc<"people">): string[] {
-  const candidates = [
-    p.display_name,
-    p.first_name,
-    p.last_name,
-    p.nickname,
-    p.organization,
-    p.first_name && p.last_name ? `${p.first_name} ${p.last_name}` : undefined,
-  ];
-  const terms = new Set<string>();
-  for (const candidate of candidates) {
-    const trimmed = candidate?.trim().toLowerCase();
-    if (trimmed) terms.add(trimmed);
-  }
-  return [...terms];
 }
 
 /**

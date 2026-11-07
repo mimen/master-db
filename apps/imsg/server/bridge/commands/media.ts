@@ -4,6 +4,7 @@ import { UnknownSendError } from "../../commands";
 import { mapMessage } from "../../map";
 import { WhisperService } from "../../whisper";
 import type { ConvexIngest } from "../convex-ingest";
+import { unnamed } from "../mapper";
 import { requireChat, type CommandContext, type HandlerMap } from "./types";
 
 type MediaBridgeRequest =
@@ -43,7 +44,7 @@ export function createMediaHandlers(deps: {
         throw new UnknownSendError(String(error));
       }
       if (!sent.ok) throw new Error(sent.error);
-      const message = mapMessage(sent.value, chatGuid, ctx.writer.deps.names ?? { lookup: () => null, searchTerms: () => [], available: false, chatCrm: () => undefined, personCrm: () => undefined });
+      const message = mapMessage(sent.value, chatGuid, unnamed);
       ctx.commands.directory.applyKnownMessage(chatGuid, message);
       // Sending already succeeded. A failed mirror must never turn into a second send.
       try { await ctx.writer.exclusive(() => ctx.writer.postMessages([{ ...sent.value, chats: [{ guid: chatGuid }] }])); }

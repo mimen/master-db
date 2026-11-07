@@ -3,6 +3,8 @@ import type { Hono } from "hono";
 import type { GenericId, Infer } from "convex/values";
 import type { attachmentDoc, conversationDoc, draftView, messageDoc, scheduledDoc, CommaOutboxPayload, CommandResult } from "../../../../convex/schema/comma/validators";
 import { conversationKey } from "../../../../convex/comma/conversationKey";
+import { resolveConversationNames } from "../../../../convex/comma/names";
+import { formatAddress } from "../../shared/address";
 import { sendService, tempGuid } from "../../../../convex/comma/tempMessage";
 import type { FixtureRouteControls } from "../../server/app";
 import { buildThread, mapMessage } from "../../server/map";
@@ -171,7 +173,15 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       lastMessage: { guid: queued.guid, text: queued.text, dateCreated: queued.dateCreated, isFromMe: true, senderName: null, hasAttachments: false },
       lastMessageAt: Math.max(row.lastMessageAt, queued.dateCreated),
     } : {};
-    return { ...row, ...preview, chatGuids: controls.directory.siblingGuids(chat.guid), rawDisplayName: raw.ok ? raw.value.displayName ?? "" : "" };
+    const rawDisplayName = raw.ok ? raw.value.displayName ?? "" : "";
+    // Names resolve here, the way comma/queries resolves them, so an identity rename shows on the next read.
+    const resolved = resolveConversationNames({ ...row, rawDisplayName }, row.participants.map((p) => names.person(p.address)));
+    const sender = row.isGroup ? (raw.ok ? raw.value.lastMessage?.handle?.address : undefined) : row.participants[0]?.address;
+    const lastMessage = row.lastMessage && !row.lastMessage.isFromMe && sender
+      ? { lastMessage: { ...row.lastMessage, senderName: names.lookup(sender) ?? formatAddress(sender) } } : {};
+    return { ...row, ...lastMessage, ...preview, chatGuids: controls.directory.siblingGuids(chat.guid), rawDisplayName,
+      displayName: resolved.displayName, participants: resolved.participants, known: resolved.known, contactsAvailable: names.available,
+      searchNames: resolved.searchNames };
   }));
   const searchContacts = (query: string, limit = 25): Contact[] => {
     const needle = query.trim().toLowerCase();
@@ -385,6 +395,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     },
     ...agent.handlers,
     ...additionalHandlers,
+    "identity/mutations:renamePerson": async (args) => names.rename(args as Parameters<FixtureIdentity["rename"]>[0]),
     "identity/queries:searchContacts": async (args) => searchContacts(String(args.q), args.limit === undefined ? 25 : Number(args.limit)),
     "comma/conversationInfo:findChat": async (args) => {
       const key = conversationKey({ isGroup: false, primaryChatGuid: "", participants: [{ address: String(args.address), name: null }] });
@@ -580,6 +591,6 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: error instanceof FixtureError ? error.status : 400 });
     }
   });
-  return () => { sendTurn = Promise.resolve(); agent.reset(); today.reset(); triage.reset(); latency.clear(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
+  return () => { sendTurn = Promise.resolve(); names.reset(); agent.reset(); today.reset(); triage.reset(); latency.clear(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
     for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };
 }

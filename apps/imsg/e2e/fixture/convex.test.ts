@@ -350,3 +350,17 @@ test("text attachments tolerate Bun's charset MIME parameter and remain visible 
   expect((await messages()).page).toContainEqual(expect.objectContaining({ text: "Here are the notes",
     attachments: [expect.objectContaining({ guid: storageId, mimeType: "text/plain", filename: "notes.txt" })] }));
 });
+
+test("a fixture identity rename renames the conversation, its senders and its search names on the next read", async () => {
+  const before = await query<{ displayName: string; known: boolean; searchNames: string[] }>("resolveChat", { chatGuid: CHAT_GUIDS.needs });
+  expect(before).toMatchObject({ displayName: "Alex Rivera", known: true, searchNames: ["alex rivera"] });
+  await call("identity/mutations:renamePerson", { personId: "fixture-alex", display_name: "Lex Rivera", nickname: "Lex" });
+  expect(await query("resolveChat", { chatGuid: CHAT_GUIDS.needs })).toMatchObject({
+    displayName: "Lex Rivera", participants: [{ name: "Lex Rivera" }], lastMessage: { senderName: "Lex Rivera" }, known: true,
+    searchNames: ["lex rivera", "lex"],
+  });
+  expect((await messages()).page.find((m) => !m.isFromMe)?.sender?.name).toBe("Lex Rivera");
+  expect(await query("resolveChat", { chatGuid: CHAT_GUIDS.unknown })).toMatchObject({ known: false, participants: [{ name: null }] });
+  reset();
+  expect(await query("resolveChat", { chatGuid: CHAT_GUIDS.needs })).toMatchObject({ displayName: "Alex Rivera" });
+});

@@ -424,11 +424,12 @@ test("a sidebar page resolves each participant once and rereads identities on th
   const before = await read();
   expect(before.result.page).toHaveLength(20);
   expect(before.result.page.every((row) => row.displayName === "Before" && row.lastMessage?.senderName === "Before")).toBe(true);
-  expect(before.identityQueries).toBe(1);
+  // One for the shared participant, one for the Unknown lens's Apple-contacts check.
+  expect(before.identityQueries).toBe(2);
   await t.run((ctx) => ctx.db.patch(personId, { display_name: "After" }));
   const after = await read();
   expect(after.result.page.every((row) => row.displayName === "After" && row.lastMessage?.senderName === "After")).toBe(true);
-  expect(after.identityQueries).toBe(1);
+  expect(after.identityQueries).toBe(2);
 });
 
 test("conversation and message names react to identity changes without a bridge refresh", async () => {
@@ -442,12 +443,43 @@ test("conversation and message names react to identity changes without a bridge 
     await ctx.db.insert("identities", { person_id: personId, kind: "phone", source: "manual", value: "+16195551234", normalized: "+16195551234",
       is_self: false, message_count: 0, chat_count: 0, created_at: "before", updated_at: "before" });
     const conversationId = await ctx.db.insert("comma_conversations", conversation("+16195551234", 1));
-    await ctx.db.insert("comma_messages", { ...message(conversationId, "m", 1), sender: { address: "+16195551234 (smsfp)", name: "Old mirrored name" } });
+    await ctx.db.insert("comma_messages", { ...message(conversationId, "m", 1), sender: { address: "+16195551234 (smsfp)", name: "Old mirrored name" },
+      reactions: [{ type: "love", isFromMe: false, senderAddress: "+16195551234", senderName: "Old mirrored name" },
+        { type: "like", isFromMe: true, senderAddress: null, senderName: null }] });
     return { personId, conversationId };
   });
-  await t.run((ctx) => ctx.db.patch(personId, { display_name: "Name After" }));
+  await t.run((ctx) => ctx.db.patch(personId, { display_name: "Name After", nickname: "Nick" }));
   const view = await t.query(api.comma.queries.getConversation, { conversationId });
-  expect(view).toMatchObject({ displayName: "Name After", participants: [{ name: "Name After" }], lastMessage: { senderName: "Name After" } });
+  expect(view).toMatchObject({ displayName: "Name After", participants: [{ name: "Name After" }], lastMessage: { senderName: "Name After" },
+    known: true, searchNames: ["name after", "nick"] });
   const messages = await t.query(api.comma.queries.listMessages, { conversationId, paginationOpts });
   expect(messages.page[0].sender?.name).toBe("Name After");
+  expect(messages.page[0].reactions.map((r) => r.senderName)).toEqual(["Name After", null]);
+  const hits = await t.query(api.comma.queries.searchMessages, { query: "comet", conversationId });
+  expect(hits.map((hit) => hit.sender?.name)).toEqual(["Name After"]);
+});
+
+test("a handle with no named person is unknown and named by its address, whatever the Mini once stored", async () => {
+  const t = authed();
+  const conversationId = await t.run(async (ctx) => {
+    const id = await ctx.db.insert("comma_conversations", {
+      ...conversation("+16195550000", 1), displayName: "Stored Name", participants: [{ address: "+16195550000", name: "Stored Name" }],
+    });
+    await ctx.db.insert("comma_messages", { ...message(id, "m", 1), sender: { address: "+16195550000", name: "Stored Name" } });
+    return id;
+  });
+  expect(await t.query(api.comma.queries.getConversation, { conversationId })).toMatchObject({
+    displayName: "(619) 555-0000", participants: [{ name: null }], lastMessage: { senderName: "(619) 555-0000" }, known: false, searchNames: [],
+  });
+  expect((await t.query(api.comma.queries.listMessages, { conversationId, paginationOpts })).page[0].sender?.name).toBeNull();
+});
+
+test("the Unknown lens fails open until Apple contacts reach the identity graph", async () => {
+  const t = authed();
+  const conversationId = await t.run((ctx) => ctx.db.insert("comma_conversations", conversation("+16195550000", 1)));
+  const available = async () => (await t.query(api.comma.queries.getConversation, { conversationId }))?.contactsAvailable;
+  expect(await available()).toBe(false);
+  await t.run((ctx) => ctx.db.insert("identities", { kind: "phone", source: "apple_contact", value: "+16195557777", normalized: "+16195557777",
+    is_self: false, message_count: 0, chat_count: 0, created_at: "x", updated_at: "x" }));
+  expect(await available()).toBe(true);
 });

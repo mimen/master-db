@@ -18,7 +18,7 @@ async function harness() {
   const db = new OverlayDb(":memory:"); const ingest = new FakeIngest();
   const contacts = new ContactBook(bb);
   const commands = new ChatCommands(bb, new ChatDirectory(bb, contacts), contacts);
-  const writer = new MessageWriter({ bb, db, ingest, names: contacts });
+  const writer = new MessageWriter({ bb, db, ingest });
   await writer.refreshChats();
   const row = { _id: "command", _creationTime: 1, clientKey: "send-file", conversationId: ingest.id, payload, status: "claimed", attempts: 1, createdAt: 1, updatedAt: 1 } as CommandContext["row"];
   const context: CommandContext = { chatGuid: CHAT, row, commands, writer, signal: new AbortController().signal, withLeaseRenewal: (work) => work() };

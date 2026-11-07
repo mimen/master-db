@@ -55,21 +55,27 @@ mirrors changes into Convex, whose live queries update clients.
 _Avoid_: instant state sync, optimistic patch
 
 **Identity Mirror**:
-The server's in-memory read replica of the Convex identity graph's name directory
-(`nameDirectory`), refreshed on an interval so the chat-list hot path never blocks
-on the cloud. Convex is the canonical name source — it's a superset of Apple
-Contacts (Apple names flow in via Identity Sync, plus manual in-app adds/renames,
-which win over a stale Apple name). Looked up by raw address through the same
-phone/email match-key seam (`shared/address.ts`) ContactBook uses.
+The Mini's in-memory read replica of the Convex identity graph's name directory
+(`nameDirectory`), refreshed on an interval. It names people only for work the Mini
+still does itself: reply-suggestion and identify prompts, and the legacy Chat Directory.
+It is not on the bridge's ingest path. The bridge posts raw addresses, and Convex names
+them (see Name Resolution).
 _Avoid_: contact cache (when meaning this), name cache
 
 **Name Resolution**:
-How a participant's display name and `known` flag are decided: Identity Mirror
-first, ContactBook fallback. ContactBook only fills the freshness gap — a contact
-added to Apple Contacts within the last Identity Sync cycle, before it reached
-Convex. `contactsAvailable` (and its Unknown-lens fail-open behavior) depends only
-on ContactBook's own availability — the mirror being down/unconfigured degrades
-silently to today's ContactBook-only resolution, never to "everything unknown."
+Convex names participants when it serves a query, not when the Mini ingests. Each
+participant address resolves through the identity graph (`identities.by_normalized`, then
+its `people` row), memoized per query. That gives the conversation's `displayName`,
+participant names, message and reaction sender names, the last-message sender, the
+Today row title, the agent context, and `searchNames`, every name a participant's person
+goes by. A rename in the graph (an in-app rename, or an Apple name arriving through
+Identity Sync) shows everywhere on the next read. A named group chat keeps the name the
+chat itself carries; an unnamed group lists its members. `known` means a participant
+resolves to a person with a name. Auto-clustered people without a name do not count. Convex
+computes `known` and sends it to the client. `contactsAvailable` is false while the graph
+holds no Apple contact identities, so a graph that never received Apple Contacts fails the
+Unknown lens open instead of screening everything. Names the Mini stored on older rows are
+ignored.
 
 **Draft**:
 What sits unsent in a conversation's composer, one per conversation (`comma_drafts`). Either the

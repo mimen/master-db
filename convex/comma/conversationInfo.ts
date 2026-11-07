@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Doc } from "../_generated/dataModel";
 import { query, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
+import { personName } from "../identity/names";
 
 import { conversationKey } from "./conversationKey";
 import { personForAddress } from "./photos";
@@ -56,6 +57,6 @@ export const chatInfo = query({
 export async function conversationPeople(ctx: QueryCtx, conversation: Doc<"comma_conversations">) {
   return await Promise.all(conversation.participants.map(async (participant) => {
     const person = await personForAddress(ctx, participant.address);
-    return { address: participant.address, name: person?.display_name ?? participant.name ?? participant.address, person };
+    return { address: participant.address, name: personName(person) ?? participant.address, person };
   }));
 }

@@ -1,10 +1,12 @@
 import { paginationOptsValidator, paginationResultValidator, type SearchFilterFinalizer } from "convex/server";
 import { v } from "convex/values";
 
+import { formatAddress } from "../../apps/imsg/shared/address";
 import { conversationFlags } from "../../apps/imsg/shared/chat-state";
 import type { Id } from "../_generated/dataModel";
 import { query, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
+import { personName } from "../identity/names";
 import {
   attachmentDoc,
   conversationCrmView,
@@ -20,7 +22,8 @@ import {
   type CommaMessageDoc,
 } from "../schema/comma/validators";
 
-import { normalizedAddress, personForAddress, personForNormalized } from "./photos";
+import { resolveConversationNames } from "./names";
+import { normalizedAddress, personForNormalized } from "./photos";
 
 const conversationView = v.object({
   ...conversationDoc.fields,
@@ -33,6 +36,12 @@ const conversationView = v.object({
     pinned: v.boolean(),
   }),
   unreadCount: v.number(),
+  /** A participant resolves to a named person in the identity graph. */
+  known: v.boolean(),
+  /** False while the identity graph holds no Apple contacts, so the Unknown lens fails open. */
+  contactsAvailable: v.boolean(),
+  /** Every name the participants' people go by, for conversation search. */
+  searchNames: v.array(v.string()),
   groupPhotoUrl: v.union(v.string(), v.null()),
   crm: v.optional(conversationCrmView),
 });
@@ -41,7 +50,7 @@ const conversationView = v.object({
 async function conversationCrm(
   ctx: QueryCtx,
   conversation: CommaConversationDoc,
-  person: Awaited<ReturnType<typeof personForAddress>>,
+  person: Awaited<ReturnType<typeof personForNormalized>>,
   read: ListReader,
 ) {
   let base: { is_favorite?: boolean; priority?: number; tags: string[] };
@@ -87,8 +96,11 @@ function memo<K, V>(load: (key: K) => Promise<V>) {
 export function listReader(ctx: QueryCtx) {
   const getPerson = memo((id: Id<"people">) => ctx.db.get(id));
   const personByNormalized = memo((normalized: string) => personForNormalized(ctx, normalized, getPerson));
+  let contactsAvailable: Promise<boolean> | undefined;
   return {
     person: (address: string) => personByNormalized(normalizedAddress(address)),
+    contactsAvailable: () => contactsAvailable ??= ctx.db.query("identities")
+      .withIndex("by_source_contact", (q) => q.eq("source", "apple_contact")).first().then((row) => row !== null),
     personTags: memo((id: Id<"people">) => ctx.db.query("tags").withIndex("by_person", (q) => q.eq("person_id", id)).collect()),
     storageUrl: memo((id: Id<"_storage">) => ctx.storage.getUrl(id)),
   };
@@ -108,25 +120,22 @@ export async function withConversationState(
   const { flags, unreadCount } = conversationFlags(state ?? undefined, conversation.lastMessage ?? null,
     conversation.lastMessageAt, conversation.unread?.count ?? 0);
   const people = await Promise.all(conversation.participants.map((participant) => read.person(participant.address)));
-  const participants = await Promise.all(conversation.participants.map(async (participant, index) => {
+  const names = resolveConversationNames(conversation, people);
+  const participants = await Promise.all(names.participants.map(async (participant, index) => {
     const person = people[index];
-    return { ...participant, name: person?.display_name ?? participant.name, photoUrl: person?.photoStorageId ? await read.storageUrl(person.photoStorageId) : null };
+    return { ...participant, photoUrl: person?.photoStorageId ? await read.storageUrl(person.photoStorageId) : null };
   }));
   const crm = await conversationCrm(ctx, conversation, !conversation.isGroup && people.length === 1 ? people[0] ?? null : null, read);
-  const displayName = conversation.isGroup
-    ? conversation.rawDisplayName === undefined ? conversation.displayName
-      : conversation.rawDisplayName.trim() || participants.map((p) => p.name ?? p.address).join(", ")
-    : participants[0]?.name ?? conversation.displayName;
   const lastMessage = conversation.lastMessage;
   let senderName = lastMessage?.senderName ?? null;
   if (lastMessage && !lastMessage.isFromMe) {
     const senderAddress = !conversation.isGroup && conversation.participants.length === 1
       ? conversation.participants[0].address
       : (await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", lastMessage.guid)).unique())?.sender?.address;
-    const person = senderAddress ? await read.person(senderAddress) : null;
-    senderName = person?.display_name ?? senderName;
+    if (senderAddress) senderName = personName(await read.person(senderAddress)) ?? formatAddress(senderAddress);
   }
-  return { ...conversation, displayName, participants, flags, unreadCount, ...(crm ? { crm } : {}),
+  return { ...conversation, displayName: names.displayName, participants, flags, unreadCount, ...(crm ? { crm } : {}),
+    known: names.known, contactsAvailable: await read.contactsAvailable(), searchNames: names.searchNames,
     ...(lastMessage ? { lastMessage: { ...lastMessage, senderName } } : {}),
     groupPhotoUrl: conversation.groupPhotoStorageId ? await read.storageUrl(conversation.groupPhotoStorageId) : null,
   };
@@ -172,16 +181,25 @@ export const messageView = v.object({
   attachments: v.array(attachmentView),
 });
 
-export async function withMessageAttachments(ctx: QueryCtx, message: CommaMessageDoc) {
+/** A message with its sender and reaction names read from the identity graph, not the names stored on the row. */
+async function withSenderNames(message: CommaMessageDoc, read: ListReader): Promise<CommaMessageDoc> {
+  const nameOf = async (address: string) => personName(await read.person(address));
+  return {
+    ...message,
+    ...(message.sender ? { sender: { ...message.sender, name: await nameOf(message.sender.address) } } : {}),
+    reactions: await Promise.all(message.reactions.map(async (reaction) =>
+      ({ ...reaction, senderName: reaction.senderAddress ? await nameOf(reaction.senderAddress) : null }))),
+  };
+}
+
+export async function withMessageAttachments(ctx: QueryCtx, message: CommaMessageDoc, read = listReader(ctx)) {
   const attachments = await ctx.db
     .query("comma_attachments")
     .withIndex("by_messageGuid", (q) => q.eq("messageGuid", message.guid))
     .filter((q) => q.eq(q.field("hideAttachment"), false))
     .collect();
-  const person = message.sender ? await personForAddress(ctx, message.sender.address) : null;
   return {
-    ...message,
-    ...(message.sender ? { sender: { ...message.sender, name: person?.display_name ?? message.sender.name } } : {}),
+    ...await withSenderNames(message, read),
     attachments: await Promise.all(attachments.map(async (attachment) => ({
       ...attachment,
       thumbUrl: attachment.thumbStorageId ? await ctx.storage.getUrl(attachment.thumbStorageId) : null,
@@ -204,7 +222,8 @@ export const listMessages = query({
       .order("desc")
       .filter((q) => q.and(q.eq(q.field("isTapback"), false), q.eq(q.field("retracted"), false)))
       .paginate(args.paginationOpts);
-    const page = await Promise.all(result.page.map((message) => withMessageAttachments(ctx, message)));
+    const read = listReader(ctx);
+    const page = await Promise.all(result.page.map((message) => withMessageAttachments(ctx, message, read)));
     return { ...result, page };
   },
 });
@@ -218,7 +237,8 @@ export const searchMessages = query({
   returns: v.array(messageDoc),
   handler: async (ctx, args) => {
     await assertAllowed(ctx);
-    return await searchMessageRows(ctx, args);
+    const read = listReader(ctx);
+    return await Promise.all((await searchMessageRows(ctx, args)).map((message) => withSenderNames(message, read)));
   },
 });
 

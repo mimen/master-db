@@ -4,7 +4,6 @@ import { dirname } from "node:path";
 import type { BBChat, BBMessage } from "../bb-types";
 import { BlueBubblesClient, type BlueBubbles, type Result } from "../bluebubbles";
 import { loadConfig, type Config } from "../config";
-import { ContactBook } from "../contacts";
 import { ConvexIngest, type AttachmentRow, type MessageRow } from "./convex-ingest";
 import { sourceVersion, toAttachmentRows, toConversationInputs, toMessageRow } from "./mapper";
 
@@ -85,8 +84,6 @@ export async function runBackfill(options: Options = {}) {
   if (latest) sourceVersion(latest);
   const maxRowid = inventory?.at(-1)?.originalROWID ?? latest?.originalROWID ?? 0;
   if (state.cursor > maxRowid) throw new Error("Backfill cursor exceeds source ROWID, use a fresh checkpoint after a source reset");
-  const contacts = new ContactBook(bb);
-  await contacts.refresh();
   const chats = new Map<string, BBChat>();
   for (let offset = 0; ; offset += 1000) {
     const page = value(await bb.queryChats(1000, offset));
@@ -95,7 +92,7 @@ export async function runBackfill(options: Options = {}) {
   }
   const conversationIds = new Map<string, MessageRow["conversationId"]>();
   async function upsertChats() {
-    const inputs = toConversationInputs([...chats.values()], contacts);
+    const inputs = toConversationInputs([...chats.values()]);
     counts.conversations = inputs.length;
     for (const batch of batches(inputs)) {
       const resolved = await ingest.post("conversations", { conversations: batch });
@@ -138,7 +135,7 @@ export async function runBackfill(options: Options = {}) {
         continue;
       }
       const version = sourceVersion(message);
-      messages.push(toMessageRow(message, id, version, contacts));
+      messages.push(toMessageRow(message, id, version));
       attachments.push(...toAttachmentRows(message, id, version));
     }
     for (const batch of batches(messages)) await ingest.post("messages", { messages: batch });
