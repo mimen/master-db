@@ -16,7 +16,7 @@ function candidate(n: number, state: TodayCandidate["state"], ageDays = n / 1000
 const card = { summary: "Wants an answer.", ask: "Answer", due: "", stakes: "medium", settle: false, needsMore: false };
 type Answer = (prompt: string, options: StructuredOptions) => GatewayResult<unknown>;
 
-function fakes(candidates: TodayCandidate[], reduce: Answer, opts: { available?: boolean; card?: Answer; store?: OverlayDb; attachments?: number } = {}) {
+function fakes(candidates: TodayCandidate[], reduce: Answer, opts: { available?: boolean; card?: Answer; store?: OverlayDb; attachments?: number; personFails?: boolean } = {}) {
   const reduces: { prompt: string; options: StructuredOptions }[] = [];
   const cardCalls: string[] = [];
   const posts: string[] = [];
@@ -41,6 +41,7 @@ function fakes(candidates: TodayCandidate[], reduce: Answer, opts: { available?:
       if (route === "agentPeople") return [] as TodayRoutes[K][1];
       if (route === "agentPersonContext") {
         const { conversationId } = body as TodayRoutes["agentPersonContext"][0];
+        if (opts.personFails) throw new Error("no such route");
         personReads.push(body as TodayRoutes["agentPersonContext"][0]);
         const line = { at: NOW - 3_600_000, conversationId: "crew" as ConversationId, conversation: "Launch Crew", kind: "group", platform: "imessage", fromMe: false, sender: "P", text: `also pinged from ${conversationId}` } as const;
         return { name: "P", lines: [line], more: false } as TodayRoutes[K][1];
@@ -125,6 +126,14 @@ describe("buildToday", () => {
     expect(reduces[0]?.prompt).toContain('elsewhere, newest first: 1h ago in group "Launch Crew" (imessage): they: also pinged from conv1');
     expect(reduces[0]?.prompt.match(/elsewhere, newest first/g)).toHaveLength(1);
     expect(cardCalls.join("\n")).not.toContain("also pinged");
+  });
+
+  test("an unavailable person read leaves the elsewhere line out and the build goes on", async () => {
+    const { deps, reduces, logs } = fakes([candidate(1, "needsYou")], firstItem, { personFails: true });
+    const { outcome } = await buildToday(deps, claim);
+    expect(outcome.ok).toBe(true);
+    expect(reduces[0]?.prompt).not.toContain("elsewhere");
+    expect(logs).toContain("today: person context for conv1 unavailable: Error: no such route");
   });
 
   test("a fresh build starts a session, saved only once todayFinish accepts the queue", async () => {

@@ -152,6 +152,9 @@ async function cardThreads(deps: TodayBuildDeps, signal: AbortSignal, read: read
       deps.port.post("agentPeople", { conversationId: candidate.conversationId }),
       candidate.isGroup ? null : deps.port.post("agentPersonContext", {
         conversationId: candidate.conversationId, sinceAt: deps.now() - ELSEWHERE.days * 86_400_000, limit: ELSEWHERE.limit, maxChars: ELSEWHERE.maxChars,
+      }).catch((error: unknown) => {
+        deps.log?.(`today: person context for ${candidate.conversationId} unavailable: ${String(error)}`);
+        return null;
       }),
     ]);
     const thread = { ref, candidate, people, messages: context.messages, elsewhere: elsewhere?.lines ?? [] };
