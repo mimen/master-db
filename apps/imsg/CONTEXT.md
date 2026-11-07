@@ -78,8 +78,10 @@ as the row `temp-<clientKey>`. Convex owns its lifecycle in `convex/comma/pendin
 outbox row, and it never goes out), then sending once the executor claims it, then lands; or it strands as Not sent
 (nothing took it within `NOT_SENT_AFTER_MS`, so a retry is safe) or failed (refused, or its outcome is unknown).
 Nothing retries a stranded send but the user's tap. A send made while Convex is unreachable waits on the device and
-goes out on reconnect, under the same deadline. The bubble says "Waiting to send" at once when Convex or the Mini is
-out of reach. See `shared/pending-send.ts`.
+goes out on reconnect, under the same deadline counted from the gesture. Until Convex has it, the device also keeps it
+in storage, so a reload or a closed tab restores it under its clientKey; one tab at a time owns each kept send through a
+Web Lock. The bubble says "Waiting to send" at once when Convex or the Mini is out of reach, and after a second when the
+Mini is up but has not taken it. Attachments and voice memos are not pending sends yet. See `shared/pending-send.ts`.
 _Avoid_: temp message, optimistic send, local send
 
 **Outbox lane**:

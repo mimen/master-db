@@ -22,6 +22,7 @@ import { installShellReleaseBridge } from "@/lib/desktop-shell";
 import { hydrateDrafts } from "@/lib/drafts";
 import { ClientAuthProvider } from "@/lib/convex-auth";
 import { LightboxProvider } from "@/lib/lightbox";
+import { pendingSends } from "@/lib/pending-sends";
 import { releaseStatus } from "@/lib/release-status";
 import { hydrateSettings } from "@/lib/settings";
 import { hydrateSidebarWidth } from "@/lib/sidebar-width";
@@ -38,6 +39,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   useEffect(() => {
     void hydrateDrafts();
+    void pendingSends.restore().catch(() => undefined);
     void hydrateSettings();
     void hydrateSidebarWidth();
     const stopShell = installShellReleaseBridge(releaseStatus.setShell);

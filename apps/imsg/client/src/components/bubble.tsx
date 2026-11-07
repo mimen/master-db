@@ -264,7 +264,9 @@ export const Bubble = memo(function Bubble({
   const { width: winW, wide } = useLayoutMode();
   const contextRef = useWebContextMenu<View>((anchor) => onLongPress(message, anchor));
   const [showTime, setShowTime] = useState(false);
-  const slowSend = useSlowSend(message.sendState === "queued" || message.sendState === "sending");
+  // A send that said it was waiting says Sending… the moment the Mini takes it, not after a blank line.
+  const [waited, setWaited] = useState(false);
+  const slowSend = useSlowSend(message.sendState === "queued" || message.sendState === "sending") || waited;
   const mine = message.isFromMe;
   const mineColor = message.service === "SMS" ? theme.sms : theme.bubbleMine;
   const senderName =
@@ -411,7 +413,7 @@ export const Bubble = memo(function Bubble({
           ) : delivery === "uncertain" ? (
             <Text style={[styles.meta, caption]}>May not have delivered</Text>
           ) : message.sendState === "queued" ? (
-            <QueuedReceipt message={message} onCancel={onCancel} style={[styles.meta, caption]}
+            <QueuedReceipt message={message} onCancel={onCancel} onWaiting={setWaited} style={[styles.meta, caption]}
               text={receiptText({ message, isLatestOutgoing, slowSend, showTime })} />
           ) : (
             <Receipt style={[styles.meta, caption]} text={receiptText({ message, isLatestOutgoing, slowSend, showTime })} />
@@ -448,11 +450,14 @@ function Receipt({ text, style }: { text: string | null; style: StyleProp<TextSt
 }
 
 /** A send nothing has taken yet says so, with a way to take it back, once it is plainly waiting. */
-function QueuedReceipt({ message, onCancel, text, style }: {
-  message: Message; onCancel: (message: Message) => void; text: string | null; style: StyleProp<TextStyle>;
+function QueuedReceipt({ message, onCancel, onWaiting, text, style }: {
+  message: Message; onCancel: (message: Message) => void; onWaiting: (waiting: true) => void; text: string | null; style: StyleProp<TextStyle>;
 }) {
   const theme = useTheme();
   const waiting = useSendWaiting(true);
+  useEffect(() => {
+    if (waiting) onWaiting(true);
+  }, [waiting, onWaiting]);
   if (!waiting) return <Receipt style={style} text={text} />;
   return (
     <View style={styles.failedRow}>

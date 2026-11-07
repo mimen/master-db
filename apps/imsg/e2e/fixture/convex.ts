@@ -159,7 +159,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
    * The Mini as the outbox sees it. While it is away a send stays queued, cancellable, until it comes back or the
    * Not sent deadline passes, as production's outbox holds it.
    */
-  const mini = { online: true, notSentAfterMs: NOT_SENT_AFTER_MS, held: new Map<string, { release: () => void; timer: ReturnType<typeof setTimeout> }>() };
+  const mini = { online: true, heartbeat: true, notSentAfterMs: NOT_SENT_AFTER_MS, held: new Map<string, { release: () => void; timer: ReturnType<typeof setTimeout> }>() };
   const strand = (clientKey: string, error: string) => {
     const receipt = receipts.get(clientKey);
     if (receipt) receipts.set(clientKey, { ...receipt, status: "failed", error, updatedAt: Date.now() });
@@ -500,7 +500,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     },
     "comma/bridgeState:bridgeState": async () => {
       // On the wall clock the browser judges it by; a Mini that is away last beat ten minutes ago.
-      const lastSeenAt = new Date().getTime() - (mini.online ? 0 : 10 * 60_000);
+      const lastSeenAt = new Date().getTime() - (mini.heartbeat ? 0 : 10 * 60_000);
       return { key: "mini", ...health(), ...miniAi(), whisperAvailable: false, whisperDetail: "Fixture transcription unavailable", lastSeenAt };
     },
     "comma/uploads:generateAttachmentUploadUrl": async () => "/__fixture/upload",
@@ -707,10 +707,12 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     }),
   };
   // Takes the Mini away from the outbox or brings it back; `notSentAfterMs` shortens the Not sent deadline for a drive.
+  // `heartbeat: true` with `online: false` is a Mini that is up but slow to take sends.
   app.post("/__fixture/mini", async (c) => {
-    const body = await c.req.json<{ online?: boolean; notSentAfterMs?: number | null }>();
+    const body = await c.req.json<{ online?: boolean; heartbeat?: boolean; notSentAfterMs?: number | null }>();
     if (body.notSentAfterMs !== undefined) mini.notSentAfterMs = body.notSentAfterMs ?? NOT_SENT_AFTER_MS;
     if (body.online !== undefined) mini.online = body.online;
+    mini.heartbeat = body.heartbeat ?? mini.online;
     if (mini.online) releaseHeld();
     return c.json({ ok: true });
   });
@@ -734,7 +736,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   });
   return () => {
     for (const { timer } of mini.held.values()) clearTimeout(timer);
-    mini.held.clear(); mini.online = true; mini.notSentAfterMs = NOT_SENT_AFTER_MS; sendPayloads.clear();
+    mini.held.clear(); mini.online = true; mini.heartbeat = true; mini.notSentAfterMs = NOT_SENT_AFTER_MS; sendPayloads.clear();
     turns.clear(); names.reset(); agent.reset(); today.reset(); triage.reset(); latency.clear(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
     for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };
 }
