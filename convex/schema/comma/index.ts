@@ -16,6 +16,7 @@ import {
   draftFields,
   messageFields,
   outboxFields,
+  reactionFields,
   scheduledFields,
   suggestionFields,
   syncStateFields,
@@ -43,6 +44,10 @@ export const comma_messages = defineTable(messageFields)
     searchField: "text",
     filterFields: ["conversationId", "isTapback", "retracted", "isFromMe"],
   });
+
+export const comma_reactions = defineTable(reactionFields)
+  .index("by_targetKey", ["targetKey"])
+  .index("by_conversationId", ["conversationId"]);
 
 export const comma_attachments = defineTable(attachmentFields)
   .index("by_guid", ["guid"])

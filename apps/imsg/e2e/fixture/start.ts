@@ -165,6 +165,16 @@ const { app, dispose } = await createApp({
       return c.json({ ok: true, message });
     });
 
+    fixtureApp.post("/__fixture/tapback", async (c) => {
+      const body = (await c.req.json()) as { chatGuid?: string; targetGuid?: string; reaction?: string; handle?: string; legacy?: boolean };
+      if (!body.chatGuid || !body.targetGuid || !body.reaction) {
+        return c.json({ error: "chatGuid, targetGuid and reaction are required" }, 400);
+      }
+      const handle = body.handle ?? body.chatGuid.split(";").at(-1) ?? "";
+      const message = bb.receiveTapback(body.chatGuid, body.targetGuid, body.reaction, handle, body.legacy === true);
+      return c.json({ ok: true, message });
+    });
+
     fixtureApp.post("/__fixture/typing", async (c) => {
       const body = (await c.req.json()) as { chatGuid?: string; display?: boolean };
       if (!body.chatGuid || typeof body.display !== "boolean") {

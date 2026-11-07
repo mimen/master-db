@@ -4,8 +4,8 @@ import type { Message, Reaction } from "@shared/types";
 
 import { applyPendingEdits, retirePendingEdits, type PendingEdit } from "./pending-edits";
 
-const theirLove: Reaction = { type: "love", isFromMe: false, senderName: "Alex", senderAddress: "+15550001111" };
-const myLike: Reaction = { type: "like", isFromMe: true, senderName: null, senderAddress: null };
+const theirLove: Reaction = { key: "love", isFromMe: false, senderName: "Alex", senderAddress: "+15550001111" };
+const myLike: Reaction = { key: "like", isFromMe: true, senderName: null, senderAddress: null };
 
 function message(overrides: Partial<Message> = {}): Message {
   return {
@@ -20,19 +20,19 @@ const edits = (...entries: [string, PendingEdit][]) => new Map(entries);
 
 describe("applyPendingEdits", () => {
   test("adds my reaction on top of the remote ones, which stay as the server has them", () => {
-    const [shown] = applyPendingEdits([message({ reactions: [theirLove] })], edits(["m1", { kind: "react", type: "like", remove: false }]));
+    const [shown] = applyPendingEdits([message({ reactions: [theirLove] })], edits(["m1", { kind: "react", key: "like", remove: false }]));
     expect(shown?.reactions).toEqual([theirLove, myLike]);
   });
 
   test("a reaction that arrives from someone else while mine is pending still shows", () => {
-    const pending = edits(["m1", { kind: "react", type: "like", remove: false }]);
-    const [shown] = applyPendingEdits([message({ reactions: [theirLove, { ...theirLove, type: "laugh" }] })], pending);
-    expect(shown?.reactions.map((r) => [r.type, r.isFromMe])).toEqual([["love", false], ["laugh", false], ["like", true]]);
+    const pending = edits(["m1", { kind: "react", key: "like", remove: false }]);
+    const [shown] = applyPendingEdits([message({ reactions: [theirLove, { ...theirLove, key: "laugh" }] })], pending);
+    expect(shown?.reactions.map((r) => [r.key, r.isFromMe])).toEqual([["love", false], ["laugh", false], ["like", true]]);
   });
 
   test("removing my reaction leaves another sender's reaction of the same type", () => {
-    const theirLike = { ...theirLove, type: "like" };
-    const [shown] = applyPendingEdits([message({ reactions: [theirLike, myLike] })], edits(["m1", { kind: "react", type: "like", remove: true }]));
+    const theirLike = { ...theirLove, key: "like" };
+    const [shown] = applyPendingEdits([message({ reactions: [theirLike, myLike] })], edits(["m1", { kind: "react", key: "like", remove: true }]));
     expect(shown?.reactions).toEqual([theirLike]);
   });
 
@@ -54,18 +54,18 @@ describe("applyPendingEdits", () => {
 
 describe("retirePendingEdits", () => {
   test("a reaction retires only once the server shows my reaction", () => {
-    const pending = edits(["m1", { kind: "react", type: "like", remove: false }]);
+    const pending = edits(["m1", { kind: "react", key: "like", remove: false }]);
     expect(retirePendingEdits(pending, [message({ reactions: [theirLove] })])).toBe(pending);
     expect(retirePendingEdits(pending, [message({ reactions: [theirLove, myLike] })]).size).toBe(0);
   });
 
   test("another sender's matching reaction does not retire mine", () => {
-    const pending = edits(["m1", { kind: "react", type: "like", remove: false }]);
-    expect(retirePendingEdits(pending, [message({ reactions: [{ ...theirLove, type: "like" }] })])).toBe(pending);
+    const pending = edits(["m1", { kind: "react", key: "like", remove: false }]);
+    expect(retirePendingEdits(pending, [message({ reactions: [{ ...theirLove, key: "like" }] })])).toBe(pending);
   });
 
   test("a removal retires once my reaction is gone from the server", () => {
-    const pending = edits(["m1", { kind: "react", type: "like", remove: true }]);
+    const pending = edits(["m1", { kind: "react", key: "like", remove: true }]);
     expect(retirePendingEdits(pending, [message({ reactions: [myLike] })])).toBe(pending);
     expect(retirePendingEdits(pending, [message({ reactions: [] })]).size).toBe(0);
   });
@@ -84,7 +84,7 @@ describe("retirePendingEdits", () => {
   });
 
   test("only the reflected intent retires", () => {
-    const pending = edits(["m1", { kind: "edit", text: "hello" }], ["m2", { kind: "react", type: "like", remove: false }]);
+    const pending = edits(["m1", { kind: "edit", text: "hello" }], ["m2", { kind: "react", key: "like", remove: false }]);
     const next = retirePendingEdits(pending, [message({ text: "hello" }), message({ guid: "m2" })]);
     expect([...next.keys()]).toEqual(["m2"]);
   });

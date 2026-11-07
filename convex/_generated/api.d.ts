@@ -576,12 +576,14 @@ export declare const api: {
           isSpam?: boolean;
           isTapback: boolean;
           mentions: Array<{ address: string; length: number; start: number }>;
+          platform?: "imessage";
           reactions: Array<{
             emoji?: string;
             isFromMe: boolean;
+            key: string;
             senderAddress: string | null;
             senderName: string | null;
-            type: string;
+            type?: string;
           }>;
           replyToFromMe?: boolean;
           replyToGuid?: string;
@@ -827,9 +829,10 @@ export declare const api: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -883,9 +886,10 @@ export declare const api: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -939,9 +943,10 @@ export declare const api: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -995,9 +1000,10 @@ export declare const api: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -1054,9 +1060,10 @@ export declare const api: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -1374,9 +1381,10 @@ export declare const api: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -1430,9 +1438,10 @@ export declare const api: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -1486,9 +1495,10 @@ export declare const api: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -1542,9 +1552,10 @@ export declare const api: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -1601,9 +1612,10 @@ export declare const api: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -2027,12 +2039,14 @@ export declare const api: {
             isSpam?: boolean;
             isTapback: boolean;
             mentions: Array<{ address: string; length: number; start: number }>;
+            platform?: "imessage";
             reactions: Array<{
               emoji?: string;
               isFromMe: boolean;
+              key: string;
               senderAddress: string | null;
               senderName: string | null;
-              type: string;
+              type?: string;
             }>;
             replyToFromMe?: boolean;
             replyToGuid?: string;
@@ -2166,12 +2180,14 @@ export declare const api: {
           isSpam?: boolean;
           isTapback: boolean;
           mentions: Array<{ address: string; length: number; start: number }>;
+          platform?: "imessage";
           reactions: Array<{
             emoji?: string;
             isFromMe: boolean;
+            key: string;
             senderAddress: string | null;
             senderName: string | null;
-            type: string;
+            type?: string;
           }>;
           replyToFromMe?: boolean;
           replyToGuid?: string;
@@ -4136,6 +4152,11 @@ export declare const internal: {
             }>;
             fromMe: boolean;
             guid: string;
+            reactions: Array<{
+              fromMe: boolean;
+              reaction: string;
+              sender: string;
+            }>;
             sender: string;
             text: string;
           }>;
@@ -4177,6 +4198,11 @@ export declare const internal: {
           }>;
           fromMe: boolean;
           guid: string;
+          reactions: Array<{
+            fromMe: boolean;
+            reaction: string;
+            sender: string;
+          }>;
           sender: string;
           text: string;
         }>
@@ -4220,9 +4246,10 @@ export declare const internal: {
             reactions: Array<{
               emoji?: string;
               isFromMe: boolean;
+              key: string;
               senderAddress: string | null;
               senderName: string | null;
-              type: string;
+              type?: string;
             }>;
             replyToFromMe: boolean | null;
             replyToGuid: string | null;
@@ -4254,6 +4281,7 @@ export declare const internal: {
           cursor?: string;
           phase?:
             | "messages"
+            | "reactions"
             | "attachments"
             | "scheduled"
             | "suggestions"
@@ -4268,6 +4296,7 @@ export declare const internal: {
           done: boolean;
           phase?:
             | "messages"
+            | "reactions"
             | "attachments"
             | "scheduled"
             | "suggestions"
@@ -4543,6 +4572,7 @@ export declare const internal: {
             isSpam?: boolean;
             isTapback: boolean;
             mentions: Array<{ address: string; length: number; start: number }>;
+            platform?: "imessage";
             reactions: Array<{
               emoji?: string;
               isFromMe: boolean;
@@ -4609,6 +4639,30 @@ export declare const internal: {
         "internal",
         { cursor: string | null; dryRun: boolean },
         { cursor: string; isDone: boolean; patched: number }
+      >;
+      backfillReactions: FunctionReference<
+        "mutation",
+        "internal",
+        { cursor: string | null; dryRun: boolean },
+        {
+          applied: number;
+          cursor: string;
+          deleted: number;
+          isDone: boolean;
+          scanned: number;
+        }
+      >;
+      deleteLegacyTapbacks: FunctionReference<
+        "mutation",
+        "internal",
+        { cursor: string | null; dryRun: boolean },
+        {
+          applied: number;
+          cursor: string;
+          deleted: number;
+          isDone: boolean;
+          scanned: number;
+        }
       >;
       rekeyGroupCrm: FunctionReference<
         "mutation",
@@ -4786,9 +4840,10 @@ export declare const internal: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -4842,9 +4897,10 @@ export declare const internal: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -4898,9 +4954,10 @@ export declare const internal: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -4954,9 +5011,10 @@ export declare const internal: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -5013,9 +5071,10 @@ export declare const internal: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -5209,9 +5268,10 @@ export declare const internal: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -5265,9 +5325,10 @@ export declare const internal: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -5321,9 +5382,10 @@ export declare const internal: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -5377,9 +5439,10 @@ export declare const internal: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;
@@ -5436,9 +5499,10 @@ export declare const internal: {
                   reactions: Array<{
                     emoji?: string;
                     isFromMe: boolean;
+                    key: string;
                     senderAddress: string | null;
                     senderName: string | null;
-                    type: string;
+                    type?: string;
                   }>;
                   replyToFromMe: boolean | null;
                   replyToGuid: string | null;

@@ -150,6 +150,7 @@ export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversation
       lastMessageAt: Math.max(conversation.lastMessageAt, now),
     });
     await ctx.db.insert("comma_messages", {
+      platform: imessage.platform,
       guid: tempGuid(clientKey),
       conversationId: conversation._id,
       chatGuid: route.chatGuid,
@@ -313,7 +314,7 @@ export const completeOutbox = internalMutation({
       // A failed or unknown send keeps its temp bubble so the client can show the state.
       else if (temp && status !== "sent") await strandTemp(ctx, clientKey);
     }
-    if (status === "sent" && (row.lane ?? laneOf(row.payload.kind)) === "imessage") await applyIMessageResult(ctx, row.payload);
+    if (status === "sent" && (row.lane ?? laneOf(row.payload.kind)) === "imessage") await applyIMessageResult(ctx, row);
     return true;
   },
 });

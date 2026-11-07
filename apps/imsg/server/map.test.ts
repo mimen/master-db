@@ -267,7 +267,7 @@ describe("custom-emoji tapbacks", () => {
     const thread = buildThread([emojiTapback({}), target], chat, names);
     expect(thread.map((m) => m.guid)).toEqual([target.guid]);
     expect(thread[0]?.reactions).toEqual([
-      { type: "emoji", emoji: "😍", isFromMe: false, senderName: "Marla", senderAddress: "+16195550101" },
+      { key: "😍", emoji: "😍", isFromMe: false, senderName: "Marla", senderAddress: "+16195550101" },
     ]);
   });
 
@@ -304,7 +304,7 @@ describe("custom-emoji tapbacks", () => {
   test("an unparseable 2006 still becomes a generic emoji reaction, not a bubble", () => {
     const thread = buildThread([emojiTapback({ text: "" }), target], chat, names);
     expect(thread.map((m) => m.guid)).toEqual([target.guid]);
-    expect(thread[0]?.reactions).toEqual([{ type: "emoji", isFromMe: false, senderName: "Marla", senderAddress: "+16195550101" }]);
+    expect(thread[0]?.reactions).toEqual([{ key: "emoji", isFromMe: false, senderName: "Marla", senderAddress: "+16195550101" }]);
   });
 
   test("the chat-list preview names the emoji instead of a removal", () => {

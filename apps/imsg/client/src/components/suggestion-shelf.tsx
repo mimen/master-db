@@ -17,7 +17,7 @@ import { useSuggestionMode, useSuggestionModel } from "@/lib/settings";
 import { useActionSheet } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
 import { alternateIndexForKey, suggestionSlots, type SuggestionSlots } from "@/lib/suggestion-slots";
-import { TAPBACK_EMOJI } from "./bubble";
+import { TAPBACK_EMOJI } from "@/lib/tapbacks";
 import type { ConversationId, EventSuggestion, ReplySuggestion, ReplySuggestions, SuggestionModel } from "@shared/types";
 
 /**
@@ -149,7 +149,7 @@ export function useReplySuggestions(
         label: `React ${emoji}`,
         ...(reactionUnavailable ? { disabled: true, note: reactionUnavailable } : {}),
         onPress: () => {
-          const rollback = pend?.(suggestion.targetMessageGuid!, { kind: "react", type: suggestion.reaction!, remove: false });
+          const rollback = pend?.(suggestion.targetMessageGuid!, { kind: "react", key: suggestion.reaction!, remove: false });
           void runCommand(conversationId, {
             kind: "react", messageGuid: suggestion.targetMessageGuid!, remove: false,
             reaction: suggestion.reaction!,

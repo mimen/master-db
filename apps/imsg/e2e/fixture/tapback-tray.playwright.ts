@@ -18,8 +18,8 @@ async function storedReactions(desk: { request: Page["request"]; chats: { needs:
   const response = await desk.request.post("/__fixture/convex", {
     data: { name: "comma/queries:listMessages", args: { conversationId: fixtureConversationId(desk.chats.needs), paginationOpts: { numItems: 50, cursor: null } } },
   });
-  const { page: rows } = await response.json() as { page: Array<{ text: string; reactions: Array<{ type: string; isFromMe: boolean }> }> };
-  return rows.find((row) => row.text === INBOUND)?.reactions.filter((r) => r.isFromMe).map((r) => r.type) ?? [];
+  const { page: rows } = await response.json() as { page: Array<{ text: string; reactions: Array<{ key: string; isFromMe: boolean }> }> };
+  return rows.find((row) => row.text === INBOUND)?.reactions.filter((r) => r.isFromMe).map((r) => r.key) ?? [];
 }
 
 test("desktop: right-click opens the tray, the keyboard picks Like, and the reaction lands", async ({ desk }) => {

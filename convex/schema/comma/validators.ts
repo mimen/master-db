@@ -17,7 +17,21 @@ export const participant = v.object({
   name: v.union(v.string(), v.null()),
 });
 
+/** A reaction as every reader sees it, whatever platform carried it. */
 export const reaction = v.object({
+  /** The reaction's identity on its platform, and what a react command sends: an iMessage tapback name or an emoji tapback's emoji. */
+  key: v.string(),
+  /** How it looks, when it is a Unicode emoji. */
+  emoji: v.optional(v.string()),
+  isFromMe: v.boolean(),
+  senderName: v.union(v.string(), v.null()),
+  senderAddress: v.union(v.string(), v.null()),
+  /** For clients built before `key`: the tapback name, or "emoji". Drop once every client reads `key`. */
+  type: v.optional(v.string()),
+});
+
+/** The folded tapbacks stored on a message row before comma_reactions existed. Read only as a fallback. */
+export const legacyReaction = v.object({
   type: v.string(),
   emoji: v.optional(v.string()),
   isFromMe: v.boolean(),
@@ -48,7 +62,7 @@ export const lastMessageSummary = v.object({
   hasAttachments: v.boolean(),
 });
 
-/** A raw tapback row's target; the folded result lives on the target's `reactions`. */
+/** A legacy tapback row's target. Ingest now writes tapbacks to comma_reactions instead. */
 export const tapback = v.object({
   targetGuid: v.string(),
   reaction: v.string(),
@@ -84,10 +98,12 @@ export const chatAliasFields = {
   service: v.string(),
 };
 
-export const messageFields = {
+/** What any platform's message has. `guid` is unique within `platform`; other tables name a message by `messageKey`. */
+export const messageCoreFields = {
+  /** Absent on rows written before platforms existed, which are all iMessage. */
+  platform: v.optional(platform),
   guid: v.string(),
   conversationId: v.id("comma_conversations"),
-  chatGuid: v.string(),
   dateCreated: v.number(),
   dateRead: v.optional(v.number()),
   dateDelivered: v.optional(v.number()),
@@ -95,23 +111,13 @@ export const messageFields = {
   dateRetracted: v.optional(v.number()),
   isFromMe: v.boolean(),
   text: v.string(),
-  service: v.union(v.literal("iMessage"), v.literal("SMS")),
   sender: v.optional(participant),
-  error: v.number(),
   edited: v.boolean(),
   retracted: v.boolean(),
-  isTapback: v.boolean(),
-  /** Top-level copy of tapback.targetGuid so it can be indexed. */
-  tapbackTargetGuid: v.optional(v.string()),
-  tapback: v.optional(tapback),
-  reactions: v.array(reaction),
   replyToGuid: v.optional(v.string()),
   replyToPreview: v.optional(v.string()),
   replyToFromMe: v.optional(v.boolean()),
   isGroupEvent: v.boolean(),
-  isSpam: v.optional(v.boolean()),
-  special: v.optional(specialContent),
-  sendEffect: v.optional(v.string()),
   mentions: v.array(mention),
   attachmentGuids: v.array(v.string()),
   /** Outbox key, set when the bridge matches an echo to a queued send. */
@@ -119,6 +125,49 @@ export const messageFields = {
   /** Bridge-assigned monotonic revision; upserts skip when existing >= incoming. */
   sourceVersion: v.number(),
 };
+
+/**
+ * iMessage's own fields, still top-level on every row. Nesting them under an `imessage` side field
+ * rewrites every stored message, so it waits for the second platform.
+ */
+export const imessageMessageFields = {
+  chatGuid: v.string(),
+  service: v.union(v.literal("iMessage"), v.literal("SMS")),
+  /** BlueBubbles' send error code; 0 when none. */
+  error: v.number(),
+  isSpam: v.optional(v.boolean()),
+  special: v.optional(specialContent),
+  sendEffect: v.optional(v.string()),
+  /** Legacy: true on tapback rows ingested before comma_reactions, and on other associated messages. */
+  isTapback: v.boolean(),
+  /** Top-level copy of tapback.targetGuid so it can be indexed. */
+  tapbackTargetGuid: v.optional(v.string()),
+  tapback: v.optional(tapback),
+  /** Legacy fold of those tapback rows. Readers merge it under comma_reactions; see convex/comma/reactions.ts. */
+  reactions: v.array(legacyReaction),
+};
+
+export const messageFields = { ...messageCoreFields, ...imessageMessageFields };
+
+/**
+ * One sender's reaction to one message: the newest state for that target, sender and key. A removal
+ * stays as a tombstone so an older add that arrives late cannot bring the reaction back.
+ */
+export const reactionFields = {
+  platform,
+  conversationId: v.id("comma_conversations"),
+  /** The reacted-to message's `messageKey`. Its row may not have arrived yet. */
+  targetKey: v.string(),
+  key: v.string(),
+  emoji: v.optional(v.string()),
+  isFromMe: v.boolean(),
+  /** Absent on my own reactions, which share one sender whatever address sent them. */
+  senderAddress: v.optional(v.string()),
+  /** When the event that set this state happened. An older event never overwrites it. */
+  at: v.number(),
+  removed: v.boolean(),
+};
+export const reactionState = v.object(reactionFields);
 
 export const attachmentFields = {
   guid: v.string(),
@@ -489,6 +538,8 @@ export type CommaPlatform = Infer<typeof platform>;
 export type CommaRoute = Infer<typeof route>;
 export type CommaParticipant = Infer<typeof participant>;
 export type CommaReaction = Infer<typeof reaction>;
+export type CommaLegacyReaction = Infer<typeof legacyReaction>;
+export type CommaReactionState = Infer<typeof reactionState>;
 export type CommaTapback = Infer<typeof tapback>;
 export type CommaOutboxPayload = Infer<typeof outboxPayload>;
 export type CommaOutboxStatus = Infer<typeof outboxStatus>;

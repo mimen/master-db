@@ -5,6 +5,8 @@ import { internalMutation } from "../_generated/server";
 
 import { imessage } from "./conversationIdentity";
 import { findByChatGuid } from "./conversationLookup";
+import { fromTapback } from "./reactions";
+import { applyReaction } from "./reactionStore";
 
 /**
  * One-time data moves for the conversation identity change. Each converges: a rerun finds nothing
@@ -96,5 +98,51 @@ export const rekeyGroupCrm = internalMutation({
 
     const unresolved = [...owners].filter(([, id]) => !id).map(([chatGuid]) => chatGuid).sort();
     return { moved, deleted, unresolved };
+  },
+});
+
+const tapbackPage = { dryRun: v.boolean(), cursor: v.union(v.string(), v.null()) };
+const tapbackPageResult = v.object({ scanned: v.number(), applied: v.number(), deleted: v.number(), cursor: v.string(), isDone: v.boolean() });
+
+/**
+ * Writes every legacy tapback row's reaction into comma_reactions and leaves the rows. Page until isDone.
+ * A dry run counts the events that would write against the table as it stands; within one page a later
+ * event can replace an earlier one, so the real run may write fewer.
+ */
+export const backfillReactions = internalMutation({
+  args: tapbackPage,
+  returns: tapbackPageResult,
+  handler: async (ctx, { dryRun, cursor }) => {
+    const page = await ctx.db.query("comma_messages")
+      .withIndex("by_tapbackTargetGuid", (q) => q.gte("tapbackTargetGuid", "")).paginate({ cursor, numItems: 200 });
+    let applied = 0;
+    for (const row of page.page) {
+      const reaction = fromTapback(row);
+      if (reaction && await applyReaction(ctx, reaction, !dryRun)) applied++;
+    }
+    return { scanned: page.page.length, applied, deleted: 0, cursor: page.continueCursor, isDone: page.isDone };
+  },
+});
+
+/**
+ * Deletes legacy tapback rows. Each row's reaction is written first, so none is lost if the backfill
+ * missed it. Not run yet: it needs a `convex export` backup and Milad's go-ahead after the new
+ * reactions are verified in production. Page until isDone.
+ */
+export const deleteLegacyTapbacks = internalMutation({
+  args: tapbackPage,
+  returns: tapbackPageResult,
+  handler: async (ctx, { dryRun, cursor }) => {
+    const page = await ctx.db.query("comma_messages")
+      .withIndex("by_tapbackTargetGuid", (q) => q.gte("tapbackTargetGuid", "")).paginate({ cursor, numItems: 200 });
+    let applied = 0;
+    let deleted = 0;
+    for (const row of page.page) {
+      const reaction = fromTapback(row);
+      if (reaction && await applyReaction(ctx, reaction, !dryRun)) applied++;
+      deleted++;
+      if (!dryRun) await ctx.db.delete(row._id);
+    }
+    return { scanned: page.page.length, applied, deleted, cursor: page.continueCursor, isDone: page.isDone };
   },
 });

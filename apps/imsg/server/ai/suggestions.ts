@@ -279,7 +279,7 @@ function validateOne(
     const target = byGuid.get(raw.targetMessageGuid);
     if (!target || target.isFromMe || raw.targetPartIndex !== 0) return reject("reaction-target");
     if (target.guid !== latestInbound.guid && !raw.basisMessageGuids.includes(target.guid)) return reject("reaction-basis");
-    if (target.reactions.some((reaction) => reaction.isFromMe && reaction.type === raw.reaction)) return reject("reaction-duplicate");
+    if (target.reactions.some((reaction) => reaction.isFromMe && reaction.key === raw.reaction)) return reject("reaction-duplicate");
     return {
       id: suggestionId(),
       kind: "reaction",

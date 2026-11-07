@@ -5,7 +5,7 @@ import { internalMutation } from "../_generated/server";
 import { choosePrimary } from "./conversationIdentity";
 import { foldTapbacks } from "./internal";
 
-const phases = ["messages", "attachments", "scheduled", "suggestions", "events", "state", "drafts", "presence", "finalize"] as const;
+const phases = ["messages", "reactions", "attachments", "scheduled", "suggestions", "events", "state", "drafts", "presence", "finalize"] as const;
 const phase = v.union(...phases.map((name) => v.literal(name)));
 
 export const deleteChat = internalMutation({
@@ -44,6 +44,14 @@ export const deleteChat = internalMutation({
           .withIndex("by_tapbackTargetGuid", (q) => q.eq("tapbackTargetGuid", guid)).collect();
         await ctx.db.patch(target._id, { reactions: foldTapbacks(tapbacks) });
       }
+      return next(page);
+    }
+    if (current === "reactions") {
+      // ponytail: a surviving sibling keeps the reactions of the deleted chat's messages; they have no target to show on.
+      if (siblings.length) return next({ isDone: true, continueCursor: "" });
+      const page = await ctx.db.query("comma_reactions")
+        .withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId)).paginate(pagination);
+      for (const row of page.page) await ctx.db.delete(row._id);
       return next(page);
     }
     if (current === "attachments") {

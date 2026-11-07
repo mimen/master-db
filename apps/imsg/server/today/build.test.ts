@@ -34,7 +34,7 @@ function fakes(candidates: TodayCandidate[], reduce: Answer, opts: { available?:
       if (route === "agentContext") {
         const { conversationId } = body as TodayRoutes["agentContext"][0];
         const attachments = Array.from({ length: opts.attachments ?? 0 }, (_, n) => ({ guid: `a${n}`, name: "f".repeat(120), mime: null }));
-        const messages = Array.from({ length: 6 }, (_, n) => ({ guid: `${conversationId}-m${n}`, at: 0, fromMe: false, sender: "P", text: `message ${n}`, attachments }));
+        const messages = Array.from({ length: 6 }, (_, n) => ({ guid: `${conversationId}-m${n}`, at: 0, fromMe: false, sender: "P", text: `message ${n}`, attachments, reactions: [] }));
         return { title: "t", participants: [], messages } as TodayRoutes[K][1];
       }
       if (route === "agentPeople") return [] as TodayRoutes[K][1];

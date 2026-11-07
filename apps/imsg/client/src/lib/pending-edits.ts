@@ -2,22 +2,22 @@ import type { Message } from "@shared/types";
 
 /** What the user asked to happen to a message the server already holds, shown until the server shows it too. */
 export type PendingEdit =
-  | { kind: "react"; type: string; remove: boolean }
+  | { kind: "react"; key: string; remove: boolean }
   | { kind: "retract" }
   | { kind: "edit"; text: string };
 
 /** Keyed by message guid. */
 export type PendingEdits = ReadonlyMap<string, PendingEdit>;
 
-function hasMine(message: Message, type: string): boolean {
-  return message.reactions.some((r) => r.isFromMe && r.type === type);
+function hasMine(message: Message, key: string): boolean {
+  return message.reactions.some((r) => r.isFromMe && r.key === key);
 }
 
 /** Thread queries drop retracted rows, so a retract is reflected once its row is gone. */
 function reflects(message: Message | undefined, edit: PendingEdit): boolean {
   if (!message) return edit.kind === "retract";
   switch (edit.kind) {
-    case "react": return hasMine(message, edit.type) !== edit.remove;
+    case "react": return hasMine(message, edit.key) !== edit.remove;
     case "retract": return message.retracted;
     case "edit": return message.text === edit.text;
   }
@@ -26,8 +26,8 @@ function reflects(message: Message | undefined, edit: PendingEdit): boolean {
 function apply(message: Message, edit: PendingEdit): Message | null {
   switch (edit.kind) {
     case "react": {
-      const others = message.reactions.filter((r) => !(r.isFromMe && r.type === edit.type));
-      return { ...message, reactions: edit.remove ? others : [...others, { type: edit.type, isFromMe: true, senderName: null, senderAddress: null }] };
+      const others = message.reactions.filter((r) => !(r.isFromMe && r.key === edit.key));
+      return { ...message, reactions: edit.remove ? others : [...others, { key: edit.key, isFromMe: true, senderName: null, senderAddress: null }] };
     }
     case "retract": return null;
     case "edit": return { ...message, text: edit.text, edited: true };

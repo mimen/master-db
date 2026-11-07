@@ -1,5 +1,5 @@
 import { paginationOptsValidator, paginationResultValidator, type SearchFilterFinalizer } from "convex/server";
-import { v } from "convex/values";
+import { v, type Infer } from "convex/values";
 
 import { formatAddress } from "../../apps/imsg/shared/address";
 import { conversationFlags } from "../../apps/imsg/shared/chat-state";
@@ -16,6 +16,7 @@ import {
   draftView,
   messageDoc,
   participant,
+  reaction,
   scheduledDoc,
   suggestionDoc,
   syncStateDoc,
@@ -26,6 +27,7 @@ import {
 import { findByChatGuid } from "./conversationLookup";
 import { resolveConversationNames } from "./names";
 import { normalizedAddress, personForNormalized } from "./photos";
+import { reactionsOf } from "./reactionStore";
 
 const conversationView = v.object({
   ...conversationDoc.fields,
@@ -175,18 +177,24 @@ const attachmentView = v.object({
   originalUrl: v.union(v.string(), v.null()),
 });
 
-export const messageView = v.object({
+/** A stored message as clients read it: `reactions` is the merged reaction list, not the row's legacy fold. */
+export const messageRead = v.object({
   ...messageDoc.fields,
+  reactions: v.array(reaction),
+});
+
+export const messageView = v.object({
+  ...messageRead.fields,
   attachments: v.array(attachmentView),
 });
 
-/** A message with its sender and reaction names read from the identity graph, not the names stored on the row. */
-async function withSenderNames(message: CommaMessageDoc, read: ListReader): Promise<CommaMessageDoc> {
+/** A message with its reactions, and sender and reaction names read from the identity graph, not the names stored on the row. */
+async function withSenderNames(ctx: QueryCtx, message: CommaMessageDoc, read: ListReader): Promise<Infer<typeof messageRead>> {
   const nameOf = async (address: string) => personName(await read.person(address));
   return {
     ...message,
     ...(message.sender ? { sender: { ...message.sender, name: await nameOf(message.sender.address) } } : {}),
-    reactions: await Promise.all(message.reactions.map(async (reaction) =>
+    reactions: await Promise.all((await reactionsOf(ctx, message)).map(async (reaction) =>
       ({ ...reaction, senderName: reaction.senderAddress ? await nameOf(reaction.senderAddress) : null }))),
   };
 }
@@ -198,7 +206,7 @@ export async function withMessageAttachments(ctx: QueryCtx, message: CommaMessag
     .filter((q) => q.eq(q.field("hideAttachment"), false))
     .collect();
   return {
-    ...await withSenderNames(message, read),
+    ...await withSenderNames(ctx, message, read),
     attachments: await Promise.all(attachments.map(async (attachment) => ({
       ...attachment,
       thumbUrl: attachment.thumbStorageId ? await ctx.storage.getUrl(attachment.thumbStorageId) : null,
@@ -233,11 +241,11 @@ export const searchMessages = query({
     conversationId: v.optional(v.id("comma_conversations")),
     from: v.optional(v.union(v.literal("me"), v.literal("them"))),
   },
-  returns: v.array(messageDoc),
+  returns: v.array(messageRead),
   handler: async (ctx, args) => {
     await assertAllowed(ctx);
     const read = listReader(ctx);
-    return await Promise.all((await searchMessageRows(ctx, args)).map((message) => withSenderNames(message, read)));
+    return await Promise.all((await searchMessageRows(ctx, args)).map((message) => withSenderNames(ctx, message, read)));
   },
 });
 

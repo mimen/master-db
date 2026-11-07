@@ -34,9 +34,9 @@ export interface AttachmentSummary {
 }
 
 export interface Reaction {
-  /** "love" | "like" | "dislike" | "laugh" | "emphasize" | "question" | "emoji" */
-  type: string;
-  /** The custom emoji for `type: "emoji"`; absent when it could not be parsed. */
+  /** The reaction's identity on its platform, and what a react command sends: an iMessage tapback name ("love") or an emoji tapback's emoji. */
+  key: string;
+  /** How it looks, when it is a Unicode emoji; absent when it could not be read. */
   emoji?: string;
   isFromMe: boolean;
   senderName: string | null;

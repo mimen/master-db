@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { TAPBACK_LABEL, TAPBACKS, trayKey } from "./tapbacks";
+import { reactionGlyph, TAPBACK_LABEL, TAPBACKS, trayKey } from "./tapbacks";
 
 describe("TAPBACKS", () => {
   test("keeps iMessage's tray order and names every tapback", () => {
@@ -37,5 +37,14 @@ describe("trayKey", () => {
     expect(trayKey("Escape", 2, 6)).toEqual({ kind: "close" });
     expect(trayKey("ArrowDown", 2, 6)).toBeNull();
     expect(trayKey("Tab", 2, 6)).toBeNull();
+  });
+});
+
+describe("reactionGlyph", () => {
+  test("shows a reaction's emoji, a classic tapback's glyph, or its key", () => {
+    expect(reactionGlyph({ key: "love", emoji: "❤️" })).toBe("❤️");
+    expect(reactionGlyph({ key: "like" })).toBe("👍");
+    expect(reactionGlyph({ key: "😍", emoji: "😍" })).toBe("😍");
+    expect(reactionGlyph({ key: "party-parrot" })).toBe("party-parrot");
   });
 });

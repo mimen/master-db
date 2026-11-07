@@ -7,6 +7,7 @@ import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
 import { imessage } from "./conversationIdentity";
+import { reactionsOf } from "./reactionStore";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 
@@ -70,6 +71,14 @@ function tapbackRow(conversationId: Id<"comma_conversations">, guid: string, tar
     tapback: { targetGuid, reaction, remove, ...(emoji ? { emoji } : {}) },
     text: "",
     ...rest,
+  });
+}
+
+/** What readers see on a message: its merged reactions. */
+async function shown(t: T, guid: string) {
+  return await t.run(async (ctx) => {
+    const target = await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", guid)).unique();
+    return target ? await reactionsOf(ctx, target) : [];
   });
 }
 
@@ -148,31 +157,60 @@ describe("upsertMessages", () => {
     expect(row?.text).toBe("m1");
   });
 
-  test("a tapback that arrives before its target folds once the target lands", async () => {
+  test("a tapback lands as a reaction, not a message row, and shows on its target once that arrives", async () => {
     const t = convexTest(schema, modules);
     const c = await seedDm(t, "+15550001111", [{ chatGuid: "iMessage;-;+15550001111", lastMessageAt: 1000 }]);
     await t.mutation(internal.comma.internal.upsertMessages, {
       messages: [tapbackRow(c, "tb1", "m1", { dateCreated: 1100, emoji: "😍", reaction: "emoji" })],
     });
     await t.mutation(internal.comma.internal.upsertMessages, { messages: [message(c, "m1")] });
-    const target = await t.run((ctx) => ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "m1")).unique());
-    expect(target?.reactions).toEqual([
-      { type: "emoji", emoji: "😍", isFromMe: false, senderName: "Alex", senderAddress: "+15550001111" },
+    expect(await t.run((ctx) => ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "tb1")).unique())).toBeNull();
+    expect(await shown(t, "m1")).toEqual([
+      { key: "😍", emoji: "😍", isFromMe: false, senderName: null, senderAddress: "+15550001111", type: "emoji" },
     ]);
+    expect((await t.run((ctx) => ctx.db.get(c)))?.platform).toBe("imessage");
+    expect((await t.run((ctx) => ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "m1")).unique()))?.platform).toBe("imessage");
   });
 
-  test("a removal drops the same sender's matching reaction", async () => {
+  test("a removal drops the same sender's matching reaction, and an older add arriving late does not bring it back", async () => {
     const t = convexTest(schema, modules);
     const c = await seedDm(t, "+15550001111", [{ chatGuid: "iMessage;-;+15550001111", lastMessageAt: 1000 }]);
+    const add = tapbackRow(c, "tb1", "m1", { dateCreated: 1100, isFromMe: true, sender: undefined });
     await t.mutation(internal.comma.internal.upsertMessages, {
-      messages: [
-        message(c, "m1"),
-        tapbackRow(c, "tb1", "m1", { dateCreated: 1100, isFromMe: true, sender: undefined }),
-        tapbackRow(c, "tb2", "m1", { dateCreated: 1200, isFromMe: true, sender: undefined, remove: true }),
-      ],
+      messages: [message(c, "m1"), tapbackRow(c, "tb2", "m1", { dateCreated: 1200, isFromMe: true, sender: undefined, remove: true })],
     });
-    const target = await t.run((ctx) => ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "m1")).unique());
-    expect(target?.reactions).toEqual([]);
+    expect(await t.mutation(internal.comma.internal.upsertMessages, { messages: [add] })).toEqual({ written: 0, skipped: 1 });
+    expect(await shown(t, "m1")).toEqual([]);
+  });
+
+  test("changing a tapback keeps each key's own state, and a replayed batch writes nothing", async () => {
+    const t = convexTest(schema, modules);
+    const c = await seedDm(t, "+15550001111", [{ chatGuid: "iMessage;-;+15550001111", lastMessageAt: 1000 }]);
+    const batch = [
+      message(c, "m1"),
+      tapbackRow(c, "tb1", "m1", { dateCreated: 1100, reaction: "love" }),
+      tapbackRow(c, "tb2", "m1", { dateCreated: 1200, reaction: "love", remove: true }),
+      tapbackRow(c, "tb3", "m1", { dateCreated: 1300, reaction: "like" }),
+    ];
+    await t.mutation(internal.comma.internal.upsertMessages, { messages: batch });
+    expect((await shown(t, "m1")).map((r) => [r.key, r.emoji])).toEqual([["like", "👍"]]);
+    expect(await t.mutation(internal.comma.internal.upsertMessages, { messages: batch.slice(1) })).toEqual({ written: 0, skipped: 3 });
+  });
+
+  test("a message ingested before comma_reactions keeps its folded tapbacks until a newer event decides them", async () => {
+    const t = convexTest(schema, modules);
+    const c = await seedDm(t, "+15550001111", [{ chatGuid: "iMessage;-;+15550001111", lastMessageAt: 1000 }]);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("comma_messages", { ...message(c, "m1"), reactions: [
+        { type: "love", isFromMe: false, senderName: "Alex", senderAddress: "+15550001111" },
+        { type: "laugh", isFromMe: true, senderName: null, senderAddress: null },
+      ] });
+    });
+    expect((await shown(t, "m1")).map((r) => [r.key, r.isFromMe])).toEqual([["love", false], ["laugh", true]]);
+    await t.mutation(internal.comma.internal.upsertMessages, {
+      messages: [tapbackRow(c, "tb9", "m1", { dateCreated: 1500, reaction: "love", remove: true })],
+    });
+    expect((await shown(t, "m1")).map((r) => [r.key, r.isFromMe])).toEqual([["laugh", true]]);
   });
 
   test("lastMessage ignores tapbacks and retracted messages", async () => {

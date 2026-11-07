@@ -54,7 +54,7 @@ export class ChatCommands {
     }
     const target = buildThread(current.value, body.chatGuid, this.names).find((message) => message.guid === messageGuid);
     if (!target || (body.suggested && target.isFromMe)) return failure("reaction target is not valid in this chat", 400);
-    const active = target.reactions.some((reaction) => reaction.isFromMe && reaction.type === body.reaction);
+    const active = target.reactions.some((reaction) => reaction.isFromMe && reaction.key === body.reaction);
     if (Boolean(body.remove) === !active) return { ok: true as const, value: undefined };
     return checked(await this.sideEffect(() => this.bb.react(body.chatGuid, messageGuid, body.remove ? `-${body.reaction}` : body.reaction, partIndex)));
   }
