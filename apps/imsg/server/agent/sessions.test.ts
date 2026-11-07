@@ -11,7 +11,12 @@ afterAll(() => rmSync(scratchRoot, { recursive: true, force: true }));
 
 const message = (at: number, text: string): ThreadMessage => ({ guid: `g${at}`, at, fromMe: false, sender: "Jesse Brennan", text, attachments: [], reactions: [] });
 
-function harness(thread: ThreadMessage[] = [message(100, "Thanks brother. Rebecca Berens - rebeccaberens@gmail.com")]) {
+const ELSEWHERE_LINE = {
+  at: 90, conversationId: fakeId<"comma_conversations">("conv-crew"), conversation: "Launch Crew", kind: "group", platform: "imessage", fromMe: false, sender: "Jesse Brennan", text: "see you at doors",
+} as const;
+
+function harness(thread: ThreadMessage[] = [message(100, "Thanks brother. Rebecca Berens - rebeccaberens@gmail.com")],
+  elsewhere: Routes["agentPersonContext"][1] = { name: "Jesse Brennan", lines: [ELSEWHERE_LINE], more: false }) {
   const calls: { route: keyof Routes; body: unknown }[] = [];
   const claimed = new Set<string>();
   let pending: CommandRow[] = [];
@@ -33,6 +38,7 @@ function harness(thread: ThreadMessage[] = [message(100, "Thanks brother. Rebecc
         return { title: "Jesse Brennan", participants: [{ name: "Jesse Brennan", handles: ["+15550100"] }], messages: thread.filter((m) => since === undefined || m.at > since) } as never;
       }
       if (route === "agentRecover") return { chatIds: [] } as never;
+      if (route === "agentPersonContext") return elsewhere as never;
       return null as never;
     },
     upload: async () => fakeId("storage"),
@@ -91,7 +97,21 @@ describe("Sessions", () => {
     expect(append.indexOf("Conversation: Jesse Brennan (id conv-chat-a)")).toBeGreaterThan(append.indexOf("ADDENDUM"));
     expect(append).toContain("untrusted messages from other people");
     expect(append).toContain("Jesse Brennan: Thanks brother. Rebecca Berens - rebeccaberens@gmail.com");
+    expect(calls).toContainEqual({ route: "agentPersonContext", body: { conversationId: "conv-chat-a", sinceAt: 1_000_000 - 30 * 86_400_000, limit: 10, maxChars: 2_000 } });
+    expect(append).toContain('Elsewhere with Jesse Brennan');
+    expect(append).toContain('Jesse Brennan in group "Launch Crew" (imessage): see you at doors');
     expect(queries[0].sent.map((m) => m.message.content)).toEqual(["add them to the guest list"]);
+  });
+
+  test("a group's packet has no elsewhere section, and a failed person read does not block the chat", async () => {
+    const group = harness(undefined, null);
+    await group.ask("chat-a", "hi");
+    expect(group.options[0].append).not.toContain("Elsewhere");
+    const failing = harness();
+    failing.hooks.before = (route) => { if (route === "agentPersonContext") throw new Error("offline"); };
+    await failing.ask("chat-a", "hi");
+    expect(failing.options[0].append).toContain("Conversation: Jesse Brennan");
+    expect(failing.logs).toContain("comma agent: chat-a: person context unavailable: Error: offline");
   });
 
   test("a chat with a session id resumes it instead of reserving a new one", async () => {

@@ -32,8 +32,9 @@ describe("parseCard", () => {
 
 const thread = (guid = "m1", text = "what time?"): TodayThread => ({
   ref: "c1",
-  candidate: { conversationId: "conv1" as ConversationId, title: "Alex", isGroup: false, state: "needsYou", lastMessageAt: 0, unreadCount: 1 },
+  candidate: { conversationId: "conv1" as ConversationId, title: "Alex", isGroup: false, platform: "imessage", state: "needsYou", lastMessageAt: 0, unreadCount: 1 },
   people: [],
+  elsewhere: [],
   messages: [{ guid, at: 0, fromMe: false, sender: "Alex", text, attachments: [], reactions: [] }],
 });
 

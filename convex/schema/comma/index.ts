@@ -38,6 +38,7 @@ export const comma_chat_aliases = defineTable(chatAliasFields)
 export const comma_messages = defineTable(messageRowFields)
   .index("by_guid", ["guid"])
   .index("by_conversation_date", ["conversationId", "dateCreated"])
+  .index("by_sender_conversation_date", ["sender.address", "conversationId", "dateCreated"])
   .index("by_clientKey", ["clientKey"])
   .searchIndex("search_text", {
     searchField: "text",

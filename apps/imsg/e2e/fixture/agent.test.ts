@@ -115,3 +115,19 @@ test("markSeen clears ready only after a turn ends, and a settled chat that asks
   await call("markSeen", { chatId });
   expect((await chat(chatId)).seenAt).toBeGreaterThanOrEqual(ended.lastTurnEndedAt!);
 });
+
+test("an ask about elsewhere reads the person's other conversations and quotes the newest line", async () => {
+  const line = { at: 0, conversationId: "g1", conversation: "Launch Crew", kind: "group", platform: "imessage", fromMe: false, sender: "Jordan Lee", text: "projector?" } as const;
+  const agent = createAgentFixture({
+    userText: () => "", writeAgentDraft: () => {},
+    personContext: async (conversationId) => conversationId === "c1" ? { name: "Jordan Lee", lines: [line as never], more: false } : null,
+  }, 0);
+  const chatId = await agent.handlers["comma/agent:ask"]!({ conversationId: "c1", key: "k1", text: "what did they say elsewhere?", steer: false, model: "claude-opus-5-5", effort: "high" }) as string;
+  await tick();
+  const entries = (await agent.handlers["comma/agent:listItems"]!({ chatId }) as AgentItem[]).map((item) => item.entry);
+  expect(entries.find((entry) => entry.kind === "tool" && entry.name === "mcp__comma__read_person")).toMatchObject({
+    summary: "Read their other conversations", detail: expect.stringContaining('Jordan Lee in group "Launch Crew" (imessage): projector?'),
+  });
+  expect(entries.find((entry) => entry.kind === "assistant")).toMatchObject({ text: "Elsewhere, Jordan Lee wrote in group **Launch Crew**: “projector?”" });
+  expect(entries.at(-1)).toMatchObject({ kind: "turn_end", outcome: "completed" });
+});

@@ -44,7 +44,7 @@ export function parseCard(raw: unknown): TodayCard | null {
 
 export function renderCardPrompt(thread: TodayThread, now: number, messageChars: number): { system: string; prompt: string } {
   const system = [
-    "You read one of Milad's iMessage conversations and write a small card about it for the planner that ranks his day.",
+    "You read one of Milad's conversations, on whatever messaging platform it lives, and write a small card about it for the planner that ranks his day.",
     "Return JSON with:",
     `- summary: one sentence on where the thread stands now, at most ${SUMMARY_WORDS} words.`,
     "- ask: what they want from Milad, in a few words, or an empty string if nothing.",

@@ -1,4 +1,6 @@
 import { askTitle, chatPreview } from "../../../../convex/comma/agentSummary";
+import { personMessages } from "../../server/agent/context";
+import type { PersonContext } from "../../server/agent/convex-port";
 import type {
   AgentAttachmentMeta, AgentChat, AgentChatId, AgentChatSummary, AgentEntry, AgentItem, AgentItemId, AgentTodo, AskArgs,
 } from "../../client/src/lib/agent-api";
@@ -10,6 +12,8 @@ export interface AgentDraftPort {
   writeAgentDraft(conversationId: string, text: string, note: string, chatId: string): void;
   /** A finalized upload, or null; an ask may carry only finalized files. */
   upload?(storageId: string): AgentAttachmentMeta | null;
+  /** agentPersonContext for this conversation's person, or null for a group. */
+  personContext?(conversationId: string): Promise<PersonContext | null>;
 }
 
 type Handler = (args: Record<string, unknown>) => Promise<unknown>;
@@ -59,8 +63,10 @@ export interface SeedAgentChat {
  * starts a running turn with a checklist, a thinking summary and a command; one step later it ends
  * with a reply, nine steps and a measured duration. A message mentioning "guest list" asks which
  * list instead, and the answer drafts a reply, into the composer or, when the user has typed
- * there, into the pane. A message saying "take your time" keeps working until Stop. Seeded chats
- * come back on every reset; a seeded working chat runs until Stop.
+ * there, into the pane. A message asking what they said elsewhere reads the person's other
+ * conversations with read_person and quotes the newest line. A message saying "take your time"
+ * keeps working until Stop. Seeded chats come back on every reset; a seeded working chat runs
+ * until Stop.
  */
 export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400, seeds: readonly SeedAgentChat[] = []) {
   const chats = new Map<string, AgentChat>();
@@ -194,6 +200,19 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400, seeds: 
       upsert(chatId, `${turn}-photo`, comma("get_attachment", "Opened an attachment"));
       upsert(chatId, `${turn}-count`, bash("bun scripts/guest-list.ts --count", "Count the spots left", "done", "2"));
       upsert(chatId, `${turn}:todos`, { kind: "todos", todos: todos(3) });
+      const elsewhere = /elsewhere|other (chats|conversations)/i.test(args.text) ? drafts.personContext : undefined;
+      if (elsewhere) {
+        void elsewhere(args.conversationId).then((context) => {
+          const newest = context?.lines[0];
+          upsert(chatId, `${turn}-person`, { ...comma("read_person", "Read their other conversations"),
+            detail: context ? personMessages(context.lines, "America/Los_Angeles") : "(a group thread)" });
+          upsert(chatId, `${turn}-reply`, { kind: "assistant", streaming: false, text: newest
+            ? `Elsewhere, ${newest.sender} wrote in ${newest.kind} **${newest.conversation}**: “${newest.text}”`
+            : "Nothing from them in your other conversations." });
+          endTurn(chats.get(chatId)!, `${turn}-end`);
+        });
+        return;
+      }
       if (/guest list/i.test(args.text)) {
         upsert(chatId, `${turn}-reply`, { kind: "assistant", streaming: false,
           text: "Jesse wants himself and **Rebecca Berens** (rebeccaberens@gmail.com) on the list." });

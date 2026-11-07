@@ -20,6 +20,8 @@ export type Routes = { [K in keyof Refs]: [FunctionArgs<Refs[K]>, FunctionReturn
 
 export type ThreadContext = Routes["agentContext"][1];
 export type ThreadMessage = ThreadContext["messages"][number];
+export type PersonContext = NonNullable<Routes["agentPersonContext"][1]>;
+export type PersonLine = PersonContext["lines"][number];
 export type StorageId = Routes["agentRecordUpload"][0]["storageId"];
 
 export type Port = {

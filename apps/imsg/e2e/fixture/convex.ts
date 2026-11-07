@@ -210,6 +210,22 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       const upload = uploads.get(storageId);
       return upload?.filename && upload.mimeType ? { filename: upload.filename, mimeType: upload.mimeType, size: upload.bytes.size } : null;
     },
+    // Production's read, from the world: what this DM's person sent in every other conversation, newest first.
+    personContext: async (conversationId) => {
+      const rows = await conversations();
+      const here = rows.find((row) => row._id === conversationId);
+      if (!here || here.isGroup) return null;
+      const address = here.participants[0]?.address;
+      const byGuid = new Map(rows.flatMap((row) => row.chatGuids.map((guid) => [guid, row] as const)));
+      const listed = await bb.queryMessages({ limit: Number.MAX_SAFE_INTEGER, offset: 0 });
+      const lines = (listed.ok ? listed.value : []).flatMap((message) => {
+        const row = byGuid.get(message.chats?.[0]?.guid ?? "");
+        if (!row || row._id === here._id || message.isFromMe || message.handle?.address !== address || !message.text) return [];
+        return [{ at: message.dateCreated ?? 0, conversationId: row._id, conversation: row.displayName, kind: row.isGroup ? "group" as const : "dm" as const,
+          platform: "imessage" as const, fromMe: false, sender: here.displayName, text: message.text }];
+      }).sort((a, b) => b.at - a.at);
+      return { name: here.displayName, lines: lines.slice(0, 10), more: lines.length > 10 };
+    },
   }, 400, AGENT_SEED);
   const triage = createTriageFixture({
     lastMessage: async (chatGuid) => {

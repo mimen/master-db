@@ -6,7 +6,7 @@ import type { ConvexIngest } from "../bridge/convex-ingest";
 import type { OverlayDb } from "../db";
 import { cardThread, emptyCardStats, type CardStats } from "./cards";
 import {
-  parseTodayOutput, renderTodayPrompt, renderUpdateTurn, TODAY_SCHEMA,
+  ELSEWHERE, parseTodayOutput, renderTodayPrompt, renderUpdateTurn, TODAY_SCHEMA,
   type ConversationId, type TodayCandidate, type TodayCardedThread, type TodayDraft,
 } from "./prompt";
 import {
@@ -15,7 +15,7 @@ import {
 } from "./session";
 
 type Refs = Pick<typeof internal.comma.today, "todaySchedule" | "todayClaim" | "todayCandidates" | "todayFinish">
-  & Pick<typeof internal.comma.agentContext, "agentContext" | "agentPeople">;
+  & Pick<typeof internal.comma.agentContext, "agentContext" | "agentPeople" | "agentPersonContext">;
 export type TodayRoutes = { [K in keyof Refs]: [FunctionArgs<Refs[K]>, FunctionReturnType<Refs[K]>] };
 
 /** The ingest routes the Today worker, build and trigger post to, each the internal mutation of the same name. */
@@ -147,11 +147,17 @@ async function cardThreads(deps: TodayBuildDeps, signal: AbortSignal, read: read
   const cardDeps = { ...deps, signal, budgetLeftMs: () => started + CARD_BUDGET_MS - performance.now() };
   const threads: TodayCardedThread[] = await mapLimit(read, CONCURRENCY, async ({ ref, candidate }) => {
     signal.throwIfAborted();
-    const [context, people] = await Promise.all([
+    const [context, people, elsewhere] = await Promise.all([
       deps.port.post("agentContext", { conversationId: candidate.conversationId, limit: TODAY_LIMITS.messages }),
       deps.port.post("agentPeople", { conversationId: candidate.conversationId }),
+      candidate.isGroup ? null : deps.port.post("agentPersonContext", {
+        conversationId: candidate.conversationId, sinceAt: deps.now() - ELSEWHERE.days * 86_400_000, limit: ELSEWHERE.limit, maxChars: ELSEWHERE.maxChars,
+      }).catch((error: unknown) => {
+        deps.log?.(`today: person context for ${candidate.conversationId} unavailable: ${String(error)}`);
+        return null;
+      }),
     ]);
-    const thread = { ref, candidate, people, messages: context.messages };
+    const thread = { ref, candidate, people, messages: context.messages, elsewhere: elsewhere?.lines ?? [] };
     return { ...thread, card: await cardThread(cardDeps, thread, cards) };
   });
   return { threads, cards, cardMs: Math.round(performance.now() - started) };

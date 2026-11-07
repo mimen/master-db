@@ -4202,6 +4202,33 @@ export declare const internal: {
           tags: Array<string>;
         }>
       >;
+      agentPersonContext: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          address?: string;
+          beforeAt?: number;
+          conversationId: Id<"comma_conversations">;
+          limit: number;
+          maxChars: number;
+          personId?: Id<"people">;
+          sinceAt?: number;
+        },
+        {
+          lines: Array<{
+            at: number;
+            conversation: string;
+            conversationId: Id<"comma_conversations">;
+            fromMe: boolean;
+            kind: "dm" | "group";
+            platform: "imessage";
+            sender: string;
+            text: string;
+          }>;
+          more: boolean;
+          name: string;
+        } | null
+      >;
       agentSearch: FunctionReference<
         "mutation",
         "internal",
@@ -5771,6 +5798,7 @@ export declare const internal: {
             };
             isGroup: boolean;
             lastMessageAt: number;
+            platform: "imessage";
             state: "needsYou" | "waiting";
             title: string;
             unreadCount: number;

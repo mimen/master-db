@@ -7,6 +7,8 @@ import { people } from "../schema/identity/people";
 
 import { conversationPeople } from "./conversationInfo";
 import { resolveConversationNames } from "./names";
+import { personContext, personContextResult } from "./personContext";
+import { personForAddress } from "./photos";
 import { searchMessageRows } from "./queries";
 import { reactionsOf } from "./reactionStore";
 
@@ -137,6 +139,35 @@ export const agentSearch = internalMutation({
   handler: async (ctx, { conversationId, query }) => {
     const participants = await conversationPeople(ctx, await requireConversation(ctx, conversationId));
     return await messageViews(ctx, participants, await searchMessageRows(ctx, { conversationId, query }));
+  },
+});
+
+/**
+ * A person's messages in every other conversation, newest first. The person is `personId`, else whoever `address`
+ * resolves to, else the one person of this conversation; null for a group named with neither.
+ */
+export const agentPersonContext = internalMutation({
+  args: {
+    conversationId: v.id("comma_conversations"),
+    personId: v.optional(v.id("people")),
+    address: v.optional(v.string()),
+    sinceAt: v.optional(v.number()),
+    beforeAt: v.optional(v.number()),
+    limit: v.number(),
+    maxChars: v.number(),
+  },
+  returns: v.union(personContextResult, v.null()),
+  handler: async (ctx, { conversationId, personId, address: named, sinceAt, beforeAt, limit, maxChars }) => {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("limit must be between 1 and 100");
+    if (!Number.isInteger(maxChars) || maxChars < 1 || maxChars > 20_000) throw new Error("maxChars must be between 1 and 20000");
+    if (personId && named !== undefined) throw new Error("Pass at most one of personId, address");
+    const conversation = await requireConversation(ctx, conversationId);
+    const address = named ?? (personId || conversation.isGroup ? undefined : conversation.participants[0]?.address);
+    if (!personId && address === undefined) return null;
+    let person = personId ? await ctx.db.get(personId) : await personForAddress(ctx, address!);
+    if (personId && !person) throw new Error("Person not found");
+    for (let hops = 0; person?.merged_into && hops < 5; hops++) person = await ctx.db.get(person.merged_into);
+    return await personContext(ctx, { person, address, excludeConversationId: conversationId, sinceAt, beforeAt, limit, maxChars });
   },
 });
 

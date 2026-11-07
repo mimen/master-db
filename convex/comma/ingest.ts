@@ -40,6 +40,7 @@ const ROUTES = {
   agentContext: internal.comma.agentContext.agentContext,
   agentSearch: internal.comma.agentContext.agentSearch,
   agentPeople: internal.comma.agentContext.agentPeople,
+  agentPersonContext: internal.comma.agentContext.agentPersonContext,
   agentAttachment: internal.comma.agentContext.agentAttachment,
   aiThread: internal.comma.agentContext.aiThread,
   agentRecordUpload: internal.comma.drafts.recordUpload,
