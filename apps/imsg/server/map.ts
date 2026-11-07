@@ -2,6 +2,7 @@ import type { BBAttachment, BBChat, BBHandle, BBMessage } from "./bb-types";
 import type { ChatSummary, Message, Participant, Reaction, SpecialContent } from "../shared/types";
 import type { MentionAnnotation } from "../shared/mentions";
 import { formatAddress } from "../shared/address";
+import { firstEmoji } from "../shared/emoji";
 import { tapbackKey } from "../shared/platform-profile";
 import type { CrmData, NameSource } from "./name-resolver";
 
@@ -72,8 +73,6 @@ function specialContent(m: BBMessage): SpecialContent | null {
 
 const TAPBACK_NAMES = ["love", "like", "dislike", "laugh", "emphasize", "question"] as const;
 const CUSTOM_EMOJI_TAPBACK = 6;
-const PICTOGRAPH = /\p{Extended_Pictographic}|\p{Regional_Indicator}/u;
-const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 interface Tapback {
   type: string;
@@ -90,11 +89,7 @@ interface Tapback {
 function tapbackEmoji(m: BBMessage): string | undefined {
   const body = Array.isArray(m.attributedBody) ? m.attributedBody[0] : m.attributedBody;
   const text = m.text ?? body?.string ?? "";
-  const prefix = text.split("“")[0] ?? "";
-  for (const { segment } of graphemes.segment(prefix)) {
-    if (PICTOGRAPH.test(segment)) return segment;
-  }
-  return undefined;
+  return firstEmoji(text.split("“")[0] ?? "") ?? undefined;
 }
 
 export function parseTapback(m: BBMessage): Tapback | null {

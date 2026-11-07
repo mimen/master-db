@@ -303,6 +303,11 @@ describe("custom-emoji tapbacks", () => {
     expect(emojiOf(emojiTapback({ text: " ​👍​ to “ fun 😭 ” " }))).toEqual(["👍"]);
   });
 
+  test("reads a keycap emoji, which the tray can send", () => {
+    const thread = buildThread([emojiTapback({ text: "Reacted 1️⃣ to “Hahaha”" }), target], chat, names);
+    expect(thread[0]?.reactions.map((r) => [r.key, r.emoji])).toEqual([["emoji:1️⃣", "1️⃣"]]);
+  });
+
   test("falls back to the attributed body when BlueBubbles sends no text", () => {
     const tapback = emojiTapback({ text: null, attributedBody: [{ string: "Reacted 🫶🏽 to “Hahaha”", runs: [] }] });
     expect(buildThread([tapback, target], chat, names)[0]?.reactions.map((r) => r.emoji)).toEqual(["🫶🏽"]);
