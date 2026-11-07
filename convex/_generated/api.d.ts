@@ -700,27 +700,9 @@ export declare const api: {
             | { kind: "unsend"; messageGuid: string; partIndex?: number }
             | { kind: "delete"; messageGuid: string; partIndex?: number }
             | { kind: "markRead"; messageGuid?: string }
-            | { kind: "markUnread"; messageGuid?: string }
-            | { kind: "settle"; messageGuid?: string }
-            | { kind: "unsettle"; messageGuid?: string }
-            | { kind: "pin"; value: boolean }
-            | { kind: "mute"; value: boolean }
             | { kind: "rename"; name: string }
             | { kind: "schedule"; sendAt: number; text: string }
-            | {
-                bbId: number;
-                kind: "editScheduled";
-                sendAt: number;
-                text: string;
-              }
-            | { bbId: number; kind: "cancelScheduled" }
             | { addresses: Array<string>; kind: "createChat"; text: string }
-            | {
-                address: string;
-                caption?: string;
-                kind: "sendContact";
-                name: string;
-              }
             | {
                 caption?: string;
                 filename: string;
@@ -729,13 +711,25 @@ export declare const api: {
                 mimeType: string;
                 storageId: Id<"_storage">;
               }
+            | { active: boolean; expiresAt: number; kind: "typing" }
+            | {
+                bbId: number;
+                kind: "editScheduled";
+                sendAt: number;
+                text: string;
+              }
+            | { bbId: number; kind: "cancelScheduled" }
+            | { bbId: number; kind: "sendScheduledNow" }
+            | {
+                address: string;
+                caption?: string;
+                kind: "sendContact";
+                name: string;
+              }
             | { action: "add" | "remove"; address: string; kind: "participant" }
             | { kind: "leaveGroup" }
             | { chatGuid: string; kind: "deleteChat" }
-            | { bbId: number; kind: "sendScheduledNow" }
-            | { attachmentGuid: string; kind: "transcribe" }
             | { kind: "createFaceTimeLink" }
-            | { active: boolean; expiresAt: number; kind: "typing" }
             | { kind: "suggestions"; model: "opus" | "terra"; refresh: boolean }
             | {
                 feedback: {
@@ -778,7 +772,13 @@ export declare const api: {
                 kind: "suggestionFeedback";
               }
             | { kind: "clearSuggestionLearning" }
-            | { kind: "identify" };
+            | { kind: "identify" }
+            | { attachmentGuid: string; kind: "transcribe" }
+            | { kind: "markUnread"; messageGuid?: string }
+            | { kind: "settle"; messageGuid?: string }
+            | { kind: "unsettle"; messageGuid?: string }
+            | { kind: "pin"; value: boolean }
+            | { kind: "mute"; value: boolean };
         },
         Id<"comma_outbox">
       >;
@@ -1216,7 +1216,7 @@ export declare const api: {
       pendingOutbox: FunctionReference<
         "query",
         "public",
-        { bridgeKey: string },
+        { bridgeKey: string; lane?: "imessage" | "ai" },
         Array<{
           _creationTime: number;
           _id: Id<"comma_outbox">;
@@ -1226,6 +1226,7 @@ export declare const api: {
           conversationId?: Id<"comma_conversations">;
           createdAt: number;
           error?: string;
+          lane?: "imessage" | "ai";
           leaseUntil?: number;
           payload:
             | {
@@ -1256,27 +1257,9 @@ export declare const api: {
             | { kind: "unsend"; messageGuid: string; partIndex?: number }
             | { kind: "delete"; messageGuid: string; partIndex?: number }
             | { kind: "markRead"; messageGuid?: string }
-            | { kind: "markUnread"; messageGuid?: string }
-            | { kind: "settle"; messageGuid?: string }
-            | { kind: "unsettle"; messageGuid?: string }
-            | { kind: "pin"; value: boolean }
-            | { kind: "mute"; value: boolean }
             | { kind: "rename"; name: string }
             | { kind: "schedule"; sendAt: number; text: string }
-            | {
-                bbId: number;
-                kind: "editScheduled";
-                sendAt: number;
-                text: string;
-              }
-            | { bbId: number; kind: "cancelScheduled" }
             | { addresses: Array<string>; kind: "createChat"; text: string }
-            | {
-                address: string;
-                caption?: string;
-                kind: "sendContact";
-                name: string;
-              }
             | {
                 caption?: string;
                 filename: string;
@@ -1285,13 +1268,25 @@ export declare const api: {
                 mimeType: string;
                 storageId: Id<"_storage">;
               }
+            | { active: boolean; expiresAt: number; kind: "typing" }
+            | {
+                bbId: number;
+                kind: "editScheduled";
+                sendAt: number;
+                text: string;
+              }
+            | { bbId: number; kind: "cancelScheduled" }
+            | { bbId: number; kind: "sendScheduledNow" }
+            | {
+                address: string;
+                caption?: string;
+                kind: "sendContact";
+                name: string;
+              }
             | { action: "add" | "remove"; address: string; kind: "participant" }
             | { kind: "leaveGroup" }
             | { chatGuid: string; kind: "deleteChat" }
-            | { bbId: number; kind: "sendScheduledNow" }
-            | { attachmentGuid: string; kind: "transcribe" }
             | { kind: "createFaceTimeLink" }
-            | { active: boolean; expiresAt: number; kind: "typing" }
             | { kind: "suggestions"; model: "opus" | "terra"; refresh: boolean }
             | {
                 feedback: {
@@ -1334,7 +1329,13 @@ export declare const api: {
                 kind: "suggestionFeedback";
               }
             | { kind: "clearSuggestionLearning" }
-            | { kind: "identify" };
+            | { kind: "identify" }
+            | { attachmentGuid: string; kind: "transcribe" }
+            | { kind: "markUnread"; messageGuid?: string }
+            | { kind: "settle"; messageGuid?: string }
+            | { kind: "unsettle"; messageGuid?: string }
+            | { kind: "pin"; value: boolean }
+            | { kind: "mute"; value: boolean };
           result?:
             | {
                 kind: "send";
@@ -4144,6 +4145,69 @@ export declare const internal: {
           text: string;
         }>
       >;
+      aiThread: FunctionReference<
+        "mutation",
+        "internal",
+        { conversationId: Id<"comma_conversations"> },
+        {
+          isGroup: boolean;
+          messages: Array<{
+            attachments: Array<{
+              filename: string | null;
+              guid: string;
+              height: number | null;
+              mimeType: string | null;
+              originalUrl?: string | null;
+              thumbUrl?: string | null;
+              totalBytes: number | null;
+              width: number | null;
+            }>;
+            chatGuid: string;
+            clientKey?: string;
+            dateCreated: number;
+            dateDelivered: number | null;
+            dateRead: number | null;
+            edited: boolean;
+            error: number;
+            failed?: boolean;
+            guid: string;
+            isAssociatedMessage?: boolean;
+            isFromMe: boolean;
+            isGroupEvent: boolean;
+            isSpam?: boolean;
+            mentions?: Array<{
+              address: string;
+              length: number;
+              start: number;
+            }>;
+            pending?: boolean;
+            reactions: Array<{
+              emoji?: string;
+              isFromMe: boolean;
+              senderAddress: string | null;
+              senderName: string | null;
+              type: string;
+            }>;
+            replyToFromMe: boolean | null;
+            replyToGuid: string | null;
+            replyToPreview: string | null;
+            retracted: boolean;
+            sendEffect: string | null;
+            sender: { address: string; name: string | null } | null;
+            service: "iMessage" | "SMS";
+            special:
+              | { kind: "contact"; name: string | null }
+              | { kind: "location" }
+              | { kind: "apple-cash" }
+              | { kind: "poll" }
+              | { kind: "unknown"; label: string }
+              | null;
+            text: string;
+          }>;
+          participants: Array<{ address: string; name: string | null }>;
+          title: string;
+        }
+      >;
     };
     deletions: {
       deleteChat: FunctionReference<
@@ -4507,7 +4571,12 @@ export declare const internal: {
       claimOutbox: FunctionReference<
         "mutation",
         "internal",
-        { leaseMs: number; limit: number; now: number },
+        {
+          lane?: "imessage" | "ai";
+          leaseMs: number;
+          limit: number;
+          now: number;
+        },
         Array<{
           _creationTime: number;
           _id: Id<"comma_outbox">;
@@ -4517,6 +4586,7 @@ export declare const internal: {
           conversationId?: Id<"comma_conversations">;
           createdAt: number;
           error?: string;
+          lane?: "imessage" | "ai";
           leaseUntil?: number;
           payload:
             | {
@@ -4547,27 +4617,9 @@ export declare const internal: {
             | { kind: "unsend"; messageGuid: string; partIndex?: number }
             | { kind: "delete"; messageGuid: string; partIndex?: number }
             | { kind: "markRead"; messageGuid?: string }
-            | { kind: "markUnread"; messageGuid?: string }
-            | { kind: "settle"; messageGuid?: string }
-            | { kind: "unsettle"; messageGuid?: string }
-            | { kind: "pin"; value: boolean }
-            | { kind: "mute"; value: boolean }
             | { kind: "rename"; name: string }
             | { kind: "schedule"; sendAt: number; text: string }
-            | {
-                bbId: number;
-                kind: "editScheduled";
-                sendAt: number;
-                text: string;
-              }
-            | { bbId: number; kind: "cancelScheduled" }
             | { addresses: Array<string>; kind: "createChat"; text: string }
-            | {
-                address: string;
-                caption?: string;
-                kind: "sendContact";
-                name: string;
-              }
             | {
                 caption?: string;
                 filename: string;
@@ -4576,13 +4628,25 @@ export declare const internal: {
                 mimeType: string;
                 storageId: Id<"_storage">;
               }
+            | { active: boolean; expiresAt: number; kind: "typing" }
+            | {
+                bbId: number;
+                kind: "editScheduled";
+                sendAt: number;
+                text: string;
+              }
+            | { bbId: number; kind: "cancelScheduled" }
+            | { bbId: number; kind: "sendScheduledNow" }
+            | {
+                address: string;
+                caption?: string;
+                kind: "sendContact";
+                name: string;
+              }
             | { action: "add" | "remove"; address: string; kind: "participant" }
             | { kind: "leaveGroup" }
             | { chatGuid: string; kind: "deleteChat" }
-            | { bbId: number; kind: "sendScheduledNow" }
-            | { attachmentGuid: string; kind: "transcribe" }
             | { kind: "createFaceTimeLink" }
-            | { active: boolean; expiresAt: number; kind: "typing" }
             | { kind: "suggestions"; model: "opus" | "terra"; refresh: boolean }
             | {
                 feedback: {
@@ -4625,7 +4689,13 @@ export declare const internal: {
                 kind: "suggestionFeedback";
               }
             | { kind: "clearSuggestionLearning" }
-            | { kind: "identify" };
+            | { kind: "identify" }
+            | { attachmentGuid: string; kind: "transcribe" }
+            | { kind: "markUnread"; messageGuid?: string }
+            | { kind: "settle"; messageGuid?: string }
+            | { kind: "unsettle"; messageGuid?: string }
+            | { kind: "pin"; value: boolean }
+            | { kind: "mute"; value: boolean };
           result?:
             | {
                 kind: "send";

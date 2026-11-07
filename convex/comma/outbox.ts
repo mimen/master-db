@@ -1,13 +1,17 @@
 import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "../_generated/dataModel";
-import { internalMutation, mutation, query, type MutationCtx } from "../_generated/server";
+import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
-import { commandReceipt, commandResult, outboxDoc, outboxPayload, outboxStatus, type CommaOutboxPayload } from "../schema/comma/validators";
+import {
+  commandReceipt, commandResult, laneOf, legacyTriagePayload, outboxDoc, outboxLane, outboxPayload, outboxStatus,
+  type CommaOutboxLane, type CommaOutboxPayload, type CommaOutboxStatus,
+} from "../schema/comma/validators";
 
 import { settleDraftChat } from "./agent";
 import { sameSecret } from "./bridgeAuth";
-import { refoldTarget, refreshLastMessage } from "./internal";
+import { applyIMessageResult } from "./imessageResults";
+import { refreshLastMessage } from "./internal";
 import { sendService, tempGuid } from "./tempMessage";
 import { carryTempAnchor, readConversation, setConversationFlag, settleConversation, unsettleConversation } from "./triage";
 
@@ -32,9 +36,9 @@ export const AUTO_RETRY = {
 export const IDEMPOTENT_KINDS = new Set(Object.entries(AUTO_RETRY).filter(([, retry]) => retry).map(([kind]) => kind));
 export const GLOBAL_KINDS = new Set<CommaOutboxPayload["kind"]>(["createChat", "clearSuggestionLearning"]);
 
-type TriagePayload = Extract<CommaOutboxPayload, { kind: "settle" | "unsettle" | "pin" | "mute" | "markUnread" }>;
+type TriagePayload = typeof legacyTriagePayload.type;
 
-const TRIAGE_KINDS: ReadonlySet<CommaOutboxPayload["kind"]> = new Set<TriagePayload["kind"]>(["settle", "unsettle", "pin", "mute", "markUnread"]);
+const TRIAGE_KINDS: ReadonlySet<CommaOutboxPayload["kind"]> = new Set(legacyTriagePayload.members.map((member) => member.fields.kind.value));
 const isTriage = (payload: CommaOutboxPayload): payload is TriagePayload => TRIAGE_KINDS.has(payload.kind);
 
 async function triageCore(ctx: MutationCtx, conversationId: Id<"comma_conversations">, payload: TriagePayload): Promise<void> {
@@ -82,7 +86,7 @@ async function applyTriage(ctx: MutationCtx, clientKey: string, conversationId: 
   await triageCore(ctx, conversationId, payload);
   const now = Date.now();
   return await ctx.db.insert("comma_outbox", {
-    clientKey, conversationId, payload, status: "sent", result: { kind: payload.kind, ok: true }, attempts: 0, createdAt: now, updatedAt: now,
+    clientKey, conversationId, payload, lane: laneOf(payload.kind), status: "sent", result: { kind: payload.kind, ok: true }, attempts: 0, createdAt: now, updatedAt: now,
   });
 }
 
@@ -126,6 +130,7 @@ export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversation
     clientKey,
     conversationId,
     payload,
+    lane: laneOf(payload.kind),
     status: "pending",
     attempts: 0,
     createdAt: now,
@@ -193,34 +198,41 @@ export const outboxStatusFor = query({
 });
 
 /**
+ * One status's rows in a lane, oldest first. No lane is every lane, for a bridge from before lanes. A row
+ * queued before lanes has none and belongs to the lane its kind maps to.
+ */
+async function laneRows(ctx: QueryCtx, lane: CommaOutboxLane | undefined, status: CommaOutboxStatus, limit: number) {
+  if (!lane) return await ctx.db.query("comma_outbox").withIndex("by_status_createdAt", (q) => q.eq("status", status)).order("asc").take(limit);
+  const scan = (stamp: CommaOutboxLane | undefined) => ctx.db.query("comma_outbox")
+    .withIndex("by_lane_status_createdAt", (q) => q.eq("lane", stamp).eq("status", status)).order("asc").take(limit);
+  // ponytail: the unstamped scan outlives the rows it serves; drop it once none are pending or claimed.
+  const unstamped = (await scan(undefined)).filter((row) => laneOf(row.payload.kind) === lane);
+  const stamped = await scan(lane);
+  return unstamped.length ? [...unstamped, ...stamped].sort((a, b) => a.createdAt - b.createdAt).slice(0, limit) : stamped;
+}
+
+/**
  * The bridge subscribes to this with ConvexClient for push delivery. Internal
  * queries can't be subscribed from outside Convex, so this one public query is
  * gated by the bridge secret instead of Convex Auth.
  */
 export const pendingOutbox = query({
-  args: { bridgeKey: v.string() },
+  args: { bridgeKey: v.string(), lane: v.optional(outboxLane) },
   returns: v.array(outboxDoc),
-  handler: async (ctx, { bridgeKey }) => {
+  handler: async (ctx, { bridgeKey, lane }) => {
     if (!sameSecret(bridgeKey)) throw new Error("Unauthorized");
-    return await ctx.db
-      .query("comma_outbox")
-      .withIndex("by_status_createdAt", (q) => q.eq("status", "pending"))
-      .order("asc")
-      .take(50);
+    return await laneRows(ctx, lane, "pending", 50);
   },
 });
 
 export const claimOutbox = internalMutation({
-  args: { now: v.number(), leaseMs: v.number(), limit: v.number() },
+  args: { now: v.number(), leaseMs: v.number(), limit: v.number(), lane: v.optional(outboxLane) },
   returns: v.array(outboxDoc),
-  handler: async (ctx, { now, leaseMs, limit }) => {
+  handler: async (ctx, { now, leaseMs, limit, lane }) => {
     if (!Number.isFinite(leaseMs) || leaseMs <= 0) throw new Error("leaseMs must be positive");
     if (!Number.isInteger(limit) || limit < 0 || limit > 50) throw new Error("limit must be between 0 and 50");
     // Expired leases first: a send can't be known to have failed, so it is never retried.
-    for (const row of await ctx.db
-      .query("comma_outbox")
-      .withIndex("by_status_createdAt", (q) => q.eq("status", "claimed"))
-      .take(200)) {
+    for (const row of await laneRows(ctx, lane, "claimed", 200)) {
       if ((row.leaseUntil ?? 0) > now) continue;
       const retry = IDEMPOTENT_KINDS.has(row.payload.kind);
       await ctx.db.patch(row._id, {
@@ -229,14 +241,11 @@ export const claimOutbox = internalMutation({
         leaseUntil: undefined,
         claimToken: undefined,
         updatedAt: now,
-      });      if (!retry && row.payload.kind === "send") await strandTemp(ctx, row.clientKey);
+      });
+      if (!retry && row.payload.kind === "send") await strandTemp(ctx, row.clientKey);
     }
     const claimed: Doc<"comma_outbox">[] = [];
-    for (const row of await ctx.db
-      .query("comma_outbox")
-      .withIndex("by_status_createdAt", (q) => q.eq("status", "pending"))
-      .order("asc")
-      .take(limit)) {
+    for (const row of await laneRows(ctx, lane, "pending", limit)) {
       if (row.conversationId && isTriage(row.payload)) {
         await applyQueuedTriage(ctx, { ...row, conversationId: row.conversationId }, row.payload, now);
         continue;
@@ -295,17 +304,7 @@ export const completeOutbox = internalMutation({
       // A failed or unknown send keeps its temp bubble so the client can show the state.
       else if (temp && status !== "sent") await strandTemp(ctx, clientKey);
     }
-    if (row.payload.kind === "react" && row.payload.remove && status === "sent") {
-      // macOS 15 removes a tapback by deleting its chat.db row; no removal row ever reaches
-      // the bridge, so the reaction stayed folded on the target until this drops it here.
-      const { messageGuid, reaction } = row.payload;
-      const mine = await ctx.db.query("comma_messages")
-        .withIndex("by_tapbackTargetGuid", (q) => q.eq("tapbackTargetGuid", messageGuid)).collect();
-      for (const tapback of mine) {
-        if (tapback.isFromMe && tapback.tapback?.reaction === reaction && !tapback.tapback.remove) await ctx.db.delete(tapback._id);
-      }
-      await refoldTarget(ctx, messageGuid);
-    }
+    if (status === "sent" && (row.lane ?? laneOf(row.payload.kind)) === "imessage") await applyIMessageResult(ctx, row.payload);
     return true;
   },
 });

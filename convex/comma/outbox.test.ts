@@ -5,7 +5,7 @@ import { api, internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { ALLOWED_EMAIL } from "../_lib/authed";
 import schema from "../schema";
-import type { CommaOutboxPayload } from "../schema/comma/validators";
+import { aiPayload, coreMessagingPayload, imessagePayload, laneOf, legacyTriagePayload, outboxPayload, type CommaOutboxPayload } from "../schema/comma/validators";
 import { normalizeModules } from "../test-utils.vitest";
 
 import { AUTO_RETRY } from "./outbox";
@@ -217,6 +217,76 @@ describe("claim and complete", () => {
     await inbound(t, c, "IN", later + 2);
     previews.push((await rows(t)).last);
     expect(previews).toEqual(["temp-b", "REAL-b", "IN"]);
+  });
+});
+
+describe("lanes", () => {
+  const suggestions = { kind: "suggestions" as const, model: "opus" as const, refresh: false };
+  const claim = (t: T, now: number, lane?: "imessage" | "ai", limit = 10) =>
+    t.mutation(internal.comma.outbox.claimOutbox, { now, leaseMs: 100, limit, ...(lane ? { lane } : {}) });
+
+  test("the kind groups partition every payload kind, and only model work leaves the iMessage lane", () => {
+    const kinds = (union: { members: { fields: { kind: { value: string } } }[] }) => union.members.map((m) => m.fields.kind.value);
+    const groups = [coreMessagingPayload, imessagePayload, aiPayload, legacyTriagePayload].flatMap(kinds);
+    expect(groups.sort()).toEqual(kinds(outboxPayload).sort());
+    expect(new Set(groups).size).toBe(groups.length);
+    expect(kinds(outboxPayload).filter((kind) => laneOf(kind as CommaOutboxPayload["kind"]) === "ai").sort())
+      .toEqual(["clearSuggestionLearning", "identify", "suggestionFeedback", "suggestions", "transcribe"]);
+  });
+
+  test("enqueue stamps each row with its lane", async () => {
+    const { t, as, c } = await setup();
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "f", conversationId: c, payload: { kind: "createFaceTimeLink" } });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "a", conversationId: c, payload: suggestions });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "x", conversationId: c, payload: { kind: "transcribe", attachmentGuid: "att" } });
+    const rows = await t.run((ctx) => ctx.db.query("comma_outbox").collect());
+    expect(Object.fromEntries(rows.map((r) => [r.clientKey, r.lane]))).toEqual({ s: "imessage", f: "imessage", a: "ai", x: "ai" });
+  });
+
+  test("a lane claims only its own rows, so a claimed AI command never holds back a send", async () => {
+    const { t, as, c } = await setup();
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "a", conversationId: c, payload: suggestions });
+    expect((await t.query(api.comma.outbox.pendingOutbox, { bridgeKey: SECRET, lane: "ai" })).map((r) => r.clientKey)).toEqual(["a"]);
+    expect((await claim(t, 1000, "ai", 1)).map((r) => r.clientKey)).toEqual(["a"]);
+    expect((await claim(t, 1001, "imessage", 1)).map((r) => r.clientKey)).toEqual(["s"]);
+    expect(await claim(t, 1002, "ai")).toEqual([]);
+  });
+
+  test("a lane expires only its own leases", async () => {
+    const { t, as, c } = await setup();
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "a", conversationId: c, payload: suggestions });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
+    await claim(t, 1000, "ai");
+    await claim(t, 1000, "imessage");
+    await claim(t, 5000, "imessage", 0);
+    const status = async () => Object.fromEntries((await t.run((ctx) => ctx.db.query("comma_outbox").collect())).map((r) => [r.clientKey, r.status]));
+    expect(await status()).toEqual({ a: "claimed", s: "unknown" });
+    await claim(t, 5000, "ai", 0);
+    expect(await status()).toEqual({ a: "pending", s: "unknown" });
+  });
+
+  test("a bridge from before lanes claims every lane in queue order", async () => {
+    const { t, as, c } = await setup();
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "a", conversationId: c, payload: suggestions });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
+    expect((await t.query(api.comma.outbox.pendingOutbox, { bridgeKey: SECRET })).map((r) => r.clientKey).sort()).toEqual(["a", "s"]);
+    expect((await claim(t, 1000)).map((r) => r.clientKey).sort()).toEqual(["a", "s"]);
+  });
+
+  test("a row queued before lanes joins the lane its kind maps to", async () => {
+    const { t, c } = await setup();
+    const legacy = (clientKey: string, payload: CommaOutboxPayload, createdAt: number, status: "pending" | "claimed" = "pending") =>
+      t.run((ctx) => ctx.db.insert("comma_outbox", { clientKey, conversationId: c, payload, status, attempts: status === "claimed" ? 1 : 0,
+        ...(status === "claimed" ? { leaseUntil: 10, claimToken: "old" } : {}), createdAt, updatedAt: createdAt }));
+    await legacy("old-send", send, 1);
+    await legacy("old-ai", suggestions, 2);
+    await legacy("old-claimed-ai", { kind: "identify" }, 3, "claimed");
+    await t.run((ctx) => ctx.db.insert("comma_outbox", { clientKey: "new-send", conversationId: c, payload: send, lane: "imessage", status: "pending", attempts: 0, createdAt: 4, updatedAt: 4 }));
+    expect((await t.query(api.comma.outbox.pendingOutbox, { bridgeKey: SECRET, lane: "ai" })).map((r) => r.clientKey)).toEqual(["old-ai"]);
+    expect((await claim(t, 20, "imessage")).map((r) => r.clientKey)).toEqual(["old-send", "new-send"]);
+    expect((await claim(t, 20, "ai")).map((r) => r.clientKey)).toEqual(["old-ai", "old-claimed-ai"]);
   });
 });
 
