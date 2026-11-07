@@ -47,7 +47,10 @@ async function openTray(page: Page) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
   await page.getByTestId("thread-view").getByRole("button", { name: `Alex Rivera: ${INBOUND}` }).click({ button: "right" });
-  return page.getByRole("toolbar", { name: "Tapbacks" }).getByRole("button", { name: "Like", exact: true });
+  const like = page.getByRole("toolbar", { name: "Tapbacks" }).getByRole("button", { name: "Like", exact: true });
+  // The tray first opens slowly on a cold runner; that wait must not count against the badge's.
+  await expect(like).toBeVisible();
+  return like;
 }
 
 test("a tapback shows at once and rolls back with a toast when the bridge fails it", async ({ desk }) => {
