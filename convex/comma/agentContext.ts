@@ -5,6 +5,7 @@ import { internalMutation, type QueryCtx } from "../_generated/server";
 import { people } from "../schema/identity/people";
 
 import { conversationPeople } from "./conversationInfo";
+import { resolveConversationNames } from "./names";
 import { searchMessageRows } from "./queries";
 
 /**
@@ -75,7 +76,7 @@ export const agentContext = internalMutation({
       .take(limit);
     const participants = await participantsOf(ctx, conversation);
     return {
-      title: conversation.displayName,
+      title: resolveConversationNames(conversation, participants.map(({ person }) => person)).displayName,
       participants: participants.map(({ name, handles }) => ({ name, handles })),
       messages: await messageViews(ctx, participants, rows.reverse()),
     };

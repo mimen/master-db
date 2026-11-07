@@ -1767,6 +1767,7 @@ export declare const api: {
           _creationTime: number;
           _id: Id<"comma_conversations">;
           chatGuids: Array<string>;
+          contactsAvailable: boolean;
           conversationKey: string;
           crm?: {
             is_favorite?: boolean;
@@ -1787,6 +1788,7 @@ export declare const api: {
           hasGroupPhoto: boolean;
           isGroup: boolean;
           isSpam: boolean;
+          known: boolean;
           lastMessage?: {
             dateCreated: number;
             guid: string;
@@ -1803,6 +1805,7 @@ export declare const api: {
           }>;
           primaryChatGuid: string;
           rawDisplayName?: string;
+          searchNames: Array<string>;
           unread?: { count: number; firstAt: number };
           unreadCount: number;
           updatedAt: number;
@@ -1888,6 +1891,7 @@ export declare const api: {
             _creationTime: number;
             _id: Id<"comma_conversations">;
             chatGuids: Array<string>;
+            contactsAvailable: boolean;
             conversationKey: string;
             crm?: {
               is_favorite?: boolean;
@@ -1908,6 +1912,7 @@ export declare const api: {
             hasGroupPhoto: boolean;
             isGroup: boolean;
             isSpam: boolean;
+            known: boolean;
             lastMessage?: {
               dateCreated: number;
               guid: string;
@@ -1924,6 +1929,7 @@ export declare const api: {
             }>;
             primaryChatGuid: string;
             rawDisplayName?: string;
+            searchNames: Array<string>;
             unread?: { count: number; firstAt: number };
             unreadCount: number;
             updatedAt: number;
@@ -2080,6 +2086,7 @@ export declare const api: {
           _creationTime: number;
           _id: Id<"comma_conversations">;
           chatGuids: Array<string>;
+          contactsAvailable: boolean;
           conversationKey: string;
           crm?: {
             is_favorite?: boolean;
@@ -2100,6 +2107,7 @@ export declare const api: {
           hasGroupPhoto: boolean;
           isGroup: boolean;
           isSpam: boolean;
+          known: boolean;
           lastMessage?: {
             dateCreated: number;
             guid: string;
@@ -2116,6 +2124,7 @@ export declare const api: {
           }>;
           primaryChatGuid: string;
           rawDisplayName?: string;
+          searchNames: Array<string>;
           unread?: { count: number; firstAt: number };
           unreadCount: number;
           updatedAt: number;

@@ -89,7 +89,7 @@ describe("message history windows", () => {
     const t = authed();
     const seeded = await t.run(async (ctx) => {
       const id = await ctx.db.insert("comma_conversations", conversation());
-      const reactions = [{ type: "love" as const, isFromMe: false, senderAddress: "them", senderName: "Them" }];
+      const reactions = [{ type: "love" as const, isFromMe: false, senderAddress: "them", senderName: null }];
       await ctx.db.insert("comma_messages", { ...message(id, 1, "photo-message"), reactions });
       const thumb = await ctx.storage.store(new Blob(["thumbnail"]));
       const original = await ctx.storage.store(new Blob(["original"]));

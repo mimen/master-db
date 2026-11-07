@@ -13,7 +13,7 @@ import { api } from "../_generated/api";
 import { ALLOWED_EMAIL } from "../_lib/authed";
 import schema from "../schema";
 
-import { commaModules } from "./testModules.vitest";
+import { commaModules, namePerson } from "./testModules.vitest";
 
 /**
  * One full agent round with the runner's real Port, Sessions and tools on one side and the real
@@ -57,14 +57,15 @@ test("ask, claim, transcript, draft, a model switch and an image round-trip betw
   const t = convexTest(schema, modules);
   globalThis.fetch = ((url: string, init?: RequestInit) => t.fetch(url.slice(SITE.length), init)) as typeof fetch;
   const conversationId = await t.run(async (ctx) => {
+    await namePerson(ctx, "+15550001111", "Alex");
     const id = await ctx.db.insert("comma_conversations", {
       conversationKey: "dm:+15550001111", primaryChatGuid: "iMessage;-;+15550001111", chatGuids: ["iMessage;-;+15550001111"],
-      displayName: "Alex", isGroup: false, participants: [{ address: "+15550001111", name: "Alex" }],
+      displayName: "+15550001111", isGroup: false, participants: [{ address: "+15550001111", name: null }],
       lastMessageAt: 100, isSpam: false, hasGroupPhoto: false, updatedAt: 1,
     });
     await ctx.db.insert("comma_messages", {
       guid: "m1", conversationId: id, chatGuid: "iMessage;-;+15550001111", text: "Are we still on for Friday?", dateCreated: 100,
-      isFromMe: false, sender: { address: "+15550001111", name: "Alex" }, service: "iMessage", error: 0, edited: false, retracted: false,
+      isFromMe: false, sender: { address: "+15550001111", name: null }, service: "iMessage", error: 0, edited: false, retracted: false,
       isTapback: false, reactions: [], isGroupEvent: false, mentions: [], attachmentGuids: [], sourceVersion: 0,
     });
     return id;

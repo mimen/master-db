@@ -164,14 +164,16 @@ test("listConversations reads per page on a 100-conversation inbox, with byte-id
       medianMs100: timings.sort((a, b) => a - b)[7] }, null, 2));
   }
 
-  // Both digests were recorded from the unmemoized implementation at e357f707 on this seed.
+  // Recorded when names moved to read time: the unmemoized e357f707 output, plus known, contactsAvailable
+  // and searchNames, with unknown handles named by their address instead of a stored Mini name.
   expect([digest(first.result), digest(rest.result)]).toEqual([
-    "e8a59081b66fe61fe869bc0622249b0d1a0ffa009b2bde9db2566a7d7528b720",
-    "c9e7938810a8ea774be169818f1c13135455807f1a8a128459aa911a3edf9dbc",
+    "b785ae641e34e80876a1cca6fab919e478149d75c1586902ad34da44761df42a",
+    "905221a0fb3de9f9c5a7be1ee242074a73f94d21a05322db3e757b66c43420ba",
   ]);
   // e357f707 made 110 identity lookups, 85 people gets, 95 tag reads and 98 getUrl calls here.
+  // The 101st identities lookup is the once-per-query Apple-contacts check.
   expect(all.lookups).toEqual({
     chat_crm: 20, comma_conversation_state: 100, comma_conversations: 1, comma_messages: 20,
-    identities: 100, "people.get": 60, "storage.getUrl": 40, tags: 80,
+    identities: 101, "people.get": 60, "storage.getUrl": 40, tags: 80,
   });
 });

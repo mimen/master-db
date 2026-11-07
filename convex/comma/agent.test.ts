@@ -7,7 +7,7 @@ import { ALLOWED_EMAIL } from "../_lib/authed";
 import schema from "../schema";
 import type { AgentEntry } from "../schema/comma/validators";
 
-import { commaModules } from "./testModules.vitest";
+import { commaModules, namePerson } from "./testModules.vitest";
 
 const modules = {
   ...commaModules,
@@ -29,11 +29,14 @@ afterEach(() => {
 
 async function setup() {
   const t = convexTest(schema, modules);
-  const conversationId = await t.run((ctx) => ctx.db.insert("comma_conversations", {
-    conversationKey: "dm:+15550001111", primaryChatGuid: "iMessage;-;+15550001111", chatGuids: ["iMessage;-;+15550001111"],
-    displayName: "Alex", isGroup: false, participants: [{ address: "+15550001111", name: "Alex" }],
-    lastMessageAt: 1, isSpam: false, hasGroupPhoto: false, updatedAt: 1,
-  }));
+  const conversationId = await t.run(async (ctx) => {
+    await namePerson(ctx, "+15550001111", "Alex");
+    return await ctx.db.insert("comma_conversations", {
+      conversationKey: "dm:+15550001111", primaryChatGuid: "iMessage;-;+15550001111", chatGuids: ["iMessage;-;+15550001111"],
+      displayName: "+15550001111", isGroup: false, participants: [{ address: "+15550001111", name: null }],
+      lastMessageAt: 1, isSpam: false, hasGroupPhoto: false, updatedAt: 1,
+    });
+  });
   const as = t.withIdentity({ email: ALLOWED_EMAIL });
   const ask = (key: string, text = key, chatId?: Id<"comma_agent_chats">) =>
     as.mutation(api.comma.agent.ask, { conversationId, chatId, key, text, steer: false, model: "claude-opus-5-5", effort: "high" });
@@ -518,7 +521,7 @@ describe("POST /comma/ingest/agent*", () => {
       ["agentDraft", { chatId, conversationId, itemKey: "d", text: "hi", attachments: [storageId] }, { placed: "composer" }],
       ["agentContext", { conversationId, limit: 40 }, { title: "Alex", participants: [{ name: "Alex", handles: ["+15550001111"] }], messages: [] }],
       ["agentSearch", { conversationId, query: "hi" }, []],
-      ["agentPeople", { conversationId }, [{ address: "+15550001111", name: "Alex", handles: ["+15550001111"], tags: [], events: [] }]],
+      ["agentPeople", { conversationId }, [{ address: "+15550001111", name: "Alex", handles: ["+15550001111"], personId: expect.any(String), tags: [], events: [] }]],
       ["agentAttachment", { guid: "missing" }, null],
       ["agentSend", { conversationId, clientKey: "c1", text: "hi" }, expect.any(String)],
     ];
