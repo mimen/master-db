@@ -41,6 +41,7 @@ const ROUTES = {
   agentSearch: internal.comma.agentContext.agentSearch,
   agentPeople: internal.comma.agentContext.agentPeople,
   agentAttachment: internal.comma.agentContext.agentAttachment,
+  aiThread: internal.comma.agentContext.aiThread,
   agentRecordUpload: internal.comma.drafts.recordUpload,
   todaySchedule: internal.comma.today.todaySchedule,
   todayClaim: internal.comma.today.todayClaim,

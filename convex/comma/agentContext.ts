@@ -2,6 +2,7 @@ import { v, type Infer } from "convex/values";
 
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, type QueryCtx } from "../_generated/server";
+import { commandMessage } from "../schema/comma/validators";
 import { people } from "../schema/identity/people";
 
 import { conversationPeople } from "./conversationInfo";
@@ -80,6 +81,44 @@ export const agentContext = internalMutation({
       participants: participants.map(({ name, handles }) => ({ name, handles })),
       messages: await messageViews(ctx, participants, rows.reverse()),
     };
+  },
+});
+
+/**
+ * The AI lane's thread: the newest 60 messages as the wire Message, with folded reactions and attachment kinds,
+ * and participants named the way every client names them. `name` is null for someone with no known name.
+ */
+export const aiThread = internalMutation({
+  args: { conversationId: v.id("comma_conversations") },
+  returns: v.object({
+    title: v.string(),
+    isGroup: v.boolean(),
+    participants: v.array(v.object({ address: v.string(), name: nullableString })),
+    messages: v.array(commandMessage),
+  }),
+  handler: async (ctx, { conversationId }) => {
+    const conversation = await requireConversation(ctx, conversationId);
+    const rows = await ctx.db.query("comma_messages")
+      .withIndex("by_conversation_date", (q) => q.eq("conversationId", conversationId))
+      .order("desc")
+      .filter((q) => q.and(q.eq(q.field("isTapback"), false), q.eq(q.field("retracted"), false)))
+      .take(60);
+    const named = resolveConversationNames(conversation, (await conversationPeople(ctx, conversation)).map(({ person }) => person));
+    const participants = named.participants.map(({ address, name }) => ({ address, name }));
+    const names = new Map(participants.map(({ address, name }) => [address, name]));
+    const messages = await Promise.all(rows.reverse().map(async (row) => ({
+      guid: row.guid, chatGuid: row.chatGuid, text: row.text, dateCreated: row.dateCreated,
+      dateRead: row.dateRead ?? null, dateDelivered: row.dateDelivered ?? null, isFromMe: row.isFromMe, service: row.service,
+      sender: row.sender ? { address: row.sender.address, name: names.get(row.sender.address) ?? row.sender.name } : null,
+      attachments: (await Promise.all(row.attachmentGuids.map((guid) => attachmentFor(ctx, guid)))).flatMap((a) => a ? [{
+        guid: a.guid, mimeType: a.mimeType ?? null, filename: a.transferName ?? a.filename ?? null,
+        width: a.width ?? null, height: a.height ?? null, totalBytes: a.totalBytes ?? null,
+      }] : []),
+      mentions: row.mentions, special: row.special ?? null, sendEffect: row.sendEffect ?? null, reactions: row.reactions,
+      replyToGuid: row.replyToGuid ?? null, replyToPreview: row.replyToPreview ?? null, replyToFromMe: row.replyToFromMe ?? null,
+      isGroupEvent: row.isGroupEvent, error: row.error, edited: row.edited, retracted: row.retracted,
+    })));
+    return { title: named.displayName, isGroup: conversation.isGroup, participants, messages };
   },
 });
 
