@@ -1,7 +1,7 @@
 import type { AiService } from "../ai/service";
 import type { OverlayDb } from "../db";
-import type { DirectoryChat } from "../map";
 import type { ReplySuggestions, SuggestionModel } from "../../shared/types";
+import type { MappedChat } from "../map";
 import type { ConvexIngest, MessageRow } from "./convex-ingest";
 
 export type ShelfUpdate =
@@ -25,7 +25,7 @@ export interface SuggestionDeps {
   ai: Pick<AiService, "available" | "replySuggestions"> & Partial<Pick<AiService, "cachedReplySuggestions">>;
   db: OverlayDb;
   ingest: Pick<ConvexIngest, "post">;
-  getChat: (chatGuid: string) => Promise<DirectoryChat | null>;
+  conversation: (chatGuid: string) => Pick<MappedChat, "displayName" | "isGroup" | "participants"> | undefined;
   now?: () => number;
 }
 
@@ -34,6 +34,8 @@ const BUDGET_KEY = "suggestion_precompute_budget";
 
 export class SuggestionsBridge {
   private queue = new Map<MessageRow["conversationId"], Pending>();
+  /** The newest message observed per conversation; a shelf answers only that one. */
+  private latest = new Map<MessageRow["conversationId"], MessageRow>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private running: Promise<void> | null = null;
   private stopped = false;
@@ -71,6 +73,7 @@ export class SuggestionsBridge {
     if (this.stopped || !this.deps.ai.available) return;
     for (const message of [...messages].sort((a, b) => a.dateCreated - b.dateCreated)) {
       if (message.isTapback || message.isGroupEvent || message.retracted) continue;
+      if ((this.latest.get(message.conversationId)?.dateCreated ?? 0) <= message.dateCreated) this.latest.set(message.conversationId, message);
       const previous = this.queue.get(message.conversationId);
       if (previous && previous.message.dateCreated > message.dateCreated) continue;
       if (message.isFromMe) this.queue.delete(message.conversationId);
@@ -107,8 +110,8 @@ export class SuggestionsBridge {
 
   private async generate(message: MessageRow): Promise<void> {
     const startedAt = this.now();
-    const chat = await this.deps.getChat(message.chatGuid);
-    if (!chat || chat.lastMessage?.guid !== message.guid || chat.lastMessage.isFromMe || chat.isSpam ||
+    const chat = this.deps.conversation(message.chatGuid);
+    if (!chat || !this.isLatest(message) || message.isSpam ||
       (SUGGESTION_PRECOMPUTE.directMessagesOnly && (chat.isGroup || chat.participants.length !== 1)) ||
       (SUGGESTION_PRECOMPUTE.knownContactsOnly && !chat.participants[0]?.name?.trim())) return;
     const cached = await this.deps.ai.cachedReplySuggestions?.(message.chatGuid, message.guid, "opus");
@@ -127,11 +130,14 @@ export class SuggestionsBridge {
       result = generated.value;
     }
     if (this.stopped || result.stale || result.basedOnMessageGuid !== message.guid) return;
-    const latest = await this.deps.getChat(message.chatGuid);
-    if (latest?.lastMessage?.guid !== message.guid || latest.lastMessage.isFromMe) return;
+    if (!this.isLatest(message)) return;
     await publishShelf(this.deps.ingest, {
       kind: "publish", conversationId: message.conversationId, model: "opus", suggestions: result, startedAt,
     });
+  }
+
+  private isLatest(message: MessageRow): boolean {
+    return this.latest.get(message.conversationId)?.guid === message.guid;
   }
 
   private resetDay(): void {
@@ -151,5 +157,6 @@ export class SuggestionsBridge {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.queue.clear();
+    this.latest.clear();
   }
 }

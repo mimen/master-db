@@ -7,11 +7,6 @@ The client has no feature REST calls or Mini event-stream connection.
 
 ## Language
 
-**Chat Directory**:
-The Mini's cached list of BlueBubbles chats: names, groups, service siblings, last messages,
-unread counts and the mark-read override. It carries no triage flags; those are Convex's.
-_Avoid_: chat list cache, summaries cache
-
 **Chat State**:
 The pure rules for a chat's flags: how Unresponded/Waiting/Unread derive from its triage
 state and last message, and which lens it matches. Convex computes flags with them and the
@@ -48,16 +43,17 @@ The single interface to BlueBubbles — REST operations plus the inbound event s
 Two adapters: the HTTP/socket.io client in production, an in-memory fake in tests.
 _Avoid_: BB client (when meaning the seam), API wrapper
 
-**Directory fast path**:
-Applying a known BlueBubbles event or command result directly to the Chat Directory
-ahead of BlueBubbles' own DB catching up. The next full rebuild reconciles. The bridge
-mirrors changes into Convex, whose live queries update clients.
-_Avoid_: instant state sync, optimistic patch
+**Service siblings**:
+The per-service chats (`iMessage;-;X`, `SMS;-;X`, an RCS fork) that the bridge mirrors into one
+Convex conversation. React, delete, delete chat, scheduled edits and the read receipt act across
+them. The bridge's `MessageWriter.siblingGuids` answers from the conversation ids Convex returned
+for each chat; the Mini keeps no chat list of its own.
+_Avoid_: aliases (Convex's table name for the same mapping), duplicates
 
 **Identity Mirror**:
 The Mini's in-memory read replica of the Convex identity graph's name directory
 (`nameDirectory`), refreshed on an interval. It names people only for work the Mini
-still does itself: reply-suggestion and identify prompts, and the legacy Chat Directory.
+still does itself: reply-suggestion and identify prompts, and the scheduled-message name.
 It is not on the bridge's ingest path. The bridge posts raw addresses, and Convex names
 them (see Name Resolution).
 _Avoid_: contact cache (when meaning this), name cache

@@ -76,7 +76,6 @@ export class OutboxBridge {
           this.lease = lease;
           if (handlers[row.payload.kind].longRunning) lease.start();
           const chatGuid = row.conversationId ? await writer.resolveConversation(row.conversationId) : null;
-          if (chatGuid) await this.deps.commands.directory.ensureSiblings();
           if (row.payload.kind === "send") writer.rememberOutboxSend(row.clientKey);
           lease.signal.throwIfAborted();
           const result = await dispatchCommand(handlers, {

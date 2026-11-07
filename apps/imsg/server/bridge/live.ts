@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import type { BBChat, BBMessage } from "../bb-types";
 import type { BlueBubbles, Result } from "../bluebubbles";
 import type { OverlayDb } from "../db";
+import { mapChat, type MappedChat } from "../map";
+import type { NameSource } from "../name-resolver";
 import type { AttachmentRow, ConvexIngest, MessageRow } from "./convex-ingest";
 import { sourceVersion, toAttachmentRows, toConversationInputs, toMessageRow } from "./mapper";
 import { PresenceBridge } from "./presence";
@@ -43,6 +45,22 @@ export class MessageWriter {
     if (!guid) throw new Error(`Unresolved conversation ${id}`);
     return guid;
   }
+
+  /** Every service chat mirrored into the same Convex conversation as `chatGuid`, itself included. */
+  siblingGuids(chatGuid: string): string[] {
+    const id = this.conversationIds.get(chatGuid);
+    if (!id) return [chatGuid];
+    return [...this.conversationIds].filter(([, other]) => other === id).map(([guid]) => guid);
+  }
+
+  /** `chatGuid`'s conversation as its primary service chat maps, named through `names`. */
+  conversation(chatGuid: string, names: NameSource): MappedChat | undefined {
+    const primary = toConversationInputs([...this.chats.values()])
+      .find((row) => row.chats.some((chat) => chat.chatGuid === chatGuid))?.chats[0]?.chatGuid;
+    const chat = primary ? this.chats.get(primary) : undefined;
+    return chat ? mapChat(chat, names) : undefined;
+  }
+
   private serial: Promise<unknown> = Promise.resolve();
 
   constructor(readonly deps: {

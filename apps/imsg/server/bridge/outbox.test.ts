@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import type { ConvexClient } from "convex/browser";
 import { ChatCommands } from "../commands";
-import { ChatDirectory } from "../chat-directory";
 import { ContactBook } from "../contacts";
 import { FakeBlueBubbles } from "../bluebubbles-fake";
 import type { LeaseTimers } from "./commands/lease";
@@ -31,7 +30,7 @@ function harness(now = 1_000) {
   const db = new OverlayDb(":memory:");
   const ingest = new FakeIngest();
   const contacts = new ContactBook(bb);
-  const commands = new ChatCommands(bb, new ChatDirectory(bb, contacts), contacts);
+  const commands = new ChatCommands(bb, contacts);
   const writer = new MessageWriter({ bb, db, ingest });
   writer.conversationIds.set(CHAT, ingest.id);
   const { client, fire } = fakeClient();
@@ -121,7 +120,7 @@ test("a disabled bridge does not subscribe or claim", async () => {
   const h = harness();
   const bridge = new OutboxBridge({
     config: { convexCloudUrl: null, commaBridgeSecret: "test" },
-    writer: h.writer, commands: new ChatCommands(h.bb, new ChatDirectory(h.bb, new ContactBook(h.bb)), new ContactBook(h.bb)),
+    writer: h.writer, commands: new ChatCommands(h.bb, new ContactBook(h.bb)),
   });
   try {
     await bridge.flush();

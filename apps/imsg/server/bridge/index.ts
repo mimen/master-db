@@ -36,7 +36,7 @@ export function startBridge(deps: {
   avatarDirectory?: string;
   now?: () => number;
   capabilities?: () => BridgeCapabilities;
-  suggestions?: Pick<SuggestionDeps, "ai" | "getChat">;
+  suggestions?: Pick<SuggestionDeps, "ai">;
   handlers?: Partial<HandlerMap>;
   today?: Pick<TodayBuildDeps, "gateway" | "profile">;
 }) {
@@ -75,7 +75,8 @@ export function startBridge(deps: {
         capabilities: deps.capabilities ?? (() => ({ privateApi: deps.bb.hasPrivateApi, suggestions: deps.suggestions?.ai.available ?? false,
           reactionSuggestions: deps.bb.hasPrivateApi, whisperAvailable: false, whisperDetail: "Whisper capabilities were not supplied" })) });
       reconcile = new ReconcileBridge(writer, deps.config, { chatDbPath: deps.chatDbPath, now: deps.now });
-      if (deps.suggestions) suggestions = new SuggestionsBridge({ ...deps.suggestions, db: deps.db, ingest, now: deps.now });
+      if (deps.suggestions) suggestions = new SuggestionsBridge({ ...deps.suggestions, db: deps.db, ingest, now: deps.now,
+        conversation: (chatGuid) => writer.conversation(chatGuid, deps.commands.names) });
       scheduled = new ScheduledMirror(deps.bb, ingest);
       live = new LiveBridge(writer, deps.now, (rows) => {
         suggestions?.observe(rows);

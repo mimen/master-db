@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import type { BlueBubbles } from "./bluebubbles";
-import { ChatDirectory } from "./chat-directory";
 import { startBridge } from "./bridge";
 import { createAiHandlers } from "./bridge/commands/ai";
 import type { ConvexIngest } from "./bridge/convex-ingest";
@@ -14,7 +13,6 @@ import { IdentityMirror } from "./identity-mirror";
 import { IdentitySync } from "./identity-sync";
 import { NameResolver } from "./name-resolver";
 import { buildThread } from "./map";
-import { wireLiveEvents } from "./live-events";
 import { ChatCommands } from "./commands";
 import { WhisperService } from "./whisper";
 import { precompressedStatic } from "./compression";
@@ -25,7 +23,6 @@ import { makeVaultSearch } from "./ai/vault";
 import type { NameSource } from "./name-resolver";
 
 export interface FixtureRouteControls {
-  readonly directory: ChatDirectory;
   readonly ai: AiServiceLike;
   readonly health: () => { ok: boolean; privateApi: boolean; eventClients: number; commaBridge: ReturnType<ReturnType<typeof startBridge>["health"]> };
 }
@@ -86,7 +83,6 @@ const productionIdentity = deps.identity ? null : new IdentityMirror(config);
 const identity = deps.identity ?? productionIdentity;
 if (!identity) throw new Error("identity directory unavailable");
 const names = deps.names ?? new NameResolver(productionIdentity ?? new IdentityMirror(config), contacts);
-const directory = new ChatDirectory(bb, contacts, now, names);
 const identitySync = new IdentitySync(bb, config, () => void identity.refresh());
 const whisper = new WhisperService(config.whisper, bb, db);
 
@@ -138,11 +134,11 @@ let reconnectTimer: ReturnType<typeof setInterval> | null = null;
 if (deps.backgroundServices !== false) {
   identity.start();
   identitySync.start();
-  reconnectTimer = setInterval(() => void bb.connect(), 5 * 60_000);
+  // ContactBook's refresh is TTL-gated; this tick keeps the name fallback current.
+  reconnectTimer = setInterval(() => { void bb.connect(); void contacts.refresh(); }, 5 * 60_000);
 }
 
-const stopLiveEvents = wireLiveEvents(bb, directory, names);
-const commands = new ChatCommands(bb, directory, names, () => commaBridge.scheduledChanged());
+const commands = new ChatCommands(bb, names, () => commaBridge.scheduledChanged());
 const commaBridge = startBridge({ config, bb, db, now, commands,
   backgroundServices: deps.backgroundServices, ingest: deps.bridgeIngest, chatDbPath: deps.bridgeChatDbPath,
   avatarDirectory: deps.bridgeAvatarDirectory,
@@ -151,10 +147,7 @@ const commaBridge = startBridge({ config, bb, db, now, commands,
     return { privateApi: bb.hasPrivateApi, suggestions: ai.available, reactionSuggestions: bb.hasPrivateApi,
       whisperAvailable: status.available, ...(status.available ? {} : { whisperDetail: status.detail }) };
   },
-  suggestions: { ai, getChat: async (chatGuid) => {
-    const result = await directory.summaries();
-    return result.ok ? result.chats.find((chat) => chat.guid === directory.canonicalGuid(chatGuid)) ?? null : null;
-  } },
+  suggestions: { ai },
   handlers: createAiHandlers({ ai, refreshContacts: () => identity.refresh(), lookupName: (address) => names.lookup(address), now }),
   today: { gateway, profile: () => loadProfile(config.ai.vaultPath) } });
 
@@ -175,7 +168,7 @@ registerDeployStatusRoute(app, webReleaseManifestPath);
 registerDesktopReleaseRoutes(app, desktopRoot, desktopReleaseRoot);
 registerConvexTokenRoute(app, config, { client: deps.convexAuthClient, now });
 
-deps.configureFixtureRoutes?.(app, { directory, ai, health });
+deps.configureFixtureRoutes?.(app, { ai, health });
 
 // Unknown API paths must remain API 404s instead of falling through to the
 // SPA shell, which would turn a client typo into a misleading 200 HTML reply.
@@ -193,7 +186,6 @@ return {
   dispose: () => {
     if (reconnectTimer) clearInterval(reconnectTimer);
     commaBridge.stop();
-    stopLiveEvents();
     identitySync.stop();
     identity.stop();
   },

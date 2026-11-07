@@ -40,7 +40,7 @@ export interface NameSource {
 
 /**
  * Combines the Convex Identity Mirror and Apple's ContactBook into the one
- * name source the Chat Directory resolves participant names through: mirror
+ * name source the bridge resolves participant names through: mirror
  * first, ContactBook fallback. The mirror is a superset — Apple names flow
  * into Convex via IdentitySync, plus manual in-app renames/adds, which must
  * WIN over a stale Apple name — while ContactBook only covers the freshness

@@ -1,7 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import { createApp } from "../app";
 import { ChatCommands } from "../commands";
-import { ChatDirectory } from "../chat-directory";
 import { ContactBook } from "../contacts";
 import { FakeBlueBubbles } from "../bluebubbles-fake";
 import type { Config } from "../config";
@@ -23,7 +22,7 @@ function fixture() {
   const db = new OverlayDb(":memory:");
   const ingest = new FakeIngest();
   const contacts = new ContactBook(bb);
-  const commands = new ChatCommands(bb, new ChatDirectory(bb, contacts), contacts);
+  const commands = new ChatCommands(bb, contacts);
   return { config, bb, db, ingest, commands, chatDbPath: "/nonexistent/chat.db", avatarDirectory: "/nonexistent/comma-avatar-fixture" };
 }
 

@@ -7,8 +7,8 @@ import { resolveConversationNames } from "../../../../convex/comma/names";
 import { formatAddress } from "../../shared/address";
 import { sendService, tempGuid } from "../../../../convex/comma/tempMessage";
 import type { FixtureRouteControls } from "../../server/app";
-import { buildThread, mapMessage } from "../../server/map";
-import { MessageSearch } from "../../server/message-search";
+import { buildThread, isGenuineUnreadInbound, mapChat, mapMessage, type UnreadSummary } from "../../server/map";
+import { toConversationInputs } from "../../server/bridge/mapper";
 import { mapScheduledMessage } from "../../server/scheduled";
 import { ScheduledSendNow } from "../../server/scheduled-send-now";
 import { ChatCommands } from "../../server/commands";
@@ -124,12 +124,11 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   bb.onEvent((event) => {
     if (event.kind === "typing") {
       const now = new Date().getTime();
-      peerTyping.set(controls.directory.canonicalGuid(event.chatGuid), { peerTyping: event.display, updatedAt: now, expiresAt: now + (event.display ? 12_000 : 0) });
+      peerTyping.set(event.chatGuid, { peerTyping: event.display, updatedAt: now, expiresAt: now + (event.display ? 12_000 : 0) });
     } else if (event.kind === "stream-connected") peerTyping.clear();
   });
-  const commands = new ChatCommands(bb, controls.directory, names);
+  const commands = new ChatCommands(bb, names);
   const ai = controls.ai;
-  const search = new MessageSearch(bb, names);
   const health = () => controls.health();
   const miniAi = () => ({ suggestions: ai.available, reactionSuggestions: bb.hasPrivateApi });
   // The fake runner beats on the wall clock the browser judges it by, not the pinned Date.now.
@@ -156,11 +155,32 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     settled: (chatGuid) => agent.outbox.settle(chatGuid),
     unsettled: (chatGuid) => agent.outbox.unsettle(chatGuid),
   });
+  // The bridge's own grouping merges service siblings; the primary row speaks for the conversation.
   const chatSummaries = async () => {
-    const result = await controls.directory.summaries();
-    if (!result.ok) throw new FixtureError(result.error, 502);
-    return result.chats.map(triage.flagged);
+    const listed = await bb.queryChats(Number.MAX_SAFE_INTEGER);
+    const unreadInbound = await bb.queryMessages({ limit: Number.MAX_SAFE_INTEGER, offset: 0, unreadInboundOnly: true });
+    if (!listed.ok) throw new FixtureError(listed.error, 502);
+    const unread = new Map<string, UnreadSummary>();
+    for (const message of unreadInbound.ok ? unreadInbound.value : []) {
+      const chatGuid = message.chats?.[0]?.guid;
+      if (!chatGuid || !isGenuineUnreadInbound(message)) continue;
+      const current = unread.get(chatGuid);
+      unread.set(chatGuid, { count: (current?.count ?? 0) + 1,
+        firstUnreadAt: Math.min(current?.firstUnreadAt ?? message.dateCreated!, message.dateCreated!) });
+    }
+    const raw = new Map(listed.value.map((chat) => [chat.guid, chat]));
+    return toConversationInputs(listed.value.filter((chat) => chat.lastMessage)).map((row) => {
+      const [primary, ...siblings] = row.chats.map(({ chatGuid }) => mapChat(raw.get(chatGuid)!, names, unread.get(chatGuid)));
+      // Replying reads the whole conversation, so older sibling unreads only count while the newest message is theirs.
+      const counted = primary.lastMessage?.isFromMe ? [] : siblings;
+      const firstUnread = [primary, ...counted].flatMap((chat) => chat.firstUnreadAt ?? []);
+      return { ...triage.flagged({ ...primary,
+        unreadCount: counted.reduce((sum, chat) => sum + chat.unreadCount, primary.unreadCount),
+        firstUnreadAt: firstUnread.length ? Math.min(...firstUnread) : null,
+        known: [primary, ...siblings].some((chat) => chat.known) }), chatGuids: row.chats.map((chat) => chat.chatGuid) };
+    });
   };
+  const siblingsOf = async (chatGuid: string) => (await chatSummaries()).find((chat) => chat.chatGuids.includes(chatGuid))?.chatGuids ?? [chatGuid];
   const accept = (result: { ok: boolean; error?: string; status?: number }) => {
     if (!result.ok) throw new FixtureError(result.error ?? "BlueBubbles operation failed", result.status);
   };
@@ -179,7 +199,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     const sender = row.isGroup ? (raw.ok ? raw.value.lastMessage?.handle?.address : undefined) : row.participants[0]?.address;
     const lastMessage = row.lastMessage && !row.lastMessage.isFromMe && sender
       ? { lastMessage: { ...row.lastMessage, senderName: names.lookup(sender) ?? formatAddress(sender) } } : {};
-    return { ...row, ...lastMessage, ...preview, chatGuids: controls.directory.siblingGuids(chat.guid), rawDisplayName,
+    return { ...row, ...lastMessage, ...preview, chatGuids: chat.chatGuids, rawDisplayName,
       displayName: resolved.displayName, participants: resolved.participants, known: resolved.known, contactsAvailable: names.available,
       searchNames: resolved.searchNames };
   }));
@@ -203,8 +223,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   };
   const messages = async (chatGuid: string): Promise<ConvexMessage[]> => {
     if (deletedChats.has(chatGuid)) return [];
-    await controls.directory.ensureSiblings();
-    const pages = await Promise.all(controls.directory.siblingGuids(chatGuid).map((guid) =>
+    const pages = await Promise.all((await siblingsOf(chatGuid)).map((guid) =>
       bb.chatMessages(guid, { limit: Number.MAX_SAFE_INTEGER, sort: "DESC" })));
     if (pages.every((page) => !page.ok)) throw new FixtureError("fetch failed", 502);
     const raw = new Map(pages.flatMap((page) => page.ok ? page.value.map((message) => [message.guid, message] as const) : []));
@@ -212,7 +231,6 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       ...[...temps.values()].filter((temp) => temp.conversationId === chatGuid)].sort((a, b) => b.dateCreated - a.dateCreated);
   };
   const execute = async (chatGuid: string, payload: CommaOutboxPayload, clientKey: string): Promise<CommandResult | undefined> => {
-    const directory = controls.directory;
     switch (payload.kind) {
       case "send": {
         const result = await commands.send(chatGuid, payload, clientKey);
@@ -232,9 +250,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         accept(result);
         if (result.ok) {
           if (payload.isAudioMessage && payload.caption) accept(await bb.sendText(chatGuid, payload.caption));
-          const message = mapMessage(result.value, chatGuid, names);
-          directory.applyKnownMessage(chatGuid, message);
-          return { kind: "sendAttachment" as const, message };
+          return { kind: "sendAttachment" as const, message: mapMessage(result.value, chatGuid, names) };
         }
         break;
       }
@@ -247,20 +263,27 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       // Production's enqueue applies the triage kinds in Convex; only markRead goes on to the Mini, for the receipt.
       case "markRead":
         triage.read(chatGuid, FIXTURE_NOW);
-        accept({ ok: await commands.markRead(chatGuid), error: "BlueBubbles mark read failed" });
+        accept({ ok: await commands.markRead(await siblingsOf(chatGuid)), error: "BlueBubbles mark read failed" });
         break;
       case "markUnread": await triage.flag(chatGuid, { markedUnread: true }); break;
       case "pin": await triage.flag(chatGuid, { pinned: payload.value }); break;
       case "mute": await triage.flag(chatGuid, { mutedUnresponded: payload.value }); break;
       case "settle": await triage.settle(chatGuid, payload.messageGuid); break;
       case "unsettle": await triage.unsettle(chatGuid); break;
-      case "react": accept(await commands.react(payload.messageGuid, { ...payload, chatGuid })); break;
+      case "react": accept(await commands.react(payload.messageGuid, { ...payload, chatGuid, siblings: await siblingsOf(chatGuid) })); break;
       case "edit": accept(await commands.edit(payload.messageGuid, payload.text, payload.partIndex)); break;
       case "unsend": accept(await commands.unsend(payload.messageGuid, payload.partIndex)); break;
-      case "delete": accept(await commands.delete(payload.messageGuid, chatGuid)); break;
+      case "delete": accept(await commands.delete(payload.messageGuid, await siblingsOf(chatGuid))); break;
       case "rename": accept(await commands.rename(chatGuid, payload.name)); break;
-      case "schedule": accept(await commands.schedule({ ...payload, chatGuid })); break;
-      case "editScheduled": accept(await commands.schedule({ ...payload, chatGuid }, payload.bbId)); break;
+      // Production answers with the stored row, which the composer waits for before it clears.
+      case "schedule":
+      case "editScheduled": {
+        const result = await commands.schedule({ ...payload, chatGuid }, payload.kind === "editScheduled" ? payload.bbId : undefined);
+        accept(result);
+        if (!result.ok) break;
+        const name = (await chatSummaries()).find((chat) => chat.chatGuids.includes(result.value.payload.chatGuid))?.displayName;
+        return { kind: payload.kind, scheduled: mapScheduledMessage(result.value, name ?? result.value.payload.chatGuid) };
+      }
       case "typing": {
         if (payload.active && payload.expiresAt <= new Date().getTime()) return { kind: "typing" as const, ok: true as const };
         const timer = typingTimers.get(chatGuid);
@@ -323,9 +346,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         if (result.ok) {
           result.value.attachments = [{ guid: `card-${result.value.guid}`, mimeType: "text/vcard",
             transferName: `${payload.name}.vcf`, totalBytes: 100, transferState: 5 }];
-          const message = mapMessage(result.value, chatGuid, names);
-          directory.applyKnownMessage(chatGuid, message);
-          return { kind: "sendContact", message };
+          return { kind: "sendContact", message: mapMessage(result.value, chatGuid, names) };
         }
         break;
       }
@@ -373,7 +394,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   const today = createTodayFixture({
     chats: chatSummaries,
     clears: triage.clears,
-    canonical: (chatGuid) => controls.directory.canonicalGuid(chatGuid),
+    canonical: async (chatGuid) => (await siblingsOf(chatGuid))[0]!,
   });
   // Drives switch the header between the seeded queue, before the morning build, and a failed build.
   app.post("/__fixture/today", async (c) => {
@@ -409,7 +430,8 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         participants: row.participants.map((p) => ({ address: p.address, name: names.lookup(p.address) ?? p.name ?? p.address, is_favorite: names.personCrm(p.address)?.is_favorite })) } : null;
     },
     "comma/presence:presence": async (args) => {
-      const row = peerTyping.get(controls.directory.canonicalGuid(String(args.conversationId)));
+      const row = (await siblingsOf(String(args.conversationId))).map((guid) => peerTyping.get(guid))
+        .filter((typing) => typing !== undefined).sort((a, b) => b.updatedAt - a.updatedAt)[0];
       return row ? { ...row, peerTyping: row.peerTyping && row.expiresAt > new Date().getTime() } : null;
     },
     "comma/bridgeState:bridgeState": async () => {
@@ -445,10 +467,13 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     "comma/queries:getConversation": async (args) => (await conversations()).find((row) => row._id === args.conversationId) ?? null,
     "comma/queries:listMessages": async (args) => paginate(await messages(String(args.conversationId)), args.paginationOpts as Pagination),
     "comma/queries:searchMessages": async (args) => {
-      return (await search.search(String(args.query), {
-        chatGuid: args.conversationId ? String(args.conversationId) : undefined,
-        from: args.from === "me" || args.from === "them" ? args.from : undefined,
-      })).map((message) => {
+      const text = String(args.query).trim();
+      if (text.length < 2) return [];
+      const chatGuid = args.conversationId ? String(args.conversationId) : undefined;
+      const found = await bb.queryMessages({ limit: 50, offset: 0, text, chatGuid,
+        from: args.from === "me" || args.from === "them" ? args.from : undefined });
+      return (found.ok ? found.value : []).map((raw) => {
+        const message = mapMessage(raw, chatGuid ?? raw.chats?.[0]?.guid ?? "", names);
         const { attachments: _attachments, ...row } = messageRow(message, bb.clientKeyFor(message.guid));
         return row;
       });

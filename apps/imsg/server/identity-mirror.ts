@@ -200,7 +200,7 @@ export class IdentityMirror {
   /**
    * Fetches `identity/queries:chatCrm` with NO chatGuids filter — the mirror
    * has no independent way to know which chat guids currently exist (that's
-   * BlueBubbles/ChatDirectory's domain, not Convex's), so it asks for
+   * BlueBubbles' domain, not Convex's), so it asks for
    * "everything with any CRM data," which is naturally small (only chats
    * someone actually favorited/prioritized/tagged/linked get a row at all).
    * Same swallow-log-once-keep-last-snapshot failure handling as names.

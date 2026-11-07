@@ -21,9 +21,7 @@ export function createAiHandlers(deps?: AiCommandDeps) {
       execute: async (context, payload) => {
         const startedAt = now();
         const chatGuid = requireChat(context);
-        const summaries = await context.commands.directory.summaries();
-        if (!summaries.ok) throw new Error(summaries.error);
-        const chat = summaries.chats.find((row) => row.guid === chatGuid);
+        const chat = context.writer.conversation(chatGuid, context.commands.names);
         const generated = await service().replySuggestions(chatGuid, chat?.isGroup ? null : chat?.displayName ?? null, payload.refresh, payload.model);
         if (!generated.ok) throw new Error(generated.error);
         context.signal.throwIfAborted();
@@ -45,8 +43,7 @@ export function createAiHandlers(deps?: AiCommandDeps) {
         if (!chat.ok) throw new Error(chat.error);
         const address = chat.value.participants?.[0]?.address;
         if (!address) throw new Error("no participant address");
-        if (deps?.refreshContacts) await deps.refreshContacts();
-        else await context.commands.directory.summaries();
+        await deps?.refreshContacts?.();
         const result = await service().identify(chatGuid, address, deps?.lookupName?.(address) ?? null);
         if (!result.ok) throw new Error(result.error);
         context.signal.throwIfAborted();

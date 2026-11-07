@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatState } from "./chat-state";
 import {
-  applyMessage,
   computeCounts,
   computeFlags,
   isSettled,
@@ -9,7 +8,7 @@ import {
   settleActionFor,
   settleLeavesLens,
 } from "./chat-state";
-import type { ChatFlags, ChatSummary, Message } from "./types";
+import type { ChatFlags, ChatSummary } from "./types";
 
 // ---------------------------------------------------------------- fixtures
 
@@ -63,32 +62,6 @@ function makeChat(overrides: Partial<ChatSummary> = {}): ChatSummary {
     unreadCount: 0,
     firstUnreadAt: null,
     flags: makeFlags(),
-    ...overrides,
-  };
-}
-
-function makeMessage(overrides: Partial<Message> = {}): Message {
-  return {
-    guid: "m2",
-    chatGuid: "chat-1",
-    text: "hello",
-    dateCreated: 2000,
-    dateRead: null,
-    dateDelivered: null,
-    isFromMe: false,
-    service: "iMessage",
-    sender: null,
-    attachments: [],
-    special: null,
-    sendEffect: null,
-    reactions: [],
-    replyToGuid: null,
-    replyToPreview: null,
-    replyToFromMe: null,
-    isGroupEvent: false,
-    error: 0,
-    edited: false,
-    retracted: false,
     ...overrides,
   };
 }
@@ -520,104 +493,5 @@ describe("computeCounts", () => {
     expect(computeCounts(chats, "known").all + computeCounts(chats, "unknown").all).toBe(
       computeCounts(chats, "all").all,
     );
-  });
-});
-
-// ---------------------------------------------------------------- applyMessage
-
-describe("applyMessage", () => {
-  test("inbound message counts as unread and moves to top", () => {
-    const chats = [
-      makeChat({ guid: "other", lastMessage: { ...makeChat().lastMessage!, dateCreated: 5000 } }),
-      makeChat({ guid: "chat-1", flags: makeFlags() }),
-    ];
-    const result = applyMessage(chats, "chat-1", makeMessage({ isFromMe: false, dateCreated: 6000 }));
-    expect(result).not.toBeNull();
-    const next = result!;
-    expect(next[0]!.guid).toBe("chat-1");
-    expect(next[0]!.firstUnreadAt).toBe(6000);
-    expect(next[0]!.unreadCount).toBe(1);
-  });
-
-  test("realtime junk classification updates screening immediately", () => {
-    const chats = [makeChat({ guid: "chat-1" })];
-    const next = applyMessage(chats, "chat-1", makeMessage({ dateCreated: 6000, isSpam: true }))!;
-
-    expect(next[0]!.isSpam).toBe(true);
-    expect(matchesFilters(next[0]!, "all", "known")).toBe(false);
-    expect(matchesFilters(next[0]!, "all", "unknown")).toBe(true);
-    expect(matchesFilters(next[0]!, "all", "all")).toBe(true);
-  });
-
-  test("qualifying inbound messages preserve the earliest unread timestamp", () => {
-    const chats = [makeChat({ guid: "chat-1", firstUnreadAt: 4000 })];
-    const next = applyMessage(chats, "chat-1", makeMessage({ dateCreated: 6000 }))!;
-    expect(next[0]!.firstUnreadAt).toBe(4000);
-  });
-
-  test("non-qualifying messages do not create an unread timestamp", () => {
-    const messages = [
-      makeMessage({ isFromMe: true }),
-      makeMessage({ dateRead: 3000 }),
-      makeMessage({ retracted: true }),
-      makeMessage({ isGroupEvent: true }),
-      makeMessage({ isAssociatedMessage: true }),
-    ];
-
-    for (const message of messages) {
-      const next = applyMessage([makeChat({ guid: "chat-1" })], "chat-1", message)!;
-      expect(next[0]!.firstUnreadAt).toBeNull();
-      expect(next[0]!.unreadCount).toBe(0);
-    }
-  });
-
-  test("outbound message clears the unread count", () => {
-    const chats = [
-      makeChat({
-        guid: "chat-1",
-        unreadCount: 3,
-        firstUnreadAt: 4000,
-        flags: makeFlags({ unresponded: true, unread: true }),
-      }),
-    ];
-    const next = applyMessage(chats, "chat-1", makeMessage({ isFromMe: true, dateCreated: 6000 }))!;
-    expect(next[0]!.unreadCount).toBe(0);
-    expect(next[0]!.firstUnreadAt).toBeNull();
-  });
-
-  test("stale message returns the same array reference", () => {
-    const chats = [makeChat({ guid: "chat-1", lastMessage: { ...makeChat().lastMessage!, dateCreated: 9000 } })];
-    const result = applyMessage(chats, "chat-1", makeMessage({ dateCreated: 1 }));
-    expect(result).toBe(chats);
-  });
-
-  test("unknown chat guid returns null", () => {
-    const chats = [makeChat({ guid: "chat-1" })];
-    expect(applyMessage(chats, "missing", makeMessage())).toBeNull();
-  });
-
-  test("empty text with attachments falls back to Attachment", () => {
-    const chats = [makeChat({ guid: "chat-1" })];
-    const next = applyMessage(
-      chats,
-      "chat-1",
-      makeMessage({
-        text: "",
-        dateCreated: 6000,
-        attachments: [{ guid: "a", mimeType: null, filename: null, width: null, height: null, totalBytes: null }],
-      }),
-    )!;
-    expect(next[0]!.lastMessage!.text).toBe("Attachment");
-    expect(next[0]!.lastMessage!.hasAttachments).toBe(true);
-  });
-
-  test("senderName prefers name over address over null", () => {
-    const chats = [makeChat({ guid: "chat-1" }), makeChat({ guid: "chat-2" }), makeChat({ guid: "chat-3" })];
-    const withName = applyMessage(chats, "chat-1", makeMessage({ dateCreated: 6000, sender: { address: "+1", name: "Bob" } }))!;
-    expect(withName[0]!.lastMessage!.senderName).toBe("Bob");
-    const withAddress = applyMessage(chats, "chat-2", makeMessage({ dateCreated: 6000, sender: { address: "+1", name: null } }))!;
-    expect(withAddress[0]!.lastMessage!.senderName).toBe("+1");
-    const withNeither = applyMessage(chats, "chat-3", makeMessage({ dateCreated: 6000, sender: null }))!;
-    expect(withNeither[0]!.lastMessage!.senderName).toBeNull();
   });
 });

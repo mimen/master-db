@@ -1,6 +1,6 @@
 import { conversationFlags, type ChatState } from "../../shared/chat-state";
 import type { ChatSummary } from "../../shared/types";
-import type { DirectoryChat } from "../../server/map";
+import type { MappedChat } from "../../server/map";
 import { CHAT_GUIDS, FIXTURE_NOW } from "./world";
 
 type LastMessage = ChatSummary["lastMessage"];
@@ -73,7 +73,7 @@ export function createTriageFixture(deps: {
   }
 
   /** A directory row as listConversations shows it, with the flags and unread count Convex derives. */
-  function flagged(chat: DirectoryChat): ChatSummary {
+  function flagged(chat: MappedChat): ChatSummary {
     const { flags, unreadCount } = conversationFlags(states.get(chat.guid), chat.lastMessage, chat.lastMessage?.dateCreated ?? 0, chat.unreadCount);
     return { ...chat, flags, unreadCount };
   }

@@ -1,6 +1,5 @@
 import type { BBAttributedBody } from "./bb-types";
 import type { BlueBubbles, Result } from "./bluebubbles";
-import type { ChatDirectory } from "./chat-directory";
 import type { MentionAnnotation } from "../shared/mentions";
 import { buildThread, mapMessage } from "./map";
 import { buildMentionAttributedBody } from "./mention-body";
@@ -19,7 +18,7 @@ function checked<T>(result: Result<T>): CommandResult<T> {
 export class UnknownSendError extends Error {}
 
 export class ChatCommands {
-  constructor(readonly bb: BlueBubbles, readonly directory: ChatDirectory, private names: NameSource,
+  constructor(readonly bb: BlueBubbles, readonly names: NameSource,
     private scheduledChanged: () => void = () => {}) {}
 
   async send(chatGuid: string, body: { text: string; replyToGuid?: string; replyToPart?: number; mentions?: MentionAnnotation[] }, clientKey?: string) {
@@ -31,7 +30,6 @@ export class ChatCommands {
       if (!built.ok) return failure(built.error, 400);
       attributedBody = built.value;
     }
-    await this.directory.summaries();
     let result;
     try {
       result = await this.bb.sendText(chatGuid, body.text,
@@ -41,19 +39,17 @@ export class ChatCommands {
       throw new UnknownSendError(String(error));
     }
     if (!result.ok) return failure(result.error);
-    const mapped = mapMessage(result.value, chatGuid, this.names);
-    this.directory.applyKnownMessage(chatGuid, mapped);
-    return { ok: true as const, value: mapped };
+    return { ok: true as const, value: mapMessage(result.value, chatGuid, this.names) };
   }
 
-  async react(messageGuid: string, body: { chatGuid: string; reaction: string; remove?: boolean; partIndex?: number; suggested?: boolean }) {
+  async react(messageGuid: string, body: { chatGuid: string; siblings: readonly string[]; reaction: string; remove?: boolean; partIndex?: number; suggested?: boolean }) {
     if (!this.bb.hasPrivateApi) return failure("private API disabled on BlueBubbles", 501);
     const partIndex = body.partIndex ?? 0;
     if (partIndex !== 0) return failure("message part is not reactable", 400);
     const current = await this.bb.messageWithReactions(messageGuid);
     if (!current.ok) return failure(current.error);
     const rawTarget = current.value.find((message) => message.guid === messageGuid);
-    if (!rawTarget || !messageBelongsToAnyChat(rawTarget, this.directory.siblingGuids(body.chatGuid))) {
+    if (!rawTarget || !messageBelongsToAnyChat(rawTarget, body.siblings)) {
       return failure("reaction target is not valid in this chat", 400);
     }
     const target = buildThread(current.value, body.chatGuid, this.names).find((message) => message.guid === messageGuid);
@@ -70,13 +66,10 @@ export class ChatCommands {
     const vcard = ["BEGIN:VCARD", "VERSION:3.0", `FN:${escape(body.name)}`, `N:${escape(body.name)};;;;`,
       `${field}:${escape(body.address)}`, "END:VCARD", ""].join("\r\n");
     const filename = `${body.name.replace(/[^\w -]/g, "").trim() || "Contact"}.vcf`;
-    await this.directory.summaries();
     const result = await this.sideEffect(() => this.bb.sendAttachmentWithCaption(
       chatGuid, filename, new TextEncoder().encode(vcard), body.caption?.trim() || undefined));
     if (!result.ok) return failure(result.error);
-    const message = mapMessage(result.value, chatGuid, this.names);
-    this.directory.applyKnownMessage(chatGuid, message);
-    return { ok: true as const, value: message };
+    return { ok: true as const, value: mapMessage(result.value, chatGuid, this.names) };
   }
 
   async createChat(body: { addresses: string[]; text: string }) {
@@ -94,38 +87,29 @@ export class ChatCommands {
     if (!message.isFromMe || message.text !== body.text || message.service !== "iMessage" || message.error !== 0) {
       return failure("created chat returned an invalid sent message");
     }
-    this.directory.applyKnownMessage(chat.guid, message);
     return { ok: true as const, value: { chat, message } };
   }
 
   async participant(chatGuid: string, address: string, action: "add" | "remove") {
     if (!this.bb.hasPrivateApi) return failure("private API disabled", 501);
-    const result = checked(await this.sideEffect(() => action === "remove"
+    return checked(await this.sideEffect(() => action === "remove"
       ? this.bb.removeParticipant(chatGuid, address) : this.bb.addParticipant(chatGuid, address)));
-    if (result.ok) this.directory.invalidate();
-    return result;
   }
 
   async leaveGroup(chatGuid: string) {
     if (!this.bb.hasPrivateApi) return failure("private API disabled", 501);
-    const result = checked(await this.sideEffect(() => this.bb.leaveGroup(chatGuid)));
-    if (result.ok) this.directory.invalidate();
-    return result;
+    return checked(await this.sideEffect(() => this.bb.leaveGroup(chatGuid)));
   }
 
   async deleteChat(chatGuid: string) {
-    const result = checked(await this.sideEffect(() => this.bb.deleteChat(chatGuid)));
-    if (result.ok) this.directory.invalidate();
-    return result;
+    return checked(await this.sideEffect(() => this.bb.deleteChat(chatGuid)));
   }
 
   async createFaceTimeLink(chatGuid: string) {
     if (!this.bb.hasPrivateApi) return failure("private API disabled", 501);
     const result = await this.sideEffect(() => createAndSendFaceTimeLink(this.bb, chatGuid));
     if (!result.ok) return failure(result.error);
-    const message = mapMessage(result.value, chatGuid, this.names);
-    this.directory.applyKnownMessage(chatGuid, message);
-    return { ok: true as const, value: message };
+    return { ok: true as const, value: mapMessage(result.value, chatGuid, this.names) };
   }
 
   private async sideEffect<T>(work: () => Promise<T>): Promise<T> {
@@ -133,9 +117,10 @@ export class ChatCommands {
     catch (error) { throw new UnknownSendError(String(error)); }
   }
 
-  async markRead(chatGuid: string) {
-    const results = await Promise.all(this.directory.siblingGuids(chatGuid).map((guid) => this.directory.markRead(guid)));
-    return results.some(Boolean);
+  /** Sends iMessage's read receipt on every service chat; the read itself is Convex's. */
+  async markRead(siblings: readonly string[]) {
+    const results = await Promise.all(siblings.map((guid) => this.bb.markRead(guid)));
+    return results.some((result) => result.ok);
   }
 
   async unsend(messageGuid: string, partIndex?: number) {
@@ -149,15 +134,12 @@ export class ChatCommands {
     return checked(await this.bb.edit(messageGuid, text.trim(), partIndex));
   }
 
-  async delete(messageGuid: string, chatGuid: string) {
+  async delete(messageGuid: string, siblings: readonly string[]) {
     if (!this.bb.hasPrivateApi) return failure("private API disabled", 501);
     let lastError = "delete failed";
-    for (const guid of this.directory.siblingGuids(chatGuid)) {
+    for (const guid of siblings) {
       const result = await this.bb.deleteMessage(guid, messageGuid);
-      if (result.ok) {
-        this.directory.invalidate();
-        return { ok: true as const, value: undefined };
-      }
+      if (result.ok) return { ok: true as const, value: undefined };
       lastError = result.error;
     }
     return failure(lastError);
@@ -165,9 +147,7 @@ export class ChatCommands {
 
   async rename(chatGuid: string, name: string) {
     if (!this.bb.hasPrivateApi) return failure("private API disabled", 501);
-    const result = checked(await this.bb.renameGroup(chatGuid, name ?? ""));
-    if (result.ok) this.directory.invalidate();
-    return result;
+    return checked(await this.bb.renameGroup(chatGuid, name ?? ""));
   }
 
   async schedule(body: { chatGuid: string; text: string; sendAt: number }, id?: number) {

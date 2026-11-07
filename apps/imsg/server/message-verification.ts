@@ -11,10 +11,6 @@ export function normalizeSendAddress(address: string): string {
   return cleaned;
 }
 
-export function sameSendAddress(a: string, b: string): boolean {
-  return normalizeSendAddress(a) === normalizeSendAddress(b);
-}
-
 export function outboundAddressesError(addresses: readonly string[]): string | null {
   if (addresses.length === 0) return "addresses are required";
   const normalized = addresses.map(normalizeSendAddress);
