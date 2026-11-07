@@ -10,21 +10,20 @@ import {
 
 import { settleDraftChat } from "./agent";
 import { sameSecret } from "./bridgeAuth";
-import { imessage, sendRoute } from "./conversationIdentity";
+import { sendRoute } from "./conversationIdentity";
 import { applyIMessageResult } from "./imessageResults";
-import { refreshLastMessage } from "./internal";
+import { claimPendingSend, completePendingSend, createPendingSend, expireIfStale, strandPendingSend } from "./pendingSends";
 import { unsupportedReason } from "./routeSupport";
-import { tempGuid } from "./tempMessage";
-import { carryTempAnchor, readConversation, setConversationFlag, settleConversation, unsettleConversation } from "./triage";
+import { readConversation, setConversationFlag, settleConversation, unsettleConversation } from "./triage";
 
 /**
  * The command queue. Clients enqueue (Convex Auth); the Mini's bridge claims
  * and executes through BlueBubbles, then completes each row.
  *
- * BlueBubbles' tempGuid is not durable, so a send whose outcome is unknown
- * (the bridge died after handing it over) becomes "unknown" and is never
- * retried. Idempotent kinds re-run safely, so an expired lease returns them
- * to "pending".
+ * A send whose outcome is unknown (the bridge died after handing it over)
+ * becomes "unknown" and is never retried. Idempotent kinds re-run safely, so
+ * an expired lease returns them to "pending". A send's bubble is the
+ * pendingSends module's.
  */
 /** Every kind has an explicit recovery policy. Ambiguous side effects never replay. */
 export const AUTO_RETRY = {
@@ -69,16 +68,6 @@ async function applyQueuedTriage(ctx: MutationCtx, row: Doc<"comma_outbox"> & { 
 }
 
 /**
- * A send that failed, or whose outcome is unknown, is no longer in flight. Its bubble takes that moment and shows
- * Not delivered, as the sender's own copy already does, and sorts among the messages around its attempt instead
- * of staying below the thread with the sends still queued.
- */
-async function strandTemp(ctx: MutationCtx, clientKey: string): Promise<void> {
-  const temp = await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", tempGuid(clientKey))).unique();
-  if (temp) await ctx.db.patch(temp._id, { error: 1, dateCreated: Date.now() });
-}
-
-/**
  * A client from before comma/triage still enqueues triage kinds. They apply here through the same cores and
  * complete at once, so the Mini never claims them; a read also queues the Mini's receipt as before.
  */
@@ -115,7 +104,7 @@ export const enqueue = mutation({
   },
 });
 
-/** Idempotent on clientKey. A send shows the temp bubble at once. */
+/** Idempotent on clientKey. A send shows its pending bubble at once. */
 export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversationId, payload }: {
   clientKey: string; conversationId?: Id<"comma_conversations">; payload: CommaOutboxPayload;
 }): Promise<{ id: Id<"comma_outbox">; created: boolean }> {
@@ -142,35 +131,7 @@ export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversation
     createdAt: now,
     updatedAt: now,
   });
-  if (payload.kind === "send" && conversation && route) {
-    // The sidebar moves with the temp bubble rather than a BlueBubbles round trip later.
-    // The real row's refreshLastMessage overwrites it, and a failed send stays the preview.
-    await ctx.db.patch(conversation._id, {
-      lastMessage: { guid: tempGuid(clientKey), text: payload.text, dateCreated: now, isFromMe: true, senderName: null, hasAttachments: false },
-      lastMessageAt: Math.max(conversation.lastMessageAt, now),
-    });
-    await ctx.db.insert("comma_messages", {
-      platform: imessage.platform,
-      guid: tempGuid(clientKey),
-      conversationId: conversation._id,
-      chatGuid: route.chatGuid,
-      dateCreated: now,
-      isFromMe: true,
-      text: payload.text,
-      service: imessage.sendService(route.chatGuid),
-      error: 0,
-      edited: false,
-      retracted: false,
-      isTapback: false,
-      reactions: [],
-      replyToGuid: payload.replyToGuid,
-      isGroupEvent: false,
-      mentions: payload.mentions ?? [],
-      attachmentGuids: [],
-      clientKey,
-      sourceVersion: 0,
-    });
-  }
+  if (payload.kind === "send" && conversation && route) await createPendingSend(ctx, { conversation, route, clientKey, payload, now });
   return { id, created: true };
 }
 
@@ -249,7 +210,7 @@ export const claimOutbox = internalMutation({
         claimToken: undefined,
         updatedAt: now,
       });
-      if (!retry && row.payload.kind === "send") await strandTemp(ctx, row.clientKey);
+      if (!retry && row.payload.kind === "send") await strandPendingSend(ctx, row.clientKey, "failed");
     }
     const claimed: Doc<"comma_outbox">[] = [];
     for (const row of await laneRows(ctx, lane, "pending", limit)) {
@@ -257,6 +218,8 @@ export const claimOutbox = internalMutation({
         await applyQueuedTriage(ctx, { ...row, conversationId: row.conversationId }, row.payload, now);
         continue;
       }
+      if (await expireIfStale(ctx, row, now)) continue;
+      if (row.payload.kind === "send") await claimPendingSend(ctx, row.clientKey);
       if (row.conversationId && row.payload.kind === "markRead") await readConversation(ctx, row.conversationId, row.createdAt);
       // A row inserted without a route (queued before routes existed, or a typing expiry) gets its conversation's route now.
       const conversation = row.conversationId && !row.route ? await ctx.db.get(row.conversationId) : null;
@@ -296,24 +259,7 @@ export const completeOutbox = internalMutation({
       resultGuid,
       result,
     });
-    if (row.payload.kind === "send") {
-      const temp = await ctx.db
-        .query("comma_messages")
-        .withIndex("by_guid", (q) => q.eq("guid", tempGuid(clientKey)))
-        .unique();
-      // BlueBubbles echoes often omit tempGuid, so a confirmed send cannot wait for a
-      // clientKey-tagged echo to retire its temp row. It goes once the real row has landed;
-      // deleting it sooner blanked the bubble and the sidebar preview until the echo arrived.
-      const real = resultGuid ? await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", resultGuid)).unique() : null;
-      if (temp && status === "sent" && (real || !resultGuid)) {
-        await ctx.db.delete(temp._id);
-        if (resultGuid) await carryTempAnchor(ctx, temp.conversationId, temp.guid, resultGuid);
-        // An echo that beat this receipt left the temp as the newest row and the preview.
-        await refreshLastMessage(ctx, temp.conversationId);
-      }
-      // A failed or unknown send keeps its temp bubble so the client can show the state.
-      else if (temp && status !== "sent") await strandTemp(ctx, clientKey);
-    }
+    if (row.payload.kind === "send") await completePendingSend(ctx, clientKey, status, resultGuid);
     if (status === "sent" && (row.lane ?? laneOf(row.payload.kind)) === "imessage") await applyIMessageResult(ctx, row);
     return true;
   },

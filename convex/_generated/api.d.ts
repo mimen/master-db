@@ -590,6 +590,7 @@ export declare const api: {
           replyToPreview?: string;
           retracted: boolean;
           sendEffect?: string;
+          sendState?: "queued" | "sending" | "notSent" | "failed";
           sender?: { address: string; name: string | null };
           service: "iMessage" | "SMS";
           sourceVersion: number;
@@ -1767,6 +1768,20 @@ export declare const api: {
         }>
       >;
     };
+    pendingSends: {
+      cancelSend: FunctionReference<
+        "mutation",
+        "public",
+        { clientKey: string },
+        boolean
+      >;
+      retrySend: FunctionReference<
+        "mutation",
+        "public",
+        { clientKey: string; retryKey: string },
+        Id<"comma_outbox">
+      >;
+    };
     presence: {
       presence: FunctionReference<
         "query",
@@ -2053,6 +2068,7 @@ export declare const api: {
             replyToPreview?: string;
             retracted: boolean;
             sendEffect?: string;
+            sendState?: "queued" | "sending" | "notSent" | "failed";
             sender?: { address: string; name: string | null };
             service: "iMessage" | "SMS";
             sourceVersion: number;
@@ -2194,6 +2210,7 @@ export declare const api: {
           replyToPreview?: string;
           retracted: boolean;
           sendEffect?: string;
+          sendState?: "queued" | "sending" | "notSent" | "failed";
           sender?: { address: string; name: string | null };
           service: "iMessage" | "SMS";
           sourceVersion: number;
@@ -5657,6 +5674,14 @@ export declare const internal: {
         "internal",
         { claimToken: string; clientKey: string; leaseMs: number; now: number },
         boolean
+      >;
+    };
+    pendingSends: {
+      expire: FunctionReference<
+        "mutation",
+        "internal",
+        { clientKey: string },
+        null
       >;
     };
     photos: {

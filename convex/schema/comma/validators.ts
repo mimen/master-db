@@ -169,6 +169,13 @@ export const reactionFields = {
 };
 export const reactionState = v.object(reactionFields);
 
+/** Where a pending send stands; see apps/imsg/shared/pending-send.ts. */
+export const pendingSendState = v.union(v.literal("queued"), v.literal("sending"), v.literal("notSent"), v.literal("failed"));
+export type CommaPendingSendState = Infer<typeof pendingSendState>;
+
+/** A stored message. Only a pending send's own row carries `sendState`; ingest never writes it. */
+export const messageRowFields = { ...messageFields, sendState: v.optional(pendingSendState) };
+
 export const attachmentFields = {
   guid: v.string(),
   messageGuid: v.string(),
@@ -518,7 +525,7 @@ function withSystemFields<T extends PropertyValidators, Table extends string>(ta
 }
 
 export const conversationDoc = withSystemFields("comma_conversations", conversationFields);
-export const messageDoc = withSystemFields("comma_messages", messageFields);
+export const messageDoc = withSystemFields("comma_messages", messageRowFields);
 export const attachmentDoc = withSystemFields("comma_attachments", attachmentFields);
 export const conversationStateDoc = withSystemFields("comma_conversation_state", conversationStateFields);
 export const draftView = withSystemFields("comma_drafts", {

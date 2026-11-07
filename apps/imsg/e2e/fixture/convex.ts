@@ -6,8 +6,9 @@ import { handleKey, imessage, routeFor } from "../../../../convex/comma/conversa
 import { resolveConversationNames } from "../../../../convex/comma/names";
 import { formatAddress } from "../../shared/address";
 import { fixtureChatGuid, fixtureConversationId } from "../../shared/fixture-ids";
-import { tempGuid } from "../../../../convex/comma/tempMessage";
-import { unsupportedReason } from "../../../../convex/comma/routeSupport";
+import { profileRoute, unsupportedReason } from "../../../../convex/comma/routeSupport";
+import { messageService } from "../../shared/platform-profile";
+import { NOT_SENT_AFTER_MS, NOT_SENT_ERROR, pendingGuid } from "../../shared/pending-send";
 import { fromTapback, mergeReactions, messageKey, sameReaction, supersedes } from "../../../../convex/comma/reactions";
 import type { FixtureRouteControls } from "../../server/app";
 import { buildThread, isGenuineUnreadInbound, mapChat, mapMessage, type UnreadSummary } from "../../server/map";
@@ -151,7 +152,27 @@ export async function fixtureMessageWindow(bb: FixtureBlueBubbles, names: Fixtur
 
 export function registerConvexFixture(app: Hono, controls: FixtureRouteControls, bb: FixtureBlueBubbles, db: OverlayDb, names: FixtureIdentity, additionalHandlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {}) {
   const drafts = new Map<string, Infer<typeof draftView>>();
-  const receipts = new Map<string, { id: string; status: "sent"; clientKey: string; updatedAt: number; result?: CommandResult; resultGuid?: string }>();
+  const receipts = new Map<string, { id: string; status: "pending" | "sent" | "failed"; clientKey: string; updatedAt: number; error?: string; result?: CommandResult; resultGuid?: string }>();
+  /** Each send's conversation and payload, for a retry. */
+  const sendPayloads = new Map<string, { chatGuid: string; payload: CommaOutboxPayload }>();
+  /**
+   * The Mini as the outbox sees it. While it is away a send stays queued, cancellable, until it comes back or the
+   * Not sent deadline passes, as production's outbox holds it.
+   */
+  const mini = { online: true, notSentAfterMs: NOT_SENT_AFTER_MS, held: new Map<string, { release: () => void; timer: ReturnType<typeof setTimeout> }>() };
+  const strand = (clientKey: string, error: string) => {
+    const receipt = receipts.get(clientKey);
+    if (receipt) receipts.set(clientKey, { ...receipt, status: "failed", error, updatedAt: Date.now() });
+    const temp = temps.get(clientKey);
+    if (temp) temps.set(clientKey, { ...temp, error: 1, dateCreated: Date.now(), sendState: error === NOT_SENT_ERROR ? "notSent" : "failed" });
+  };
+  const releaseHeld = () => {
+    for (const [clientKey, { release, timer }] of [...mini.held]) {
+      clearTimeout(timer);
+      mini.held.delete(clientKey);
+      release();
+    }
+  };
   const shelves = new Map<string, ReplySuggestions>();
   const deletedChats = new Set<string>();
   const uploads = new Map<string, { bytes: Blob; filename?: string; mimeType?: string }>();
@@ -478,7 +499,9 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return row ? { ...row, peerTyping: row.peerTyping && row.expiresAt > new Date().getTime() } : null;
     },
     "comma/bridgeState:bridgeState": async () => {
-      return { key: "mini", ...health(), ...miniAi(), whisperAvailable: false, whisperDetail: "Fixture transcription unavailable", lastSeenAt: Date.now() };
+      // On the wall clock the browser judges it by; a Mini that is away last beat ten minutes ago.
+      const lastSeenAt = new Date().getTime() - (mini.online ? 0 : 10 * 60_000);
+      return { key: "mini", ...health(), ...miniAi(), whisperAvailable: false, whisperDetail: "Fixture transcription unavailable", lastSeenAt };
     },
     "comma/uploads:generateAttachmentUploadUrl": async () => "/__fixture/upload",
     "comma/uploads:finalizeUpload": async (args) => {
@@ -604,31 +627,47 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
           const primaryChatGuid = (await conversations()).find((row) => row._id === chatGuid)!.primaryChatGuid;
           const now = Date.now();
           temps.set(clientKey, {
-            _id: id(tempGuid(clientKey)), _creationTime: now, guid: tempGuid(clientKey),
+            _id: id(pendingGuid(clientKey)), _creationTime: now, guid: pendingGuid(clientKey), sendState: mini.online ? "sending" : "queued",
             conversationId: id(chatGuid), chatGuid: primaryChatGuid, dateCreated: now, isFromMe: true,
-            text: payload.text, service: imessage.sendService(primaryChatGuid), error: 0, edited: false, retracted: false,
+            text: payload.text, service: messageService(profileRoute({ platform: "imessage", chatGuid: primaryChatGuid }, conversation?.isGroup ?? false).service), error: 0, edited: false, retracted: false,
             isTapback: false, reactions: [], ...(payload.replyToGuid ? { replyToGuid: payload.replyToGuid } : {}),
             isGroupEvent: false, mentions: payload.mentions ?? [], attachmentGuids: [], clientKey, sourceVersion: 0, attachments: [],
           });
         }
-        // Each lane on the Mini runs one command at a time, so a burst of sends lands one by one and a slow
-        // model command holds back only the model work behind it.
-        const lane = laneOf(payload.kind);
-        const ordered = payload.kind === "send" || lane === "ai";
-        const work = () => wait(`outbox:${payload.kind}`).then(() => execute(chatGuid, payload, clientKey));
-        const run = ordered ? (turns.get(lane) ?? Promise.resolve()).then(work) : work();
-        if (ordered) turns.set(lane, run.catch(() => undefined));
-        const result = await run.finally(() => temps.delete(clientKey));
-        const resultGuid = result && "message" in result ? result.message.guid : undefined;
-        if (result && "message" in result) triage.replied(chatGuid, conversation?.lastMessage ?? null, result.message.dateCreated);
-        const draft = drafts.get(chatGuid);
-        if (draft && (payload.kind === "send" || (payload.kind === "sendAttachment" && draft.attachments?.some((a) => a.storageId === payload.storageId)))) {
-          agent.outbox.sentDraft(draft.agentChatId);
-          drafts.delete(chatGuid);
-        }
-        const receipt = { id: `outbox-${clientKey}`, clientKey, updatedAt: Date.now(), status: "sent" as const, ...(result ? { result } : {}), ...(resultGuid ? { resultGuid } : {}) };
-        receipts.set(clientKey, receipt);
-        return receipt.id;
+        if (payload.kind === "send") sendPayloads.set(clientKey, { chatGuid, payload });
+        const finish = async () => {
+          // Each lane on the Mini runs one command at a time, so a burst of sends lands one by one and a slow
+          // model command holds back only the model work behind it.
+          const lane = laneOf(payload.kind);
+          const ordered = payload.kind === "send" || lane === "ai";
+          const work = () => wait(`outbox:${payload.kind}`).then(() => execute(chatGuid, payload, clientKey));
+          const run = ordered ? (turns.get(lane) ?? Promise.resolve()).then(work) : work();
+          if (ordered) turns.set(lane, run.catch(() => undefined));
+          const result = await run.finally(() => temps.delete(clientKey));
+          const resultGuid = result && "message" in result ? result.message.guid : undefined;
+          if (result && "message" in result) triage.replied(chatGuid, conversation?.lastMessage ?? null, result.message.dateCreated);
+          const draft = drafts.get(chatGuid);
+          if (draft && (payload.kind === "send" || (payload.kind === "sendAttachment" && draft.attachments?.some((a) => a.storageId === payload.storageId)))) {
+            agent.outbox.sentDraft(draft.agentChatId);
+            drafts.delete(chatGuid);
+          }
+          const receipt = { id: `outbox-${clientKey}`, clientKey, updatedAt: Date.now(), status: "sent" as const, ...(result ? { result } : {}), ...(resultGuid ? { resultGuid } : {}) };
+          receipts.set(clientKey, receipt);
+          return receipt.id;
+        };
+        if (payload.kind !== "send" || mini.online) return await finish();
+        const queuedId = `outbox-${clientKey}`;
+        receipts.set(clientKey, { id: queuedId, clientKey, status: "pending", updatedAt: Date.now() });
+        const timer = setTimeout(() => {
+          mini.held.delete(clientKey);
+          strand(clientKey, NOT_SENT_ERROR);
+        }, mini.notSentAfterMs);
+        mini.held.set(clientKey, { timer, release: () => {
+          const temp = temps.get(clientKey);
+          if (temp) temps.set(clientKey, { ...temp, sendState: "sending" });
+          finish().catch((error: unknown) => strand(clientKey, error instanceof Error ? error.message : String(error)));
+        } });
+        return queuedId;
       })();
       inFlight.set(clientKey, execution);
       try { return await execution; }
@@ -640,11 +679,41 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       const { id: commandId, ...row } = receipt;
       return { commandId, ...row };
     },
+    "comma/pendingSends:cancelSend": async (args) => {
+      const clientKey = String(args.clientKey);
+      const receipt = receipts.get(clientKey);
+      if (!receipt) return true;
+      const held = mini.held.get(clientKey);
+      if (receipt.status !== "pending" || !held) return false;
+      clearTimeout(held.timer);
+      mini.held.delete(clientKey);
+      receipts.delete(clientKey);
+      temps.delete(clientKey);
+      return true;
+    },
+    "comma/pendingSends:retrySend": async (args) => {
+      const clientKey = String(args.clientKey);
+      const retryKey = String(args.retryKey);
+      const retried = receipts.get(retryKey);
+      if (retried) return retried.id;
+      const sendOf = sendPayloads.get(clientKey);
+      if (!sendOf || receipts.get(clientKey)?.status !== "failed") throw new FixtureError("Only a send that did not go out can be retried", 400);
+      temps.delete(clientKey);
+      return handlers["comma/outbox:enqueue"]!({ clientKey: retryKey, conversationId: sendOf.chatGuid, payload: sendOf.payload });
+    },
     "comma/outbox:outboxStatusFor": async (args) => (args.clientKeys as string[]).slice(0, 100).flatMap((clientKey) => {
       const row = receipts.get(clientKey);
       return row ? [{ clientKey, status: row.status }] : [];
     }),
   };
+  // Takes the Mini away from the outbox or brings it back; `notSentAfterMs` shortens the Not sent deadline for a drive.
+  app.post("/__fixture/mini", async (c) => {
+    const body = await c.req.json<{ online?: boolean; notSentAfterMs?: number | null }>();
+    if (body.notSentAfterMs !== undefined) mini.notSentAfterMs = body.notSentAfterMs ?? NOT_SENT_AFTER_MS;
+    if (body.online !== undefined) mini.online = body.online;
+    if (mini.online) releaseHeld();
+    return c.json({ ok: true });
+  });
   app.post("/__fixture/latency", async (c) => {
     const { name, delayMs } = await c.req.json<{ name: string; delayMs: number | null }>();
     if (delayMs === null) latency.delete(name);
@@ -663,6 +732,9 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: error instanceof FixtureError ? error.status : 400 });
     }
   });
-  return () => { turns.clear(); names.reset(); agent.reset(); today.reset(); triage.reset(); latency.clear(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
+  return () => {
+    for (const { timer } of mini.held.values()) clearTimeout(timer);
+    mini.held.clear(); mini.online = true; mini.notSentAfterMs = NOT_SENT_AFTER_MS; sendPayloads.clear();
+    turns.clear(); names.reset(); agent.reset(); today.reset(); triage.reset(); latency.clear(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
     for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };
 }
