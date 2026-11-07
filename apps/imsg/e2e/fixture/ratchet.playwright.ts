@@ -21,6 +21,15 @@ async function continueHeld(route: Route): Promise<void> {
   });
 }
 
+/**
+ * Waits until the open conversation has painted the server's messages. A right-click or a tap on the thread before
+ * then is lost on a slow runner (it is at 43c15e78 too, under a 6x CPU throttle), and that is not what these measure.
+ */
+async function threadSettled(page: Page): Promise<void> {
+  await page.waitForFunction(() =>
+    (window as unknown as { __commaTimings: Array<{ freshMs: number | null }> }).__commaTimings.at(-1)?.freshMs != null);
+}
+
 test("Contacts and its people list wait for the first visit, then stay mounted", async ({ desk }) => {
   const page = desk.page;
   await page.setViewportSize({ width: 1300, height: 820 });
@@ -46,6 +55,7 @@ function likeBadgeShown(): boolean {
 async function openTray(page: Page) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
+  await threadSettled(page);
   await page.getByTestId("thread-view").getByRole("button", { name: `Alex Rivera: ${INBOUND}` }).click({ button: "right" });
   const like = page.getByRole("toolbar", { name: "Tapbacks" }).getByRole("button", { name: "Like", exact: true });
   // The tray first opens slowly on a cold runner; that wait must not count against the badge's.
@@ -155,6 +165,7 @@ test("ratchet: settling the open conversation moves the Needs you count within 5
   const page = desk.page;
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
+  await threadSettled(page);
   await page.getByPlaceholder("iMessage").blur();
   const label = await page.locator('[aria-label^="Needs you, "]').getAttribute("aria-label");
   const before = Number(label?.slice("Needs you, ".length));
@@ -198,6 +209,7 @@ async function recordVoice(page: Page) {
   await page.context().grantPermissions(["microphone"]);
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
+  await threadSettled(page);
   await page.getByRole("button", { name: "Record voice message" }).click();
   await expect(page.getByText("0:01", { exact: true })).toBeVisible();
   return page.getByRole("button", { name: "Send voice message" });
@@ -233,6 +245,7 @@ test("a voice message shows at once, then leaves with a toast and stays staged w
 async function forwardToJordan(page: Page) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
+  await threadSettled(page);
   await page.getByTestId("thread-view").getByRole("button", { name: `Alex Rivera: ${INBOUND}` }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Forward" }).click();
   await page.getByPlaceholder("Forward to…").fill("Jordan");
@@ -328,6 +341,7 @@ async function sendAgainMenuItem(page: Page) {
   await page.getByTestId("conversation-row").filter({ hasText: "Avery Brooks" }).click();
   const own = page.getByTestId("thread-view").getByRole("button", { name: AVERY_SEND });
   await expect(own).toHaveCount(1);
+  await threadSettled(page);
   await own.click({ button: "right" });
   return page.getByRole("menuitem", { name: "Send again" });
 }
