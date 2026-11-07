@@ -32,13 +32,15 @@ interface FeatureRule {
 
 const EVERY: readonly RouteService[] = ["iMessage", "SMS", "RCS"];
 const IMESSAGE: readonly RouteService[] = ["iMessage"];
+/** Messages sends tapbacks and threaded replies over RCS; chat.db holds both from Milad's RCS chats. */
+const NOT_SMS: readonly RouteService[] = ["iMessage", "RCS"];
 
 export const IMESSAGE_PROFILE = {
   /** The tapbacks a react command may send where "react" is supported. */
   reactions: ["love", "like", "dislike", "laugh", "emphasize", "question"] as const satisfies readonly TapbackType[],
   features: {
-    react: { services: IMESSAGE, privateApi: true, cant: "send reactions" },
-    reply: { services: IMESSAGE, privateApi: true, cant: "reply to a message" },
+    react: { services: NOT_SMS, privateApi: true, cant: "send reactions" },
+    reply: { services: NOT_SMS, privateApi: true, cant: "reply to a message" },
     edit: { services: IMESSAGE, privateApi: true, cant: "edit messages" },
     unsend: { services: IMESSAGE, privateApi: true, cant: "unsend messages" },
     deleteMessage: { services: EVERY, privateApi: true, cant: "delete messages" },

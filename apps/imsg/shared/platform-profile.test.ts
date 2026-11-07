@@ -18,7 +18,12 @@ describe("support", () => {
     expect(support(dm("SMS"), "reply")).toEqual({ ok: false, reason: "SMS can't reply to a message" });
     expect(support(dm("SMS"), "typing")).toEqual({ ok: false, reason: "SMS can't show typing" });
     expect(support(group("SMS"), "mentions")).toEqual({ ok: false, reason: "SMS can't mention people" });
-    expect(support(dm("RCS"), "react")).toEqual({ ok: false, reason: "RCS can't send reactions" });
+  });
+
+  test("RCS reacts and replies but can't edit or unsend", () => {
+    expect(support(dm("RCS"), "react")).toEqual({ ok: true });
+    expect(support(dm("RCS"), "reply")).toEqual({ ok: true });
+    expect(support(dm("RCS"), "edit")).toEqual({ ok: false, reason: "RCS can't edit messages" });
   });
 
   test("SMS keeps attachments, voice, contact cards, scheduling and deleting", () => {
