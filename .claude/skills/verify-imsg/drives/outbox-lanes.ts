@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "../fixtures/desk";
+import { fixtureConversationId } from "../../shared/fixture-ids";
 
 const evidence = process.env.VERIFY_IMSG_EVIDENCE!;
 const INBOUND = "Can you send the final arrival time?";
@@ -70,8 +71,8 @@ test("outbox-lanes: a tapback and a send land while a slow suggestions command h
   type Rows = { page: Array<{ guid: string; text: string; reactions: Array<{ type: string; isFromMe: boolean }> }> };
   const messages = (conversationId: string) => convex<Rows>("comma/queries:listMessages", { conversationId, paginationOpts: { numItems: 50, cursor: null } });
   const stored = {
-    send: (await messages(desk.chats.waiting)).page.find((row) => row.text === TEXT),
-    tapbacks: (await messages(desk.chats.needs)).page.find((row) => row.text === INBOUND)?.reactions.filter((r) => r.isFromMe),
+    send: (await messages(fixtureConversationId(desk.chats.waiting))).page.find((row) => row.text === TEXT),
+    tapbacks: (await messages(fixtureConversationId(desk.chats.needs))).page.find((row) => row.text === INBOUND)?.reactions.filter((r) => r.isFromMe),
   };
   const timeline = { suggestionsEnqueuedAt: suggestions.at, sendEnqueuedAt: send.at, sentAt, reactEnqueuedAt: react.at, reactedAt, suggestedAt, slowMs: SLOW_MS };
   writeFileSync(join(evidence, "side-effects.json"), JSON.stringify({ timeline, enqueued, stored }, null, 2));
