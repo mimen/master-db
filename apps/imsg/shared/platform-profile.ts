@@ -56,6 +56,11 @@ export const IMESSAGE_PROFILE = {
   } satisfies Record<Feature, FeatureRule>,
 };
 
+/** How each named tapback looks, for readers on any platform. */
+export const TAPBACK_GLYPHS: Readonly<Record<TapbackType, string>> = {
+  love: "❤️", like: "👍", dislike: "👎", laugh: "😂", emphasize: "‼️", question: "❓",
+};
+
 export const PROFILES = { imessage: IMESSAGE_PROFILE } satisfies Record<ProfileRoute["platform"], unknown>;
 
 export type Support = { ok: true } | { ok: false; reason: string };

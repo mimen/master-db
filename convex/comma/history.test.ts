@@ -98,10 +98,10 @@ describe("message history windows", () => {
       await ctx.db.insert("comma_attachments", { ...attachment, guid: "not-uploaded" });
       await ctx.db.insert("comma_attachments", { ...attachment, guid: "hidden", hideAttachment: true });
       await ctx.db.insert("comma_attachments", { ...attachment, guid: "unrelated", messageGuid: "other" });
-      return { id, reactions, thumbUrl: await ctx.storage.getUrl(thumb), originalUrl: await ctx.storage.getUrl(original) };
+      return { id, thumbUrl: await ctx.storage.getUrl(thumb), originalUrl: await ctx.storage.getUrl(original) };
     });
     const [row] = await t.query(windowRef, { conversationId: seeded.id, around: 1 });
-    expect(row.reactions).toEqual(seeded.reactions);
+    expect(row.reactions).toEqual([{ key: "love", emoji: "❤️", isFromMe: false, senderAddress: "them", senderName: null, type: "love" }]);
     expect(row.attachments.map((a) => a.guid)).toEqual(["photo", "not-uploaded"]);
     expect(row.attachments[0]).toMatchObject({ thumbUrl: seeded.thumbUrl, originalUrl: seeded.originalUrl });
     expect(row.attachments[1]).toMatchObject({ thumbUrl: null, originalUrl: null });

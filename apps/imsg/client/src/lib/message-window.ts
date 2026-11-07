@@ -1,4 +1,4 @@
-import type { Message, ServerEvent } from "@shared/types";
+import type { Message } from "@shared/types";
 
 const inFlight = (m: Message): boolean => m.pending === true && m.failed !== true;
 
@@ -92,17 +92,6 @@ export function reconcileWindow(current: Message[], batch: Message[]): Message[]
   );
   const next = batch.reduce(upsertMessage, kept);
   return JSON.stringify(next) === JSON.stringify(current) ? current : next;
-}
-
-/** A live tapback folded into its target, the same shape the server builds on reload. */
-export function foldReaction(target: Message, event: Extract<ServerEvent, { kind: "reaction" }>): Message {
-  const sameSender = (r: Message["reactions"][number]) =>
-    event.reaction.isFromMe ? r.isFromMe : !r.isFromMe && r.senderAddress === event.reaction.senderAddress;
-  const { type, emoji } = event.reaction;
-  const rest = target.reactions.filter(
-    (r) => !(sameSender(r) && r.type === type && (!emoji || r.emoji === emoji)),
-  );
-  return { ...target, reactions: event.remove ? rest : [...rest, event.reaction] };
 }
 
 /** iMessage echoes a note-to-self back within seconds; wider gaps are real messages. */

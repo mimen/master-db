@@ -49,6 +49,12 @@ async function setup() {
     await ctx.db.insert("comma_messages", message(conversationId, "tapback", 25, { isTapback: true }));
     await ctx.db.insert("comma_messages", message(conversationId, "m3", 30, { isFromMe: true, sender: undefined }));
     await ctx.db.insert("comma_messages", message(conversationId, "m4", 40));
+    await ctx.db.insert("comma_reactions", {
+      platform: "imessage", conversationId, targetKey: "imessage:m2", key: "like", emoji: "👍", isFromMe: false, senderAddress: ALEX, at: 21, removed: false,
+    });
+    await ctx.db.insert("comma_reactions", {
+      platform: "imessage", conversationId, targetKey: "imessage:m2", key: "laugh", emoji: "😂", isFromMe: true, at: 22, removed: true,
+    });
     return { conversationId, personId };
   });
   return { t, ...ids };
@@ -64,9 +70,10 @@ describe("agentContext", () => {
       { name: SAM, handles: [SAM] },
     ]);
     expect(context.messages).toEqual([
-      { guid: "m2", at: 20, fromMe: false, sender: SAM, text: "m2", attachments: [{ guid: "att1", name: "door.png", mime: "image/png" }] },
-      { guid: "m3", at: 30, fromMe: true, sender: "Me", text: "m3", attachments: [] },
-      { guid: "m4", at: 40, fromMe: false, sender: "Alex Rivera", text: "m4", attachments: [] },
+      { guid: "m2", at: 20, fromMe: false, sender: SAM, text: "m2", attachments: [{ guid: "att1", name: "door.png", mime: "image/png" }],
+        reactions: [{ reaction: "👍", fromMe: false, sender: "Alex Rivera" }] },
+      { guid: "m3", at: 30, fromMe: true, sender: "Me", text: "m3", attachments: [], reactions: [] },
+      { guid: "m4", at: 40, fromMe: false, sender: "Alex Rivera", text: "m4", attachments: [], reactions: [] },
     ]);
   });
 
@@ -84,7 +91,7 @@ describe("agentContext", () => {
 test("agentSearch finds thread messages in the agent's message shape", async () => {
   const { t, conversationId } = await setup();
   expect(await t.mutation(internal.comma.agentContext.agentSearch, { conversationId, query: "code" })).toEqual([
-    { guid: "m1", at: 10, fromMe: false, sender: "Alex Rivera", text: "the door code is 4411", attachments: [] },
+    { guid: "m1", at: 10, fromMe: false, sender: "Alex Rivera", text: "the door code is 4411", attachments: [], reactions: [] },
   ]);
 });
 
@@ -122,6 +129,9 @@ describe("aiThread", () => {
     expect(thread.messages[0]).toMatchObject({ sender: { address: ALEX, name: "Alex Rivera" }, text: "the door code is 4411", reactions: [] });
     expect(thread.messages[1]?.attachments).toEqual([{ guid: "att1", mimeType: "image/png", filename: "door.png", width: null, height: null, totalBytes: null }]);
     expect(thread.messages[2]).toMatchObject({ isFromMe: true, sender: null });
-    expect(thread.messages[3]?.reactions).toEqual([{ type: "love", isFromMe: true, senderName: null, senderAddress: null }]);
+    expect(thread.messages[3]?.reactions).toEqual([{ key: "love", emoji: "❤️", isFromMe: true, senderName: null, senderAddress: null, type: "love" }]);
+    expect(thread.messages[1]?.reactions).toEqual([
+      { key: "like", emoji: "👍", isFromMe: false, senderName: "Alex Rivera", senderAddress: ALEX, type: "like" },
+    ]);
   });
 });

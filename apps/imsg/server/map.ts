@@ -127,9 +127,16 @@ function isTapback(m: BBMessage): boolean {
   return Boolean(m.associatedMessageGuid && m.associatedMessageType);
 }
 
-function reactionOf(tapback: Tapback, isFromMe: boolean, who: Participant | null): Reaction {
+interface FoldedTapback {
+  tapback: Tapback;
+  isFromMe: boolean;
+  who: Participant | null;
+}
+
+/** A classic tapback is keyed by its name; an emoji tapback by its emoji, or "emoji" when it could not be read. */
+function reactionOf({ tapback, isFromMe, who }: FoldedTapback): Reaction {
   return {
-    type: tapback.type,
+    key: tapback.type === "emoji" ? tapback.emoji ?? "emoji" : tapback.type,
     ...(tapback.emoji ? { emoji: tapback.emoji } : {}),
     isFromMe,
     senderName: who?.name ?? null,
@@ -137,10 +144,10 @@ function reactionOf(tapback: Tapback, isFromMe: boolean, who: Participant | null
   };
 }
 
-/** `a` is the incoming reaction; one without a parsed emoji matches any emoji from the same sender. */
-function sameReaction(a: Reaction, b: Reaction): boolean {
-  const sameSender = a.isFromMe ? b.isFromMe : !b.isFromMe && a.senderAddress === b.senderAddress;
-  return sameSender && a.type === b.type && (!a.emoji || a.emoji === b.emoji);
+/** `a` is the incoming tapback; one without a parsed emoji matches any emoji from the same sender. */
+function sameReaction(a: FoldedTapback, b: FoldedTapback): boolean {
+  const sameSender = a.isFromMe ? b.isFromMe : !b.isFromMe && a.who?.address === b.who?.address;
+  return sameSender && a.tapback.type === b.tapback.type && (!a.tapback.emoji || a.tapback.emoji === b.tapback.emoji);
 }
 
 function isGroupEvent(m: BBMessage): boolean {
@@ -259,20 +266,16 @@ export function buildThread(
   chatGuid: string,
   contacts: NameSource,
 ): Message[] {
-  const tapbacks = new Map<string, Reaction[]>();
+  const tapbacks = new Map<string, FoldedTapback[]>();
   const chronological = raw.filter(isTapback).sort((a, b) => (a.dateCreated ?? 0) - (b.dateCreated ?? 0));
   for (const m of chronological) {
     const tapback = parseTapback(m);
     if (!tapback || !m.associatedMessageGuid) continue;
     const target = stripPartPrefix(m.associatedMessageGuid);
     const address = m.handle?.address ?? null;
-    const reaction = reactionOf(
-      tapback,
-      m.isFromMe === true,
-      address ? { address, name: contacts.lookup(address) } : null,
-    );
-    const rest = (tapbacks.get(target) ?? []).filter((r) => !sameReaction(reaction, r));
-    tapbacks.set(target, tapback.remove ? rest : [...rest, reaction]);
+    const folded = { tapback, isFromMe: m.isFromMe === true, who: address ? { address, name: contacts.lookup(address) } : null };
+    const rest = (tapbacks.get(target) ?? []).filter((r) => !sameReaction(folded, r));
+    tapbacks.set(target, tapback.remove ? rest : [...rest, folded]);
   }
 
   const messages = raw
@@ -282,7 +285,7 @@ export function buildThread(
 
   const byGuid = new Map(messages.map((m) => [m.guid, m]));
   for (const message of messages) {
-    message.reactions = tapbacks.get(message.guid) ?? [];
+    message.reactions = (tapbacks.get(message.guid) ?? []).map(reactionOf);
     if (message.replyToGuid) {
       const target = byGuid.get(stripPartPrefix(message.replyToGuid));
       if (target) {

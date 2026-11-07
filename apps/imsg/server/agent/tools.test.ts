@@ -81,12 +81,12 @@ describe("comma tools", () => {
   });
 
   test("search_thread lists matches in the read_thread format", async () => {
-    const h = harness({ agentSearch: [{ guid: "g", at: Date.UTC(2026, 9, 19, 18), fromMe: true, sender: "Me", text: "the list", attachments: [] }] });
+    const h = harness({ agentSearch: [{ guid: "g", at: Date.UTC(2026, 9, 19, 18), fromMe: true, sender: "Me", text: "the list", attachments: [], reactions: [] }] });
     expect((await h.call("search_thread", { query: "list" })).content[0]).toMatchObject({ text: expect.stringContaining("Milad (me): the list") });
   });
 
   test("read_thread pages back from a timestamp", async () => {
-    const h = harness({ agentContext: { title: "Jesse", participants: [], messages: [{ guid: "g", at: Date.UTC(2026, 9, 19, 18), fromMe: false, sender: "Jesse", text: "list?", attachments: [] }] } });
+    const h = harness({ agentContext: { title: "Jesse", participants: [], messages: [{ guid: "g", at: Date.UTC(2026, 9, 19, 18), fromMe: false, sender: "Jesse", text: "list?", attachments: [], reactions: [] }] } });
     const result = await h.call("read_thread", { beforeMessageAt: 5, limit: 10 });
     expect(h.calls[0]).toEqual({ route: "agentContext", body: { conversationId: "conv-1", beforeMessageAt: 5, limit: 10 } });
     expect(result.content[0]).toMatchObject({ text: expect.stringContaining("Jesse: list?") });

@@ -31,6 +31,8 @@ import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { openAgentPane } from "@/lib/agent-pane";
 import { openChatInfo } from "@/lib/chat-info";
 import { openPersonPane } from "@/lib/person-pane";
+import { conversationRoute } from "@shared/imessage";
+import { PROFILES } from "@shared/platform-profile";
 import type { Message, Participant } from "@shared/types";
 import { useMessages, type JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
@@ -39,8 +41,8 @@ import { CardShadow, HOVER_DIM, Radii } from "@/constants/theme";
 import { showToast, ToastAnchor } from "@/lib/toast";
 import type { ChatSummary, ConversationId } from "@shared/types";
 import { useAiStatus } from "@/hooks/use-ai";
-import { Bubble, TAPBACK_EMOJI } from "./bubble";
-import { TAPBACKS } from "@/lib/tapbacks";
+import { Bubble } from "./bubble";
+import { reactionGlyph, TAPBACK_LABEL } from "@/lib/tapbacks";
 import { sinceYourReply } from "./message-meta";
 import { Composer } from "./composer";
 import { QueuePosition } from "./queue-position";
@@ -410,7 +412,7 @@ export function ThreadView({
       showSheet({
         title: "Reactions",
         actions: message.reactions.map((r) => ({
-          label: `${r.emoji ?? TAPBACK_EMOJI.get(r.type) ?? r.type}  ${r.isFromMe ? "You" : (r.senderName ?? r.senderAddress ?? "Unknown")}`,
+          label: `${reactionGlyph(r)}  ${r.isFromMe ? "You" : (r.senderName ?? r.senderAddress ?? "Unknown")}`,
           onPress: () => undefined,
         })),
       });
@@ -423,15 +425,17 @@ export function ThreadView({
       const mine = message.isFromMe;
       const age = Date.now() - message.dateCreated;
       const react = can("react");
-      const tapbacks = react
-        ? TAPBACKS.map(({ type, label }) => {
-            const active = message.reactions.some((r) => r.isFromMe && r.type === type);
+      // The tray offers the route's reaction set from its platform profile.
+      const tapbacks = react && conversation
+        ? PROFILES[conversationRoute(conversation).platform].reactions.map((type) => {
+            const label = TAPBACK_LABEL[type] ?? type;
+            const active = message.reactions.some((r) => r.isFromMe && r.key === type);
             return {
               type,
               label,
               active,
               onPress: () => {
-                const rollback = pend(message.guid, { kind: "react", type, remove: active });
+                const rollback = pend(message.guid, { kind: "react", key: type, remove: active });
                 hapticSelect();
                 runCommand(conversationId, { kind: "react", messageGuid: message.guid, reaction: type, remove: active }).catch(() => {
                   rollback();
@@ -529,7 +533,7 @@ export function ThreadView({
       ];
       if (actions.length > 0 || tapbacks) showSheet({ actions, tapbacks, tapbacksUnavailable: reasonOf(react), anchor });
     },
-    [can, conversationId, isGroup, pend, replaceTemp, scrollToLatest, showSheet, upsert],
+    [can, conversation, conversationId, isGroup, pend, replaceTemp, scrollToLatest, showSheet, upsert],
   );
 
   const desk = headerChat !== null;

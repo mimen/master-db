@@ -1,16 +1,17 @@
 import { extractLinkPreview, parsePublicPreviewUrl } from "../../shared/link-preview";
 import type { Hono } from "hono";
 import type { GenericId, Infer } from "convex/values";
-import { laneOf, type attachmentDoc, type conversationDoc, type draftView, type messageDoc, type scheduledDoc, type CommaOutboxLane, type CommaOutboxPayload, type CommandResult } from "../../../../convex/schema/comma/validators";
+import { laneOf, type attachmentDoc, type conversationDoc, type draftView, type messageDoc, type scheduledDoc, type CommaOutboxLane, type CommaOutboxPayload, type CommaReaction, type CommaReactionState, type CommandResult } from "../../../../convex/schema/comma/validators";
 import { handleKey, imessage, routeFor } from "../../../../convex/comma/conversationIdentity";
 import { resolveConversationNames } from "../../../../convex/comma/names";
 import { formatAddress } from "../../shared/address";
 import { fixtureChatGuid, fixtureConversationId } from "../../shared/fixture-ids";
 import { tempGuid } from "../../../../convex/comma/tempMessage";
 import { unsupportedReason } from "../../../../convex/comma/routeSupport";
+import { fromTapback, mergeReactions, messageKey, sameReaction, supersedes } from "../../../../convex/comma/reactions";
 import type { FixtureRouteControls } from "../../server/app";
 import { buildThread, isGenuineUnreadInbound, mapChat, mapMessage, type UnreadSummary } from "../../server/map";
-import { toConversationInputs } from "../../server/bridge/mapper";
+import { toConversationInputs, toMessageRow } from "../../server/bridge/mapper";
 import { mapScheduledMessage } from "../../server/scheduled";
 import { ScheduledSendNow } from "../../server/scheduled-send-now";
 import { ChatCommands } from "../../server/commands";
@@ -18,6 +19,7 @@ import { WhisperService } from "../../server/whisper";
 import type { ConversationId } from "../../server/ai/service";
 import type { OverlayDb } from "../../server/db";
 import type { ChatSummary, Contact, ReplySuggestions, TranscriptState } from "../../shared/types";
+import type { BBMessage } from "../../server/bb-types";
 import { createAgentFixture } from "./agent";
 import { createTodayFixture, type TodayMode } from "./today";
 import { createTriageFixture } from "./triage";
@@ -25,7 +27,8 @@ import type { FixtureBlueBubbles } from "./fake-bluebubbles";
 import { AGENT_SEED, fixtureSeed, FIXTURE_NOW, type FixtureIdentity } from "./world";
 
 type Conversation = Infer<typeof conversationDoc> & Pick<ChatSummary, "flags" | "unreadCount"> & { groupPhotoUrl: string | null };
-type ConvexMessage = Infer<typeof messageDoc> & { attachments: Array<Infer<typeof attachmentDoc> & { thumbUrl: string | null; originalUrl: string | null }> };
+type ConvexMessage = Omit<Infer<typeof messageDoc>, "reactions"> & { reactions: CommaReaction[] }
+  & { attachments: Array<Infer<typeof attachmentDoc> & { thumbUrl: string | null; originalUrl: string | null }> };
 type Pagination = { numItems: number; cursor: string | null };
 
 function id<Table extends string>(value: string): GenericId<Table> {
@@ -44,6 +47,27 @@ export function conversationRow(chat: ChatSummary): Conversation {
     flags: chat.flags, unreadCount: chat.unreadCount,
     ...(chat.crm ? { crm: chat.crm } : {}),
   };
+}
+
+/**
+ * Reactions as production Convex serves them. A `legacy-` tapback stands for a row ingested before
+ * comma_reactions and shows through its target's fold; every other tapback goes through the bridge
+ * mapper and ingest's reaction rules, in arrival order since the fixture clock is pinned.
+ */
+function reactionsByGuid(raw: BBMessage[], chatGuid: string, names: FixtureIdentity): (guid: string) => CommaReaction[] {
+  const tapbacks = raw.filter((m) => m.associatedMessageGuid && m.associatedMessageType);
+  const legacy = new Map(buildThread(raw.filter((m) => !tapbacks.includes(m) || m.guid.startsWith("legacy-")), chatGuid, names)
+    .map((message) => [message.guid, message.reactions.map((r) => ({ ...r, type: r.key === r.emoji ? "emoji" : r.key }))]));
+  const states: CommaReactionState[] = [];
+  for (const m of tapbacks.filter((m) => !m.guid.startsWith("legacy-")).sort((a, b) => (a.dateCreated ?? 0) - (b.dateCreated ?? 0))) {
+    const event = fromTapback(toMessageRow(m, id(chatGuid), 0));
+    if (!event) continue;
+    const at = states.findIndex((state) => state.targetKey === event.targetKey && sameReaction(state, event));
+    if (at < 0) states.push(event);
+    else if (supersedes(event, states[at])) states[at] = event;
+  }
+  return (guid) => mergeReactions(legacy.get(guid) ?? [], states.filter((state) => state.targetKey === messageKey("imessage", guid)))
+    .map((r) => ({ ...r, senderName: r.senderAddress ? names.lookup(r.senderAddress) : null }));
 }
 
 export function messageRow(message: Message, clientKey?: string): ConvexMessage {
@@ -115,7 +139,8 @@ export async function fixtureMessageWindow(bb: FixtureBlueBubbles, names: Fixtur
   const chatGuid = String(args.conversationId);
   const result = await bb.chatMessages(chatGuid, { limit: Number.MAX_SAFE_INTEGER });
   if (!result.ok) throw new FixtureError(result.error);
-  const rows = buildThread(result.value, chatGuid, names);
+  const reactions = reactionsByGuid(result.value, chatGuid, names);
+  const rows = buildThread(result.value, chatGuid, names).map((message) => ({ ...message, reactions: reactions(message.guid) }));
   const bound = bounds[0];
   const window = args.around !== undefined
     ? [...rows.filter((row) => row.dateCreated <= bound).slice(-40), ...rows.filter((row) => row.dateCreated > bound).slice(0, 40)]
@@ -248,7 +273,9 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       bb.chatMessages(guid, { limit: Number.MAX_SAFE_INTEGER, sort: "DESC" })));
     if (pages.every((page) => !page.ok)) throw new FixtureError("fetch failed", 502);
     const raw = new Map(pages.flatMap((page) => page.ok ? page.value.map((message) => [message.guid, message] as const) : []));
-    return [...buildThread([...raw.values()], chatGuid, names).map((message) => messageRow(message, bb.clientKeyFor(message.guid))),
+    const reactions = reactionsByGuid([...raw.values()], chatGuid, names);
+    return [...buildThread([...raw.values()], chatGuid, names)
+      .map((message) => messageRow({ ...message, reactions: reactions(message.guid) }, bb.clientKeyFor(message.guid))),
       ...[...temps.values()].filter((temp) => temp.conversationId === chatGuid)].sort((a, b) => b.dateCreated - a.dateCreated);
   };
   const execute = async (chatGuid: string, payload: CommaOutboxPayload, clientKey: string): Promise<CommandResult | undefined> => {

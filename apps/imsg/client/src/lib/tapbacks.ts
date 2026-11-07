@@ -1,4 +1,5 @@
-import type { TapbackType } from "@shared/types";
+import { TAPBACK_GLYPHS } from "@shared/platform-profile";
+import type { Reaction, TapbackType } from "@shared/types";
 
 /** The six classic tapbacks in iMessage's tray order, with their spoken names. */
 export const TAPBACKS: readonly { readonly type: TapbackType; readonly label: string }[] = [
@@ -14,6 +15,13 @@ export const TAPBACKS: readonly { readonly type: TapbackType; readonly label: st
 export const TAPBACK_LABEL: Readonly<Record<string, string>> = Object.fromEntries(
   TAPBACKS.map(({ type, label }) => [type, label]),
 );
+
+export const TAPBACK_EMOJI: ReadonlyMap<string, string> = new Map(Object.entries(TAPBACK_GLYPHS));
+
+/** How a reaction looks on any platform: its emoji, else a classic tapback's glyph, else its key. */
+export function reactionGlyph(reaction: Pick<Reaction, "key" | "emoji">): string {
+  return reaction.emoji ?? TAPBACK_EMOJI.get(reaction.key) ?? reaction.key;
+}
 
 export type TrayKeyResult = { kind: "move"; index: number } | { kind: "pick"; index: number } | { kind: "close" };
 

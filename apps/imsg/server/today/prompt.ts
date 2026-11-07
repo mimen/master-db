@@ -105,6 +105,7 @@ function messageLines(messages: ThreadMessage[], chars: number): string {
     attachments: message.attachments.map((file) => ({
       ...file, name: file.name === null ? null : clean(file.name, ATTACHMENT_CHARS), mime: file.mime === null ? null : clean(file.mime, ATTACHMENT_CHARS),
     })),
+    reactions: message.reactions.map((r) => ({ ...r, reaction: clean(r.reaction, ATTACHMENT_CHARS), sender: clean(r.sender, 60) })),
   })), TODAY_TIME_ZONE);
 }
 

@@ -36,6 +36,24 @@ Private API for it. Enqueue rejects a command its route can't run (`convex/comma
 shows that control greyed with the same short reason ("SMS can't send reactions") instead of hiding it.
 _Avoid_: capability flags, service checks (`service === "SMS"`)
 
+**Message core**:
+What every platform's message has (`messageCoreFields` in `convex/schema/comma/validators.ts`): platform, id,
+conversation, sender, from-me, time, text, attachments, reply-to, edited and retracted. iMessage's own fields
+(`imessageMessageFields`: chat GUID, service, send effect, legacy tapback fields) are still top-level on every row.
+A message id is unique within its platform; other tables name a message by its **message key**, `platform:id`
+(`messageKey` in `convex/comma/reactions.ts`).
+_Avoid_: guid (as a cross-platform id)
+
+**Reaction**:
+One sender's reaction to one message: a key (an iMessage tapback name like `love`, or an emoji tapback's emoji;
+what a react command sends), an optional emoji, and the sender. `comma_reactions` holds each sender's newest state
+per message and key, removals included, so an older event arriving late never undoes a newer one. Ingest turns an
+iMessage tapback into a reaction and stores no message row for it. Messages ingested before that carry their tapbacks
+folded on the row; reads show the fold until a reaction row decides the same sender and key, and
+`migrations:deleteLegacyTapbacks` retires those rows once the new form is verified. The tray offers the route's
+reaction set from its platform profile.
+_Avoid_: tapback (outside iMessage-specific code), tapback row
+
 **Triage state**:
 Comma's own per-conversation state that BlueBubbles knows nothing about: dismissal anchors,
 pin, mute, marked-unread, the read time, and the clear log of settles and replies. Convex owns it

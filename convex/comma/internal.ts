@@ -9,11 +9,13 @@ import {
   participant,
   scheduledStatus,
   suggestionFields,
-  type CommaReaction,
+  type CommaLegacyReaction,
 } from "../schema/comma/validators";
 
 import { choosePrimary, imessage } from "./conversationIdentity";
 import { findByChatGuid, findByKey } from "./conversationLookup";
+import { fromTapback } from "./reactions";
+import { applyReaction } from "./reactionStore";
 import { tempGuid } from "./tempMessage";
 import { carryTempAnchor, logReplies } from "./triage";
 
@@ -25,6 +27,9 @@ import { carryTempAnchor, logReplies } from "./triage";
  * Batch limits: keep calls at or under 200 messages or attachments. A Convex
  * mutation may write 8,192 documents and read 16,384, and each message write
  * can also touch its target, its conversation, and earlier tapbacks.
+ *
+ * A tapback the bridge posts as a message row is a reaction: it lands in comma_reactions and
+ * leaves no message row. Tapback rows ingested before that stay until migrations:deleteLegacyTapbacks.
  */
 
 /** Structural equality over Convex values, ignoring object key order. */
@@ -112,16 +117,16 @@ export const upsertConversations = internalMutation({
   },
 });
 
-/** Replays a target's tapback rows in date order into its folded reactions. */
-export function foldTapbacks(tapbacks: Pick<Doc<"comma_messages">, "dateCreated" | "isFromMe" | "sender" | "tapback">[]): CommaReaction[] {
-  let reactions: CommaReaction[] = [];
+/** Replays a target's legacy tapback rows in date order into its folded reactions. */
+export function foldTapbacks(tapbacks: Pick<Doc<"comma_messages">, "dateCreated" | "isFromMe" | "sender" | "tapback">[]): CommaLegacyReaction[] {
+  let reactions: CommaLegacyReaction[] = [];
   for (const row of [...tapbacks].sort((a, b) => a.dateCreated - b.dateCreated)) {
     if (!row.tapback) continue;
     const senderAddress = row.sender?.address ?? null;
     // My own reactions share one sender regardless of address; others match by address.
-    const sameSender = (r: CommaReaction) =>
+    const sameSender = (r: CommaLegacyReaction) =>
       row.isFromMe ? r.isFromMe : !r.isFromMe && r.senderAddress === senderAddress;
-    const same = (r: CommaReaction) =>
+    const same = (r: CommaLegacyReaction) =>
       sameSender(r) && r.type === row.tapback?.reaction && (r.emoji ?? null) === (row.tapback?.emoji ?? null);
     reactions = reactions.filter((r) => !same(r));
     if (!row.tapback.remove) {
@@ -211,8 +216,14 @@ export const upsertMessages = internalMutation({
         skipped++;
         continue;
       }
+      const reaction = fromTapback(message);
+      if (reaction) {
+        if (await applyReaction(ctx, reaction)) written++;
+        else skipped++;
+        continue;
+      }
       // Folded reactions are derived; never let an incoming row clobber them.
-      const row = { ...message, reactions: existing?.reactions ?? [] };
+      const row = { ...message, platform: imessage.platform, reactions: existing?.reactions ?? [] };
       if (existing) await ctx.db.patch(existing._id, row);
       else await ctx.db.insert("comma_messages", row);
       // The real echo of a queued send replaces its optimistic temp row, matched by the
@@ -232,8 +243,8 @@ export const upsertMessages = internalMutation({
       written++;
       if (!message.guid.startsWith("temp-") && !message.isTapback && !message.retracted) real.push(message);
       touchedConversations.add(message.conversationId);
-      // A tapback refolds its target; a normal message folds tapbacks that arrived first.
-      touchedTargets.add(message.isTapback && message.tapbackTargetGuid ? message.tapbackTargetGuid : message.guid);
+      // A message folds legacy tapbacks that were ingested before it.
+      touchedTargets.add(message.guid);
     }
     for (const targetGuid of touchedTargets) await refoldTarget(ctx, targetGuid);
     for (const conversationId of touchedConversations) await refreshLastMessage(ctx, conversationId);
@@ -443,6 +454,7 @@ export const mergeDuplicateConversations = internalMutation({
         const moved = [
           ...(await ctx.db.query("comma_messages").withIndex("by_conversation_date", (q) => q.eq("conversationId", id)).collect()),
           ...(await ctx.db.query("comma_attachments").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).collect()),
+          ...(await ctx.db.query("comma_reactions").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).collect()),
           ...(await ctx.db.query("comma_drafts").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).collect()),
           ...(await ctx.db.query("comma_suggestions").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).collect()),
           ...(await ctx.db.query("comma_triage_events").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).collect()),

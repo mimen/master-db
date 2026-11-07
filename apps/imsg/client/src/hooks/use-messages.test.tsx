@@ -71,9 +71,9 @@ test("anchored history subscribes, pages once per direction, preserves local sen
     expect(result?.hasNewer).toBe(false);
     const own = { ...result!.messages[0], guid: "temp-own", clientKey: "temp-own", pending: true, isFromMe: true, dateCreated: 200 };
     await act(async () => { result?.upsert(own); });
-    await publish(Array.from({ length: 79 }, (_, i) => ({ ...row(i + 12), ...(i === 0 ? { text: "edited", reactions: [{ type: "love" as const, isFromMe: true, senderAddress: null, senderName: null }] } : {}) })));
+    await publish(Array.from({ length: 79 }, (_, i) => ({ ...row(i + 12), ...(i === 0 ? { text: "edited", reactions: [{ key: "love", isFromMe: true, senderAddress: null, senderName: null }] } : {}) })));
     expect(result?.messages.some((m) => m.guid === "m-11")).toBe(false);
-    expect(result?.messages.find((m) => m.guid === "m-12")).toMatchObject({ text: "edited", reactions: [{ type: "love" }] });
+    expect(result?.messages.find((m) => m.guid === "m-12")).toMatchObject({ text: "edited", reactions: [{ key: "love" }] });
     expect(result?.messages.some((m) => m.guid === "m-1")).toBe(true);
     expect(result?.messages.some((m) => m.guid === "temp-own")).toBe(true);
     await act(async () => { result?.loadOlder(); });

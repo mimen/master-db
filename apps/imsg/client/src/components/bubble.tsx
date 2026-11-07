@@ -18,7 +18,7 @@ import { useLightbox } from "@/lib/lightbox";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 import { LinkPreviewCard, firstUrl } from "./link-preview-card";
 import { receiptText } from "./message-meta";
-import { TAPBACK_LABEL } from "@/lib/tapbacks";
+import { reactionGlyph, TAPBACK_EMOJI, TAPBACK_LABEL } from "@/lib/tapbacks";
 
 const SPECIAL_META: Record<SpecialContent["kind"], { icon: keyof typeof Ionicons.glyphMap; label: string }> = {
   contact: { icon: "person-circle-outline", label: "Contact card" },
@@ -102,14 +102,7 @@ function SpecialCard({ special, mine }: { special: SpecialContent; mine: boolean
   );
 }
 
-export const TAPBACK_EMOJI = new Map([
-  ["love", "❤️"],
-  ["like", "👍"],
-  ["dislike", "👎"],
-  ["laugh", "😂"],
-  ["emphasize", "‼️"],
-  ["question", "❓"],
-]);
+const TAPBACK_LABEL_BY_GLYPH = new Map([...TAPBACK_EMOJI].map(([type, glyph]) => [glyph, TAPBACK_LABEL[type] ?? type]));
 
 /** Holds still under a thread image until its thumbnail paints. */
 function ImageSkeleton() {
@@ -283,7 +276,7 @@ export const Bubble = memo(function Bubble({
   const caption = { fontSize: wide ? 11 : 12, color: theme.textTertiary };
   const tapbacks = Object.entries(
     message.reactions.reduce<Record<string, number>>((acc, r) => {
-      const glyph = r.type === "emoji" ? (r.emoji ?? "🙂") : r.type;
+      const glyph = reactionGlyph(r);
       acc[glyph] = (acc[glyph] ?? 0) + 1;
       return acc;
     }, {}),
@@ -422,15 +415,15 @@ export const Bubble = memo(function Bubble({
           {/* Anchored to the whole message, so a media-only message still wears its tapbacks on top. */}
           {tapbacks.length > 0 && (
             <View style={[styles.reactionRow, mine ? { left: -18 } : { right: -14 }]}>
-              {tapbacks.map(([type, count]) => (
+              {tapbacks.map(([glyph, count]) => (
                 <Pressable
-                  key={type}
+                  key={glyph}
                   accessibilityRole="button"
-                  accessibilityLabel={`${TAPBACK_LABEL[type] ?? type}${count > 1 ? `, ${count}` : ""}`}
+                  accessibilityLabel={`${TAPBACK_LABEL_BY_GLYPH.get(glyph) ?? glyph}${count > 1 ? `, ${count}` : ""}`}
                   onPress={() => onShowReactions(message)}
                   style={[styles.reactionChip, { backgroundColor: theme.tapbackBg, borderColor: theme.tapbackBorder }]}
                 >
-                  <Text style={{ fontSize: 12 }}>{TAPBACK_EMOJI.get(type) ?? type}</Text>
+                  <Text style={{ fontSize: 12 }}>{glyph}</Text>
                   {count > 1 && <Text style={[styles.reactionCount, { color: theme.textSecondary }]}>{count}</Text>}
                 </Pressable>
               ))}

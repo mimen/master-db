@@ -34,7 +34,7 @@ const thread = (guid = "m1", text = "what time?"): TodayThread => ({
   ref: "c1",
   candidate: { conversationId: "conv1" as ConversationId, title: "Alex", isGroup: false, state: "needsYou", lastMessageAt: 0, unreadCount: 1 },
   people: [],
-  messages: [{ guid, at: 0, fromMe: false, sender: "Alex", text, attachments: [] }],
+  messages: [{ guid, at: 0, fromMe: false, sender: "Alex", text, attachments: [], reactions: [] }],
 });
 
 function harness(answers: ((options: StructuredOptions, prompt: string) => GatewayResult<unknown>)[]) {
@@ -51,7 +51,7 @@ function harness(answers: ((options: StructuredOptions, prompt: string) => Gatew
         if (route !== "agentContext") throw new Error(`unexpected ${route}`);
         const { limit } = body as TodayRoutes["agentContext"][0];
         contexts.push(limit);
-        const messages = Array.from({ length: limit }, (_, n) => ({ guid: n === limit - 1 ? "m1" : `old${n}`, at: 0, fromMe: false, sender: "Alex", text: `older ${n}`, attachments: [] }));
+        const messages = Array.from({ length: limit }, (_, n) => ({ guid: n === limit - 1 ? "m1" : `old${n}`, at: 0, fromMe: false, sender: "Alex", text: `older ${n}`, attachments: [], reactions: [] }));
         return { title: "Alex", participants: [], messages } as TodayRoutes[K][1];
       },
     },

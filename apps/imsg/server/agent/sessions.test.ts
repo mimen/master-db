@@ -9,7 +9,7 @@ import type { Chat, Command, CommandRow, Port, Routes, ThreadMessage } from "./c
 const scratchRoot = mkdtempSync(join(tmpdir(), "comma-sessions-"));
 afterAll(() => rmSync(scratchRoot, { recursive: true, force: true }));
 
-const message = (at: number, text: string): ThreadMessage => ({ guid: `g${at}`, at, fromMe: false, sender: "Jesse Brennan", text, attachments: [] });
+const message = (at: number, text: string): ThreadMessage => ({ guid: `g${at}`, at, fromMe: false, sender: "Jesse Brennan", text, attachments: [], reactions: [] });
 
 function harness(thread: ThreadMessage[] = [message(100, "Thanks brother. Rebecca Berens - rebeccaberens@gmail.com")]) {
   const calls: { route: keyof Routes; body: unknown }[] = [];

@@ -193,7 +193,7 @@ test("concurrent enqueue retries execute a send once and failed execution can re
 
 test("reactions, edits, unsends, deletes, and rename persist in the fixture world", async () => {
   await command({ kind: "react", messageGuid: "needs-2", reaction: "like", remove: false });
-  expect((await messages()).page.find((row) => row.guid === "needs-2")?.reactions).toMatchObject([{ type: "like", isFromMe: true }]);
+  expect((await messages()).page.find((row) => row.guid === "needs-2")?.reactions).toMatchObject([{ key: "like", isFromMe: true }]);
   await command({ kind: "react", messageGuid: "needs-2", reaction: "like", remove: true });
   expect((await messages()).page.find((row) => row.guid === "needs-2")?.reactions).toEqual([]);
   await command({ kind: "edit", messageGuid: "needs-1", text: "edited fixture" });
@@ -270,7 +270,7 @@ test("history fixture serves strict windows, joins reactions and stays live", as
   expect((await history({ after: rows[0].dateCreated })).map((row) => row.guid)).toEqual(["needs-2"]);
   expect(await history({ before: rows[0].dateCreated })).toEqual([]);
   await command({ kind: "react", messageGuid: "needs-2", reaction: "love", remove: false });
-  expect((await history({ around: rows[0].dateCreated }))[1].reactions).toMatchObject([{ type: "love", isFromMe: true }]);
+  expect((await history({ around: rows[0].dateCreated }))[1].reactions).toMatchObject([{ key: "love", isFromMe: true }]);
   bb.receiveMessage(CHAT_GUIDS.needs, "live history");
   expect((await history({ around: rows[0].dateCreated })).at(-1)?.text).toBe("live history");
   await expect(history({})).rejects.toThrow("Exactly one");

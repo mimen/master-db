@@ -8,6 +8,7 @@ import { people } from "../schema/identity/people";
 import { conversationPeople } from "./conversationInfo";
 import { resolveConversationNames } from "./names";
 import { searchMessageRows } from "./queries";
+import { reactionsOf } from "./reactionStore";
 
 /**
  * Thread reads for the agent runner, reached through the bridge ingest routes. They are
@@ -18,6 +19,8 @@ const nullableString = v.union(v.string(), v.null());
 const agentMessage = v.object({
   guid: v.string(), at: v.number(), fromMe: v.boolean(), sender: v.string(), text: v.string(),
   attachments: v.array(v.object({ guid: v.string(), name: nullableString, mime: nullableString })),
+  /** `reaction` is the emoji, or the platform's name for a reaction without one. */
+  reactions: v.array(v.object({ reaction: v.string(), fromMe: v.boolean(), sender: v.string() })),
 });
 type AgentMessage = Infer<typeof agentMessage>;
 
@@ -46,6 +49,10 @@ async function messageViews(ctx: QueryCtx, participants: { address: string; name
     attachments: await Promise.all(message.attachmentGuids.map(async (guid) => {
       const attachment = await attachmentFor(ctx, guid);
       return { guid, name: attachment?.transferName ?? attachment?.filename ?? null, mime: attachment?.mimeType ?? null };
+    })),
+    reactions: (await reactionsOf(ctx, message)).map((reaction) => ({
+      reaction: reaction.emoji ?? reaction.key, fromMe: reaction.isFromMe,
+      sender: reaction.isFromMe ? "Me" : names.get(reaction.senderAddress ?? "") ?? reaction.senderAddress ?? "Unknown",
     })),
   })));
 }
@@ -114,7 +121,9 @@ export const aiThread = internalMutation({
         guid: a.guid, mimeType: a.mimeType ?? null, filename: a.transferName ?? a.filename ?? null,
         width: a.width ?? null, height: a.height ?? null, totalBytes: a.totalBytes ?? null,
       }] : []),
-      mentions: row.mentions, special: row.special ?? null, sendEffect: row.sendEffect ?? null, reactions: row.reactions,
+      mentions: row.mentions, special: row.special ?? null, sendEffect: row.sendEffect ?? null,
+      reactions: (await reactionsOf(ctx, row)).map((reaction) =>
+        ({ ...reaction, senderName: reaction.senderAddress ? names.get(reaction.senderAddress) ?? null : null })),
       replyToGuid: row.replyToGuid ?? null, replyToPreview: row.replyToPreview ?? null, replyToFromMe: row.replyToFromMe ?? null,
       isGroupEvent: row.isGroupEvent, error: row.error, edited: row.edited, retracted: row.retracted,
     })));

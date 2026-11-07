@@ -1,10 +1,12 @@
 import { convexTest, type TestConvex } from "convex-test";
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
+
+import { reactionsOf } from "./reactionStore";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 
@@ -99,4 +101,56 @@ test("backfillConversationPlatform stamps only rows without a platform, page by 
   expect(patched).toBe(249);
   const platforms = await t.run(async (ctx) => (await ctx.db.query("comma_conversations").collect()).map((row) => row.platform));
   expect(new Set(platforms)).toEqual(new Set(["imessage"]));
+});
+
+describe("legacy tapback rows", () => {
+  const chatGuid = "iMessage;-;+15550001111";
+  const row = { chatGuid, service: "iMessage" as const, error: 0, edited: false, retracted: false, reactions: [], isGroupEvent: false,
+    mentions: [], attachmentGuids: [], text: "", sourceVersion: 1, sender: { address: "+15550001111", name: null } };
+
+  /** A target with one sender's love, removed, then like; plus a sticker row that is not a reaction. */
+  async function seedLegacy(t: T) {
+    return await t.run(async (ctx) => {
+      const conversationId = await ctx.db.insert("comma_conversations", { ...base, conversationKey: "dm:+15550001111", primaryChatGuid: chatGuid, chatGuids: [chatGuid] });
+      const tapback = (guid: string, dateCreated: number, reaction: string, remove: boolean) => ctx.db.insert("comma_messages", {
+        ...row, conversationId, guid, dateCreated, isFromMe: false, isTapback: true, tapbackTargetGuid: "m1", tapback: { targetGuid: "m1", reaction, remove },
+      });
+      await ctx.db.insert("comma_messages", { ...row, conversationId, guid: "m1", dateCreated: 1, isFromMe: false, isTapback: false, text: "hi",
+        reactions: [{ type: "like", isFromMe: false, senderName: null, senderAddress: "+15550001111" }] });
+      await tapback("tb3", 30, "like", false);
+      await tapback("tb1", 10, "love", false);
+      await tapback("tb2", 20, "love", true);
+      await ctx.db.insert("comma_messages", { ...row, conversationId, guid: "sticker", dateCreated: 40, isFromMe: false, isTapback: true });
+      return conversationId;
+    });
+  }
+  const reactionRows = (t: T) => t.run(async (ctx) => (await ctx.db.query("comma_reactions").collect())
+    .map(({ key, removed, at }) => ({ key, removed, at })).sort((a, b) => a.at - b.at));
+  const messageGuids = (t: T) => t.run(async (ctx) => (await ctx.db.query("comma_messages").collect()).map((m) => m.guid).sort());
+
+  test("backfillReactions derives the reactions in any row order, leaves the rows, and converges", async () => {
+    const t = convexTest(schema, modules);
+    await seedLegacy(t);
+    expect(await t.mutation(internal.comma.migrations.backfillReactions, { dryRun: true, cursor: null }))
+      .toMatchObject({ scanned: 3, applied: 3, isDone: true });
+    expect(await reactionRows(t)).toEqual([]);
+    expect(await t.mutation(internal.comma.migrations.backfillReactions, { dryRun: false, cursor: null })).toMatchObject({ scanned: 3, isDone: true });
+    expect(await reactionRows(t)).toEqual([{ key: "love", removed: true, at: 20 }, { key: "like", removed: false, at: 30 }]);
+    expect(await t.mutation(internal.comma.migrations.backfillReactions, { dryRun: false, cursor: null })).toMatchObject({ applied: 0 });
+    expect(await messageGuids(t)).toEqual(["m1", "sticker", "tb1", "tb2", "tb3"]);
+  });
+
+  test("deleteLegacyTapbacks writes each row's reaction before it deletes the row, and keeps other associated rows", async () => {
+    const t = convexTest(schema, modules);
+    await seedLegacy(t);
+    expect(await t.mutation(internal.comma.migrations.deleteLegacyTapbacks, { dryRun: true, cursor: null }))
+      .toMatchObject({ scanned: 3, deleted: 3, isDone: true });
+    expect(await messageGuids(t)).toHaveLength(5);
+    expect(await t.mutation(internal.comma.migrations.deleteLegacyTapbacks, { dryRun: false, cursor: null }))
+      .toMatchObject({ deleted: 3, isDone: true });
+    expect(await messageGuids(t)).toEqual(["m1", "sticker"]);
+    expect(await reactionRows(t)).toEqual([{ key: "love", removed: true, at: 20 }, { key: "like", removed: false, at: 30 }]);
+    const shown = await t.run(async (ctx) => reactionsOf(ctx, (await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "m1")).unique())!));
+    expect(shown.map((r) => r.key)).toEqual(["like"]);
+  });
 });

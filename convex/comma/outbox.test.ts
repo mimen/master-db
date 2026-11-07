@@ -9,6 +9,7 @@ import { aiPayload, coreMessagingPayload, imessagePayload, laneOf, legacyTriageP
 import { normalizeModules } from "../test-utils.vitest";
 
 import { AUTO_RETRY } from "./outbox";
+import { reactionsOf } from "./reactionStore";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 const SECRET = "bridge-secret";
@@ -624,11 +625,30 @@ describe("react remove", () => {
       { ...base, guid: "theirs", dateCreated: 3, isFromMe: false, isTapback: true, tapbackTargetGuid: "target",
         sender: { address: "+15550001111", name: null }, tapback: { reaction: "like", remove: false, targetGuid: "target" }, sourceVersion: 3000 },
     ] });
-    const reactions = () => t.run(async (ctx) => (await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "target")).unique())?.reactions);
-    expect((await reactions())?.map((r) => r.isFromMe)).toEqual([true, false]);
+    const reactions = () => t.run(async (ctx) => {
+      const target = await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "target")).unique();
+      return target ? await reactionsOf(ctx, target) : [];
+    });
+    expect((await reactions()).map((r) => r.isFromMe)).toEqual([true, false]);
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "r", conversationId: c, payload: { kind: "react", messageGuid: "target", reaction: "like", remove: true } });
     const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 10 });
     await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "r", claimToken: claim.claimToken!, status: "sent" });
-    expect((await reactions())?.map((r) => r.isFromMe)).toEqual([false]);
+    expect((await reactions()).map((r) => r.isFromMe)).toEqual([false]);
+  });
+
+  test("a confirmed removal hides my tapback from a message ingested before comma_reactions, and keeps its rows", async () => {
+    const { t, as, c } = await setup();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("comma_messages", { conversationId: c, chatGuid: "iMessage;-;+15550001111", service: "iMessage", error: 0,
+        edited: false, retracted: false, isGroupEvent: false, mentions: [], attachmentGuids: [], guid: "target", dateCreated: 1,
+        isFromMe: false, isTapback: false, text: "hi", sourceVersion: 1000,
+        reactions: [{ type: "like", isFromMe: true, senderName: null, senderAddress: null }] });
+    });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "r", conversationId: c, payload: { kind: "react", messageGuid: "target", reaction: "like", remove: true } });
+    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 10 });
+    await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "r", claimToken: claim.claimToken!, status: "sent" });
+    const target = await t.run((ctx) => ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "target")).unique());
+    expect(target?.reactions).toHaveLength(1);
+    expect(await t.run((ctx) => reactionsOf(ctx, target!))).toEqual([]);
   });
 });

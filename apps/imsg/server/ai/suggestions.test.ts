@@ -89,7 +89,7 @@ describe("semantic suggestion validation", () => {
   });
 
   test("rejects duplicate existing tapbacks", () => {
-    const target = message({ reactions: [{ type: "like", isFromMe: true, senderName: null, senderAddress: null }] });
+    const target = message({ reactions: [{ key: "like", isFromMe: true, senderName: null, senderAddress: null }] });
     const result = validateSuggestionSet({ noReply: false, suggestions: [{
       kind: "reaction", strategy: "react", vibe: "affirmative", text: "thumbs up",
       reaction: "like", targetMessageGuid: target.guid, targetPartIndex: 0,
