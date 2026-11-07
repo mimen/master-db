@@ -1,3 +1,5 @@
+import type { ConversationId } from "@shared/types";
+
 export type TriageWriteOutcome = "done" | "busy";
 
 /**
@@ -20,18 +22,18 @@ export type TriageWriteOutcome = "done" | "busy";
  * Keyed per conversation and never global. Writes to different conversations
  * cannot race each other, and fast triage across a queue has to stay fast.
  */
-const inFlight = new Set<string>();
+const inFlight = new Set<ConversationId>();
 
 export async function runExclusiveTriageWrite(
-  chatGuid: string,
+  conversationId: ConversationId,
   write: () => Promise<void>,
 ): Promise<TriageWriteOutcome> {
-  if (inFlight.has(chatGuid)) return "busy";
-  inFlight.add(chatGuid);
+  if (inFlight.has(conversationId)) return "busy";
+  inFlight.add(conversationId);
   try {
     await write();
   } finally {
-    inFlight.delete(chatGuid);
+    inFlight.delete(conversationId);
   }
   return "done";
 }

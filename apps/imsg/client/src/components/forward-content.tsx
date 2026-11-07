@@ -10,7 +10,7 @@ import { failedSend, localSends, tempMessage } from "@/lib/local-sends";
 import { showToast } from "@/lib/toast";
 import { useForwardTargets } from "@/hooks/use-forward-targets";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
-import { chatIsSMS } from "@/lib/chat-service";
+import { conversationService } from "@shared/imessage";
 
 import { ChatAvatar } from "./avatar";
 import { CenteredSpinner, EmptyState } from "./empty-state";
@@ -32,14 +32,14 @@ export function ForwardContent({ onClose, onOpenChat }: ForwardContentProps): Re
   // The copy lands in the destination thread on the click, the way a composer send does.
   const forwardTo = (chat: ChatSummary): void => {
     if (!text) return;
-    const temp = tempMessage(chat.guid, text);
-    localSends.upsert(chat.guid, temp);
+    const temp = tempMessage(chat, text);
+    localSends.upsert(chat.conversationId, temp);
     onClose();
     onOpenChat(chat);
-    void runCommand(chat.guid, { kind: "send", text }, { clientKey: temp.guid })
-      .then(({ message }) => localSends.settle(chat.guid, temp.guid, message))
+    void runCommand(chat.conversationId, { kind: "send", text }, { clientKey: temp.guid })
+      .then(({ message }) => localSends.settle(chat.conversationId, temp.guid, message))
       .catch((error: unknown) => {
-        localSends.settle(chat.guid, temp.guid, failedSend(temp));
+        localSends.settle(chat.conversationId, temp.guid, failedSend(temp));
         showToast(messagingCommandError(error, "Forward failed"));
       });
   };
@@ -77,7 +77,7 @@ export function ForwardContent({ onClose, onOpenChat }: ForwardContentProps): Re
       ) : (
         <FlatList
           data={results}
-          keyExtractor={(chat) => chat.guid}
+          keyExtractor={(chat) => chat.conversationId}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.list}
           ListEmptyComponent={<EmptyState message="No matching chats" />}
@@ -90,7 +90,7 @@ export function ForwardContent({ onClose, onOpenChat }: ForwardContentProps): Re
             >
               <ChatAvatar chat={item} size={28} />
               <Text numberOfLines={1} style={[styles.name, { color: theme.text }]}>{item.displayName}</Text>
-              <ServiceLabel service={chatIsSMS(item.guid) ? "SMS" : "iMessage"} size={12} />
+              <ServiceLabel service={conversationService(item)} size={12} />
             </Pressable>
           )}
         />

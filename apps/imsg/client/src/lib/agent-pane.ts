@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import type { ConversationId } from "@shared/types";
 
 import { requestFocus } from "./keyboard/controller";
 
@@ -6,23 +7,23 @@ import { requestFocus } from "./keyboard/controller";
 type Listener = () => void;
 const listeners = new Set<Listener>();
 /** The chat a toast, the Agents tab or the switcher asked the wide pane to show, per conversation. */
-const requested = new Map<string, string>();
+const requested = new Map<ConversationId, string>();
 
 /** Opens the pane on chatId when given, else on the conversation's most urgent chat. */
-export function openAgentPane(chatGuid: string, chatId?: string): void {
+export function openAgentPane(conversationId: ConversationId, chatId?: string): void {
   requestFocus("agent-input");
   if (listeners.size === 0) {
-    router.push({ pathname: "/agent", params: chatId ? { guid: chatGuid, chat: chatId } : { guid: chatGuid } });
+    router.push({ pathname: "/agent", params: chatId ? { conversation: conversationId, chat: chatId } : { conversation: conversationId } });
     return;
   }
-  if (chatId) requested.set(chatGuid, chatId);
+  if (chatId) requested.set(conversationId, chatId);
   for (const listener of listeners) listener();
 }
 
 /** The chat last requested for this conversation, once; the phone route carries its own as the `chat` param. */
-export function takeRequestedAgentChat(chatGuid: string): string | undefined {
-  const chatId = requested.get(chatGuid);
-  requested.delete(chatGuid);
+export function takeRequestedAgentChat(conversationId: ConversationId): string | undefined {
+  const chatId = requested.get(conversationId);
+  requested.delete(conversationId);
   return chatId;
 }
 

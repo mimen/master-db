@@ -5,7 +5,7 @@ import { matchesAnyAddress } from "@shared/address";
 import type { ChatSummary } from "@shared/types";
 import { useChatDirectory } from "./use-chat-directory";
 import { type WhoIsResult, useWhoIs } from "@/lib/identity";
-import { selectChat } from "@/lib/selection";
+import { conversationRoute, selectChat } from "@/lib/selection";
 
 function useSharedChats(knownAddresses: string[]): ChatSummary[] {
   const all = useChatDirectory() ?? [];
@@ -49,11 +49,8 @@ export function usePersonView(address: string, name?: string): PersonView {
   const canCall = phones.length > 0;
 
   const openChat = (chat: ChatSummary) => {
-    if (!selectChat({ guid: chat.guid, name: chat.displayName, isGroup: chat.isGroup })) {
-      router.push({
-        pathname: "/chat/[guid]",
-        params: { guid: chat.guid, name: chat.displayName, isGroup: chat.isGroup ? "1" : "0" },
-      });
+    if (!selectChat({ conversationId: chat.conversationId, name: chat.displayName, isGroup: chat.isGroup })) {
+      router.push(conversationRoute(chat.conversationId));
       return;
     }
     router.push("/");

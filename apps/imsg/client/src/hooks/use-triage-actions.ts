@@ -1,12 +1,12 @@
 import { settleActionFor } from "@shared/chat-state";
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, ConversationId } from "@shared/types";
 import { useCallback } from "react";
 import { beginUndoAction, commitUndoAction, runLatestUndo, runUndo } from "@/lib/action-undo";
 import { conversationState } from "@/lib/conversation-state";
 import { showToast } from "@/lib/toast";
 import { runExclusiveTriageWrite, type TriageWriteOutcome } from "@/lib/triage-writes";
 
-type TriageListener = (chatGuid: string) => void;
+type TriageListener = (conversationId: ConversationId) => void;
 const resolvedListeners = new Set<TriageListener>();
 const undoListeners = new Set<TriageListener>();
 const settlingListeners = new Set<TriageListener>();
@@ -30,8 +30,8 @@ export function onTriageUndo(listener: TriageListener): () => void {
   return () => undoListeners.delete(listener);
 }
 
-function emit(listeners: Set<TriageListener>, chatGuid: string): void {
-  for (const listener of listeners) listener(chatGuid);
+function emit(listeners: Set<TriageListener>, conversationId: ConversationId): void {
+  for (const listener of listeners) listener(conversationId);
 }
 
 export function undoLastTriageAction(): boolean {
@@ -39,7 +39,7 @@ export function undoLastTriageAction(): boolean {
 }
 
 function unsettle(chat: ChatSummary): Promise<void> {
-  return conversationState().then((state) => state.unsettle(chat));
+  return conversationState().then((state) => state.unsettle(chat.conversationId));
 }
 
 function settleFailure(error: unknown): string {
@@ -54,7 +54,7 @@ function settleFailure(error: unknown): string {
  * caller's toast.
  */
 function settleWrite(chat: ChatSummary, settled: (reverse: () => Promise<void>) => void, opts: { pinned?: string; quiet?: boolean } = {}): Promise<TriageWriteOutcome> {
-  return runExclusiveTriageWrite(chat.guid, async () => {
+  return runExclusiveTriageWrite(chat.conversationId, async () => {
     if (settleActionFor(chat) !== "settle") return;
 
     // A send's temp guid anchors too: Convex matches it to the real message once that send lands.
@@ -62,17 +62,17 @@ function settleWrite(chat: ChatSummary, settled: (reverse: () => Promise<void>) 
     // In Needs you only for its agent chats, it settles just those: a conversation settle's Undo would
     // undismiss both anchors and bring back a flag the user had already cleared.
     const agentsOnly = !chat.flags.unresponded && !chat.flags.waiting;
-    const written = conversationState().then((state) => (agentsOnly ? state.settleAgents(chat) : state.settle(chat, anchor)));
-    emit(settlingListeners, chat.guid);
+    const written = conversationState().then((state) => (agentsOnly ? state.settleAgents(chat.conversationId) : state.settle(chat.conversationId, anchor)));
+    emit(settlingListeners, chat.conversationId);
     try {
       await written;
     } catch (error) {
       if (!opts.quiet) showToast(settleFailure(error));
       throw error;
     }
-    emit(resolvedListeners, chat.guid);
-    settled(() => conversationState().then((state) => (agentsOnly ? state.reopenAgents(chat) : state.unsettle(chat)))
-      .then(() => emit(undoListeners, chat.guid)));
+    emit(resolvedListeners, chat.conversationId);
+    settled(() => conversationState().then((state) => (agentsOnly ? state.reopenAgents(chat.conversationId) : state.unsettle(chat.conversationId)))
+      .then(() => emit(undoListeners, chat.conversationId)));
   });
 }
 
@@ -142,7 +142,7 @@ export async function settleAllChats(targets: readonly { chat: ChatSummary; anch
  * stack would break that.
  */
 function unsettleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome> {
-  return runExclusiveTriageWrite(chat.guid, async () => {
+  return runExclusiveTriageWrite(chat.conversationId, async () => {
     const last = chat.lastMessage;
     if (!last) return;
     // Un-settling returns the conversation to the queue its last message implies,
@@ -151,7 +151,7 @@ function unsettleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome> {
       showToast("Couldn't un-settle the conversation. Try again.");
       throw error;
     });
-    emit(undoListeners, chat.guid);
+    emit(undoListeners, chat.conversationId);
   });
 }
 

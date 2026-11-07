@@ -1,5 +1,6 @@
 import { agentAttention } from "@shared/agent-attention";
-import type { ChatSummary, Contact, Message, StateFilter, TypeFilter } from "@shared/types";
+import type { ChatSummary, Contact, StateFilter, TypeFilter } from "@shared/types";
+import type { SearchHit } from "@/lib/api";
 import type { AgentChatSummary } from "@/lib/agent-api";
 import { ATTENTION_ORDER } from "@/lib/inbox-model";
 import { shortcutFor } from "@/lib/keyboard/registry";
@@ -91,7 +92,7 @@ export type PaletteItem =
   | { kind: "command"; key: string; command: PaletteCommand }
   | { kind: "conversation"; key: string; chat: ChatSummary }
   | { kind: "group"; key: string; chat: ChatSummary; matchedMember: string | null }
-  | { kind: "message"; key: string; message: Message }
+  | { kind: "message"; key: string; message: SearchHit }
   | { kind: "contact"; key: string; contact: Contact }
   | { kind: "agent"; key: string; chat: ChatSummary; agent: PaletteAgentChat };
 
@@ -147,7 +148,7 @@ export interface PaletteInput {
   /** Recency-ordered universe — search spans everything. */
   chats: readonly ChatSummary[];
   /** Server message hits for the CURRENT query (already filtered); [] while pending. */
-  messages: readonly Message[];
+  messages: readonly SearchHit[];
   /** Contact-directory hits for the CURRENT query; [] while pending. */
   contacts: readonly Contact[];
   /** listAgentChats: every open agent chat. */
@@ -205,7 +206,7 @@ export function buildPaletteSections(input: PaletteInput): PaletteSection[] {
     });
     const recents = input.chats
       .slice(0, 6)
-      .map((chat): PaletteItem => ({ kind: "conversation", key: `chat-${chat.guid}`, chat }));
+      .map((chat): PaletteItem => ({ kind: "conversation", key: `chat-${chat.conversationId}`, chat }));
     if (recents.length > 0) sections.push({ title: "Recent", items: recents });
     return sections;
   }
@@ -236,7 +237,7 @@ export function buildPaletteSections(input: PaletteInput): PaletteSection[] {
         const base = Math.max(matchScore(needle, chat.displayName), bestParticipantMatch(needle, chat).score, ...(chat.searchNames ?? []).map((t) => matchScore(needle, t)));
         return {
           score: base > 0 && chat.crm?.is_favorite ? base + FAVORITE_BONUS : base,
-          item: { kind: "conversation", key: `chat-${chat.guid}`, chat } satisfies PaletteItem,
+          item: { kind: "conversation", key: `chat-${chat.conversationId}`, chat } satisfies PaletteItem,
         };
       }),
     CAPS.conversations,
@@ -254,7 +255,7 @@ export function buildPaletteSections(input: PaletteInput): PaletteSection[] {
           score: base > 0 && chat.crm?.is_favorite ? base + FAVORITE_BONUS : base,
           item: {
             kind: "group",
-            key: `group-${chat.guid}`,
+            key: `group-${chat.conversationId}`,
             chat,
             matchedMember: member.score > nameScore ? member.name : null,
           } satisfies PaletteItem,

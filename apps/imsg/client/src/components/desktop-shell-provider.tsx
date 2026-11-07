@@ -33,6 +33,7 @@ import { onOpenAgentPane } from "@/lib/agent-pane";
 import { onOpenChatInfo } from "@/lib/chat-info";
 import { DEFAULT_INBOX_FILTERS } from "@/lib/inbox-model";
 import { WANTS_YOU } from "@shared/agent-attention";
+import type { ConversationId } from "@shared/types";
 import {
   createInitialDesktopShellState,
   INITIAL_DESKTOP_SHELL_STATE,
@@ -45,6 +46,7 @@ import type {
   DesktopUtility,
 } from "@/lib/desktop-coordinator/types";
 import { onOpenPersonPane } from "@/lib/person-pane";
+import { conversationRoute } from "@/lib/selection";
 import { onOpenScheduledPane } from "@/lib/scheduled-pane";
 import { onOpenSettingsPane } from "@/lib/settings-pane";
 import { installNativeMenuBridge } from "@/lib/desktop-shell";
@@ -76,13 +78,13 @@ function AgentToasts({ lookingAt }: { readonly lookingAt: string | null }): null
 function utilityForPerson(
   workspace: "messages" | "contacts",
   target: { readonly address: string; readonly name?: string },
-  backGuid?: string,
+  backConversation?: ConversationId,
 ): DesktopUtility {
   return {
     kind: "person",
     workspace,
     target,
-    ...(backGuid ? { backGuid } : {}),
+    ...(backConversation ? { backConversation } : {}),
   };
 }
 
@@ -130,17 +132,17 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   // lens. The pane then shows the most urgent chat, the one the row's badge names. Focus stays where
   // the open put it, so j/k keeps walking the list. Any pane already open, Settings or chat info
   // included, stays put.
-  const selectedGuid = state.messages.selection?.guid;
+  const selectedId = state.messages.selection?.conversationId;
   const autoOpen = useRef({ wide: false, agentEnabled, rail: messagesRail, utilityOpen: false });
   autoOpen.current = { wide: wide && projection !== null, agentEnabled, rail: messagesRail, utilityOpen: state.utility !== null };
   useEffect(() => {
     const { wide: shellWide, agentEnabled: enabled, rail, utilityOpen } = autoOpen.current;
-    if (!shellWide || !enabled || !selectedGuid || utilityOpen) return;
-    const agent = rail.allChats.find((chat) => chat.guid === selectedGuid)?.agent;
+    if (!shellWide || !enabled || !selectedId || utilityOpen) return;
+    const agent = rail.allChats.find((chat) => chat.conversationId === selectedId)?.agent;
     if (agent && (rail.state === "agents" || WANTS_YOU.has(agent.attention))) {
       dispatch({ type: "utility/toggled", utility: { kind: "agent", workspace: "messages" } });
     }
-  }, [selectedGuid]);
+  }, [selectedId]);
 
   useEffect(() => {
     if (projection === null) {
@@ -171,10 +173,10 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
 
   useEffect(() => {
     if (!shellOwnsRoute) return;
-    const stopChatInfo = onOpenChatInfo((guid) => {
+    const stopChatInfo = onOpenChatInfo((conversationId) => {
       dispatch({
         type: "utility/toggled",
-        utility: { kind: "chat-info", workspace: "messages", guid },
+        utility: { kind: "chat-info", workspace: "messages", conversationId },
       });
     });
     const stopPerson = onOpenPersonPane((target) => {
@@ -183,7 +185,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
         utility: utilityForPerson(
           activeWorkspace,
           { address: target.address, name: target.name },
-          activeWorkspace === "messages" ? target.backGuid : undefined,
+          activeWorkspace === "messages" ? target.backConversation : undefined,
         ),
       });
     });
@@ -291,25 +293,25 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
     [activeWorkspace, closeTopSurface, closeUtility, openHelp, openPalette, registerMessagesActions, reportMessagesRail, state],
   );
   const utilityIsGlobal = state.utility?.kind === "scheduled" || state.utility?.kind === "settings";
-  const agentGuid = agentEnabled ? state.messages.selection?.guid : undefined;
+  const agentConversation = agentEnabled ? state.messages.selection?.conversationId : undefined;
   const utility =
     shellOwnsRoute && state.utility && (utilityIsGlobal || state.utility.workspace === activeWorkspace) &&
-    (state.utility.kind !== "agent" || agentGuid !== undefined)
+    (state.utility.kind !== "agent" || agentConversation !== undefined)
       ? state.utility
       : null;
-  const phoneAgentGuid = pathname === "/agent" && typeof params.guid === "string" ? params.guid : null;
-  const utilityContent = utility?.kind === "agent" && agentGuid ? (
-    <AgentPane key={agentGuid} chatGuid={agentGuid} onClose={closeUtility} />
+  const phoneAgentConversation = pathname === "/agent" && typeof params.conversation === "string" ? params.conversation as ConversationId : null;
+  const utilityContent = utility?.kind === "agent" && agentConversation ? (
+    <AgentPane key={agentConversation} conversationId={agentConversation} onClose={closeUtility} />
   ) : utility?.kind === "chat-info" ? (
     <ChatInfoContent
-      key={utility.guid}
-      guid={utility.guid}
+      key={utility.conversationId}
+      conversationId={utility.conversationId}
       showHeader
       onClose={closeUtility}
       onOpenPerson={(address, name) => {
         dispatch({
           type: "utility/toggled",
-          utility: utilityForPerson("messages", { address, name }, utility.guid),
+          utility: utilityForPerson("messages", { address, name }, utility.conversationId),
         });
       }}
       onDeleted={() => {
@@ -324,11 +326,11 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
       address={utility.target.address}
       name={utility.target.name}
       showHeader
-      backLabel={utility.backGuid ? "Details" : undefined}
-      onBack={utility.backGuid ? () => {
+      backLabel={utility.backConversation ? "Details" : undefined}
+      onBack={utility.backConversation ? () => {
         dispatch({
           type: "utility/toggled",
-          utility: { kind: "chat-info", workspace: "messages", guid: utility.backGuid! },
+          utility: { kind: "chat-info", workspace: "messages", conversationId: utility.backConversation! },
         });
       } : undefined}
       onClose={closeUtility}
@@ -348,7 +350,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   const routeOverlayContent = routeOverlay?.kind === "search" ? (
     <SearchContent
       initialQuery={routeOverlay.query}
-      scopeChatGuid={routeOverlay.chatGuid}
+      scopeConversation={routeOverlay.conversationId}
       scopeLabel={routeOverlay.chatName}
       onClose={closeRouteSurface}
     />
@@ -366,7 +368,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
     <ForwardContent
       onClose={closeRouteSurface}
       onOpenChat={(chat) => {
-        router.replace({ pathname: "/chat/[guid]", params: { guid: chat.guid, name: chat.displayName } });
+        router.replace(conversationRoute(chat.conversationId));
       }}
     />
   ) : null;
@@ -374,7 +376,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   return (
     <DesktopShellContext.Provider value={context}>
       <View style={styles.root}>
-        <AgentToasts lookingAt={wide ? (utility?.kind === "agent" ? agentGuid ?? null : null) : phoneAgentGuid} />
+        <AgentToasts lookingAt={wide ? (utility?.kind === "agent" ? agentConversation ?? null : null) : phoneAgentConversation} />
         <View
           style={shellOwnsRoute ? styles.hiddenRouteHost : styles.routeHost}
           accessibilityElementsHidden={shellOwnsRoute}

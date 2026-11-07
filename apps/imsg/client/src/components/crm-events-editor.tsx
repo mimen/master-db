@@ -18,7 +18,7 @@ export interface CrmEventsEditorProps {
  * unlink) plus a debounced Airtable Events search-to-add row. Reused by
  * PersonCrmSection and ChatCrmSection (person and GROUP chat both support
  * event links, same UI either way — see convex/schema/identity/event_links.ts).
- * Owner-agnostic: the caller's onLink/onUnlink close over personId/chatGuid.
+ * Owner-agnostic: the caller's onLink/onUnlink close over personId/conversationId.
  */
 export function CrmEventsEditor({ events, onLink, onUnlink }: CrmEventsEditorProps) {
   const theme = useTheme();

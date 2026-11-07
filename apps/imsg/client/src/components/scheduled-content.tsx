@@ -7,7 +7,7 @@ import { ScheduleEditor } from "@/components/schedule-editor";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { formatScheduledWhen, useScheduled } from "@/hooks/use-scheduled";
 import { useTypeRamp } from "@/hooks/use-type";
-import { chatIsSMS } from "@/lib/chat-service";
+import { imessageChat } from "@shared/imessage";
 import { groupScheduled, isNotSent } from "@/lib/scheduled-groups";
 import { showToast } from "@/lib/toast";
 import { ChatAvatar, PersonAvatar } from "./avatar";
@@ -91,7 +91,7 @@ export function ScheduledContent({ showHeader = false, onClose }: ScheduledConte
                 <Text style={[styles.groupTitle, styles.num, { color: theme.textSecondary, fontSize: type.secondary }]}>{group.items.length}</Text>
               </View>
               {group.items.map((item) => (
-                <ScheduledRow key={item.id} item={item} chat={chats?.find((c) => c.guid === item.chatGuid) ?? null} theme={theme} actions={actions} roomy={listWidth >= 560} />
+                <ScheduledRow key={item.id} item={item} chat={chats?.find((c) => c.conversationId === item.conversationId) ?? null} theme={theme} actions={actions} roomy={listWidth >= 560} />
               ))}
             </View>
           ))}
@@ -119,7 +119,7 @@ function ScheduledRow({
   const [focused, setFocused] = useState(false);
   const failed = isNotSent(item.status);
   const editable = item.status === "pending" || failed;
-  const service = chatIsSMS(item.chatGuid) ? "SMS" : "iMessage";
+  const service = imessageChat.service(item.chatGuid) === "SMS" ? "SMS" : "iMessage";
   const meta = failed
     ? `${service}, was due ${formatScheduledWhen(item.sendAt).replace(/^(Today|Tomorrow),/, (_m, day: string) => day.toLowerCase())}`
     : chat?.isGroup ? `${service}, ${chat.participants.length + 1} people` : service;

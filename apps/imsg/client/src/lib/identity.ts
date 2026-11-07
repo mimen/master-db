@@ -1,5 +1,6 @@
 import { ConvexReactClient, useAction, useMutation, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
+import type { ConversationId } from "@shared/types";
 
 import { bootWebSocket } from "./boot-handoff";
 import { requireConvexUrl } from "./public-env";
@@ -241,31 +242,31 @@ const listTagsRef = makeFunctionReference<
 
 const setChatFavoriteRef = makeFunctionReference<
   "mutation",
-  { chatGuid: string; is_favorite: boolean },
+  { conversationId: ConversationId; is_favorite: boolean },
   null
 >("identity/crm:setChatFavorite");
 
 const setChatPriorityRef = makeFunctionReference<
   "mutation",
-  { chatGuid: string; priority?: Priority | null },
+  { conversationId: ConversationId; priority?: Priority | null },
   null
 >("identity/crm:setChatPriority");
 
 const addChatTagRef = makeFunctionReference<
   "mutation",
-  { chatGuid: string; tag: string },
+  { conversationId: ConversationId; tag: string },
   null
 >("identity/crm:addChatTag");
 
 const removeChatTagRef = makeFunctionReference<
   "mutation",
-  { chatGuid: string; tag: string },
+  { conversationId: ConversationId; tag: string },
   null
 >("identity/crm:removeChatTag");
 
 const chatCrmRef = makeFunctionReference<
   "query",
-  { chatGuids?: string[] },
+  { conversationIds?: ConversationId[] },
   Record<string, ChatCrm>
 >("identity/queries:chatCrm");
 
@@ -280,7 +281,7 @@ const searchEventsRef = makeFunctionReference<
 
 const linkEventRef = makeFunctionReference<
   "mutation",
-  { personId?: string; chatGuid?: string; airtable_event_id: string; event_name: string; start_date?: string },
+  { personId?: string; conversationId?: ConversationId; airtable_event_id: string; event_name: string; start_date?: string },
   { linkId: string }
 >("identity/events:linkEvent");
 
@@ -395,31 +396,31 @@ export function useListTags(): Array<{ tag: string; count: number }> | undefined
 
 /** A GROUP chat's live CRM projection — undefined while loading, `{tags:[],
  * events:[]}` (no is_favorite/priority) when the chat has never been
- * annotated. `null`/omitted chatGuid skips the query (mirrors useWhoIs). */
-export function useChatCrm(chatGuid: string | null): ChatCrm | undefined {
-  const result = useQuery(chatCrmRef, chatGuid ? { chatGuids: [chatGuid] } : "skip");
-  if (!chatGuid) return undefined;
-  return result?.[chatGuid] ?? (result ? { tags: [], events: [] } : undefined);
+ * annotated. A null conversation skips the query (mirrors useWhoIs). */
+export function useChatCrm(conversationId: ConversationId | null): ChatCrm | undefined {
+  const result = useQuery(chatCrmRef, conversationId ? { conversationIds: [conversationId] } : "skip");
+  if (!conversationId) return undefined;
+  return result?.[conversationId] ?? (result ? { tags: [], events: [] } : undefined);
 }
 
 export function useSetChatFavorite() {
   const mutate = useMutation(setChatFavoriteRef);
-  return (args: { chatGuid: string; is_favorite: boolean }) => mutate(args);
+  return (args: { conversationId: ConversationId; is_favorite: boolean }) => mutate(args);
 }
 
 export function useSetChatPriority() {
   const mutate = useMutation(setChatPriorityRef);
-  return (args: { chatGuid: string; priority?: Priority | null }) => mutate(args);
+  return (args: { conversationId: ConversationId; priority?: Priority | null }) => mutate(args);
 }
 
 export function useAddChatTag() {
   const mutate = useMutation(addChatTagRef);
-  return (args: { chatGuid: string; tag: string }) => mutate(args);
+  return (args: { conversationId: ConversationId; tag: string }) => mutate(args);
 }
 
 export function useRemoveChatTag() {
   const mutate = useMutation(removeChatTagRef);
-  return (args: { chatGuid: string; tag: string }) => mutate(args);
+  return (args: { conversationId: ConversationId; tag: string }) => mutate(args);
 }
 
 export function useSearchEvents() {
@@ -429,7 +430,7 @@ export function useSearchEvents() {
 
 export function useLinkEvent() {
   const mutate = useMutation(linkEventRef);
-  return (args: { personId?: string; chatGuid?: string; airtable_event_id: string; event_name: string; start_date?: string }) =>
+  return (args: { personId?: string; conversationId?: ConversationId; airtable_event_id: string; event_name: string; start_date?: string }) =>
     mutate(args);
 }
 

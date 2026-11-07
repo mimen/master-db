@@ -26,7 +26,7 @@ import { hapticFailure, hapticSend } from "@/lib/haptics";
 import { playSend } from "@/lib/sounds";
 import { useActionSheet } from "@/lib/action-sheet";
 import { api } from "@/lib/api";
-import { chatIsSMS } from "@/lib/chat-service";
+import { conversationService } from "@shared/imessage";
 import { INPUT_BORDER_W, INPUT_PADDING_H, MIRROR_INSET_H } from "@/lib/composer-metrics";
 import { uploadAndSendAttachment } from "@/lib/attachment-upload";
 import { setTyping as sendTyping } from "@/lib/presence-api";
@@ -39,7 +39,7 @@ import { formatAddress } from "@shared/address";
 import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
 import { onFillComposer, type SuggestionAttribution } from "@/lib/composer-fill";
 import type { GenericId } from "convex/values";
-import type { Contact, Message, Participant } from "@shared/types";
+import type { ChatSummary, Contact, Message, Participant } from "@shared/types";
 import type { PendingEdit } from "@/lib/pending-edits";
 import { runCommand } from "@/lib/convex-commands";
 import type { MentionAnnotation } from "@shared/mentions";
@@ -69,7 +69,7 @@ import { SuggestionAlternates, type SuggestionSource, useReplySuggestions } from
 import { useSpring } from "@/constants/springs";
 
 interface ComposerProps {
-  chatGuid: string;
+  chat: Pick<ChatSummary, "conversationId" | "imessage">;
   isGroup: boolean;
   participants: Participant[];
   privateApi: boolean;
@@ -169,8 +169,8 @@ function GhostText({ text, shown, card, fontSize, color, onHeight }: {
 
 
 /** A voice memo on its way: the audio bubble draws now, and plays once the recorder hands over its file. */
-function tempVoiceMessage(chatGuid: string, filename: string): Message {
-  const temp = tempMessage(chatGuid, "");
+function tempVoiceMessage(chat: Pick<ChatSummary, "imessage">, filename: string): Message {
+  const temp = tempMessage(chat, "");
   return {
     ...temp,
     attachments: [{ guid: `${temp.guid}-audio`, mimeType: "audio/mp4", filename, originalUrl: null, width: null, height: null, totalBytes: null }],
@@ -283,7 +283,7 @@ function ContactPicker({
 }
 
 export function Composer({
-  chatGuid,
+  chat,
   isGroup,
   participants,
   privateApi,
@@ -301,6 +301,7 @@ export function Composer({
   suggestions,
   strip,
 }: ComposerProps) {
+  const { conversationId } = chat;
   const theme = useTheme();
   const type = useType();
   // Wide: one rounded card on the gray thread. Phone keeps the iOS bar and pill field.
@@ -308,7 +309,7 @@ export function Composer({
   const insets = useSafeAreaInsets();
   const showSheet = useActionSheet();
   const [keyboardUp, setKeyboardUp] = useState(false);
-  const [text, setText] = useState(() => getDraft(chatGuid));
+  const [text, setText] = useState(() => getDraft(conversationId));
   const [inputHeight, setInputHeight] = useState(IOS_INPUT_MIN_HEIGHT);
   const [selection, setSelection] = useState({ start: text.length, end: text.length });
   const onSelection = (next: { start: number; end: number }): void =>
@@ -322,7 +323,7 @@ export function Composer({
   const [customScheduleAt, setCustomScheduleAt] = useState(Date.now() + 3_600_000);
   const [scheduleAnchor, setScheduleAnchor] = useState<{ right: number; bottom: number } | null>(null);
   const containerRef = useRef<View>(null);
-  const isSMS = chatIsSMS(chatGuid);
+  const isSMS = conversationService(chat) === "SMS";
   const loadRemoteDraft = useCallback((draft: string) => {
     setText(draft);
     setSelection({ start: draft.length, end: draft.length });
@@ -330,8 +331,8 @@ export function Composer({
     suggestionAttribution.current = null;
     setInputHeight(IOS_INPUT_MIN_HEIGHT);
   }, []);
-  const draftSync = useComposerDraft(chatGuid, editing !== null, loadRemoteDraft);
-  const replySuggestions = useReplySuggestions(chatGuid, { ...suggestions, pend: onEdit });
+  const draftSync = useComposerDraft(conversationId, editing !== null, loadRemoteDraft);
+  const replySuggestions = useReplySuggestions(conversationId, { ...suggestions, pend: onEdit });
   const ghost = replySuggestions.slots.kind === "ready" ? replySuggestions.slots.ghost : null;
   const [ghostTextHeight, setGhostHeight] = useState(0);
 
@@ -376,7 +377,7 @@ export function Composer({
 
   // Swap drafts when the conversation changes.
   useEffect(() => {
-    const draft = getDraft(chatGuid);
+    const draft = getDraft(conversationId);
     setText(draft);
     setSelection({ start: draft.length, end: draft.length });
     setMentions([]);
@@ -384,7 +385,7 @@ export function Composer({
     setInputHeight(IOS_INPUT_MIN_HEIGHT);
     for (const attachment of pendingRef.current) cleanupPendingAttachment(attachment);
     replacePending([]);
-  }, [chatGuid, replacePending]);
+  }, [conversationId, replacePending]);
 
   useEffect(() => {
     if (editing) {
@@ -403,16 +404,16 @@ export function Composer({
         setSelection({ start: fill.text.length, end: fill.text.length });
         setMentions([]);
         suggestionAttribution.current = fill.attribution;
-        setDraft(chatGuid, fill.text);
+        setDraft(conversationId, fill.text);
         inputRef.current?.focus();
       }),
-    [chatGuid],
+    [conversationId],
   );
 
   // The composer is a focus target: desktop reply-intent selections and the empty lens's
   // Nudge request it (docs/keyboard-design.md). Type-anywhere is gone: it can't coexist with
   // glide-mode single keys, and its char-append was wrong for IME/dead-key/emoji input anyway.
-  useEffect(() => registerFocusTarget("composer", () => inputRef.current), [chatGuid]);
+  useEffect(() => registerFocusTarget("composer", () => inputRef.current), [conversationId]);
 
   // Desktop web: Enter sends, Shift+Enter newlines (RN multiline swallows
   // submit on web). Guards: IME composition, key repeat, in-flight send.
@@ -450,7 +451,7 @@ export function Composer({
     if (typingActive.current === active && (!active || now - typingSentAt.current < 2500)) return;
     typingActive.current = active;
     typingSentAt.current = now;
-    void sendTyping(chatGuid, active).catch(() => undefined);
+    void sendTyping(conversationId, active).catch(() => undefined);
   };
 
   const onChangeText = (value: string) => {
@@ -461,7 +462,7 @@ export function Composer({
     if (node) onSelection({ start: node.selectionStart, end: node.selectionEnd });
     if (value.trim().length === 0) suggestionAttribution.current = null;
     if (!editing) {
-      setDraft(chatGuid, value);
+      setDraft(conversationId, value);
       setTyping(value.length > 0);
       if (typingIdle.current) clearTimeout(typingIdle.current);
       typingIdle.current = setTimeout(() => setTyping(false), 5000);
@@ -528,7 +529,7 @@ export function Composer({
       const rollback = onEdit(editing.guid, { kind: "edit", text: trimmed });
       clearText();
       onClearEditing();
-      runCommand(editing.chatGuid, { kind: "edit", messageGuid: editing.guid, text: trimmed }).catch(() => {
+      runCommand(conversationId, { kind: "edit", messageGuid: editing.guid, text: trimmed }).catch(() => {
         rollback();
         showToast("Couldn't edit. Messages can only be edited for 15 minutes.");
       });
@@ -545,7 +546,7 @@ export function Composer({
       const caption = outgoingMentions.length === 0 ? trimmed || undefined : undefined;
       replacePending([]);
       clearText();
-      setDraft(chatGuid, "");
+      setDraft(conversationId, "");
       setBusy(true);
       // Confirm on touch-up, not on upload completion — Apple plays the whoosh
       // when you commit, and a confirmation that waits on the network reads as lag.
@@ -558,7 +559,7 @@ export function Composer({
           if (attachment) await uploadAsset(attachment, i === 0 ? caption : undefined);
         }
         if (trimmed && outgoingMentions.length > 0) {
-          const mentionMessage = await api.sendText(chatGuid, {
+          const mentionMessage = await api.sendText(conversationId, {
             text: trimmed,
             replyToGuid: replyTo?.guid,
             mentions: outgoingMentions,
@@ -584,10 +585,10 @@ export function Composer({
     }
 
     const attribution = suggestionAttribution.current;
-    const temp = tempMessage(chatGuid, trimmed, replyTo, outgoingMentions);
+    const temp = tempMessage(chat, trimmed, replyTo, outgoingMentions);
     const reply = replyTo;
     clearText();
-    setDraft(chatGuid, "");
+    setDraft(conversationId, "");
     onClearReply();
     onOptimistic(temp);
     playSend();
@@ -595,13 +596,13 @@ export function Composer({
     setSendStatus("sending");
     try {
       const message = await sendWithSuggestionFeedback(
-        () => api.sendText(chatGuid, {
+        () => api.sendText(conversationId, {
           text: trimmed,
           replyToGuid: reply?.guid,
           mentions: outgoingMentions.length > 0 ? outgoingMentions : undefined,
         }, { clientKey: temp.guid }),
         () => attribution
-          ? api.recordSuggestionFeedback(chatGuid, { ...attribution, finalText: trimmed })
+          ? api.recordSuggestionFeedback(conversationId, { ...attribution, finalText: trimmed })
           : Promise.resolve(),
       );
       const withMentions =
@@ -624,10 +625,10 @@ export function Composer({
 
   const uploadAsset = async (att: PendingAttachment, caption?: string) => {
     if (att.contact) {
-      onSent(await api.sendContactCard(chatGuid, att.contact, caption));
+      onSent(await api.sendContactCard(conversationId, att.contact, caption));
       return;
     }
-    onSent(await uploadAndSendAttachment(chatGuid, {
+    onSent(await uploadAndSendAttachment(conversationId, {
       ...(att.storageId ? { storageId: att.storageId } : { uri: att.uri }), filename: att.name, mimeType: att.mime,
       caption, isAudioMessage: att.voice === true,
     }));
@@ -648,7 +649,7 @@ export function Composer({
 
   // A drafted attachment stages once per conversation visit, so removing or sending it sticks.
   const stagedDraftAttachments = useRef(new Set<string>());
-  useEffect(() => { stagedDraftAttachments.current = new Set(); }, [chatGuid]);
+  useEffect(() => { stagedDraftAttachments.current = new Set(); }, [conversationId]);
   useEffect(() => {
     const fresh = (draftSync.draft?.attachments ?? []).filter((a) => a.url && !stagedDraftAttachments.current.has(a.storageId));
     for (const a of fresh) stagedDraftAttachments.current.add(a.storageId);
@@ -785,7 +786,7 @@ ${url}` : url;
     };
     setText(next);
     setMentions([...reconciled, annotation].sort((a, b) => a.start - b.start));
-    setDraft(chatGuid, next);
+    setDraft(conversationId, next);
     const cursor = activeMentionQuery.start + replacement.length;
     setSelection({ start: cursor, end: cursor });
     inputRef.current?.focus();
@@ -865,7 +866,7 @@ ${url}` : url;
     const outcome = voiceMemoOutcome(end, Date.now() - startedAt);
     // The bubble goes up on the release; the web recorder only hands over its file a beat later.
     const filename = `voice-${Date.now()}.m4a`;
-    const temp = outcome === "send" ? tempVoiceMessage(chatGuid, filename) : null;
+    const temp = outcome === "send" ? tempVoiceMessage(chat, filename) : null;
     if (temp) {
       onOptimistic(temp);
       setBusy(true);
@@ -879,7 +880,7 @@ ${url}` : url;
       if (!temp) return;
       if (!uri) throw new Error("The recorder produced no file");
       onOptimistic({ ...temp, attachments: temp.attachments.map((attachment) => ({ ...attachment, originalUrl: uri })) });
-      onSettled(temp.guid, await uploadAndSendAttachment(chatGuid, {
+      onSettled(temp.guid, await uploadAndSendAttachment(conversationId, {
         uri, filename, mimeType: "audio/mp4", isAudioMessage: true,
       }));
     } catch (error) {
@@ -904,11 +905,11 @@ ${url}` : url;
         onPress: () => {
           // Clears and confirms on the tap; a failure puts the text back with the error.
           clearText();
-          setDraft(chatGuid, "");
+          setDraft(conversationId, "");
           showToast(`Scheduled ${option.label.toLowerCase()}`);
-          api.schedule(chatGuid, trimmed, option.at).catch(() => {
+          api.schedule(conversationId, trimmed, option.at).catch(() => {
             setText(trimmed);
-            setDraft(chatGuid, trimmed);
+            setDraft(conversationId, trimmed);
             showToast("Couldn't schedule the message. Try again.");
           });
         },
@@ -1171,9 +1172,9 @@ ${url}` : url;
         anchor={scheduleAnchor}
         onClose={() => setCustomScheduleOpen(false)}
         onSubmit={async (scheduledText, sendAt) => {
-          await api.schedule(chatGuid, scheduledText, sendAt);
+          await api.schedule(conversationId, scheduledText, sendAt);
           clearText();
-          setDraft(chatGuid, "");
+          setDraft(conversationId, "");
           showToast("Message scheduled");
         }}
       />

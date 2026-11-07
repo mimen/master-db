@@ -1,3 +1,4 @@
+import type { GenericId } from "convex/values";
 import type { AgentAttention } from "./agent-attention";
 import type { MentionAnnotation } from "./mentions";
 
@@ -107,10 +108,13 @@ export interface ChatFlags {
   pinned: boolean;
 }
 
+/** A conversation's Convex id: what the app selects, routes, keys and commands by. */
+export type ConversationId = GenericId<"comma_conversations">;
+
 export interface ChatSummary {
-  /** Stable Convex row key. guid remains the REST chat target. */
-  conversationId?: string;
-  guid: string;
+  conversationId: ConversationId;
+  /** iMessage only: the chat GUID the conversation sends through. Parse it only through shared/imessage.ts. */
+  imessage: { chatGuid: string };
   displayName: string;
   isGroup: boolean;
   /** Whether BlueBubbles reports an uploaded group photo for this chat. */
@@ -149,7 +153,7 @@ export interface ChatSummary {
    * means "nothing set," not "explicitly cleared."
    *
    * INHERITANCE RULE (see server/map.ts's mapChat): a GROUP chat's `crm`
-   * comes from its OWN chat_crm/tags/event_links rows (chat_guid-keyed). A
+   * comes from its OWN chat_crm/tags/event_links rows (keyed by conversation). A
    * DM has no CRM of its own — its `crm` is INHERITED from the linked
    * person's CRM (person_id-keyed), so favoriting/prioritizing/tagging a
    * contact and seeing it on their DM are the same fact, not two copies that
@@ -220,6 +224,8 @@ export type ScheduledMessageStatus =
 
 export interface ScheduledMessage {
   id: number;
+  /** Absent until the bridge has mirrored the scheduled message's chat. */
+  conversationId?: ConversationId;
   chatGuid: string;
   chatName: string;
   text: string;

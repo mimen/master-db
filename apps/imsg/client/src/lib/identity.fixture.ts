@@ -1,4 +1,6 @@
 import { useSyncExternalStore } from "react";
+import { fixtureConversationId } from "@shared/fixture-ids";
+import type { ConversationId } from "@shared/types";
 
 import { makeFunctionReference } from "convex/server";
 
@@ -185,8 +187,8 @@ function normalize(handle: string): string {
   return digits.length === 10 ? `+1${digits}` : `+${digits}`;
 }
 
-const groupCrm: Record<string, ChatCrm> = {
-  "iMessage;+;fixture-crew": {
+const groupCrm: Record<ConversationId, ChatCrm> = {
+  [fixtureConversationId("iMessage;+;fixture-crew")]: {
     is_favorite: true,
     priority: 2,
     tags: ["launch"],
@@ -369,23 +371,23 @@ export function useListTags(): Array<{ tag: string; count: number }> | undefined
   });
 }
 
-export function useChatCrm(chatGuid: string | null): ChatCrm | undefined {
-  return chatGuid ? (groupCrm[chatGuid] ?? { tags: [], events: [] }) : undefined;
+export function useChatCrm(conversationId: ConversationId | null): ChatCrm | undefined {
+  return conversationId ? (groupCrm[conversationId] ?? { tags: [], events: [] }) : undefined;
 }
 
-export function useSetChatFavorite(): (args: { chatGuid: string; is_favorite: boolean }) => Promise<null> {
+export function useSetChatFavorite(): (args: { conversationId: ConversationId; is_favorite: boolean }) => Promise<null> {
   return async () => null;
 }
 
-export function useSetChatPriority(): (args: { chatGuid: string; priority?: Priority | null }) => Promise<null> {
+export function useSetChatPriority(): (args: { conversationId: ConversationId; priority?: Priority | null }) => Promise<null> {
   return async () => null;
 }
 
-export function useAddChatTag(): (args: { chatGuid: string; tag: string }) => Promise<null> {
+export function useAddChatTag(): (args: { conversationId: ConversationId; tag: string }) => Promise<null> {
   return async () => null;
 }
 
-export function useRemoveChatTag(): (args: { chatGuid: string; tag: string }) => Promise<null> {
+export function useRemoveChatTag(): (args: { conversationId: ConversationId; tag: string }) => Promise<null> {
   return async () => null;
 }
 
@@ -395,7 +397,7 @@ export function useSearchEvents(): (args: { query: string }) => Promise<Airtable
 
 export function useLinkEvent(): (args: {
   personId?: string;
-  chatGuid?: string;
+  conversationId?: ConversationId;
   airtable_event_id: string;
   event_name: string;
   start_date?: string;

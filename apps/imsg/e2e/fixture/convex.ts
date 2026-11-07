@@ -5,6 +5,7 @@ import { laneOf, type attachmentDoc, type conversationDoc, type draftView, type 
 import { handleKey, imessage, routeFor } from "../../../../convex/comma/conversationIdentity";
 import { resolveConversationNames } from "../../../../convex/comma/names";
 import { formatAddress } from "../../shared/address";
+import { fixtureChatGuid, fixtureConversationId } from "../../shared/fixture-ids";
 import { tempGuid } from "../../../../convex/comma/tempMessage";
 import type { FixtureRouteControls } from "../../server/app";
 import { buildThread, isGenuineUnreadInbound, mapChat, mapMessage, type UnreadSummary } from "../../server/map";
@@ -78,6 +79,18 @@ export function messageRow(message: Message, clientKey?: string): ConvexMessage 
       originalUrl: `/__fixture/media/${encodeURIComponent(a.guid)}`, sourceVersion: 1,
     })),
   };
+}
+
+/** Gives every conversation in a result the id the client sees; the fixture's own rows use the chat GUID. */
+function withConversationIds(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withConversationIds);
+  if (!value || typeof value !== "object") return value;
+  const out: Record<string, unknown> = Object.fromEntries(Object.entries(value).map(([key, field]) =>
+    [key, key === "conversationId" && typeof field === "string" ? fixtureConversationId(field)
+      : key === "openAtSnapshot" && Array.isArray(field) ? field.map((guid) => fixtureConversationId(String(guid)))
+      : withConversationIds(field)]));
+  if (typeof out.primaryChatGuid === "string" && typeof out._id === "string") out._id = fixtureConversationId(out._id);
+  return out;
 }
 
 export function paginate<T>(rows: readonly T[], options: Pagination) {
@@ -427,8 +440,8 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return row && guid ? { conversationId: row._id, chatGuid: guid, service: imessage.sendService(guid), isGroup: false, participants: row.participants.map((p) => p.address) } : null;
     },
     "comma/conversationInfo:chatInfo": async (args) => {
-      const row = (await conversations()).find((row) => row.chatGuids.includes(String(args.chatGuid)));
-      return row ? { guid: String(args.chatGuid), displayName: row.rawDisplayName || null, isGroup: row.isGroup,
+      const row = (await conversations()).find((row) => row._id === args.conversationId);
+      return row ? { guid: row.primaryChatGuid, displayName: row.rawDisplayName || null, isGroup: row.isGroup,
         participants: row.participants.map((p) => ({ address: p.address, name: names.lookup(p.address) ?? p.name ?? p.address, is_favorite: names.personCrm(p.address)?.is_favorite })) } : null;
     },
     "comma/presence:presence": async (args) => {
@@ -496,8 +509,8 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     "comma/queries:getDraft": async (args) => drafts.get(String(args.conversationId)) ?? null,
     "comma/queries:getSuggestions": async () => null,
     "comma/suggestions:getSuggestions": async (args) => {
-      const chat = (await conversations()).find((row) => row.primaryChatGuid === args.chatGuid);
-      const shelf = shelves.get(JSON.stringify([args.chatGuid, args.model]));
+      const chat = (await conversations()).find((row) => row._id === args.conversationId);
+      const shelf = chat && shelves.get(JSON.stringify([chat.primaryChatGuid, args.model]));
       if (!chat || !shelf || chat.lastMessage?.isFromMe || shelf.basedOnMessageGuid !== chat.lastMessage?.guid) return null;
       const { basedOnMessageGuid, generatedAt, stale: _stale, ...payload } = shelf;
       return { _id: id(`shelf-${chat._id}-${args.model}`), _creationTime: generatedAt, conversationId: chat._id,
@@ -614,7 +627,8 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       const handler = Object.hasOwn(handlers, name) ? handlers[name] : undefined;
       if (!handler) return c.json({ error: `Unknown fixture Convex function: ${name}` }, 400);
       await wait(name);
-      return Response.json(await handler(args));
+      const inside = typeof args.conversationId === "string" ? { ...args, conversationId: fixtureChatGuid(args.conversationId) } : args;
+      return Response.json(withConversationIds(await handler(inside)));
     } catch (error) {
       return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: error instanceof FixtureError ? error.status : 400 });
     }

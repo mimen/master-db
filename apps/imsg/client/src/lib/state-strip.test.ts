@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, ConversationId } from "@shared/types";
 import { firstName, relativeDay, stripCopy } from "./state-strip";
 
 const H = 3_600_000;
@@ -8,7 +8,7 @@ const NOW = new Date(2027, 0, 16, 12).getTime();
 
 function chat(flags: Partial<ChatSummary["flags"]>, last: { at: number; fromMe: boolean } | null, extra: Partial<ChatSummary> = {}): ChatSummary {
   return {
-    guid: "c", displayName: "Tracy Mesina", isGroup: false, known: true, isSpam: false, participants: [], unreadCount: 0,
+    conversationId: "c" as ConversationId, imessage: { chatGuid: "iMessage;-;c" }, displayName: "Tracy Mesina", isGroup: false, known: true, isSpam: false, participants: [], unreadCount: 0,
     lastMessage: last && { guid: "m", text: "", dateCreated: last.at, isFromMe: last.fromMe, senderName: null, hasAttachments: false },
     flags: { unresponded: false, waiting: false, unread: false, mutedUnresponded: false, pinned: false, ...flags },
     ...extra,

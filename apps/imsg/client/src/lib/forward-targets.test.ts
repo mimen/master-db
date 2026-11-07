@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { filterForwardTargets } from "./forward-targets";
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, ConversationId } from "@shared/types";
 
-function chat(guid: string, displayName: string): ChatSummary {
+function chat(id: string, displayName: string): ChatSummary {
   return {
-    guid,
+    conversationId: id as ConversationId,
     displayName,
     isGroup: false,
     participants: [],
@@ -24,7 +24,7 @@ describe("filterForwardTargets", () => {
 
   test("filters case-insensitively by substring", () => {
     const chats = [chat("a", "Alex"), chat("b", "Bea"), chat("c", "alexandra")];
-    expect(filterForwardTargets(chats, "ALEX").map((c) => c.guid)).toEqual(["a", "c"]);
+    expect(filterForwardTargets(chats, "ALEX").map((c) => c.conversationId)).toEqual(["a", "c"] as ConversationId[]);
   });
 
   test("caps results at 40", () => {

@@ -12,80 +12,76 @@ import type {
   Contact,
   GalleryItem,
   ContactSuggestion,
+  ConversationId,
   Message,
   ScheduledMessage,
   TranscriptState,
 } from "@shared/types";
 
-async function scheduledChatGuid(id: number): Promise<string> {
+async function scheduledConversation(id: number): Promise<ConversationId> {
   const rows = await convexClient.query(commaApi.listScheduled, {});
-  const scheduled = rows.find((row) => row.bbId === id);
-  if (!scheduled) throw new Error("Scheduled message is unavailable");
-  return scheduled.chatGuid;
+  const conversationId = rows.find((row) => row.bbId === id)?.conversationId;
+  if (!conversationId) throw new Error("Scheduled message is unavailable");
+  return conversationId;
 }
 
 const messagingApi = createMessagingApi(runCommand);
+
+/** A search result names the conversation it belongs to. */
+export type SearchHit = Message & { conversationId: ConversationId };
 
 export const api = {
   sendText: messagingApi.sendText,
   contacts(q: string): Promise<Contact[]> {
     return convexClient.query(identityApi.searchContacts, contactSearchArgs(q));
   },
-  sendContactCard(chatGuid: string, contact: Contact, caption?: string): Promise<Message> {
-    return messagingApi.sendContactCard(chatGuid, contact, caption);
+  sendContactCard(conversationId: ConversationId, contact: Contact, caption?: string): Promise<Message> {
+    return messagingApi.sendContactCard(conversationId, contact, caption);
   },
-  async findChat(address: string): Promise<{ chatGuid: string }> {
+  async findChat(address: string): Promise<{ conversationId: ConversationId }> {
     const result = await convexClient.query(identityApi.findChat, { address });
     if (!result) throw new Error("Chat not found");
     return result;
   },
   newChat: messagingApi.newChat,
-  async search(q: string, opts: { chat?: string; from?: "me" | "them" } = {}): Promise<Message[]> {
-    const conversation = opts.chat ? await convexClient.query(commaApi.resolveChat, { chatGuid: opts.chat }) : null;
-    if (opts.chat && !conversation) return [];
+  async search(q: string, opts: { conversationId?: ConversationId; from?: "me" | "them" } = {}): Promise<SearchHit[]> {
     const rows = await convexClient.query(searchMessages, {
       query: q,
-      ...(conversation ? { conversationId: conversation._id } : {}),
+      ...(opts.conversationId ? { conversationId: opts.conversationId } : {}),
       ...(opts.from ? { from: opts.from } : {}),
     });
-    return rows.map(messageToMessage);
+    return rows.map((row) => ({ ...messageToMessage(row), conversationId: row.conversationId }));
   },
-  async gallery(chatGuid: string): Promise<GalleryAttachment[]> {
-    const conversation = await convexClient.query(commaApi.resolveChat, { chatGuid });
-    return conversation ? convexClient.query(mediaApi.gallery, { conversationId: conversation._id }) : [];
+  gallery(conversationId: ConversationId): Promise<GalleryAttachment[]> {
+    return convexClient.query(mediaApi.gallery, { conversationId });
   },
-  async chatInfo(chatGuid: string): Promise<{
+  async chatInfo(conversationId: ConversationId): Promise<{
     guid: string;
     displayName: string | null;
     isGroup: boolean;
     participants: Contact[];
   }> {
-    const result = await convexClient.query(identityApi.chatInfo, { chatGuid });
+    const result = await convexClient.query(identityApi.chatInfo, { conversationId });
     if (!result) throw new Error("Chat not found");
     return result;
   },
   participant: messagingApi.participant,
   leaveGroup: messagingApi.leaveGroup,
   deleteChat: messagingApi.deleteChat,
-  async schedule(chatGuid: string, text: string, sendAt: number): Promise<ScheduledMessage> {
-    return (await runCommand(chatGuid, { kind: "schedule", text, sendAt })).scheduled;
+  async schedule(conversationId: ConversationId, text: string, sendAt: number): Promise<ScheduledMessage> {
+    return (await runCommand(conversationId, { kind: "schedule", text, sendAt })).scheduled;
   },
-  async updateScheduled(id: number, chatGuid: string, text: string, sendAt: number): Promise<ScheduledMessage> {
-    return (await runCommand(chatGuid, { kind: "editScheduled", bbId: id, text, sendAt })).scheduled;
+  async updateScheduled(id: number, conversationId: ConversationId, text: string, sendAt: number): Promise<ScheduledMessage> {
+    return (await runCommand(conversationId, { kind: "editScheduled", bbId: id, text, sendAt })).scheduled;
   },
   async cancelScheduled(id: number): Promise<{ ok: boolean }> {
-    return runCommand(await scheduledChatGuid(id), { kind: "cancelScheduled", bbId: id });
+    return runCommand(await scheduledConversation(id), { kind: "cancelScheduled", bbId: id });
   },
   async sendScheduledNow(id: number): Promise<{ ok: true }> {
-    return runCommand(await scheduledChatGuid(id), { kind: "sendScheduledNow", bbId: id });
+    return runCommand(await scheduledConversation(id), { kind: "sendScheduledNow", bbId: id });
   },
   transcriptState(attachmentGuid: string): Promise<TranscriptState> {
     return convexClient.query(mediaApi.transcriptState, { attachmentGuid });
-  },
-  async transcribe(attachmentGuid: string, chatGuid?: string): Promise<TranscriptState> {
-    const chat = chatGuid ?? await convexClient.query(mediaApi.attachmentChatGuid, { guid: attachmentGuid });
-    if (!chat) throw new Error("Attachment conversation is unavailable");
-    return (await runCommand(chat, { kind: "transcribe", attachmentGuid })).transcript;
   },
   createFaceTimeLink: messagingApi.createFaceTimeLink,
   // ------------------------------------------------------------------- ai

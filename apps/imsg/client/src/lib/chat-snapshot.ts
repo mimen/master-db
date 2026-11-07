@@ -48,7 +48,7 @@ export function writeChatSnapshot(store: Store | undefined, chats: readonly Chat
  */
 export function bridgeSnapshot(live: readonly ChatSummary[], snapshot: readonly ChatSummary[]): ChatSummary[] {
   if (live.length === 0) return [...snapshot];
-  const seen = new Set(live.map((chat) => chat.guid));
+  const seen = new Set(live.map((chat) => chat.conversationId));
   const oldest = Math.min(...live.map((chat) => chat.lastMessage?.dateCreated ?? 0));
-  return [...live, ...snapshot.filter((chat) => !seen.has(chat.guid) && (chat.lastMessage?.dateCreated ?? 0) < oldest)];
+  return [...live, ...snapshot.filter((chat) => !seen.has(chat.conversationId) && (chat.lastMessage?.dateCreated ?? 0) < oldest)];
 }

@@ -1,11 +1,12 @@
+import type { ConversationId } from "@shared/types";
 import type { JumpTarget } from "@/hooks/use-messages";
 
 /**
- * Wide-layout selection bus: modals (search, new chat) publish the chat to
+ * Wide-layout selection bus: modals (search, new chat) publish the conversation to
  * open; the split-pane index screen subscribes instead of route navigation.
  */
 export interface Selection {
-  guid: string;
+  conversationId: ConversationId;
   name?: string;
   isGroup?: boolean;
   jumpTarget?: JumpTarget | null;
@@ -24,5 +25,16 @@ export function onSelectChat(listener: Listener): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
+  };
+}
+
+/** The phone route of a conversation's thread, optionally opened at a message. */
+export function conversationRoute(conversationId: ConversationId, jumpTarget?: JumpTarget | null) {
+  return {
+    pathname: "/c/[conversationId]" as const,
+    params: {
+      conversationId,
+      ...(jumpTarget ? { targetGuid: jumpTarget.guid, targetDate: String(jumpTarget.dateCreated) } : {}),
+    },
   };
 }

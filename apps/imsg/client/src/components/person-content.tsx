@@ -487,7 +487,7 @@ function ConversationsSection({ person, chats, onOpen, grouped }: {
           if (grouped) {
             const meta = chat.isGroup ? [state.label && `${state.label} ago`, `${chat.participants.length + 1} people`].filter(Boolean).join(", ") : state.label;
             return (
-              <Pressable key={chat.guid} accessibilityRole="button" accessibilityLabel={`${title}, ${meta}`} onPress={() => onOpen(chat)} style={[styles.hrowGrouped, styles.convGrouped, rowDivider(colors, i === 0)]}>
+              <Pressable key={chat.conversationId} accessibilityRole="button" accessibilityLabel={`${title}, ${meta}`} onPress={() => onOpen(chat)} style={[styles.hrowGrouped, styles.convGrouped, rowDivider(colors, i === 0)]}>
                 <Text style={[styles.kGrouped, { color: state.yourTurn ? colors.turn : colors.textSecondary }]}>{meta}</Text>
                 <Text style={[styles.vGrouped, { color: colors.text }]}>{title}</Text>
               </Pressable>
@@ -495,7 +495,7 @@ function ConversationsSection({ person, chats, onOpen, grouped }: {
           }
           return (
             <Pressable
-              key={chat.guid}
+              key={chat.conversationId}
               testID="person-conversation"
               accessibilityRole="button"
               accessibilityLabel={`${title}. ${line}. ${state.label}`}

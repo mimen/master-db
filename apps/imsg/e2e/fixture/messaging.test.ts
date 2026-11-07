@@ -3,6 +3,7 @@ import type { CommandResult, CommaOutboxPayload } from "../../../../convex/schem
 import { createApp } from "../../server/app";
 import type { Config } from "../../server/config";
 import { OverlayDb } from "../../server/db";
+import { fixtureConversationId } from "../../shared/fixture-ids";
 import { registerConvexFixture } from "./convex";
 import { FixtureBlueBubbles } from "./fake-bluebubbles";
 import { CHAT_GUIDS, FIXTURE_NOW, FixtureIdentity, fixtureSeed } from "./world";
@@ -25,8 +26,8 @@ async function call<T>(name: string, args: Record<string, unknown>): Promise<T> 
   if (!response.ok) throw new Error(await response.text());
   return response.json() as Promise<T>;
 }
-async function command(payload: CommaOutboxPayload, conversationId?: string) {
-  const commandId = await call<string>("comma/outbox:enqueue", { clientKey: crypto.randomUUID(), ...(conversationId ? { conversationId } : {}), payload });
+async function command(payload: CommaOutboxPayload, chatGuid?: string) {
+  const commandId = await call<string>("comma/outbox:enqueue", { clientKey: crypto.randomUUID(), ...(chatGuid ? { conversationId: fixtureConversationId(chatGuid) } : {}), payload });
   return call<{ status: string; result: CommandResult }>("comma/outbox:getCommand", { commandId });
 }
 

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { APIRequestContext, Locator, Page } from "@playwright/test";
 import { renderCounter, type Renders } from "../bench/renders";
 import { expect, test } from "../fixtures/desk";
+import { fixtureConversationId } from "../../shared/fixture-ids";
 import { AGENT_CHAT_GUIDS } from "./world";
 
 const evidence = process.env.VERIFY_IMSG_EVIDENCE!;
@@ -22,8 +23,8 @@ function recordCalls(page: Page, names = /^comma\/agent:(ask|answer|settle|reope
 }
 
 type Summary = { _id: string; title: string; state: string; settledAt?: number; seenAt?: number; lastTurnEndedAt?: number };
-async function chatsOf(request: APIRequestContext, conversationId: string): Promise<Summary[]> {
-  const response = await request.post("/__fixture/convex", { data: { name: "comma/agent:chatsFor", args: { conversationId } } });
+async function chatsOf(request: APIRequestContext, chatGuid: string): Promise<Summary[]> {
+  const response = await request.post("/__fixture/convex", { data: { name: "comma/agent:chatsFor", args: { conversationId: fixtureConversationId(chatGuid) } } });
   expect(response.ok(), await response.text()).toBe(true);
   return response.json() as Promise<Summary[]>;
 }
@@ -70,7 +71,7 @@ test("agent-pane: ⌘J asks, a question card answers, drafts land in the compose
     expect(response.ok(), await response.text()).toBe(true);
     return response.json() as Promise<T>;
   };
-  const chatsFor = () => convex<Array<{ _id: string; state: string; settledAt?: number }>>("comma/agent:chatsFor", { conversationId: desk.chats.needs });
+  const chatsFor = () => convex<Array<{ _id: string; state: string; settledAt?: number }>>("comma/agent:chatsFor", { conversationId: fixtureConversationId(desk.chats.needs) });
   /** The newest chat's items. */
   const liveItems = async () => {
     const [chat] = await chatsFor();
@@ -170,7 +171,7 @@ test("agent-pane: ⌘J asks, a question card answers, drafts land in the compose
   await composer.click();
   await page.keyboard.press("Meta+a");
   await page.keyboard.type("hold on, checking");
-  await expect.poll(async () => (await convex<{ text: string; source: string } | null>("comma/queries:getDraft", { conversationId: desk.chats.needs }))?.source).toBe("user");
+  await expect.poll(async () => (await convex<{ text: string; source: string } | null>("comma/queries:getDraft", { conversationId: fixtureConversationId(desk.chats.needs) }))?.source).toBe("user");
   await page.keyboard.press("Meta+j");
   await input.fill("put both on the guest list");
   await input.press("Enter");
@@ -317,7 +318,7 @@ test("agent-pane: a pasted image, a long paste and a dropped file go with an ask
     return { width: bitmap.width, height: bitmap.height };
   }, flyer.storageId);
   expect(uploaded, "the image was downscaled to a 2000 px edge before upload").toEqual({ width: 2000, height: 1000 });
-  const [chat] = await (await desk.request.post("/__fixture/convex", { data: { name: "comma/agent:chatsFor", args: { conversationId: desk.chats.needs } } })).json() as Array<{ _id: string }>;
+  const [chat] = await (await desk.request.post("/__fixture/convex", { data: { name: "comma/agent:chatsFor", args: { conversationId: fixtureConversationId(desk.chats.needs) } } })).json() as Array<{ _id: string }>;
   const items = await (await desk.request.post("/__fixture/convex", { data: { name: "comma/agent:listItems", args: { chatId: chat!._id } } })).json() as Array<{ entry: { kind: string } }>;
   expect(items.at(-1)?.entry, "the turn ran on the selection the ask carried").toMatchObject({ kind: "turn_end", model: "claude-sonnet-5-5", effort: "low" });
   await expect(pane.getByRole("button", { name: "Model, Sonnet 5.5" })).toBeVisible();
@@ -497,7 +498,7 @@ test("agent-pane: looking at Riley's ready chat marks it seen, so it reads open 
   const [before] = await chatsOf(desk.request, guid);
   expect(before!.lastTurnEndedAt! > (before!.seenAt ?? 0), "Riley's chat starts ready").toBe(true);
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
-  await page.goto(`/chat/${encodeURIComponent(guid)}`, { waitUntil: "domcontentloaded" });
+  await page.goto(`/c/${fixtureConversationId(guid)}`, { waitUntil: "domcontentloaded" });
   const strip = page.getByTestId("agent-strip");
   await expect(strip).toContainText("Agent drafted a reply");
   expect(marks, "nothing is seen while the pane is closed").toEqual([]);
@@ -532,7 +533,7 @@ test("agent-pane: the strip chip names the most urgent chat's attention and open
     { guid: AGENT_CHAT_GUIDS.failed, chip: "Agent hit an error", title: "Priya's deposit" },
   ];
   for (const [index, { guid, chip, title }] of cases.entries()) {
-    await page.goto(`/chat/${encodeURIComponent(guid)}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`/c/${fixtureConversationId(guid)}`, { waitUntil: "domcontentloaded" });
     const strip = page.getByTestId("agent-strip");
     await expect(strip).toContainText(chip);
     await expect(strip).toHaveAccessibleName(`${chip}. Open the agent`);
@@ -546,8 +547,8 @@ test("agent-pane: the strip chip names the most urgent chat's attention and open
 
   const loaded = page.waitForResponse((response) => response.url().endsWith("/__fixture/convex")
     && (response.request().postDataJSON() as Call).name === "comma/agent:chatsFor"
-    && (response.request().postDataJSON() as Call).args.conversationId === AGENT_CHAT_GUIDS.open);
-  await page.goto(`/chat/${encodeURIComponent(AGENT_CHAT_GUIDS.open)}`, { waitUntil: "domcontentloaded" });
+    && (response.request().postDataJSON() as Call).args.conversationId === fixtureConversationId(AGENT_CHAT_GUIDS.open));
+  await page.goto(`/c/${fixtureConversationId(AGENT_CHAT_GUIDS.open)}`, { waitUntil: "domcontentloaded" });
   await loaded;
   await expect(page.getByTestId("thread-view")).toBeVisible();
   await page.waitForTimeout(300);

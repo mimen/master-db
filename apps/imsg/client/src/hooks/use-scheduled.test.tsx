@@ -39,15 +39,16 @@ function commands() {
   let callback: (() => void) | undefined;
   let subscribed!: () => void;
   const ready = new Promise<void>((resolve) => { subscribed = resolve; });
+  const enqueued: unknown[] = [];
   const client: ResultCommandClient = {
-    query: async () => ({ _id: "chat" }), mutation: async () => "command-1",
+    mutation: async (_ref, args) => { enqueued.push(args); return "command-1"; },
     watchQuery: () => ({ localQueryResult: () => snapshot, onUpdate: (listener) => {
       callback = listener; subscribed(); return () => { callback = undefined; };
     } }),
   };
-  return { ready, actions: {
-    cancelScheduled: (id: number) => runCommandVia(client, rows[0]!.chatGuid, { kind: "cancelScheduled", bbId: id }),
-    sendScheduledNow: (id: number) => runCommandVia(client, rows[0]!.chatGuid, { kind: "sendScheduledNow", bbId: id }),
+  return { ready, enqueued, actions: {
+    cancelScheduled: (id: number) => runCommandVia(client, rows[0]!.conversationId ?? null, { kind: "cancelScheduled", bbId: id }),
+    sendScheduledNow: (id: number) => runCommandVia(client, rows[0]!.conversationId ?? null, { kind: "sendScheduledNow", bbId: id }),
     updateScheduled: async () => { throw new Error("unused"); },
   }, finish: (status: "failed" | "unknown" | "sent", kind: "cancelScheduled" | "sendScheduledNow") => {
     snapshot = { commandId: "command-1" as GenericId<"comma_outbox">, clientKey: "key", status, updatedAt: 1,
@@ -86,6 +87,7 @@ for (const kind of ["cancelScheduled", "sendScheduledNow"] as const) {
           await h.ready;
         });
         expect(container.textContent).toBe("");
+        expect(h.enqueued).toEqual([expect.objectContaining({ conversationId: "chat", payload: { kind, bbId: id } })]);
         await act(async () => { h.finish(status, kind); await result; });
         expect(container.textContent).toBe(status === "sent" ? "" : "later");
       } finally {

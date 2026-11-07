@@ -1,10 +1,12 @@
+import type { ConversationId } from "@shared/types";
+
 /** Bus for opening a contact in the desktop right pane (over the details view,
  * with a back button). Fired from the thread header name and detail participants. */
 export interface PersonTarget {
   address: string;
   name: string;
-  /** The chat whose Details the back button returns to. */
-  backGuid: string;
+  /** The conversation whose Details the back button returns to. */
+  backConversation?: ConversationId;
 }
 
 type Listener = (target: PersonTarget) => void;

@@ -1,3 +1,4 @@
+import type { ConversationId } from "@shared/types";
 import type {
   DesktopChatSelection,
   DesktopPersonSelection,
@@ -23,7 +24,7 @@ function normalizePathname(pathname: string): string {
   return withoutTabs.length > 1 ? withoutTabs.replace(/\/+$/, "") : withoutTabs;
 }
 
-function missing(pathname: string, parameter: "guid" | "address"): ProjectionResult {
+function missing(pathname: string, parameter: "conversation" | "address"): ProjectionResult {
   return {
     ok: false,
     error: { kind: "missing-parameter", pathname, parameter },
@@ -32,7 +33,7 @@ function missing(pathname: string, parameter: "guid" | "address"): ProjectionRes
 
 function invalid(
   pathname: string,
-  parameter: "workspace" | "count" | "targetDate",
+  parameter: "workspace" | "targetDate",
   value: string,
 ): ProjectionResult {
   return {
@@ -103,32 +104,14 @@ function parsePerson(params: DesktopRouteParams): DesktopPersonSelection | null 
 function parseChatSelection(
   pathname: string,
   params: DesktopRouteParams,
-  pathGuid?: string,
+  pathId?: string,
 ): Result<DesktopChatSelection, DesktopRouteError> {
-  const guid = first(params.guid) ?? pathGuid;
-  if (!guid) {
+  const conversationId = (first(params.conversationId) ?? first(params.conversation) ?? pathId) as ConversationId | undefined;
+  if (!conversationId) {
     return {
       ok: false,
-      error: { kind: "missing-parameter", pathname, parameter: "guid" },
+      error: { kind: "missing-parameter", pathname, parameter: "conversation" },
     };
-  }
-
-  const countRaw = first(params.count);
-  let participantCount: number | undefined;
-  if (countRaw !== undefined) {
-    const parsedCount = Number(countRaw);
-    if (!Number.isInteger(parsedCount) || parsedCount < 0) {
-      return {
-        ok: false,
-        error: {
-          kind: "invalid-parameter",
-          pathname,
-          parameter: "count",
-          value: countRaw,
-        },
-      };
-    }
-    participantCount = parsedCount;
   }
 
   const targetGuid = first(params.targetGuid);
@@ -151,11 +134,10 @@ function parseChatSelection(
   return {
     ok: true,
     value: {
-      guid,
+      conversationId,
       intent: "reply",
       ...(name ? { name } : {}),
       ...(isGroupRaw === "1" ? { isGroup: true } : isGroupRaw === "0" ? { isGroup: false } : {}),
-      ...(participantCount !== undefined ? { participantCount } : {}),
       ...(targetGuid && targetDate !== undefined
         ? { jumpTarget: { guid: targetGuid, dateCreated: targetDate } }
         : {}),
@@ -199,10 +181,23 @@ export function projectDesktopRoute(
     };
   }
 
-  const chatPathMatch = normalized.match(/^\/chat\/(.+)$/);
-  if (normalized === "/chat/[guid]" || chatPathMatch) {
-    const pathGuid = chatPathMatch?.[1] === "[guid]" ? undefined : chatPathMatch?.[1];
-    const selection = parseChatSelection(normalized, params, pathGuid);
+  // An old /chat/<guid> link shows Messages while app/chat/[guid].tsx resolves it to /c/<id>.
+  if (/^\/chat\/.+$/.test(normalized)) {
+    return {
+      ok: true,
+      value: {
+        kind: "workspace",
+        pathname: normalized,
+        workspace: "messages",
+        workspaceProvenance: { kind: "path" },
+      },
+    };
+  }
+
+  const chatPathMatch = normalized.match(/^\/c\/(.+)$/);
+  if (chatPathMatch) {
+    const pathId = chatPathMatch[1] === "[conversationId]" ? undefined : chatPathMatch[1];
+    const selection = parseChatSelection(normalized, params, pathId);
     if (!selection.ok) return selection;
     return {
       ok: true,
@@ -239,7 +234,7 @@ export function projectDesktopRoute(
         },
       };
     }
-    const backGuid = first(params.backGuid);
+    const backConversation = first(params.backConversation) as ConversationId | undefined;
     return {
       ok: true,
       value: {
@@ -251,7 +246,7 @@ export function projectDesktopRoute(
           kind: "person",
           workspace,
           target: selection,
-          ...(backGuid ? { backGuid } : {}),
+          ...(backConversation ? { backConversation } : {}),
         },
       },
     };
@@ -270,7 +265,7 @@ export function projectDesktopRoute(
         utility: {
           kind: "chat-info",
           workspace: "messages",
-          guid: selection.value.guid,
+          conversationId: selection.value.conversationId,
         },
         chatSelection: selection.value,
       },
@@ -318,7 +313,7 @@ export function projectDesktopRoute(
 
     if (normalized === "/search") {
       const query = first(params.query) ?? "";
-      const chatGuid = first(params.chat);
+      const conversationId = first(params.conversation) as ConversationId | undefined;
       const chatName = first(params.name);
       return {
         ok: true,
@@ -330,7 +325,7 @@ export function projectDesktopRoute(
           overlay: {
             kind: "search",
             query,
-            ...(chatGuid ? { chatGuid } : {}),
+            ...(conversationId ? { conversationId } : {}),
             ...(chatName ? { chatName } : {}),
           },
         },

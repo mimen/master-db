@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "../fixtures/desk";
+import { fixtureConversationId } from "../../shared/fixture-ids";
 
 const INBOUND = "Can you send the final arrival time?";
 
@@ -15,7 +16,7 @@ function reactCommands(page: Page): unknown[] {
 
 async function storedReactions(desk: { request: Page["request"]; chats: { needs: string } }): Promise<string[]> {
   const response = await desk.request.post("/__fixture/convex", {
-    data: { name: "comma/queries:listMessages", args: { conversationId: desk.chats.needs, paginationOpts: { numItems: 50, cursor: null } } },
+    data: { name: "comma/queries:listMessages", args: { conversationId: fixtureConversationId(desk.chats.needs), paginationOpts: { numItems: 50, cursor: null } } },
   });
   const { page: rows } = await response.json() as { page: Array<{ text: string; reactions: Array<{ type: string; isFromMe: boolean }> }> };
   return rows.find((row) => row.text === INBOUND)?.reactions.filter((r) => r.isFromMe).map((r) => r.type) ?? [];

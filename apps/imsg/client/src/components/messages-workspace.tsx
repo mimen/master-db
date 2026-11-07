@@ -1,7 +1,6 @@
-import { formatAddress } from "@shared/address";
 import { matchesFilters, settleActionFor, settleLeavesLens } from "@shared/chat-state";
 import Reanimated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
-import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
+import type { ChatSummary, ConversationId, StateFilter, TypeFilter } from "@shared/types";
 import { router, useGlobalSearchParams, usePathname } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
 import { Platform, Text, View } from "react-native";
@@ -13,6 +12,7 @@ import { DesktopSplit } from "@/components/desktop-split";
 import { EmptyState } from "@/components/empty-state";
 import { ThreadView } from "@/components/lazy-surfaces";
 import { useAgentEnabled } from "@/hooks/use-agent";
+import { useConversation } from "@/hooks/use-chat-directory";
 import { useChats } from "@/hooks/use-chats";
 import { type JumpTarget } from "@/hooks/use-messages";
 import { Springs } from "@/constants/springs";
@@ -31,7 +31,7 @@ import {
   setKeyboardRuntime,
   setListMode,
 } from "@/lib/keyboard/controller";
-import { onSelectChat } from "@/lib/selection";
+import { conversationRoute, onSelectChat, type Selection } from "@/lib/selection";
 import { playReceive } from "@/lib/sounds";
 import { useReceiveSound } from "@/hooks/use-receive-sound";
 import { openThreadSearch } from "@/lib/thread-search";
@@ -40,17 +40,8 @@ import { showToast } from "@/lib/toast";
 /** The lenses where a reply or a settle moves straight on to the next conversation. */
 const ADVANCING: ReadonlySet<StateFilter> = new Set(["today", "unresponded", "unread"]);
 
-function chatRoute(chat: ChatSummary) {
-  return {
-    pathname: "/chat/[guid]" as const,
-    params: {
-      guid: chat.guid,
-      name: chat.displayName,
-      isGroup: chat.isGroup ? "1" : "0",
-      count: String(chat.participants.length),
-      hasGroupPhoto: chat.hasGroupPhoto ? "1" : "0",
-    },
-  };
+function selectionOf(chat: ChatSummary): Selection {
+  return { conversationId: chat.conversationId, name: chat.displayName, isGroup: chat.isGroup };
 }
 
 export function MessagesWorkspace({
@@ -67,15 +58,16 @@ export function MessagesWorkspace({
   // Today is the working view: the inbox opens on the day's ranked queue.
   const [state, setState] = useState<StateFilter>("today");
   const [type, setType] = useState<TypeFilter>(DEFAULT_INBOX_FILTERS.type);
-  const [selected, setSelected] = useState<ChatSummary | null>(null);
+  const [selectedId, setSelectedId] = useState<ConversationId | null>(null);
+  const selected = useConversation(selectedId) ?? null;
   // "reply" focuses the composer and marks read; "preview" (glide j/k) does neither.
   const [selectionIntent, setSelectionIntent] = useState<"reply" | "preview">("reply");
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
   // The conversation auto-advance opened. Only it slides in; a click cuts as before.
-  const [advanced, setAdvanced] = useState<{ guid: string; from: string } | null>(null);
+  const [advanced, setAdvanced] = useState<{ conversationId: ConversationId; from: string } | null>(null);
   // The open conversation stays in Today, Needs you or Unread after a reply or a read, until it is
   // left or settled; otherwise the row vanished under the cursor mid-reply.
-  const [held, setHeld] = useState<string | null>(null);
+  const [held, setHeld] = useState<ConversationId | null>(null);
   const { chats, allChats, counts, loading, error, refresh } = useChats(state, type, !wide, wide ? held : null);
   const selectedRef = useRef(selected);
   const stateRef = useRef(state);
@@ -87,20 +79,19 @@ export function MessagesWorkspace({
   // commit. That is the recorded row flicker and the blank, never-settling
   // thread. Route-originated shell state still hydrates local state below.
   const commitChatSelection = useCallback((
-    chat: ChatSummary,
+    selection: Selection,
     intent: "reply" | "preview",
     target: JumpTarget | null = null,
   ): void => {
     setJumpTarget(target);
     setSelectionIntent(intent);
-    setSelected(chat);
+    setSelectedId(selection.conversationId);
     shell.dispatch({
       type: "messages/chat-selected",
       selection: {
-        guid: chat.guid,
-        name: chat.displayName,
-        isGroup: chat.isGroup,
-        participantCount: chat.participants.length,
+        conversationId: selection.conversationId,
+        ...(selection.name ? { name: selection.name } : {}),
+        ...(selection.isGroup !== undefined ? { isGroup: selection.isGroup } : {}),
         jumpTarget: target ?? undefined,
         intent,
       },
@@ -114,71 +105,20 @@ export function MessagesWorkspace({
   useEffect(() => {
     if (!wide) return;
     return onSelectChat((selection) => {
-      // Search the unfiltered list: a chat outside the active queue still has a real name.
-      const known = allChats.find((chat) => chat.guid === selection.guid);
-      const chat = known ?? {
-        guid: selection.guid,
-        displayName: selection.name ?? placeholderName(selection.guid),
-        isGroup: selection.isGroup ?? selection.guid.includes(";+;"),
-        known: true,
-        isSpam: false,
-        participants: [],
-        lastMessage: null,
-        unreadCount: 0,
-        flags: {
-          unresponded: false,
-          waiting: false,
-          unread: false,
-          mutedUnresponded: false,
-          pinned: false,
-        },
-      } satisfies ChatSummary;
-      commitChatSelection(chat, "reply", selection.jumpTarget ?? null);
-      router.replace({
-        pathname: "/chat/[guid]",
-        params: {
-          guid: selection.guid,
-          ...(selection.name ? { name: selection.name } : {}),
-          ...(selection.jumpTarget
-            ? {
-                targetGuid: selection.jumpTarget.guid,
-                targetDate: String(selection.jumpTarget.dateCreated),
-              }
-            : {}),
-        },
-      });
+      commitChatSelection(selection, "reply", selection.jumpTarget ?? null);
+      router.replace(conversationRoute(selection.conversationId, selection.jumpTarget));
     });
-  }, [allChats, commitChatSelection, wide]);
+  }, [commitChatSelection, wide]);
 
   useEffect(() => {
     if (!wide) return;
     const selection = shell.state.messages.selection;
     if (!selection) return;
-    const known = allChats.find((chat) => chat.guid === selection.guid);
-    // Re-resolve a placeholder once the directory loads, so a deep link stops showing its guid.
-    if (selected?.guid === selection.guid && (!known || selected.displayName !== placeholderName(selection.guid))) return;
+    if (selection.conversationId === selectedId) return;
     setJumpTarget(selection.jumpTarget ?? null);
     setSelectionIntent(selection.intent);
-    setSelected(
-      known ?? {
-        guid: selection.guid,
-        displayName: selection.name ?? placeholderName(selection.guid),
-        isGroup: selection.isGroup ?? selection.guid.includes(";+;"),
-        known: true,
-        isSpam: false,
-        participants: [],
-        lastMessage: null,
-        unreadCount: 0,
-        flags: {
-          unresponded: false,
-          waiting: false,
-          unread: false,
-          mutedUnresponded: false,
-          pinned: false,
-        },
-      },
-    );
-  }, [allChats, selected?.guid, selected?.displayName, shell.state.messages.selection, wide]);
+    setSelectedId(selection.conversationId);
+  }, [selectedId, shell.state.messages.selection, wide]);
 
   // The shell owns the one rail and the one utility surface. Messages keeps
   // its filters and selection local so they survive workspace switches, then
@@ -194,39 +134,28 @@ export function MessagesWorkspace({
       applyType: setType,
       clearSelection: () => {
         traceTriage({ kind: "clear", via: "clearSelection" });
-        setSelected(null);
+        setSelectedId(null);
         shell.dispatch({ type: "messages/chat-settled" });
         router.replace("/");
       },
       openChat: (chat) => {
-        commitChatSelection(chat, "reply");
-        router.replace({ pathname: "/chat/[guid]", params: { guid: chat.guid, name: chat.displayName } });
+        commitChatSelection(selectionOf(chat), "reply");
+        router.replace(conversationRoute(chat.conversationId));
       },
       refresh,
     });
     return () => shell.registerMessagesActions(null);
   }, [commitChatSelection, refresh, shell.registerMessagesActions, wide]);
 
-  // Keep the selected chat's flags fresh as the directory reconciles. Read from the
-  // whole directory: a reply or a settle moves the open conversation out of the lens.
-  // A functional update, because a selection made in the same commit must not be
-  // overwritten with the conversation it replaced.
-  useEffect(() => {
-    setSelected((current) => {
-      const updated = current && allChats.find((chat) => chat.guid === current.guid);
-      return updated ?? current;
-    });
-  }, [allChats]);
-
   const openChat = (chat: ChatSummary): void => {
     if (wide) {
-      commitChatSelection(chat, "reply");
-      router.replace(chatRoute(chat));
+      commitChatSelection(selectionOf(chat), "reply");
+      router.replace(conversationRoute(chat.conversationId));
       setListMode(false);
       requestFocus("composer");
       return;
     }
-    router.push(chatRoute(chat));
+    router.push(conversationRoute(chat.conversationId));
   };
 
   // Auto-advance (round4 ux.md daily loop): in Today, Needs you and Unread, a reply or a settle
@@ -236,38 +165,38 @@ export function MessagesWorkspace({
   const order = useMemo(() => (state === "today" ? rendered ?? [] : queueOrder(chats)), [chats, rendered, state]);
   useEffect(() => {
     if (!wide || !active) return;
-    publishQueuePosition(queuePosition(order, selected?.guid));
+    publishQueuePosition(queuePosition(order, selected?.conversationId));
     return () => publishQueuePosition(null);
-  }, [active, order, selected?.guid, wide]);
+  }, [active, order, selected?.conversationId, wide]);
   // The neighbor is remembered while the open conversation is still in the lens: by the time
   // a send's echo or a settle lands, the conversation has already left Needs you.
   const nextRef = useRef<ChatSummary | null>(null);
   // Rerun on the rendered order too: folding a section changes what the next conversation is.
   useEffect(() => {
-    if (selected && order.some((chat) => chat.guid === selected.guid)) nextRef.current = advanceTarget(order, selected.guid);
+    if (selected && order.some((chat) => chat.conversationId === selected.conversationId)) nextRef.current = advanceTarget(order, selected.conversationId);
   }, [order, rendered, selected]);
   // A phone thread is a pushed route, not a selection: settling the one on screen replaces it with the next.
   const pathname = usePathname();
-  const routeGuid = useGlobalSearchParams<{ guid?: string }>().guid;
-  const phoneThreadRef = useRef<string | null>(null);
-  phoneThreadRef.current = pathname.startsWith("/chat/") ? routeGuid ?? null : null;
+  const routeConversation = useGlobalSearchParams<{ conversationId?: ConversationId }>().conversationId;
+  const phoneThreadRef = useRef<ConversationId | null>(null);
+  phoneThreadRef.current = pathname.startsWith("/c/") ? routeConversation ?? null : null;
   const orderRef = useRef(order);
   orderRef.current = order;
-  const advanceFrom = useCallback((guid: string): void => {
-    if (!ADVANCING.has(stateRef.current)) return traceTriage({ kind: "advance", from: guid, to: null, reason: `lens ${stateRef.current}` });
+  const advanceFrom = useCallback((conversationId: ConversationId): void => {
+    if (!ADVANCING.has(stateRef.current)) return traceTriage({ kind: "advance", from: conversationId, to: null, reason: `lens ${stateRef.current}` });
     if (!wide) {
-      if (phoneThreadRef.current !== guid) return traceTriage({ kind: "advance", from: guid, to: null, reason: "thread not open" });
-      const next = advanceTarget(orderRef.current, guid);
-      if (!next || next.guid === guid) return traceTriage({ kind: "advance", from: guid, to: null, reason: next ? "next is self" : "no next" });
-      traceTriage({ kind: "advance", from: guid, to: next.guid, reason: "ok" });
-      router.replace(chatRoute(next));
+      if (phoneThreadRef.current !== conversationId) return traceTriage({ kind: "advance", from: conversationId, to: null, reason: "thread not open" });
+      const next = advanceTarget(orderRef.current, conversationId);
+      if (!next || next.conversationId === conversationId) return traceTriage({ kind: "advance", from: conversationId, to: null, reason: next ? "next is self" : "no next" });
+      traceTriage({ kind: "advance", from: conversationId, to: next.conversationId, reason: "ok" });
+      router.replace(conversationRoute(next.conversationId));
       return;
     }
-    if (selectedRef.current?.guid !== guid) return traceTriage({ kind: "advance", from: guid, to: null, reason: `selected ${selectedRef.current?.guid.slice(-6) ?? "none"}` });
+    if (selectedRef.current?.conversationId !== conversationId) return traceTriage({ kind: "advance", from: conversationId, to: null, reason: `selected ${selectedRef.current?.conversationId.slice(-6) ?? "none"}` });
     const next = nextRef.current;
-    if (!next || next.guid === guid) return traceTriage({ kind: "advance", from: guid, to: null, reason: next ? "next is self" : "no next" });
-    traceTriage({ kind: "advance", from: guid, to: next.guid, reason: "ok" });
-    setAdvanced({ guid: next.guid, from: selectedRef.current.displayName });
+    if (!next || next.conversationId === conversationId) return traceTriage({ kind: "advance", from: conversationId, to: null, reason: next ? "next is self" : "no next" });
+    traceTriage({ kind: "advance", from: conversationId, to: next.conversationId, reason: "ok" });
+    setAdvanced({ conversationId: next.conversationId, from: selectedRef.current.displayName });
     openChatRef.current(next);
   }, [wide]);
   useEffect(() => onTriageSettling(advanceFrom), [advanceFrom]);
@@ -277,18 +206,17 @@ export function MessagesWorkspace({
     allChatsRef.current = allChats;
     renderedRef.current = rendered;
   });
-  const selectedGuid = selected?.guid;
   useEffect(() => {
-    const chat = selectedGuid ? allChatsRef.current.find((c) => c.guid === selectedGuid) : undefined;
+    const chat = selectedId ? allChatsRef.current.find((c) => c.conversationId === selectedId) : undefined;
     const shown = !chat || !ADVANCING.has(state) ? false
-      : state === "today" ? renderedRef.current?.some((c) => c.guid === chat.guid) === true
+      : state === "today" ? renderedRef.current?.some((c) => c.conversationId === chat.conversationId) === true
       : matchesFilters(chat, state, type);
-    setHeld(chat && shown ? chat.guid : null);
-  }, [selectedGuid, state, type]);
-  useEffect(() => onTriageSettling((guid) => setHeld((current) => (current === guid ? null : current))), []);
+    setHeld(chat && shown ? chat.conversationId : null);
+  }, [selectedId, state, type]);
+  useEffect(() => onTriageSettling((id) => setHeld((current) => (current === id ? null : current))), []);
   /** Glide-mode j/k: show the thread, keep list focus, don't mark read. */
   const previewChat = (chat: ChatSummary): void => {
-    commitChatSelection(chat, "preview");
+    commitChatSelection(selectionOf(chat), "preview");
   };
 
   const openNewMessage = (): void => {
@@ -337,12 +265,12 @@ export function MessagesWorkspace({
         // No lens gate. The gesture acts on the selected conversation from any
         // lens, and toggleSettleChat answers every press with a toast.
         const action = settleActionFor(sel);
-        traceTriage({ kind: "settle-key", guid: sel.guid, lens: stateRef.current, action, next: nextRef.current?.guid ?? null });
+        traceTriage({ kind: "settle-key", conversationId: sel.conversationId, lens: stateRef.current, action, next: nextRef.current?.conversationId ?? null });
         void toggleSettleChat(sel);
         // Today, Needs you and Unread auto-advance on the settle itself (onTriageSettling).
         // Elsewhere, glide off the row only when the action drops it out of the lens.
         const advances = action === "settle" && ADVANCING.has(stateRef.current);
-        if (!advances && settleLeavesLens(action, stateRef.current)) getListAdapter()?.selectNeighborOf(sel.guid);
+        if (!advances && settleLeavesLens(action, stateRef.current)) getListAdapter()?.selectNeighborOf(sel.conversationId);
       },
       markUnreadSelected: () => {
         const sel = selectedRef.current;
@@ -357,12 +285,12 @@ export function MessagesWorkspace({
         if (!sel) return;
         shell.dispatch({
           type: "utility/toggled",
-          utility: { kind: "chat-info", workspace: "messages", guid: sel.guid },
+          utility: { kind: "chat-info", workspace: "messages", conversationId: sel.conversationId },
         });
       },
       openAgent: () => {
         const sel = selectedRef.current;
-        if (sel && overlaysRef.current.agentEnabled) openAgentPane(sel.guid);
+        if (sel && overlaysRef.current.agentEnabled) openAgentPane(sel.conversationId);
       },
       focusListSearch: () => getListAdapter()?.focusSearch(),
       undoLast: () => showToast(undoLastAction() ? "Undone" : "Nothing to undo"),
@@ -397,7 +325,7 @@ export function MessagesWorkspace({
         }
         if (selectedRef.current) {
           traceTriage({ kind: "clear", via: "closePanel" });
-          setSelected(null);
+          setSelectedId(null);
           shell.dispatch({ type: "messages/chat-settled" });
           router.replace("/");
           return true;
@@ -420,7 +348,7 @@ export function MessagesWorkspace({
       loading={loading}
       offline={error !== null}
       wide={wide}
-      selectedGuid={wide ? selected?.guid : undefined}
+      selectedId={wide ? selected?.conversationId : undefined}
       held={wide ? held : null}
       onFiltersChange={(filters) => {
         setState(filters.state);
@@ -442,18 +370,18 @@ export function MessagesWorkspace({
       list={list}
       detail={
         selected ? (
-          <ThreadEnter key={selected.guid + (jumpTarget?.guid ?? "")} animate={selected.guid === advanced?.guid}>
+          <ThreadEnter key={selected.conversationId + (jumpTarget?.guid ?? "")} animate={selected.conversationId === advanced?.conversationId}>
             <ThreadView
-              chatGuid={selected.guid}
+              conversationId={selected.conversationId}
               isGroup={selected.isGroup}
               jumpTarget={jumpTarget}
               headerChat={selected}
               lensLabel={desktopInboxTitle({ state, type })}
               previewOnly={selectionIntent === "preview"}
-              advancedFrom={selected.guid === advanced?.guid ? advanced.from : undefined}
+              advancedFrom={selected.conversationId === advanced?.conversationId ? advanced.from : undefined}
               toastActive={active}
             />
-            <UnknownSenderBanner key={selected.guid} chat={selected} />
+            <UnknownSenderBanner key={selected.conversationId} chat={selected} />
           </ThreadEnter>
         ) : (
           <EmptyState
@@ -486,9 +414,4 @@ function ThreadEnter({ animate, children }: { readonly animate: boolean; readonl
     transform: reduceMotion ? [] : [{ translateY: (1 - progress.value) * 14 }],
   }));
   return <Reanimated.View style={[{ flex: 1 }, style]}>{children}</Reanimated.View>;
-}
-
-/** Before the directory loads, a deep-linked chat shows its handle rather than its raw guid. */
-function placeholderName(guid: string): string {
-  return guid.includes(";+;") ? "Group conversation" : formatAddress(guid.split(";").pop() ?? guid);
 }

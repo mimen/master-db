@@ -3,6 +3,7 @@ import type { TodayView } from "../../../../convex/schema/comma/validators";
 import { createApp } from "../../server/app";
 import type { Config } from "../../server/config";
 import { OverlayDb } from "../../server/db";
+import { fixtureConversationId } from "../../shared/fixture-ids";
 import { registerConvexFixture } from "./convex";
 import { FixtureBlueBubbles } from "./fake-bluebubbles";
 import { CHAT_GUIDS, FIXTURE_NOW, FixtureIdentity, TODAY_SEED, fixtureSeed } from "./world";
@@ -38,13 +39,14 @@ const get = () => call<TodayView | null>("comma/today:get", { day: "2026-10-27" 
 test("serves the seeded queue for any day, with a settle in the clear log", async () => {
   const seeded = await get();
   expect(seeded?.day).toBe("2026-10-27");
-  expect(seeded?.queue?.items[0]).toMatchObject({ conversationId: CHAT_GUIDS.needs, rank: 1, group: "friday" });
-  expect(seeded?.queue?.openAtSnapshot).not.toContain(CHAT_GUIDS.waiting);
+  expect(seeded?.queue?.items[0]).toMatchObject({ conversationId: fixtureConversationId(CHAT_GUIDS.needs), rank: 1, group: "friday" });
+  expect(seeded?.queue?.openAtSnapshot).toContain(fixtureConversationId(CHAT_GUIDS.needs));
+  expect(seeded?.queue?.openAtSnapshot).not.toContain(fixtureConversationId(CHAT_GUIDS.waiting));
   expect(seeded?.queue?.snapshotAt).toBe(TODAY_SEED.snapshotAt);
   expect(seeded?.cleared).toEqual([]);
 
-  await call("comma/outbox:enqueue", { clientKey: "settle-alex", conversationId: CHAT_GUIDS.needs, payload: { kind: "settle", messageGuid: "needs-2" } });
-  expect((await get())?.cleared).toEqual([{ conversationId: CHAT_GUIDS.needs, at: FIXTURE_NOW }]);
+  await call("comma/outbox:enqueue", { clientKey: "settle-alex", conversationId: fixtureConversationId(CHAT_GUIDS.needs), payload: { kind: "settle", messageGuid: "needs-2" } });
+  expect((await get())?.cleared).toEqual([{ conversationId: fixtureConversationId(CHAT_GUIDS.needs), at: FIXTURE_NOW }]);
 });
 
 test("Regenerate is building first, then ranks the open conversations in a new session, and a second press is a no-op", async () => {
@@ -57,7 +59,7 @@ test("Regenerate is building first, then ranks the open conversations in a new s
   const built = await get();
   expect(built?.run).toMatchObject({ status: "done", attempt: 2 });
   expect(built?.queue?.snapshotAt).toBeGreaterThan(TODAY_SEED.snapshotAt);
-  expect(built?.queue?.items.map((item) => item.conversationId)).toContain(CHAT_GUIDS.unreadGroup);
+  expect(built?.queue?.items.map((item) => item.conversationId)).toContain(fixtureConversationId(CHAT_GUIDS.unreadGroup));
   expect(built?.queue?.items.map((item) => item.rank)).toEqual(built?.queue?.items.map((_, index) => index + 1));
   expect(built?.queue?.session).toEqual({ id: "fixture-2", startedAt: built!.queue!.snapshotAt, updates: 0 });
 });

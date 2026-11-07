@@ -1,4 +1,4 @@
-import type { ChatSummary, StateCounts } from "@shared/types";
+import type { ChatSummary, ConversationId, StateCounts } from "@shared/types";
 import { useQuery } from "convex/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -99,9 +99,9 @@ interface ConversationListPaneProps {
   /** The last chat-list fetch failed; the list is the saved copy. */
   offline: boolean;
   wide: boolean;
-  selectedGuid?: string;
+  selectedId?: ConversationId;
   /** The open conversation the workspace keeps in its slot after it is handled (desktop). */
-  held?: string | null;
+  held?: ConversationId | null;
   onFiltersChange: (filters: InboxFilters) => void;
   onOpenChat: (chat: ChatSummary) => void;
   /** Glide-mode j/k selection: show the thread without focusing or marking
@@ -119,7 +119,7 @@ export function ConversationListPane({
   loading,
   offline,
   wide,
-  selectedGuid,
+  selectedId,
   held = null,
   onFiltersChange,
   onOpenChat,
@@ -176,7 +176,7 @@ export function ConversationListPane({
   const scheduledRows = usePendingScheduled(useQuery(commaApi.listScheduled, {}));
   const scheduled = useMemo(() => new Set((scheduledRows ?? [])
     .filter((row) => PENDING_SCHEDULED.has(row.status))
-    .flatMap((row) => [row.chatGuid, ...(row.conversationId ? [row.conversationId] : [])])), [scheduledRows]);
+    .flatMap((row) => (row.conversationId ? [row.conversationId] : []))), [scheduledRows]);
   useEffect(() => {
     const stopResolved = onTriageResolved(onRefresh);
     const stopUndo = onTriageUndo(onRefresh);
@@ -188,7 +188,7 @@ export function ConversationListPane({
   // Wide chrome sits in the flow above the list; the phone bar floats over it.
   const topBarH = wide ? 0 : SIDEBAR_TITLE_HEIGHT;
   const filterBtnRef = useRef<View>(null);
-  const selectedPositionRef = useRef<{ guid: string; index: number } | null>(null);
+  const selectedPositionRef = useRef<{ conversationId: ConversationId; index: number } | null>(null);
 
   // Desktop opens filters as a popover mounted at the button; mobile as a sheet.
   // useCallback, not a bare arrow: the compiler can't prove a render-scope
@@ -213,18 +213,18 @@ export function ConversationListPane({
   // useChats' FROZEN membership so triage rows never vanish mid-pass. (The
   // remount theory that motivated a single array was disproved by the
   // Playwright trap — the blur was keyboardDismissMode.)
-  const browseGuids = useMemo(() => new Set(chats.map((c) => c.guid)), [chats]);
+  const browseIds = useMemo(() => new Set(chats.map((c) => c.conversationId)), [chats]);
   // Minute resolution: ages and the Today / This week boundary move with it.
   const now = useMinuteClock();
   const refine = useMemo(() => ({ refinements, scheduled, now }), [refinements, scheduled, now]);
   // Today's plan runs on every lens: it is also the Today tab's count.
   const today = useToday();
   // The section the held row sat in when the hold began, so a reply cannot drop it out of New since or Below the line.
-  const [heldAt, setHeldAt] = useState<{ guid: string; section: TodaySectionKey | undefined } | null>(null);
-  const heldSection = heldAt?.guid === held ? heldAt.section : undefined;
+  const [heldAt, setHeldAt] = useState<{ conversationId: ConversationId; section: TodaySectionKey | undefined } | null>(null);
+  const heldSection = heldAt?.conversationId === held ? heldAt.section : undefined;
   const plan = useMemo(() => planToday(today.view, allChats, { held, heldSection }), [today.view, allChats, held, heldSection]);
-  if ((heldAt?.guid ?? null) !== held) {
-    setHeldAt(held === null ? null : { guid: held, section: plan.sections.find((section) => section.rows.some((row) => row.chat.guid === held))?.key });
+  if ((heldAt?.conversationId ?? null) !== held) {
+    setHeldAt(held === null ? null : { conversationId: held, section: plan.sections.find((section) => section.rows.some((row) => row.chat.conversationId === held))?.key });
   }
   const [openFolds, setOpenFolds] = useState<ReadonlySet<TodaySectionKey>>(() => new Set());
   const toggleFold = useCallback((key: TodaySectionKey) => setOpenFolds((current) => {
@@ -245,11 +245,11 @@ export function ConversationListPane({
   // Explicitly memoised: full passes over every conversation, plus a per-chat
   // participant scan while searching.
   const deskModel = useMemo(
-    () => deriveInboxModel(allChats, filters, search.query, search.deepMatches, browseGuids, refine, onToday ? { plan, openFolds } : undefined),
-    [allChats, filters, search.query, search.deepMatches, browseGuids, refine, onToday, plan, openFolds],
+    () => deriveInboxModel(allChats, filters, search.query, search.deepMatches, browseIds, refine, onToday ? { plan, openFolds } : undefined),
+    [allChats, filters, search.query, search.deepMatches, browseIds, refine, onToday, plan, openFolds],
   );
-  const lensTotal = useMemo(() => filterInbox(allChats, filters, "", undefined, browseGuids).length, [allChats, filters, browseGuids]);
-  const toggleCounts = useMemo(() => checkboxCounts(allChats, filters, browseGuids, refine), [allChats, filters, browseGuids, refine]);
+  const lensTotal = useMemo(() => filterInbox(allChats, filters, "", undefined, browseIds).length, [allChats, filters, browseIds]);
+  const toggleCounts = useMemo(() => checkboxCounts(allChats, filters, browseIds, refine), [allChats, filters, browseIds, refine]);
   const tags = useMemo(() => tagsInUse(allChats), [allChats]);
   const chips = activeChips(filters, refinements);
   const lensLabel = LENSES.find((lens) => lens.value === filters.state)?.label ?? "Settled";
@@ -303,13 +303,13 @@ export function ConversationListPane({
     viewKey: search.viewKey,
   });
   useEffect(() => {
-    if (!wide || !selectedGuid) { selectedPositionRef.current = null; return; }
-    const selectedIndex = deskModel.listChats.findIndex((chat) => chat.guid === selectedGuid);
+    if (!wide || !selectedId) { selectedPositionRef.current = null; return; }
+    const selectedIndex = deskModel.listChats.findIndex((chat) => chat.conversationId === selectedId);
     const prior = selectedPositionRef.current;
-    selectedPositionRef.current = { guid: selectedGuid, index: selectedIndex };
-    if (prior?.guid !== selectedGuid || prior.index <= 0 || selectedIndex !== 0) return;
+    selectedPositionRef.current = { conversationId: selectedId, index: selectedIndex };
+    if (prior?.conversationId !== selectedId || prior.index <= 0 || selectedIndex !== 0) return;
     requestAnimationFrame(() => viewport.listRef.current?.scrollToOffset({ offset: 0, animated: false }));
-  }, [deskModel.listChats, selectedGuid, viewport.listRef, wide]);
+  }, [deskModel.listChats, selectedId, viewport.listRef, wide]);
 
   // FlashList's cell memo compares renderItem by identity, so a fresh arrow here
   // re-renders every mounted row on every render of this pane.
@@ -327,16 +327,16 @@ export function ConversationListPane({
         gone={leaving.has(row.key)}
         onCollapsed={dropLeaving}
         labelColor={theme.textTertiary}
-        handle={row.kind === "chat" ? handles.get(row.chat.guid) : undefined}
-        selected={row.kind === "chat" && wide && selectedGuid === row.chat.guid}
-        keyboardFocused={row.kind === "chat" && wide && glide && selectedGuid === row.chat.guid}
+        handle={row.kind === "chat" ? handles.get(row.chat.conversationId) : undefined}
+        selected={row.kind === "chat" && wide && selectedId === row.chat.conversationId}
+        keyboardFocused={row.kind === "chat" && wide && glide && selectedId === row.chat.conversationId}
         onOpen={openRow}
         agentLens={filters.state === "agents"}
         onToggleFold={toggleFold}
         onSettleAll={settleSection}
       />
     ),
-    [theme.textTertiary, leaving, dropLeaving, handles, wide, glide, selectedGuid, openRow, filters.state, toggleFold, settleSection],
+    [theme.textTertiary, leaving, dropLeaving, handles, wide, glide, selectedId, openRow, filters.state, toggleFold, settleSection],
   );
   // Needs you and Unread show what happened and the next step once they empty; other lenses
   // and searches keep the plain line.
@@ -345,7 +345,7 @@ export function ConversationListPane({
   useConversationListKeyboard({
     enabled: wide,
     model: deskModel,
-    selectedGuid,
+    selectedId,
     viewport,
     search,
     onOpenChat,

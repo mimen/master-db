@@ -43,7 +43,7 @@ test("anchored history subscribes, pages once per direction, preserves local sen
   } as unknown as ConvexReactClient;
   let result: ReturnType<typeof useMessageWindow> | undefined;
   function Thread({ conversationId = "one", around = 50 }: { conversationId?: string; around?: number }) {
-    result = useMessageWindow(conversationId, conversationId, { guid: `anchor-${around}`, dateCreated: around });
+    result = useMessageWindow(conversationId as Rows[number]["conversationId"], { guid: `anchor-${around}`, dateCreated: around });
     return createElement("div", null, result.messages.map((m) => m.guid).join(","));
   }
   const root = createRoot(globalThis.document.getElementById("history-root")!);

@@ -4,51 +4,61 @@ import { getFunctionName, type FunctionReference } from "convex/server";
 import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, ConversationId } from "@shared/types";
 
-import { ChatDirectoryContext, useConversationRef } from "./use-chat-directory";
+import { ChatDirectoryContext, useConversation } from "./use-chat-directory";
 
 const known = {
-  conversationId: "conv-known", guid: "iMessage;-;+1555", displayName: "Known", isGroup: false, known: true,
-  isSpam: false, participants: [], unreadCount: 0,
+  conversationId: "conv-known" as ConversationId, imessage: { chatGuid: "iMessage;-;+1555" }, displayName: "Known",
+  isGroup: false, known: true, isSpam: false, participants: [], unreadCount: 0, firstUnreadAt: null,
   lastMessage: { guid: "m1", text: "hi", dateCreated: 1234, isFromMe: false, senderName: null, hasAttachments: false },
   flags: { unresponded: true, waiting: false, unread: false, mutedUnresponded: false, pinned: false },
 } satisfies ChatSummary;
 
-test("a chat the directory knows opens without a resolveChat round trip; an unknown one resolves", async () => {
+const fetchedRow = {
+  _id: "conv-fetched", primaryChatGuid: "SMS;-;+1999", displayName: "Fetched", isGroup: false, hasGroupPhoto: false,
+  groupPhotoUrl: null, participants: [], isSpam: false, lastMessage: null, unreadCount: 0,
+  flags: { unresponded: false, waiting: false, unread: false, mutedUnresponded: false, pinned: false },
+};
+
+test("a conversation the directory lists reads without a query; one it lacks loads through getConversation", async () => {
   const dom = new JSDOM("<div id='root'></div>");
   const globals = { window: globalThis.window, document: globalThis.document };
   Object.assign(globalThis, { window: dom.window, document: dom.window.document });
   Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
   const watched: string[] = [];
   const client = {
-    watchQuery: (ref: FunctionReference<"query">, args: { chatGuid: string }) => {
-      watched.push(`${getFunctionName(ref)} ${args.chatGuid}`);
+    watchQuery: (ref: FunctionReference<"query">, args: { conversationId: string }) => {
+      watched.push(`${getFunctionName(ref)} ${args.conversationId}`);
       return {
         onUpdate: () => () => undefined,
-        localQueryResult: () => ({ _id: "conv-resolved", lastMessage: { dateCreated: 99 } }),
+        localQueryResult: () => fetchedRow,
         journal: () => undefined,
       };
     },
   } as unknown as ConvexReactClient;
-  let ref: ReturnType<typeof useConversationRef> | undefined;
-  function Probe({ guid }: { guid: string }) {
-    ref = useConversationRef(guid);
+  let seen: ReturnType<typeof useConversation>;
+  function Probe({ conversationId }: { conversationId: ConversationId | null }) {
+    seen = useConversation(conversationId);
     return null;
   }
   const root = createRoot(globalThis.document.getElementById("root")!);
-  const render = (guid: string) => act(async () => {
+  const render = (conversationId: ConversationId | null) => act(async () => {
     root.render(createElement(ConvexProvider, { client },
-      createElement(ChatDirectoryContext.Provider, { value: [known] }, createElement(Probe, { guid }))));
+      createElement(ChatDirectoryContext.Provider, { value: [known] }, createElement(Probe, { conversationId }))));
   });
   try {
-    await render(known.guid);
-    expect(ref).toEqual({ conversationId: "conv-known" as never, lastMessageAt: 1234, resolving: false });
+    await render(known.conversationId);
+    expect(seen).toBe(known);
     expect(watched).toEqual([]);
 
-    await render("iMessage;-;+1999");
-    expect(ref).toEqual({ conversationId: "conv-resolved" as never, lastMessageAt: 99, resolving: false });
-    expect(new Set(watched)).toEqual(new Set(["comma/queries:resolveChat iMessage;-;+1999"]));
+    await render(null);
+    expect(seen).toBeNull();
+    expect(watched).toEqual([]);
+
+    await render("conv-fetched" as ConversationId);
+    expect(seen).toMatchObject({ conversationId: "conv-fetched", imessage: { chatGuid: "SMS;-;+1999" }, displayName: "Fetched" });
+    expect(new Set(watched)).toEqual(new Set(["comma/queries:getConversation conv-fetched"]));
   } finally {
     await act(async () => { root.unmount(); });
     Object.assign(globalThis, globals);

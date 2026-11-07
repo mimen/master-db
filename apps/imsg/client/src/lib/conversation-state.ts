@@ -1,10 +1,10 @@
 import type { OptimisticLocalStore, OptimisticUpdate } from "convex/browser";
 import { optimisticallyUpdateValueInPaginatedQuery } from "convex/react";
 import type { FunctionArgs, FunctionReference, FunctionReturnType } from "convex/server";
-import type { GenericId } from "convex/values";
+import type { ConversationId } from "@shared/types";
 import { agentApi } from "./agent-api";
 import { commaApi, todayApi, triageApi } from "./convex-api";
-import { conversationIdVia, watchCommandVia, type ResultCommandClient } from "./convex-commands";
+import { watchCommandVia, type ResultCommandClient } from "./convex-commands";
 
 /**
  * Comma's own conversation state (settles, pins, reads, marked-unread) lives in Convex. Each write here carries an
@@ -13,10 +13,9 @@ import { conversationIdVia, watchCommandVia, type ResultCommandClient } from "./
  */
 
 type Row = FunctionReturnType<typeof commaApi.listConversations>["page"][number];
-type ConversationId = GenericId<"comma_conversations">;
 type Mutation = FunctionReference<"mutation">;
 
-export interface ConversationStateClient extends Pick<ResultCommandClient, "query" | "watchQuery"> {
+export interface ConversationStateClient extends Pick<ResultCommandClient, "watchQuery"> {
   mutation<Ref extends Mutation>(ref: Ref, args: FunctionArgs<Ref>, options?: { optimisticUpdate?: OptimisticUpdate<FunctionArgs<Ref>> }): Promise<FunctionReturnType<Ref>>;
 }
 
@@ -69,35 +68,29 @@ export const optimistic = {
   read: ((store, { conversationId, at }) => patchRow(store, conversationId, (row) => rowAfter.read(row, at))) satisfies OptimisticUpdate<FunctionArgs<typeof triageApi.markRead>>,
 };
 
-/** A conversation as a caller knows it: a listed row carries its id, a bare chat guid is looked up. */
-type ChatRef = { guid: string; conversationId?: string };
-
 /** Writes against one conversation. */
 export function conversationStateVia(client: ConversationStateClient) {
-  const id = async (chat: ChatRef) => (chat.conversationId as ConversationId | undefined) ?? await conversationIdVia(client, chat.guid);
   return {
-    async settle(chat: ChatRef, anchor: string | undefined): Promise<void> {
-      const conversationId = await id(chat);
+    async settle(conversationId: ConversationId, anchor: string | undefined): Promise<void> {
       await client.mutation(triageApi.settle, { conversationId, ...(anchor !== undefined ? { anchor } : {}) }, { optimisticUpdate: optimistic.settle });
     },
-    async unsettle(chat: ChatRef): Promise<void> {
-      await client.mutation(triageApi.unsettle, { conversationId: await id(chat) }, { optimisticUpdate: optimistic.unsettle });
+    async unsettle(conversationId: ConversationId): Promise<void> {
+      await client.mutation(triageApi.unsettle, { conversationId }, { optimisticUpdate: optimistic.unsettle });
     },
-    async settleAgents(chat: ChatRef): Promise<void> {
-      await client.mutation(agentApi.settleConversationAgents, { conversationId: await id(chat) }, { optimisticUpdate: optimistic.settleAgents });
+    async settleAgents(conversationId: ConversationId): Promise<void> {
+      await client.mutation(agentApi.settleConversationAgents, { conversationId }, { optimisticUpdate: optimistic.settleAgents });
     },
-    async reopenAgents(chat: ChatRef): Promise<void> {
-      await client.mutation(agentApi.reopenConversationAgents, { conversationId: await id(chat) });
+    async reopenAgents(conversationId: ConversationId): Promise<void> {
+      await client.mutation(agentApi.reopenConversationAgents, { conversationId });
     },
-    async pin(chat: ChatRef, pinned: boolean): Promise<void> {
-      await client.mutation(triageApi.setPinned, { conversationId: await id(chat), pinned }, { optimisticUpdate: optimistic.pin });
+    async pin(conversationId: ConversationId, pinned: boolean): Promise<void> {
+      await client.mutation(triageApi.setPinned, { conversationId, pinned }, { optimisticUpdate: optimistic.pin });
     },
-    async markUnread(chat: ChatRef): Promise<void> {
-      await client.mutation(triageApi.markUnread, { conversationId: await id(chat) }, { optimisticUpdate: optimistic.markUnread });
+    async markUnread(conversationId: ConversationId): Promise<void> {
+      await client.mutation(triageApi.markUnread, { conversationId }, { optimisticUpdate: optimistic.markUnread });
     },
     /** Reads in Convex at once; resolves when the Mini has sent iMessage's read receipt, and rejects if it could not. */
-    async read(chat: ChatRef): Promise<void> {
-      const conversationId = await id(chat);
+    async read(conversationId: ConversationId): Promise<void> {
       const receipt = await client.mutation(triageApi.markRead, { conversationId, at: Date.now() }, { optimisticUpdate: optimistic.read });
       await watchCommandVia(client, receipt, "markRead");
     },

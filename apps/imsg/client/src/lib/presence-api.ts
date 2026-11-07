@@ -1,20 +1,20 @@
 import { makeFunctionReference } from "convex/server";
-import type { GenericId, ObjectType } from "convex/values";
+import type { ObjectType } from "convex/values";
+import type { ConversationId } from "@shared/types";
 import { useConvexAuth, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import type { bridgeStateFields, presenceFields } from "../../../../../convex/schema/comma/validators";
-import { useConversationRef } from "@/hooks/use-chat-directory";
 import { runCommand } from "./convex-commands";
 
 export type BridgeState = ObjectType<typeof bridgeStateFields>;
 export type PeerPresence = Omit<ObjectType<typeof presenceFields>, "conversationId">;
 export const presenceApi = {
-  presence: makeFunctionReference<"query", { conversationId: GenericId<"comma_conversations"> }, PeerPresence | null>("comma/presence:presence"),
+  presence: makeFunctionReference<"query", { conversationId: ConversationId }, PeerPresence | null>("comma/presence:presence"),
   bridgeState: makeFunctionReference<"query", Record<string, never>, BridgeState | null>("comma/bridgeState:bridgeState"),
 };
 
-export async function setTyping(chatGuid: string, active: boolean): Promise<void> {
-  await runCommand(chatGuid, { kind: "typing", active, expiresAt: Date.now() + 5000 });
+export async function setTyping(conversationId: ConversationId, active: boolean): Promise<void> {
+  await runCommand(conversationId, { kind: "typing", active, expiresAt: Date.now() + 5000 });
 }
 
 export function useBridgeState(): BridgeState | null | undefined {
@@ -34,9 +34,8 @@ export function usePeerTypingValue(presence: PeerPresence | null | undefined): b
   return peerTyping && expiresAt !== undefined && expiresAt > Date.now() && expiredAt !== expiresAt;
 }
 
-export function usePeerTyping(chatGuid: string | null): boolean {
+export function usePeerTyping(conversationId: ConversationId | null): boolean {
   const { isAuthenticated } = useConvexAuth();
-  const { conversationId } = useConversationRef(isAuthenticated ? chatGuid : null);
-  const presence = useQuery(presenceApi.presence, conversationId ? { conversationId } : "skip");
+  const presence = useQuery(presenceApi.presence, isAuthenticated && conversationId ? { conversationId } : "skip");
   return usePeerTypingValue(presence);
 }

@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { FIXTURE_NOW } from "./world";
 import { expect, test } from "../fixtures/desk";
+import { fixtureConversationId } from "../../shared/fixture-ids";
 
 const evidence = process.env.VERIFY_IMSG_EVIDENCE!;
 const sends = ["burst one", "burst two", "burst three"];
@@ -66,7 +67,7 @@ test("send-burst: a burst keeps send order in the thread and the newest send in 
   await shoot("burst-queued");
   const stored = async () => {
     const response = await desk.request.post("/__fixture/convex", {
-      data: { name: "comma/queries:listMessages", args: { conversationId: desk.chats.needs, paginationOpts: { numItems: 10, cursor: null } } },
+      data: { name: "comma/queries:listMessages", args: { conversationId: fixtureConversationId(desk.chats.needs), paginationOpts: { numItems: 10, cursor: null } } },
     });
     return ((await response.json()) as { page: { guid: string; text: string }[] }).page;
   };

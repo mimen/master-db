@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
-import type { ChatSummary, Contact, Message } from "@shared/types";
+import type { SearchHit } from "@/lib/api";
+import type { ChatSummary, Contact, ConversationId } from "@shared/types";
 
 import { agentChatsSection, buildPaletteSections, flattenSections, matchScore, PALETTE_COMMANDS } from "./model";
 
+const cid = (id: string) => id as ConversationId;
+
 const chat = (over: Partial<ChatSummary>): ChatSummary => ({
-  guid: over.guid ?? "g",
+  conversationId: cid("g"),
+  imessage: { chatGuid: "iMessage;-;+15550000000" },
   displayName: over.displayName ?? "Someone",
   isGroup: false,
   known: true,
@@ -23,8 +27,8 @@ const chat = (over: Partial<ChatSummary>): ChatSummary => ({
   ...over,
 });
 
-const msg = (guid: string, text: string): Message =>
-  ({ guid, chatGuid: "c", text, dateCreated: 1, isFromMe: false }) as unknown as Message;
+const msg = (guid: string, text: string): SearchHit =>
+  ({ guid, chatGuid: "c", conversationId: cid("c"), text, dateCreated: 1, isFromMe: false }) as unknown as SearchHit;
 
 const contact = (name: string, address: string): Contact => ({ name, address });
 
@@ -39,9 +43,9 @@ describe("matchScore", () => {
 });
 
 describe("buildPaletteSections", () => {
-  const tysonDm = chat({ guid: "dm", displayName: "Tyson", participants: [{ address: "+1555", name: "Tyson" }] });
+  const tysonDm = chat({ conversationId: cid("dm"), displayName: "Tyson", participants: [{ address: "+1555", name: "Tyson" }] });
   const tysonGroup = chat({
-    guid: "grp",
+    conversationId: cid("grp"),
     displayName: "Umbrella Weekend",
     isGroup: true,
     participants: [
@@ -49,8 +53,8 @@ describe("buildPaletteSections", () => {
       { address: "+1666", name: "Wes" },
     ],
   });
-  const namedGroup = chat({ guid: "grp2", displayName: "Tyson Planning", isGroup: true, participants: [] });
-  const other = chat({ guid: "other", displayName: "Karely" });
+  const namedGroup = chat({ conversationId: cid("grp2"), displayName: "Tyson Planning", isGroup: true, participants: [] });
+  const other = chat({ conversationId: cid("other"), displayName: "Karely" });
 
   test("blank query lists every command then recent chats", () => {
     const sections = buildPaletteSections({
@@ -63,7 +67,7 @@ describe("buildPaletteSections", () => {
     expect(sections[0]?.title).toBe("Commands");
     expect(sections[0]?.items.length).toBe(PALETTE_COMMANDS.length);
     expect(sections[1]?.title).toBe("Recent");
-    expect(sections[1]?.items.map((i) => (i.kind === "conversation" ? i.chat.guid : "?"))).toEqual([
+    expect(sections[1]?.items.map((i) => (i.kind === "conversation" ? String(i.chat.conversationId) : "?"))).toEqual([
       "dm",
       "other",
     ]);
@@ -79,7 +83,7 @@ describe("buildPaletteSections", () => {
 
     expect(sections.map((s) => s.title)).toEqual(["People", "Messages", "Contacts"]);
     const flat = flattenSections(sections);
-    expect(flat[0]).toMatchObject({ kind: "conversation", chat: { guid: "dm" } });
+    expect(flat[0]).toMatchObject({ kind: "conversation", chat: { conversationId: "dm" } });
   });
 
   test("group name hits outrank member hits; member hit carries the matched name", () => {
@@ -91,8 +95,8 @@ describe("buildPaletteSections", () => {
     });
     const groups = sections.find((s) => s.title === "People")!.items;
 
-    expect(groups[0]).toMatchObject({ kind: "group", chat: { guid: "grp2" }, matchedMember: null });
-    expect(groups[1]).toMatchObject({ kind: "group", chat: { guid: "grp" }, matchedMember: "Tyson" });
+    expect(groups[0]).toMatchObject({ kind: "group", chat: { conversationId: "grp2" }, matchedMember: null });
+    expect(groups[1]).toMatchObject({ kind: "group", chat: { conversationId: "grp" }, matchedMember: "Tyson" });
   });
 
   test("commands appear only when matched, and match keywords", () => {
@@ -138,7 +142,7 @@ describe("buildPaletteSections", () => {
     // Identity Mirror's full term list (populated onto the chat's
     // searchNames by map.ts) still carries the old first/last name.
     const renamed = chat({
-      guid: "jimmy",
+      conversationId: cid("jimmy"),
       displayName: "Uncle Jimmy",
       participants: [{ address: "+16266522285", name: "Uncle Jimmy" }],
       searchNames: ["uncle jimmy", "jimmy", "sciandra", "jimmy sciandra"],
@@ -152,12 +156,12 @@ describe("buildPaletteSections", () => {
 
     const conversations = sections.find((s) => s.title === "People")?.items ?? [];
     expect(conversations).toHaveLength(1);
-    expect(conversations[0]).toMatchObject({ kind: "conversation", chat: { guid: "jimmy" } });
+    expect(conversations[0]).toMatchObject({ kind: "conversation", chat: { conversationId: "jimmy" } });
   });
 
   test("a renamed group surfaces via searchNames when the group name doesn't match", () => {
     const renamedGroup = chat({
-      guid: "jimmy-grp",
+      conversationId: cid("jimmy-grp"),
       displayName: "Family Chat",
       isGroup: true,
       participants: [{ address: "+16266522285", name: "Uncle Jimmy" }],
@@ -172,7 +176,7 @@ describe("buildPaletteSections", () => {
 
     const groups = sections.find((s) => s.title === "People")?.items ?? [];
     expect(groups).toHaveLength(1);
-    expect(groups[0]).toMatchObject({ kind: "group", chat: { guid: "jimmy-grp" } });
+    expect(groups[0]).toMatchObject({ kind: "group", chat: { conversationId: "jimmy-grp" } });
   });
 
   test("no searchNames on a chat doesn't throw and doesn't spuriously match", () => {
@@ -185,20 +189,20 @@ describe("buildPaletteSections", () => {
   describe("favorite ranking", () => {
     test("a favorited DM wins a same-tier tie over a non-favorite (substring match)", () => {
       // "arissa" is a mid-string substring (score 1) for both — same tier.
-      const favorite = chat({ guid: "fav", displayName: "Marissa Carlene", crm: { is_favorite: true } });
-      const plain = chat({ guid: "plain", displayName: "Klarissa" });
+      const favorite = chat({ conversationId: cid("fav"), displayName: "Marissa Carlene", crm: { is_favorite: true } });
+      const plain = chat({ conversationId: cid("plain"), displayName: "Klarissa" });
       const sections = buildPaletteSections({ query: "arissa", chats: [plain, favorite], messages: [], contacts: [] });
 
       const conversations = sections.find((s) => s.title === "People")!.items;
-      expect(conversations.map((i) => (i.kind === "conversation" ? i.chat.guid : "?"))).toEqual(["fav", "plain"]);
+      expect(conversations.map((i) => (i.kind === "conversation" ? String(i.chat.conversationId) : "?"))).toEqual(["fav", "plain"]);
     });
 
     test("a strong non-favorite match still beats a weak favorite match", () => {
       // "ma" is an exact word-prefix (score 2) for "Marissa" but only a
       // substring (score 1) for the favorited "Emma" — the favorite bonus
       // (0.5) must not close a full match-tier gap.
-      const strongMatch = chat({ guid: "marissa", displayName: "Marissa" });
-      const weakFavorite = chat({ guid: "emma", displayName: "Emma", crm: { is_favorite: true } });
+      const strongMatch = chat({ conversationId: cid("marissa"), displayName: "Marissa" });
+      const weakFavorite = chat({ conversationId: cid("emma"), displayName: "Emma", crm: { is_favorite: true } });
       const sections = buildPaletteSections({
         query: "ma",
         chats: [weakFavorite, strongMatch],
@@ -207,11 +211,11 @@ describe("buildPaletteSections", () => {
       });
 
       const conversations = sections.find((s) => s.title === "People")!.items;
-      expect(conversations.map((i) => (i.kind === "conversation" ? i.chat.guid : "?"))).toEqual(["marissa", "emma"]);
+      expect(conversations.map((i) => (i.kind === "conversation" ? String(i.chat.conversationId) : "?"))).toEqual(["marissa", "emma"]);
     });
 
     test("a favorite with zero match is never conjured into the results", () => {
-      const favoriteNoMatch = chat({ guid: "fav", displayName: "Nobody Related", crm: { is_favorite: true } });
+      const favoriteNoMatch = chat({ conversationId: cid("fav"), displayName: "Nobody Related", crm: { is_favorite: true } });
       const sections = buildPaletteSections({
         query: "zzz-nomatch",
         chats: [favoriteNoMatch],
@@ -226,14 +230,14 @@ describe("buildPaletteSections", () => {
       // Both hit an identical exact member-name match ("Tyson", score 3) and
       // neither group name matches — a genuine tie except for favorite status.
       const favGroup = chat({
-        guid: "fav-grp",
+        conversationId: cid("fav-grp"),
         displayName: "Umbrella Weekend",
         isGroup: true,
         participants: [{ address: "+1555", name: "Tyson" }],
         crm: { is_favorite: true },
       });
       const plainGroup = chat({
-        guid: "plain-grp",
+        conversationId: cid("plain-grp"),
         displayName: "Other Group",
         isGroup: true,
         participants: [{ address: "+1666", name: "Tyson" }],
@@ -246,7 +250,7 @@ describe("buildPaletteSections", () => {
       });
 
       const groups = sections.find((s) => s.title === "People")!.items;
-      expect(groups.map((i) => (i.kind === "group" ? i.chat.guid : "?"))).toEqual(["fav-grp", "plain-grp"]);
+      expect(groups.map((i) => (i.kind === "group" ? String(i.chat.conversationId) : "?"))).toEqual(["fav-grp", "plain-grp"]);
     });
 
     test("a favorited contact sorts before a non-favorite contact, preserving server order otherwise", () => {
@@ -277,11 +281,11 @@ describe("agentChatsSection", () => {
     ({ _id: id, conversationId, title, state: "idle", model: "m", effort: "high", createdAt: 1, updatedAt, ...over }) as Summary;
   const agent = { attention: "open", chatId: "top", title: "Top", openCount: 1, activityAt: 1 } as const;
   const chats = [
-    chat({ guid: "marcus", conversationId: "c-marcus", displayName: "Marcus Reed", agent }),
-    chat({ guid: "none", conversationId: "c-none", displayName: "Nobody" }),
-    chat({ guid: "riley", conversationId: "c-riley", displayName: "Riley Chen", agent }),
-    chat({ guid: "leah", conversationId: "c-leah", displayName: "Leah Kim", agent: { ...agent, openCount: 2 } }),
-    chat({ guid: "diego", conversationId: "c-diego", displayName: "Diego Santos", agent }),
+    chat({ conversationId: cid("c-marcus"), displayName: "Marcus Reed", agent }),
+    chat({ conversationId: cid("c-none"), displayName: "Nobody" }),
+    chat({ conversationId: cid("c-riley"), displayName: "Riley Chen", agent }),
+    chat({ conversationId: cid("c-leah"), displayName: "Leah Kim", agent: { ...agent, openCount: 2 } }),
+    chat({ conversationId: cid("c-diego"), displayName: "Diego Santos", agent }),
   ];
   const agentChats = [
     summary("set", "c-marcus", "Set length", 9),
@@ -292,19 +296,19 @@ describe("agentChatsSection", () => {
     summary("stray", "c-none", "A settle still in flight", 8),
   ];
   const listed = (section: ReturnType<typeof agentChatsSection>) =>
-    section?.items.map((item) => item.kind === "agent" ? `${item.chat.guid} ${item.agent.chatId} ${item.agent.attention}` : item.kind);
+    section?.items.map((item) => item.kind === "agent" ? `${item.chat.conversationId} ${item.agent.chatId} ${item.agent.attention}` : item.kind);
 
   test("lists every open agent chat, most urgent first, each opening its own chat", () => {
     const section = agentChatsSection(chats, agentChats, "");
     expect(section?.title).toBe("Agent chats");
     expect(listed(section)).toEqual([
-      "diego load needs_you", "riley guest ready", "leah rides ready", "marcus set open", "leah hotel open",
+      "c-diego load needs_you", "c-riley guest ready", "c-leah rides ready", "c-marcus set open", "c-leah hotel open",
     ]);
   });
 
   test("a typed query matches a chat's title or the person, and joins the typed sections", () => {
-    expect(listed(agentChatsSection(chats, agentChats, "leah"))).toEqual(["leah rides ready", "leah hotel open"]);
-    expect(listed(agentChatsSection(chats, agentChats, "hotel"))).toEqual(["leah hotel open"]);
+    expect(listed(agentChatsSection(chats, agentChats, "leah"))).toEqual(["c-leah rides ready", "c-leah hotel open"]);
+    expect(listed(agentChatsSection(chats, agentChats, "hotel"))).toEqual(["c-leah hotel open"]);
     expect(agentChatsSection(chats, agentChats, "zzz")).toBeNull();
     const sections = buildPaletteSections({ query: "load", chats, messages: [], contacts: [], agentChats });
     expect(sections.find((section) => section.title === "Agent chats")?.items.map((item) => item.key)).toEqual(["agent-load"]);

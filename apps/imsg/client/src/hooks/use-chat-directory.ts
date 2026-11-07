@@ -1,7 +1,7 @@
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, ConversationId } from "@shared/types";
 import { useQuery } from "convex/react";
-import type { GenericId } from "convex/values";
-import { createContext, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
+import { conversationToChat } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 
 /** The one conversation-list subscription, published by ChatDirectoryProvider in use-chats. */
@@ -12,22 +12,14 @@ export function useChatDirectory(): ChatSummary[] | null {
 }
 
 /**
- * The conversation id and newest-message time for a chat, from the directory when it has the
- * chat, so a thread's message queries start on the click instead of after a resolveChat round
- * trip. Falls back to resolveChat for chats outside the directory (deep links, new chats).
+ * A conversation from the directory when it lists it, so a thread's queries start on the click.
+ * One the directory has not loaded or does not list (a deep link, a new chat) comes from its own
+ * query: undefined while it loads, null when no such conversation exists.
  */
-export function useConversationRef(chatGuid: string | null): {
-  conversationId: GenericId<"comma_conversations"> | null;
-  lastMessageAt: number | null;
-  resolving: boolean;
-} {
-  const known = useChatDirectory()?.find((chat) => chat.guid === chatGuid);
-  const knownId = known?.conversationId as GenericId<"comma_conversations"> | undefined;
-  const resolved = useQuery(commaApi.resolveChat, chatGuid && !knownId ? { chatGuid } : "skip");
-  if (knownId) return { conversationId: knownId, lastMessageAt: known?.lastMessage?.dateCreated ?? null, resolving: false };
-  return {
-    conversationId: resolved?._id ?? null,
-    lastMessageAt: resolved?.lastMessage?.dateCreated ?? null,
-    resolving: chatGuid !== null && resolved === undefined,
-  };
+export function useConversation(conversationId: ConversationId | null): ChatSummary | null | undefined {
+  const known = useChatDirectory()?.find((chat) => chat.conversationId === conversationId);
+  const fetched = useQuery(commaApi.getConversation, conversationId && !known ? { conversationId } : "skip");
+  const loaded = useMemo(() => fetched && conversationToChat(fetched), [fetched]);
+  if (!conversationId) return null;
+  return known ?? loaded;
 }

@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "../fixtures/desk";
+import { fixtureConversationId } from "../../shared/fixture-ids";
 
 const NINA_ADDRESS = "+16195550201";
 const NINA = `iMessage;-;${NINA_ADDRESS}`;
@@ -10,7 +11,7 @@ async function holdThreadFetches(page: Page, chatGuid: string): Promise<() => vo
   const gate = new Promise<void>((resolve) => { release = resolve; });
   await page.route("**/__fixture/convex", async (route) => {
     const body = route.request().postDataJSON() as { name: string; args: { conversationId?: string } };
-    if (body.name !== "comma/queries:listMessages" || body.args.conversationId !== chatGuid) {
+    if (body.name !== "comma/queries:listMessages" || body.args.conversationId !== fixtureConversationId(chatGuid)) {
       return route.continue();
     }
     await gate;
@@ -63,7 +64,7 @@ test("Convex updates edit and retract a confirmed send without reviving its opti
   let guid = "";
   await expect.poll(async () => {
     const response = await desk.request.post("/__fixture/convex", {
-      data: { name: "comma/queries:listMessages", args: { conversationId: desk.chats.needs, paginationOpts: { numItems: 100, cursor: null } } },
+      data: { name: "comma/queries:listMessages", args: { conversationId: fixtureConversationId(desk.chats.needs), paginationOpts: { numItems: 100, cursor: null } } },
     });
     const { page: messages } = await response.json() as { page: Array<{ guid: string; text: string }> };
     guid = messages.find((message) => message.text === "A live query send")?.guid ?? "";
@@ -71,7 +72,7 @@ test("Convex updates edit and retract a confirmed send without reviving its opti
   }).toMatch(/^out-/);
   const command = async (payload: { kind: string; messageGuid: string; text?: string; reaction?: string; remove?: boolean }) => {
     const result = await desk.request.post("/__fixture/convex", {
-      data: { name: "comma/outbox:enqueue", args: { conversationId: desk.chats.needs,
+      data: { name: "comma/outbox:enqueue", args: { conversationId: fixtureConversationId(desk.chats.needs),
         clientKey: `live-${payload.kind}`, payload } },
     });
     expect(result.ok()).toBe(true);

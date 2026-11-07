@@ -94,7 +94,7 @@ The `desk` fixture gives every drive four things:
 | `coldSms` | An SMS chat |
 | `unknown` | An unknown sender |
 
-**Reading state as the client does.** POST `{ name, args }` to `/__fixture/convex` with the same Convex function the client calls. For example, `comma/queries:listMessages` with `{ conversationId, paginationOpts }`, or `comma/outbox:getCommand` with `{ commandId }`.
+**Reading state as the client does.** POST `{ name, args }` to `/__fixture/convex` with the same Convex function the client calls. For example, `comma/queries:listMessages` with `{ conversationId, paginationOpts }`, or `comma/outbox:getCommand` with `{ commandId }`. A conversation id is not a chat GUID. Build one with `fixtureConversationId(desk.chats.needs)` from `apps/imsg/shared/fixture-ids.ts` (import `"../../shared/fixture-ids"` from a staged drive), and expect it wherever a request or result carries a `conversationId`. `/chat/<guid>` URLs redirect to `/c/<conversationId>`.
 
 **Fixture time.** The server clock is pinned to `FIXTURE_NOW` (exported from `e2e/fixture/world.ts`). If a feature cares whether a message counts as fresh, shift the page clock with `page.addInitScript` the way `e2e/fixture/send.playwright.ts` does.
 

@@ -1,5 +1,5 @@
 import type { JumpTarget } from "@/hooks/use-messages";
-import type { StateFilter, TypeFilter } from "@shared/types";
+import type { ConversationId, StateFilter, TypeFilter } from "@shared/types";
 
 export type Result<Value, Error> =
   | { readonly ok: true; readonly value: Value }
@@ -16,10 +16,9 @@ export type DesktopWorkspaceProvenance =
 export type SelectionIntent = "reply" | "preview";
 
 export interface DesktopChatSelection {
-  readonly guid: string;
+  readonly conversationId: ConversationId;
   readonly name?: string;
   readonly isGroup?: boolean;
-  readonly participantCount?: number;
   readonly jumpTarget?: JumpTarget;
   readonly intent: SelectionIntent;
 }
@@ -39,13 +38,14 @@ export type DesktopUtility =
   | {
       readonly kind: "chat-info";
       readonly workspace: "messages";
-      readonly guid: string;
+      readonly conversationId: ConversationId;
     }
   | {
       readonly kind: "person";
       readonly workspace: DesktopWorkspaceId;
       readonly target: DesktopPersonSelection;
-      readonly backGuid?: string;
+      /** The conversation the person pane was opened from, which its back button returns to. */
+      readonly backConversation?: ConversationId;
     }
   | {
       readonly kind: "scheduled";
@@ -65,7 +65,7 @@ export type DesktopRouteOverlay =
   | {
       readonly kind: "search";
       readonly query: string;
-      readonly chatGuid?: string;
+      readonly conversationId?: ConversationId;
       readonly chatName?: string;
     }
   | {
@@ -106,18 +106,17 @@ export type DesktopRouteProjection =
     });
 
 export interface DesktopRouteParams {
-  readonly guid?: string | readonly string[];
+  readonly conversationId?: string | readonly string[];
+  readonly conversation?: string | readonly string[];
   readonly name?: string | readonly string[];
   readonly isGroup?: string | readonly string[];
-  readonly count?: string | readonly string[];
   readonly targetGuid?: string | readonly string[];
   readonly targetDate?: string | readonly string[];
   readonly address?: string | readonly string[];
   readonly personId?: string | readonly string[];
   readonly workspace?: string | readonly string[];
-  readonly backGuid?: string | readonly string[];
+  readonly backConversation?: string | readonly string[];
   readonly query?: string | readonly string[];
-  readonly chat?: string | readonly string[];
 }
 
 export type DesktopRouteError =
@@ -128,12 +127,12 @@ export type DesktopRouteError =
   | {
       readonly kind: "missing-parameter";
       readonly pathname: string;
-      readonly parameter: "guid" | "address";
+      readonly parameter: "conversation" | "address";
     }
   | {
       readonly kind: "invalid-parameter";
       readonly pathname: string;
-      readonly parameter: "workspace" | "count" | "targetDate";
+      readonly parameter: "workspace" | "targetDate";
       readonly value: string;
     };
 

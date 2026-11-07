@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import type { ChatSummary } from "@shared/types";
 import { contactService, splitPrefix } from "./contact-service";
 
-const chat = (guid: string, address: string, isGroup = false): ChatSummary =>
-  ({ guid, isGroup, participants: [{ address, name: null }] }) as unknown as ChatSummary;
+const chat = (chatGuid: string, address: string, isGroup = false): ChatSummary =>
+  ({ conversationId: `conv-${chatGuid}`, imessage: { chatGuid }, isGroup, participants: [{ address, name: null }] }) as unknown as ChatSummary;
 
 test("the service comes from the existing one-to-one chat with that handle", () => {
   const chats = [chat("SMS;-;+16195550103", "+16195550103"), chat("iMessage;-;+16195550101", "+16195550101")];

@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
-import type { ChatSummary, Message } from "@shared/types";
+import type { ChatSummary, ConversationId, Message } from "@shared/types";
 import { createInboundReadObserver, createReceiveSoundObserver } from "./message-observers";
 
-const chat = (guid: string, dateCreated: number, isFromMe = false, chatGuid = "chat") => ({
-  guid: chatGuid,
+const cid = (id: string) => id as ConversationId;
+const chat = (guid: string, dateCreated: number, isFromMe = false, conversationId = "chat") => ({
+  conversationId: cid(conversationId),
   lastMessage: { guid, dateCreated, isFromMe, text: guid, senderName: null, hasAttachments: false },
-}) satisfies Pick<ChatSummary, "guid" | "lastMessage">;
+}) satisfies Pick<ChatSummary, "conversationId" | "lastMessage">;
 const message = (guid: string, isFromMe = false, dateCreated = 0) => ({ guid, isFromMe, dateCreated, isGroupEvent: false, retracted: false }) as Message;
 
 test("initial pages, new pagination pages and backfill are silent", () => {
@@ -38,27 +39,27 @@ test("reconnection suppresses unseen catch-up then resumes live sound", () => {
 
 test("mounted reads follow new inbound GUIDs and ignore edits and outbound", () => {
   const reads = createInboundReadObserver();
-  expect(reads.observe("chat", [], true)).toBe(false);
-  expect(reads.observe("chat", [message("initial")], true)).toBe(true);
-  expect(reads.observe("chat", [message("initial"), message("new")], true)).toBe(true);
-  expect(reads.observe("chat", [message("initial"), message("new")], true)).toBe(false);
-  expect(reads.observe("chat", [message("outbound", true)], true)).toBe(false);
-  expect(reads.observe("other", [message("other-initial")], true)).toBe(true);
+  expect(reads.observe(cid("chat"), [], true)).toBe(false);
+  expect(reads.observe(cid("chat"), [message("initial")], true)).toBe(true);
+  expect(reads.observe(cid("chat"), [message("initial"), message("new")], true)).toBe(true);
+  expect(reads.observe(cid("chat"), [message("initial"), message("new")], true)).toBe(false);
+  expect(reads.observe(cid("chat"), [message("outbound", true)], true)).toBe(false);
+  expect(reads.observe(cid("other"), [message("other-initial")], true)).toBe(true);
 });
 
 test("an older page loading into the thread does not mark it read again", () => {
   const reads = createInboundReadObserver();
-  expect(reads.observe("chat", [message("newest", false, 500)], true)).toBe(true);
-  expect(reads.observe("chat", [message("older", false, 100), message("newest", false, 500)], true)).toBe(false);
-  expect(reads.observe("chat", [message("older", false, 100), message("newest", false, 500), message("arrived", false, 900)], true)).toBe(true);
+  expect(reads.observe(cid("chat"), [message("newest", false, 500)], true)).toBe(true);
+  expect(reads.observe(cid("chat"), [message("older", false, 100), message("newest", false, 500)], true)).toBe(false);
+  expect(reads.observe(cid("chat"), [message("older", false, 100), message("newest", false, 500), message("arrived", false, 900)], true)).toBe(true);
 });
 
 test("preview threads do not consume inbound GUIDs; retractions do not mark read", () => {
   const reads = createInboundReadObserver();
-  reads.observe("chat", [message("initial")], true);
-  expect(reads.observe("chat", [message("new")], false)).toBe(false);
-  expect(reads.observe("chat", [message("new")], true)).toBe(true);
-  expect(reads.observe("chat", [{ ...message("retracted"), retracted: true }], true)).toBe(false);
+  reads.observe(cid("chat"), [message("initial")], true);
+  expect(reads.observe(cid("chat"), [message("new")], false)).toBe(false);
+  expect(reads.observe(cid("chat"), [message("new")], true)).toBe(true);
+  expect(reads.observe(cid("chat"), [{ ...message("retracted"), retracted: true }], true)).toBe(false);
 });
 
 test("a message stamped ahead of this device's clock still sounds", () => {

@@ -1,4 +1,7 @@
 import { expect, mock, test } from "bun:test";
+import type { ConversationId } from "@shared/types";
+
+const cid = (id: string) => id as ConversationId;
 
 if (process.env.COMMA_PANE_CHAT_TEST_CHILD !== "1") {
   test("the pane picks, holds and switches its chat, and marks finished turns seen while watched", async () => {
@@ -31,8 +34,8 @@ if (process.env.COMMA_PANE_CHAT_TEST_CHILD !== "1") {
   const summary = (id: string, state: Summary["state"], extra: Partial<Summary> = {}) =>
     ({ _id: id, state, updatedAt: 1, ...extra }) as Summary;
   let shown: unknown;
-  function Probe({ guid, chats, requested }: { guid: string; chats: readonly Summary[] | undefined; requested?: string }) {
-    shown = usePaneSelection(guid, requested, chats)[0];
+  function Probe({ conversationId, chats, requested }: { conversationId: ConversationId; chats: readonly Summary[] | undefined; requested?: string }) {
+    shown = usePaneSelection(conversationId, requested, chats)[0];
     return null;
   }
   function Watcher({ chat }: { chat: Summary }) {
@@ -48,38 +51,38 @@ if (process.env.COMMA_PANE_CHAT_TEST_CHILD !== "1") {
   const asking = summary("asking", "waiting_input");
 
   test("a chat requested before the pane mounts beats the most urgent one", async () => {
-    openAgentPane("a", "ready");
-    await render(createElement(Probe, { key: "a", guid: "a", chats: [asking, ready] }));
+    openAgentPane(cid("a"), "ready");
+    await render(createElement(Probe, { key: "a", conversationId: cid("a"), chats: [asking, ready] }));
     expect(shown).toEqual({ kind: "chat", chatId: "ready" });
   });
 
   test("the phone route's param is the request", async () => {
-    await render(createElement(Probe, { key: "phone", guid: "a", chats: [asking, ready], requested: "ready" }));
+    await render(createElement(Probe, { key: "phone", conversationId: cid("a"), chats: [asking, ready], requested: "ready" }));
     expect(shown).toEqual({ kind: "chat", chatId: "ready" });
   });
 
   test("with no request the most urgent open chat wins once the list loads, and holds after it stops being the most urgent", async () => {
-    await render(createElement(Probe, { key: "b", guid: "b", chats: undefined }));
+    await render(createElement(Probe, { key: "b", conversationId: cid("b"), chats: undefined }));
     expect(shown).toBeUndefined();
-    await render(createElement(Probe, { key: "b", guid: "b", chats: [ready, asking] }));
+    await render(createElement(Probe, { key: "b", conversationId: cid("b"), chats: [ready, asking] }));
     expect(shown).toEqual({ kind: "chat", chatId: "asking" });
-    await render(createElement(Probe, { key: "b", guid: "b", chats: [ready, { ...asking, state: "idle" }] }));
+    await render(createElement(Probe, { key: "b", conversationId: cid("b"), chats: [ready, { ...asking, state: "idle" }] }));
     expect(shown).toEqual({ kind: "chat", chatId: "asking" });
   });
 
   test("no open chat means a new chat", async () => {
-    await render(createElement(Probe, { key: "c", guid: "c", chats: [summary("old", "idle", { settledAt: 3 })] }));
+    await render(createElement(Probe, { key: "c", conversationId: cid("c"), chats: [summary("old", "idle", { settledAt: 3 })] }));
     expect(shown).toEqual({ kind: "new" });
   });
 
   test("a request for the open conversation switches the mounted pane; one for another conversation waits for its pane", async () => {
-    await render(createElement(Probe, { key: "d", guid: "d", chats: [asking, ready] }));
+    await render(createElement(Probe, { key: "d", conversationId: cid("d"), chats: [asking, ready] }));
     expect(shown).toEqual({ kind: "chat", chatId: "asking" });
-    await act(async () => openAgentPane("d", "ready"));
+    await act(async () => openAgentPane(cid("d"), "ready"));
     expect(shown).toEqual({ kind: "chat", chatId: "ready" });
-    await act(async () => openAgentPane("e", "asking"));
+    await act(async () => openAgentPane(cid("e"), "asking"));
     expect(shown).toEqual({ kind: "chat", chatId: "ready" });
-    expect(takeRequestedAgentChat("e")).toBe("asking");
+    expect(takeRequestedAgentChat(cid("e"))).toBe("asking");
   });
 
   test("a finished turn is marked seen once while the window is watched, and waits while it is not", async () => {

@@ -27,8 +27,8 @@ export const renderCounter = (): void => {
       return item && "groupStart" in item ? "cells" : null;
     }
     if ("onLongPress" in props && "groupStart" in props && "message" in props) return "bubbles";
-    if ("onOptimistic" in props && "chatGuid" in props) return "composer";
-    if ("jumpTarget" in props && "chatGuid" in props && "isGroup" in props) return "threadView";
+    if ("onOptimistic" in props && "chat" in props) return "composer";
+    if ("jumpTarget" in props && "conversationId" in props && "isGroup" in props) return "threadView";
     return null;
   };
   const walk = (next: Fiber, prev: Fiber | null): void => {

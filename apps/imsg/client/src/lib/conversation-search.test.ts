@@ -7,10 +7,13 @@ import {
   usableDeepMatches,
   type ConversationSearchState,
 } from "./conversation-search";
+import type { ConversationId } from "@shared/types";
 
-const ready = (query: string, guids: string[]): ConversationSearchState => ({
+const ids = (...values: string[]) => new Set(values as ConversationId[]);
+
+const ready = (query: string, conversations: string[]): ConversationSearchState => ({
   query,
-  deepSearch: { kind: "ready", query, guids: new Set(guids) },
+  deepSearch: { kind: "ready", query, conversations: ids(...conversations) },
 });
 
 describe("conversationSearchReducer", () => {
@@ -31,7 +34,7 @@ describe("conversationSearchReducer", () => {
       value: "pizza ",
     });
 
-    expect(usableDeepMatches(next)).toEqual(new Set(["a"]));
+    expect(usableDeepMatches(next)).toEqual(ids("a"));
   });
 
   test("a late response for an old query is dropped", () => {
@@ -42,7 +45,7 @@ describe("conversationSearchReducer", () => {
     const stale = conversationSearchReducer(typing, {
       type: "deep-ready",
       query: "pizza",
-      guids: new Set(["a"]),
+      conversations: ids("a"),
     });
 
     expect(stale.deepSearch).toEqual({ kind: "idle" });
@@ -57,10 +60,10 @@ describe("conversationSearchReducer", () => {
     const landed = conversationSearchReducer(typing, {
       type: "deep-ready",
       query: "zebra",
-      guids: new Set(["z1", "z2"]),
+      conversations: ids("z1", "z2"),
     });
 
-    expect(usableDeepMatches(landed)).toEqual(new Set(["z1", "z2"]));
+    expect(usableDeepMatches(landed)).toEqual(ids("z1", "z2"));
   });
 
   test("clear resets everything", () => {

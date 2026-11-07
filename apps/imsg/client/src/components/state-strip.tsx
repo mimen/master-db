@@ -1,13 +1,13 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { mostUrgent } from "@shared/agent-attention";
-import type { Message } from "@shared/types";
+import type { ConversationId, Message } from "@shared/types";
 import { useContext, useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 
 import { DesktopShellContext } from "@/components/desktop-shell-context";
 import { useAgentChats, useAgentEnabled } from "@/hooks/use-agent";
-import { useChatDirectory, useConversationRef } from "@/hooks/use-chat-directory";
+import { useConversation } from "@/hooks/use-chat-directory";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { useToday } from "@/hooks/use-today";
@@ -53,25 +53,24 @@ const AGENT_CHIP: Record<AgentStripState, { readonly copy: string; readonly icon
 interface AgentStrip { readonly state: AgentStripState; readonly chatId: string }
 
 /** While the Agent pane is closed, what the conversation's most urgent open chat wants. */
-function useAgentStrip(chatGuid: string): AgentStrip | null {
+function useAgentStrip(conversationId: ConversationId): AgentStrip | null {
   const enabled = useAgentEnabled();
   const shell = useContext(DesktopShellContext);
   const paneOpen = shell?.state.utility?.kind === "agent";
-  const { conversationId } = useConversationRef(chatGuid);
   // Subscribed while the pane is open too (the pane holds the same query), so closing it shows the chip at once.
   const chat = mostUrgent(useAgentChats(conversationId, enabled) ?? []);
   const state = enabled && !paneOpen ? agentStripState(chat) : null;
   return state && chat ? { state, chatId: chat._id } : null;
 }
 
-function AgentChip({ chatGuid, agent, colors }: { readonly chatGuid: string; readonly agent: AgentStrip; readonly colors: ReturnType<typeof useTheme> }) {
+function AgentChip({ conversationId, agent, colors }: { readonly conversationId: ConversationId; readonly agent: AgentStrip; readonly colors: ReturnType<typeof useTheme> }) {
   const { copy, icon } = AGENT_CHIP[agent.state];
   return (
     <Pressable
       testID="agent-strip"
       accessibilityRole="button"
       accessibilityLabel={`${copy}. Open the agent`}
-      onPress={() => openAgentPane(chatGuid, agent.chatId)}
+      onPress={() => openAgentPane(conversationId, agent.chatId)}
       hitSlop={4}
       style={({ hovered, pressed }) => [styles.action, (hovered || pressed) && { backgroundColor: colors.rowHover }]}
     >
@@ -86,27 +85,27 @@ function AgentChip({ chatGuid, agent, colors }: { readonly chatGuid: string; rea
  * whose turn it is and for how long, with Settle or Un-settle beside it.
  */
 export function StateStrip({
-  chatGuid,
+  conversationId,
   messages,
   historyComplete,
 }: {
-  readonly chatGuid: string;
+  readonly conversationId: ConversationId;
   readonly messages: readonly Message[];
   readonly historyComplete: boolean;
 }) {
-  const chat = useChatDirectory()?.find((c) => c.guid === chatGuid);
+  const chat = useConversation(conversationId);
   const colors = useTheme();
   const { wide } = useLayoutMode();
   const now = useMinuteClock();
   const [actionHovered, setActionHovered] = useState(false);
-  const agent = useAgentStrip(chatGuid);
+  const agent = useAgentStrip(conversationId);
   const { view } = useToday();
   if (!chat) return null;
   const place = classifyToday(view, chat);
   const today = place.at === "ranked" ? { rank: place.rank, reason: place.reason } : null;
   const copy = stripCopy({ chat, messages, historyComplete, now, compact: !wide, today });
   if (!copy && !agent) return null;
-  const agentChip = agent ? <AgentChip chatGuid={chatGuid} agent={agent} colors={colors} /> : null;
+  const agentChip = agent ? <AgentChip conversationId={conversationId} agent={agent} colors={colors} /> : null;
   if (!copy) {
     return (
       <View testID="state-strip" style={[styles.strip, { backgroundColor: colors.strip, borderColor: colors.divider }]}>

@@ -16,7 +16,7 @@ export function conversationToChat(
 ): ChatSummary {
   return {
     conversationId: row._id,
-    guid: row.primaryChatGuid,
+    imessage: { chatGuid: row.primaryChatGuid },
     displayName: row.displayName,
     isGroup: row.isGroup,
     hasGroupPhoto: row.hasGroupPhoto,
@@ -39,9 +39,9 @@ type ConvexDraftListItem = FunctionReturnType<typeof commaApi.listDrafts>[number
 /** Marks each conversation that has something in its composer, for the Drafts lens and its rows. */
 export function withDrafts(chats: ChatSummary[], drafts: readonly ConvexDraftListItem[]): ChatSummary[] {
   if (drafts.length === 0) return chats;
-  const byConversation = new Map(drafts.map(({ conversationId, ...draft }) => [conversationId as string, draft]));
+  const byConversation = new Map(drafts.map(({ conversationId, ...draft }) => [conversationId, draft]));
   return chats.map((chat) => {
-    const draft = chat.conversationId ? byConversation.get(chat.conversationId) : undefined;
+    const draft = byConversation.get(chat.conversationId);
     return draft ? { ...chat, draft } : chat;
   });
 }
@@ -65,9 +65,9 @@ export function withAgents(chats: ChatSummary[], summaries: readonly AgentChatSu
   for (const summary of summaries) {
     if (summary.settledAt === undefined) open.set(summary.conversationId, [...(open.get(summary.conversationId) ?? []), summary]);
   }
-  const before = new Map(previous.map((row) => [row.guid, row]));
+  const before = new Map(previous.map((row) => [row.conversationId, row]));
   const joined = chats.map((chat) => {
-    const mine = chat.conversationId ? open.get(chat.conversationId) : undefined;
+    const mine = open.get(chat.conversationId);
     const top = mine && mostUrgent(mine);
     if (!mine || !top) return chat;
     const attention = agentAttention(top);
@@ -75,7 +75,7 @@ export function withAgents(chats: ChatSummary[], summaries: readonly AgentChatSu
     const agent: RowAgent = {
       attention, chatId: top._id, title: top.title, ...(top.preview ? { preview: top.preview } : {}), openCount: mine.length, activityAt: top.updatedAt,
     };
-    const last = before.get(chat.guid);
+    const last = before.get(chat.conversationId);
     const keys = Object.keys(chat) as (keyof ChatSummary)[];
     const unchanged = last !== undefined && sameAgent(last.agent, agent) &&
       Object.keys(last).length === keys.length + 1 && keys.every((key) => last[key] === chat[key]);
@@ -152,8 +152,9 @@ export function attachmentSource(attachment: AttachmentSummary, fallback: string
 export function scheduledToScheduled(row: ConvexScheduled, chats: readonly ChatSummary[]): ScheduledMessage {
   return {
     id: row.bbId,
+    ...(row.conversationId ? { conversationId: row.conversationId } : {}),
     chatGuid: row.chatGuid,
-    chatName: chats.find((c) => (row.conversationId && c.conversationId === row.conversationId) || c.guid === row.chatGuid)?.displayName ?? row.chatGuid,
+    chatName: chats.find((c) => c.conversationId === row.conversationId)?.displayName ?? row.chatGuid,
     text: row.text,
     sendAt: row.sendAt,
     status: row.status,

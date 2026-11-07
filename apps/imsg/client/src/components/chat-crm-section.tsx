@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ConversationId } from "@shared/types";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import {
@@ -20,22 +21,22 @@ import { Dropdown } from "./ui/dropdown";
 import { useTheme } from "@/hooks/use-theme";
 
 export interface ChatCrmSectionProps {
-  chatGuid: string;
+  conversationId: ConversationId;
 }
 
 
 /**
  * The private CRM row for a GROUP chat — the chat-side twin of
- * PersonCrmSection, same layout/behavior, targeting `chatGuid` instead of a
+ * PersonCrmSection, same layout/behavior, targeting `conversationId` instead of a
  * `personId`. GROUPS only: a DM has no CRM of its own (it inherits the
  * linked person's — see server/map.ts's mapChat and chat-info-content.tsx,
  * which renders a read-only inherited view for DMs instead of this
  * component). Reads live via `useChatCrm` (direct Convex query, not the
  * imsg server's REST chat list) so edits reflect immediately.
  */
-export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
+export function ChatCrmSection({ conversationId }: ChatCrmSectionProps) {
   const theme = useTheme();
-  const crm = useChatCrm(chatGuid);
+  const crm = useChatCrm(conversationId);
   const setFavorite = useSetChatFavorite();
   const setPriority = useSetChatPriority();
   const addTag = useAddChatTag();
@@ -51,11 +52,11 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
   const priority = crm.priority;
 
   const toggleFavorite = () => {
-    setFavorite({ chatGuid, is_favorite: !isFavorite }).catch(() => showToast("Couldn't update the favorite. Try again."));
+    setFavorite({ conversationId, is_favorite: !isFavorite }).catch(() => showToast("Couldn't update the favorite. Try again."));
   };
 
   const choosePriority = (value: Priority) => {
-    setPriority({ chatGuid, priority: value === NO_PRIORITY ? null : value }).catch(() => showToast("Couldn't update the priority. Try again."));
+    setPriority({ conversationId, priority: value === NO_PRIORITY ? null : value }).catch(() => showToast("Couldn't update the priority. Try again."));
   };
 
   const submitTag = async () => {
@@ -63,7 +64,7 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
     if (!tag) return;
     setAddingTag(true);
     try {
-      await addTag({ chatGuid, tag });
+      await addTag({ conversationId, tag });
       setTagInput("");
     } catch {
       showToast("Couldn't add the tag. Try again.");
@@ -116,7 +117,7 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
                 accessibilityRole="button"
                 accessibilityLabel={`Remove tag ${tag}`}
                 hitSlop={6}
-                onPress={() => removeTag({ chatGuid, tag }).catch(() => showToast("Couldn't remove the tag. Try again."))}
+                onPress={() => removeTag({ conversationId, tag }).catch(() => showToast("Couldn't remove the tag. Try again."))}
               >
                 {({ hovered, pressed }) => <Ionicons name="close" size={12} color={hovered || pressed ? theme.text : theme.textTertiary} />}
               </Pressable>
@@ -147,7 +148,7 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
         <CrmEventsEditor
           events={crm.events}
           onLink={async (record) =>
-            void (await linkEvent({ chatGuid, airtable_event_id: record.record_id, event_name: record.name }))
+            void (await linkEvent({ conversationId, airtable_event_id: record.record_id, event_name: record.name }))
           }
           onUnlink={(linkId) => unlinkEvent({ linkId }).catch(() => showToast("Couldn't unlink the event. Try again."))}
         />

@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 
+import type { ConversationId } from "@shared/types";
 import { resetTriageWritesForTests, runExclusiveTriageWrite } from "./triage-writes";
+
+const CHAT_A = "conv-a" as ConversationId;
+const CHAT_B = "conv-b" as ConversationId;
+const CHAT_C = "conv-c" as ConversationId;
 
 /** A write the test resolves by hand, standing in for the dismiss round trip. */
 function deferred(): { promise: Promise<void>; resolve: () => void; reject: (error: Error) => void } {
@@ -20,11 +25,11 @@ describe("per-conversation triage write exclusion", () => {
     const writes: string[] = [];
     const first = deferred();
 
-    const firstPress = runExclusiveTriageWrite("chat-a", () => {
+    const firstPress = runExclusiveTriageWrite(CHAT_A, () => {
       writes.push("dismiss");
       return first.promise;
     });
-    const secondPress = runExclusiveTriageWrite("chat-a", () => {
+    const secondPress = runExclusiveTriageWrite(CHAT_A, () => {
       writes.push("undismiss");
       return Promise.resolve();
     });
@@ -43,14 +48,14 @@ describe("per-conversation triage write exclusion", () => {
     const writes: string[] = [];
     const first = deferred();
 
-    const firstPress = runExclusiveTriageWrite("chat-a", () => {
+    const firstPress = runExclusiveTriageWrite(CHAT_A, () => {
       writes.push("dismiss");
       return first.promise;
     });
     first.resolve();
     expect(await firstPress).toBe("done");
 
-    const secondPress = runExclusiveTriageWrite("chat-a", () => {
+    const secondPress = runExclusiveTriageWrite(CHAT_A, () => {
       writes.push("undismiss");
       return Promise.resolve();
     });
@@ -63,7 +68,7 @@ describe("per-conversation triage write exclusion", () => {
     const writes: string[] = [];
     const failing = deferred();
 
-    const firstPress = runExclusiveTriageWrite("chat-a", () => {
+    const firstPress = runExclusiveTriageWrite(CHAT_A, () => {
       writes.push("dismiss");
       return failing.promise;
     });
@@ -72,7 +77,7 @@ describe("per-conversation triage write exclusion", () => {
       "409: anchor moved",
     );
 
-    const retry = runExclusiveTriageWrite("chat-a", () => {
+    const retry = runExclusiveTriageWrite(CHAT_A, () => {
       writes.push("dismiss-retry");
       return Promise.resolve();
     });
@@ -85,15 +90,15 @@ describe("per-conversation triage write exclusion", () => {
     const writes: string[] = [];
     const held = deferred();
 
-    const heldPress = runExclusiveTriageWrite("chat-a", () => {
+    const heldPress = runExclusiveTriageWrite(CHAT_A, () => {
       writes.push("a");
       return held.promise;
     });
-    const otherPress = runExclusiveTriageWrite("chat-b", () => {
+    const otherPress = runExclusiveTriageWrite(CHAT_B, () => {
       writes.push("b");
       return Promise.resolve();
     });
-    const thirdPress = runExclusiveTriageWrite("chat-c", () => {
+    const thirdPress = runExclusiveTriageWrite(CHAT_C, () => {
       writes.push("c");
       return Promise.resolve();
     });

@@ -11,7 +11,6 @@ export type GalleryAttachment = GalleryItem & AttachmentMedia;
 export const mediaApi = {
   gallery: makeFunctionReference<"query", { conversationId: GenericId<"comma_conversations">; limit?: number }, GalleryAttachment[]>("comma/media:gallery"),
   attachmentMedia: makeFunctionReference<"query", { guid: string }, AttachmentMedia | null>("comma/media:attachmentMedia"),
-  attachmentChatGuid: makeFunctionReference<"query", { guid: string }, string | null>("comma/media:attachmentChatGuid"),
   transcriptState: makeFunctionReference<"query", { attachmentGuid: string }, TranscriptState>("comma/media:transcriptState"),
   generateAttachmentUploadUrl: makeFunctionReference<"mutation", Record<string, never>, string>("comma/uploads:generateAttachmentUploadUrl"),
   finalizeUpload: makeFunctionReference<"mutation", { storageId: GenericId<"_storage">; filename: string; mimeType: string }, GenericId<"comma_uploads">>("comma/uploads:finalizeUpload"),

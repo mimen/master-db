@@ -26,6 +26,7 @@ import { failedSend, tempMessage } from "@/lib/local-sends";
 import { onOpenThreadSearch } from "@/lib/thread-search";
 import { readChat } from "@/lib/chat-actions";
 import { useAgentEnabled } from "@/hooks/use-agent";
+import { useConversation } from "@/hooks/use-chat-directory";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { openAgentPane } from "@/lib/agent-pane";
 import { openChatInfo } from "@/lib/chat-info";
@@ -37,7 +38,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
 import { CardShadow, HOVER_DIM, Radii } from "@/constants/theme";
 import { showToast, ToastAnchor } from "@/lib/toast";
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, ConversationId } from "@shared/types";
 import { useAiStatus } from "@/hooks/use-ai";
 import { Bubble, TAPBACK_EMOJI } from "./bubble";
 import { TAPBACKS } from "@/lib/tapbacks";
@@ -101,7 +102,7 @@ function keepRow(previous: Row | undefined, next: Row): Row {
 }
 
 interface ThreadViewProps {
-  chatGuid: string;
+  conversationId: ConversationId;
   isGroup: boolean;
   jumpTarget?: JumpTarget | null;
   /**
@@ -123,7 +124,7 @@ interface ThreadViewProps {
 }
 
 export function ThreadView({
-  chatGuid,
+  conversationId,
   isGroup,
   jumpTarget = null,
   headerChat = null,
@@ -141,8 +142,12 @@ export function ThreadView({
   const paneRef = useRef<View>(null);
   const [fileDragActive, setFileDragActive] = useState(false);
   const messagesRef = useRef<Message[]>([]);
+  const conversation = useConversation(conversationId);
+  // Read at tap time, so a new last message does not hand every row a new long-press handler.
+  const conversationRef = useRef(conversation);
+  conversationRef.current = conversation;
   const { messages, loading, failed, retry: retryLoad, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, remove, pend, newestMessages } =
-    useMessages(chatGuid, jumpTarget);
+    useMessages(conversationId, jumpTarget);
   messagesRef.current = messages;
   // It is your turn when the newest real message is inbound. Drives whether
   // the suggestion shelf appears at all.
@@ -162,7 +167,7 @@ export function ThreadView({
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
   const [highlightGuid, setHighlightGuid] = useState<string | null>(null);
-  const peerTyping = usePeerTyping(chatGuid);
+  const peerTyping = usePeerTyping(conversationId);
   const readObserver = useRef(createInboundReadObserver());
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
@@ -213,8 +218,8 @@ export function ThreadView({
     setSearchOpen(false);
     setSearchText("");
     // Preview (glide-mode j/k) must not mark read; activation ("reply") does.
-    if (!previewOnly) readChat(chatGuid).catch(() => undefined);
-  }, [chatGuid, previewOnly]);
+    if (!previewOnly) readChat(conversationId).catch(() => undefined);
+  }, [conversationId, previewOnly]);
 
   useEffect(() => {
     if (headerChat) {
@@ -223,7 +228,7 @@ export function ThreadView({
     }
     let cancelled = false;
     api
-      .chatInfo(chatGuid)
+      .chatInfo(conversationId)
       .then((info) => {
         if (!cancelled) setParticipants(info.participants);
       })
@@ -233,7 +238,7 @@ export function ThreadView({
     return () => {
       cancelled = true;
     };
-  }, [chatGuid, headerChat]);
+  }, [conversationId, headerChat]);
 
   // Header search buttons open the in-thread search shelf via a signal bus.
   useEffect(() => onOpenThreadSearch(() => setSearchOpen(true)), []);
@@ -274,13 +279,13 @@ export function ThreadView({
     };
     node.addEventListener("wheel", onWheel, { passive: false, capture: true });
     return () => node.removeEventListener("wheel", onWheel, { capture: true });
-  }, [beginDayChipScroll, chatGuid, endDayChipScroll, messages.length]);
+  }, [beginDayChipScroll, conversationId, endDayChipScroll, messages.length]);
 
   useEffect(() => {
-    if (readObserver.current.observe(chatGuid, [...messages, ...newestMessages], !previewOnly)) {
-      readChat(chatGuid).catch(() => undefined);
+    if (readObserver.current.observe(conversationId, [...messages, ...newestMessages], !previewOnly)) {
+      readChat(conversationId).catch(() => undefined);
     }
-  }, [chatGuid, messages, newestMessages, previewOnly]);
+  }, [conversationId, messages, newestMessages, previewOnly]);
 
   const firstUnreadAt = headerChat?.firstUnreadAt ?? null;
   const previousRows = useRef(new Map<string, Row>());
@@ -389,14 +394,14 @@ export function ThreadView({
     (failed: Message) => {
       const revived: Message = { ...failed, pending: true, failed: false };
       replaceTemp(failed.guid, revived);
-      runCommand(chatGuid, { kind: "send", text: failed.text, replyToGuid: failed.replyToGuid ?? undefined, mentions: failed.mentions })
+      runCommand(conversationId, { kind: "send", text: failed.text, replyToGuid: failed.replyToGuid ?? undefined, mentions: failed.mentions })
         .then(({ message }) => replaceTemp(revived.guid, message))
         .catch((error: unknown) => {
           replaceTemp(revived.guid, failedSend(revived));
           showToast(messagingCommandError(error, "Send failed"));
         });
     },
-    [chatGuid, replaceTemp],
+    [conversationId, replaceTemp],
   );
 
   const showReactions = useCallback(
@@ -426,7 +431,7 @@ export function ThreadView({
               onPress: () => {
                 const rollback = pend(message.guid, { kind: "react", type, remove: active });
                 hapticSelect();
-                runCommand(chatGuid, { kind: "react", messageGuid: message.guid, reaction: type, remove: active }).catch(() => {
+                runCommand(conversationId, { kind: "react", messageGuid: message.guid, reaction: type, remove: active }).catch(() => {
                   rollback();
                   showToast("Couldn't send the reaction. Try again.");
                 });
@@ -462,10 +467,12 @@ export function ThreadView({
               {
                 label: "Send again",
                 onPress: () => {
-                  const temp = { ...tempMessage(chatGuid, message.text, null, message.mentions), replyToGuid: message.replyToGuid };
+                  const chat = conversationRef.current;
+                  if (!chat) return;
+                  const temp = { ...tempMessage(chat, message.text, null, message.mentions), replyToGuid: message.replyToGuid };
                   upsert(temp);
                   scrollToLatest();
-                  runCommand(chatGuid, { kind: "send", text: message.text, replyToGuid: message.replyToGuid ?? undefined, mentions: message.mentions }, { clientKey: temp.guid })
+                  runCommand(conversationId, { kind: "send", text: message.text, replyToGuid: message.replyToGuid ?? undefined, mentions: message.mentions }, { clientKey: temp.guid })
                     .then(({ message: sent }) => replaceTemp(temp.guid, sent))
                     .catch((error: unknown) => {
                       replaceTemp(temp.guid, failedSend(temp));
@@ -493,7 +500,7 @@ export function ThreadView({
                 destructive: true,
                 onPress: () => {
                   const rollback = pend(message.guid, { kind: "retract" });
-                  runCommand(message.chatGuid, { kind: "unsend", messageGuid: message.guid }).catch(() => {
+                  runCommand(conversationId, { kind: "unsend", messageGuid: message.guid }).catch(() => {
                     rollback();
                     showToast("Couldn't unsend. Messages can only be unsent for about 2 minutes.");
                   });
@@ -511,7 +518,7 @@ export function ThreadView({
                 destructive: true,
                 onPress: () => {
                   const rollback = pend(message.guid, { kind: "retract" });
-                  runCommand(chatGuid, { kind: "delete", messageGuid: message.guid }).then(() => showToast("Deleted"), () => {
+                  runCommand(conversationId, { kind: "delete", messageGuid: message.guid }).then(() => showToast("Deleted"), () => {
                     rollback();
                     showToast("Couldn't delete the message. Try again.");
                   });
@@ -522,7 +529,7 @@ export function ThreadView({
       ];
       if (actions.length > 0 || tapbacks) showSheet({ actions, tapbacks, anchor });
     },
-    [chatGuid, isGroup, pend, privateApi, replaceTemp, scrollToLatest, showSheet, upsert],
+    [conversationId, isGroup, pend, privateApi, replaceTemp, scrollToLatest, showSheet, upsert],
   );
 
   const desk = headerChat !== null;
@@ -532,6 +539,7 @@ export function ThreadView({
       row={item}
       desk={desk}
       columnW={columnW}
+      conversationId={conversationId}
       isGroup={isGroup}
       isLatestOutgoing={item.message.guid === latestOutgoingGuid}
       // Only an outgoing message with an error code reads it, so an arrival leaves every other row alone.
@@ -542,7 +550,7 @@ export function ThreadView({
       onRetry={retry}
       onShowReactions={showReactions}
     />
-  ), [columnW, desk, highlightGuid, isGroup, latestInboundAt, latestOutgoingGuid, openMessageSheet, retry, showReactions, unreadCount]);
+  ), [columnW, conversationId, desk, highlightGuid, isGroup, latestInboundAt, latestOutgoingGuid, openMessageSheet, retry, showReactions, unreadCount]);
 
   // Keyboard height only. The safe-area strip belongs to the composer, whose
   // background fills it; lifting the whole thread by the inset left a dead gap under the bar.
@@ -563,10 +571,10 @@ export function ThreadView({
             style={styles.paneIdentity}
             onPress={() => {
               if (headerChat.isGroup) {
-                openChatInfo(chatGuid);
+                openChatInfo(conversationId);
               } else {
                 const p = headerChat.participants[0];
-                if (p) openPersonPane({ address: p.address, name: headerChat.displayName, backGuid: chatGuid });
+                if (p) openPersonPane({ address: p.address, name: headerChat.displayName, backConversation: conversationId });
               }
             }}
           >
@@ -587,7 +595,7 @@ export function ThreadView({
             <QueuePosition />
             <View style={[styles.vsep, { backgroundColor: theme.divider }]} />
             <FaceTimeButton
-              chatGuid={chatGuid}
+              conversationId={conversationId}
               isGroup={isGroup}
               address={isGroup ? null : (participants[0]?.address ?? null)}
               color={theme.icon}
@@ -600,11 +608,11 @@ export function ThreadView({
               {({ active }) => <HugeiconsIcon icon={Search01Icon} size={18} color={active ? theme.text : theme.icon} strokeWidth={1.6} />}
             </IconButton>
             {agentEnabled ? (
-              <IconButton label="Ask the agent (⌘J)" onPress={() => openAgentPane(chatGuid)} style={styles.headerIconButton}>
+              <IconButton label="Ask the agent (⌘J)" onPress={() => openAgentPane(conversationId)} style={styles.headerIconButton}>
                 {({ active }) => <HugeiconsIcon icon={AiChat02Icon} size={18} color={active ? theme.text : theme.icon} strokeWidth={1.6} />}
               </IconButton>
             ) : null}
-            <IconButton label="Conversation info" onPress={() => openChatInfo(chatGuid)} style={styles.headerIconButton}>
+            <IconButton label="Conversation info" onPress={() => openChatInfo(conversationId)} style={styles.headerIconButton}>
               {({ active }) => <HugeiconsIcon icon={SidebarRightIcon} size={18} color={active ? theme.text : theme.icon} strokeWidth={1.6} />}
             </IconButton>
           </View>
@@ -734,15 +742,15 @@ export function ThreadView({
         </View>
       )}
       <ToastAnchor active={toastActive}>
-        <Composer
+        {conversation ? <Composer
           suggestions={{
             enabled: aiStatus?.suggestions === true && !editing,
             awaitingReply,
             reactionSuggestions: aiStatus?.reactionSuggestions === true,
             reactionPreview,
           }}
-          strip={<StateStrip chatGuid={chatGuid} messages={messages} historyComplete={!hasMore} />}
-          chatGuid={chatGuid}
+          strip={<StateStrip conversationId={conversationId} messages={messages} historyComplete={!hasMore} />}
+          chat={conversation}
           isGroup={isGroup}
           participants={participants}
           privateApi={privateApi}
@@ -765,7 +773,7 @@ export function ThreadView({
           }}
           dropTargetRef={paneRef}
           onDragActiveChange={setFileDragActive}
-        />
+        /> : null}
       </ToastAnchor>
       {fileDragActive && (
         <View
@@ -788,6 +796,7 @@ interface ThreadRowProps {
   row: Row;
   desk: boolean;
   columnW: number;
+  conversationId: ConversationId;
   isGroup: boolean;
   isLatestOutgoing: boolean;
   latestInboundAt: number | null;
@@ -804,6 +813,7 @@ const ThreadRow = memo(function ThreadRow({
   row,
   desk,
   columnW,
+  conversationId,
   isGroup,
   isLatestOutgoing,
   latestInboundAt,
@@ -823,6 +833,7 @@ const ThreadRow = memo(function ThreadRow({
   ) : (
     <Bubble
       message={message}
+      conversationId={conversationId}
       paneWidth={columnW}
       groupStart={row.groupStart}
       groupEnd={row.groupEnd}

@@ -1,5 +1,6 @@
 import { expect, mock, spyOn, test } from "bun:test";
 import { getFunctionName, type FunctionReference } from "convex/server";
+import type { ConversationId } from "@shared/types";
 
 if (process.env.COMMA_IDENTITY_API_TEST_CHILD !== "1") {
   test("identity API reads keep their public contracts and use Convex without Mini requests", async () => {
@@ -36,11 +37,12 @@ if (process.env.COMMA_IDENTITY_API_TEST_CHILD !== "1") {
       expect(calls.at(-1)).toEqual({ name: "comma/conversationInfo:findChat", args: { address: "friend@example.com" } });
       const info = { guid: "group", displayName: null, isGroup: true, participants: contacts };
       responses.set("comma/conversationInfo:chatInfo", info);
-      expect(await api.chatInfo("group")).toEqual(info);
+      expect(await api.chatInfo("group" as ConversationId)).toEqual(info);
+      expect(calls.at(-1)).toEqual({ name: "comma/conversationInfo:chatInfo", args: { conversationId: "group" } });
       responses.set("comma/conversationInfo:findChat", null);
       responses.set("comma/conversationInfo:chatInfo", null);
       await expect(api.findChat("missing")).rejects.toThrow("Chat not found");
-      await expect(api.chatInfo("missing")).rejects.toThrow("Chat not found");
+      await expect(api.chatInfo("missing" as ConversationId)).rejects.toThrow("Chat not found");
       expect(avatarUrl("friend@example.com")).toBeNull();
       expect(avatarUrl("friend@example.com", "https://cloud.test/photo")).toBe("https://cloud.test/photo");
       expect(groupPhotoUrl({})).toBeNull();

@@ -16,7 +16,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { api } from "@/lib/api";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
-import { selectChat } from "@/lib/selection";
+import { conversationRoute, selectChat } from "@/lib/selection";
 import { showToast } from "@/lib/toast";
 import type { ChatSummary, Contact } from "@shared/types";
 import { formatAddress } from "@shared/address";
@@ -115,15 +115,13 @@ export function NewChatContent({
     if (selected.length === 0 || !text.trim() || sending) return;
     setSending(true);
     try {
-      const { chatGuid } = await runCommand(null, {
+      const { conversationId } = await runCommand(null, {
         kind: "createChat",
         addresses: selected.map((c) => c.address),
         text: text.trim(),
       });
       onClose();
-      if (!selectChat({ guid: chatGuid })) {
-        router.push({ pathname: "/chat/[guid]", params: { guid: chatGuid } });
-      }
+      if (conversationId && !selectChat({ conversationId })) router.push(conversationRoute(conversationId));
     } catch (e) {
       // Surface the server's reason when it gives one — a bare toast made
       // the group-creation failure (apple-script vs private-api) opaque.

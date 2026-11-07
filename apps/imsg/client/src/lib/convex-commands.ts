@@ -3,6 +3,7 @@ import type { OptimisticUpdate } from "convex/browser";
 import { optimisticallyUpdateValueInPaginatedQuery } from "convex/react";
 import type { FunctionArgs } from "convex/server";
 import type { GenericId } from "convex/values";
+import type { ConversationId } from "@shared/types";
 import { commaApi, commaOutbox } from "./convex-api";
 import { resultFromReceipt, type CommandReceipt, type CommandResult, type ResultFor } from "./command-results";
 
@@ -10,7 +11,6 @@ export type CommandPayload = FunctionArgs<typeof commaOutbox.enqueue>["payload"]
 
 /** Injected client contracts keep the complete test suite free of module mocks. */
 export interface CommandClient {
-  query(ref: typeof commaApi.resolveChat, args: { chatGuid: string }): Promise<{ _id: string } | null>;
   mutation(ref: typeof commaOutbox.enqueue, args: FunctionArgs<typeof commaOutbox.enqueue>,
     options?: { optimisticUpdate?: OptimisticUpdate<FunctionArgs<typeof commaOutbox.enqueue>> }): Promise<unknown>;
 }
@@ -46,32 +46,12 @@ export interface RunCommandOptions {
   onQueued?: () => void;
 }
 
-/**
- * Conversation ids the directory already holds, keyed by chat guid. The directory provider keeps it
- * current, so a command on a listed chat skips the resolveChat round trip before it can enqueue,
- * and the enqueue's optimistic update lands on the frame of the input.
- */
-const knownConversations = new Map<string, string>();
-
-export function publishKnownConversations(chats: readonly { guid: string; conversationId?: string }[]): void {
-  knownConversations.clear();
-  for (const chat of chats) if (chat.conversationId) knownConversations.set(chat.guid, chat.conversationId);
-}
-
 function newClientKey(): string {
   return `command-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
-/** The conversation a chat belongs to; a listed one needs no round trip. */
-export async function conversationIdVia(client: Pick<CommandClient, "query">, chatGuid: string): Promise<GenericId<"comma_conversations">> {
-  const conversation = knownConversations.get(chatGuid) ?? (await client.query(commaApi.resolveChat, { chatGuid }))?._id;
-  if (!conversation) throw new Error("Conversation is not mirrored yet");
-  return conversation as GenericId<"comma_conversations">;
-}
-
-async function enqueueCommandVia(client: CommandClient, chatGuid: string | null, payload: CommandPayload, clientKey = newClientKey()): Promise<GenericId<"comma_outbox">> {
+async function enqueueCommandVia(client: CommandClient, conversationId: ConversationId | null, payload: CommandPayload, clientKey = newClientKey()): Promise<GenericId<"comma_outbox">> {
   const global = payload.kind === "createChat" || payload.kind === "clearSuggestionLearning";
-  if (!chatGuid && !global) throw new Error("This command requires a chat");
-  const conversationId = chatGuid ? await conversationIdVia(client, chatGuid) : null;
+  if (!conversationId && !global) throw new Error("This command requires a conversation");
   const id = await client.mutation(commaOutbox.enqueue, {
     clientKey,
     ...(conversationId ? { conversationId } : {}),
@@ -82,13 +62,13 @@ async function enqueueCommandVia(client: CommandClient, chatGuid: string | null,
 }
 
 /** Existing immediate-queue API. Callers migrate to runCommand in phase 3. */
-export async function enqueueVia(client: CommandClient, chatGuid: string, payload: CommandPayload): Promise<void> {
-  await enqueueCommandVia(client, chatGuid, payload);
+export async function enqueueVia(client: CommandClient, conversationId: ConversationId, payload: CommandPayload): Promise<void> {
+  await enqueueCommandVia(client, conversationId, payload);
 }
 
-export async function runCommandVia<P extends CommandPayload>(client: ResultCommandClient, chatGuid: string | null, payload: P, options: RunCommandOptions = {}): Promise<ResultFor<P["kind"]>> {
+export async function runCommandVia<P extends CommandPayload>(client: ResultCommandClient, conversationId: ConversationId | null, payload: P, options: RunCommandOptions = {}): Promise<ResultFor<P["kind"]>> {
   options.signal?.throwIfAborted();
-  const commandId = await enqueueCommandVia(client, chatGuid, payload, options.clientKey);
+  const commandId = await enqueueCommandVia(client, conversationId, payload, options.clientKey);
   options.onQueued?.();
   options.signal?.throwIfAborted();
   return watchCommandVia<P["kind"]>(client, commandId, payload.kind, options.signal);
@@ -133,9 +113,9 @@ export function watchCommandVia<K extends CommandPayload["kind"]>(client: Pick<R
 }
 
 /** Uses the authenticated client shared with the rest of imsg. Import only on invocation. */
-export async function runCommand<P extends CommandPayload>(chatGuid: string | null, payload: P, options?: RunCommandOptions): Promise<ResultFor<P["kind"]>> {
+export async function runCommand<P extends CommandPayload>(conversationId: ConversationId | null, payload: P, options?: RunCommandOptions): Promise<ResultFor<P["kind"]>> {
   const { convexClient } = await import("./identity");
-  return runCommandVia(convexClient, chatGuid, payload, options);
+  return runCommandVia(convexClient, conversationId, payload, options);
 }
 
 export function useRunCommand(client?: ResultCommandClient) {
@@ -154,7 +134,7 @@ export function useRunCommand(client?: ResultCommandClient) {
       active.clear();
     };
   }, []);
-  const run = useCallback(async <P extends CommandPayload>(chatGuid: string | null, payload: P, options?: RunCommandOptions): Promise<ResultFor<P["kind"]>> => {
+  const run = useCallback(async <P extends CommandPayload>(conversationId: ConversationId | null, payload: P, options?: RunCommandOptions): Promise<ResultFor<P["kind"]>> => {
     const current = ++sequence.current;
     const controller = new AbortController();
     const forwardAbort = () => controller.abort(options?.signal?.reason);
@@ -165,7 +145,7 @@ export function useRunCommand(client?: ResultCommandClient) {
     setPendingCount((count) => count + 1);
     setError(null); setResult(null);
     try {
-      const value = await (client ? runCommandVia(client, chatGuid, payload, observation) : runCommand(chatGuid, payload, observation));
+      const value = await (client ? runCommandVia(client, conversationId, payload, observation) : runCommand(conversationId, payload, observation));
       if (mounted.current && sequence.current === current) setResult(value);
       return value;
     } catch (cause) {

@@ -1,14 +1,16 @@
 import { afterEach, expect, test } from "bun:test";
-import type { Message } from "@shared/types";
+import type { ConversationId, Message } from "@shared/types";
 import { localSends, resetLocalSendsForTests, tempMessage } from "./local-sends";
 
-const ALEX = "iMessage;-;+16195550101";
-const JORDAN = "iMessage;-;+16195550102";
+const ALEX = "conv-alex" as ConversationId;
+const JORDAN = "conv-jordan" as ConversationId;
+const alexChat = { imessage: { chatGuid: "iMessage;-;+16195550101" } };
+const jordanChat = { imessage: { chatGuid: "iMessage;-;+16195550102" } };
 
 afterEach(resetLocalSendsForTests);
 
 test("a send made outside a thread waits under its own chat, then settles into the real message's row", () => {
-  const temp = tempMessage(JORDAN, "forwarded");
+  const temp = tempMessage(jordanChat, "forwarded");
   localSends.upsert(JORDAN, temp);
   expect(localSends.read(ALEX)).toEqual([]);
   expect(localSends.read(JORDAN).map((m) => [m.guid, m.pending])).toEqual([[temp.guid, true]]);
@@ -19,8 +21,8 @@ test("a send made outside a thread waits under its own chat, then settles into t
 });
 
 test("retain drops only the rejected sends and leaves an untouched chat's list identical", () => {
-  const first = tempMessage(ALEX, "one");
-  const second = tempMessage(ALEX, "two");
+  const first = tempMessage(alexChat, "one");
+  const second = tempMessage(alexChat, "two");
   localSends.upsert(ALEX, first);
   localSends.upsert(ALEX, second);
   const before = localSends.read(ALEX);
@@ -31,8 +33,8 @@ test("retain drops only the rejected sends and leaves an untouched chat's list i
 });
 
 test("a temp is the user's pending send in the chat's service, keyed for the outbox", () => {
-  const sms = tempMessage("SMS;-;+16195550103", "hi");
-  expect(sms).toMatchObject({ isFromMe: true, pending: true, service: "SMS", text: "hi" });
+  const sms = tempMessage({ imessage: { chatGuid: "SMS;-;+16195550103" } }, "hi");
+  expect(sms).toMatchObject({ chatGuid: "SMS;-;+16195550103", isFromMe: true, pending: true, service: "SMS", text: "hi" });
   expect(sms.clientKey).toBe(sms.guid);
   expect(sms.guid.startsWith("temp-")).toBe(true);
 });

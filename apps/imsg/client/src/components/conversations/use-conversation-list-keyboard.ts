@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, ConversationId } from "@shared/types";
 
 import type { ConversationListViewport } from "./use-conversation-list-viewport";
 import type { ConversationSearchController } from "./use-conversation-search";
@@ -23,7 +23,7 @@ export function useConversationListKeyboard(args: {
   /** Adapter registration is desktop-only; the focus target is universal. */
   readonly enabled: boolean;
   readonly model: InboxModel;
-  readonly selectedGuid: string | undefined;
+  readonly selectedId: ConversationId | undefined;
   readonly viewport: ConversationListViewport;
   readonly search: ConversationSearchController;
   readonly onOpenChat: (chat: ChatSummary) => void;
@@ -44,16 +44,16 @@ export function useConversationListKeyboard(args: {
     if (!enabled) return;
     return registerListAdapter({
       move(delta) {
-        const { model, selectedGuid, onPreviewChat } = stateRef.current;
-        const target = nextNavigationTarget(model.navigationEntries, selectedGuid, delta);
-        if (!target || target.chat.guid === selectedGuid) return;
+        const { model, selectedId, onPreviewChat } = stateRef.current;
+        const target = nextNavigationTarget(model.navigationEntries, selectedId, delta);
+        if (!target || target.chat.conversationId === selectedId) return;
         onPreviewChat(target.chat);
         stateRef.current.viewport.revealEntry(target, delta);
       },
       activate() {
-        const { model, selectedGuid, onOpenChat } = stateRef.current;
+        const { model, selectedId, onOpenChat } = stateRef.current;
         const target =
-          model.navigationEntries.find((e) => e.chat.guid === selectedGuid) ??
+          model.navigationEntries.find((e) => e.chat.conversationId === selectedId) ??
           model.navigationEntries[0];
         if (target) onOpenChat(target.chat);
       },
@@ -67,11 +67,11 @@ export function useConversationListKeyboard(args: {
       clearSearch() {
         return stateRef.current.search.clear();
       },
-      selectNeighborOf(guid) {
+      selectNeighborOf(conversationId) {
         // Runs synchronously after the removal action, before re-render — so
-        // the current model still contains `guid` and its neighbors.
+        // the current model still contains `conversationId` and its neighbors.
         const { model, onPreviewChat } = stateRef.current;
-        const neighbor = neighborAfterRemoval(model.navigationEntries, guid);
+        const neighbor = neighborAfterRemoval(model.navigationEntries, conversationId);
         if (neighbor) onPreviewChat(neighbor.chat);
       },
     });

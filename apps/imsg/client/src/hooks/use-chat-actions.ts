@@ -29,8 +29,8 @@ export function useChatActions(detailsInPane: boolean): ChatActions {
       {
         label: "Details",
         onPress: () => {
-          if (detailsInPane) openChatInfo(chat.guid);
-          else router.push({ pathname: "/chat-info", params: { guid: chat.guid } });
+          if (detailsInPane) openChatInfo(chat.conversationId);
+          else router.push({ pathname: "/chat-info", params: { conversation: chat.conversationId } });
         },
       },
     ];

@@ -3,7 +3,8 @@ import { isSettled, matchesFilters } from "@shared/chat-state";
 import { liveThoughtLine } from "@/components/agent/vendor/live-thought-line";
 import type { AgentChatSummary } from "./agent-api";
 import type { TodayPlan, TodaySectionKey } from "./today";
-import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
+import { imessageChat } from "@shared/imessage";
+import type { ChatSummary, ConversationId, StateFilter, TypeFilter } from "@shared/types";
 
 /** The two lenses the workspace owns: which queue, and whose conversations. */
 export interface InboxFilters {
@@ -130,11 +131,8 @@ const DAY = 86_400_000;
 const LINK = /\bhttps?:\/\/|\bwww\.[a-z0-9-]+\.[a-z]/i;
 
 /** Service of the conversation's primary chat. RCS renders green, so it reads as SMS. */
-export function chatService(chat: Pick<ChatSummary, "guid">): Exclude<Service, "any"> | null {
-  const prefix = chat.guid.split(";")[0];
-  if (prefix === "iMessage") return "iMessage";
-  if (prefix === "SMS" || prefix === "RCS") return "SMS";
-  return null;
+export function chatService(chat: Pick<ChatSummary, "imessage">): Exclude<Service, "any"> | null {
+  return imessageChat.service(chat.imessage.chatGuid);
 }
 
 /** CRM priority is P1-P5 with one highest: P1-P2 high, P3 medium, P4-P5 low. */
@@ -173,13 +171,13 @@ const ONLY: Record<OnlyKey, (chat: ChatSummary) => boolean> = {
 
 export interface RefineContext {
   refinements: Refinements;
-  /** Conversation ids and chat guids with a pending scheduled message. */
-  scheduled: ReadonlySet<string>;
+  /** Conversations with a pending scheduled message. */
+  scheduled: ReadonlySet<ConversationId>;
   now: number;
 }
 
-function hasScheduled(chat: ChatSummary, scheduled: ReadonlySet<string>): boolean {
-  return scheduled.has(chat.guid) || (chat.conversationId !== undefined && scheduled.has(chat.conversationId));
+function hasScheduled(chat: ChatSummary, scheduled: ReadonlySet<ConversationId>): boolean {
+  return scheduled.has(chat.conversationId);
 }
 
 /** The narrowing half: every control except Also include. */
@@ -296,7 +294,7 @@ export function groupByAge(chats: readonly ChatSummary[], now: number, oldestFir
     return [
       { kind: "section", key: `section-${label}`, label, count: group.length },
       ...queueOrder(group, oldestFirst).map(
-        (chat): InboxRow => ({ kind: "chat", key: chat.conversationId ?? chat.guid, chat }),
+        (chat): InboxRow => ({ kind: "chat", key: chat.conversationId, chat }),
       ),
     ];
   });
@@ -306,22 +304,22 @@ export function groupByAge(chats: readonly ChatSummary[], now: number, oldestFir
  * Unknown/absent selection resolves to the first entry. */
 export function nextNavigationTarget(
   entries: readonly InboxNavigationEntry[],
-  selectedGuid: string | undefined,
+  selected: ConversationId | undefined,
   delta: -1 | 1,
 ): InboxNavigationEntry | null {
   if (entries.length === 0) return null;
-  const idx = entries.findIndex((e) => e.chat.guid === selectedGuid);
+  const idx = entries.findIndex((e) => e.chat.conversationId === selected);
   if (idx === -1) return entries[0] ?? null;
   return entries[Math.max(0, Math.min(entries.length - 1, idx + delta))] ?? null;
 }
 
-/** After `guid` leaves the view, the neighbor to glide onto:
+/** After `conversationId` leaves the view, the neighbor to glide onto:
  * the next entry, else the previous, else nothing. */
 export function neighborAfterRemoval(
   entries: readonly InboxNavigationEntry[],
-  guid: string,
+  conversationId: ConversationId,
 ): InboxNavigationEntry | null {
-  const idx = entries.findIndex((e) => e.chat.guid === guid);
+  const idx = entries.findIndex((e) => e.chat.conversationId === conversationId);
   if (idx === -1) return null;
   return entries[idx + 1] ?? entries[idx - 1] ?? null;
 }
@@ -335,16 +333,16 @@ export function filterInbox(
   filters: InboxFilters,
   searchQuery: string,
   /** Chat GUIDs whose deeper message history matched the query (server search). */
-  deepMatchGuids?: ReadonlySet<string>,
+  deepMatches?: ReadonlySet<ConversationId>,
   /** Frozen browse membership (useChats' triage freeze). When provided, blank-
    * query browsing selects EXACTLY these guids as the lens base, so live
    * flag changes cannot evict rows mid-triage. */
-  browseGuids?: ReadonlySet<string>,
+  browseIds?: ReadonlySet<ConversationId>,
   refine?: RefineContext,
 ): ChatSummary[] {
-  if (searchQuery.trim().length > 0) return chats.filter((chat) => searchMatch(chat, searchQuery, deepMatchGuids) !== null);
+  if (searchQuery.trim().length > 0) return chats.filter((chat) => searchMatch(chat, searchQuery, deepMatches) !== null);
   return chats.filter((chat) => {
-    const base = browseGuids ? browseGuids.has(chat.guid) : matchesFilters(chat, filters.state, filters.type);
+    const base = browseIds ? browseIds.has(chat.conversationId) : matchesFilters(chat, filters.state, filters.type);
     if (!refine) return base;
     if (!base && !included(chat, filters.type, refine)) return false;
     return narrows(chat, refine.refinements, refine.now);
@@ -352,7 +350,7 @@ export function filterInbox(
 }
 
 /** How a conversation matches a search: by its name or a number ("name"), or only by message text. */
-export function searchMatch(chat: ChatSummary, searchQuery: string, deepMatchGuids?: ReadonlySet<string>): "name" | "message" | null {
+export function searchMatch(chat: ChatSummary, searchQuery: string, deepMatches?: ReadonlySet<ConversationId>): "name" | "message" | null {
   const needle = searchQuery.trim().toLowerCase();
   const needleDigits = needle.replace(/\D/g, "");
   const byName = chat.displayName.toLowerCase().includes(needle) ||
@@ -365,20 +363,20 @@ export function searchMatch(chat: ChatSummary, searchQuery: string, deepMatchGui
         (needleDigits.length >= 3 && p.address.replace(/\D/g, "").includes(needleDigits)),
     );
   if (byName) return "name";
-  return (chat.lastMessage?.text ?? "").toLowerCase().includes(needle) || deepMatchGuids?.has(chat.guid) ? "message" : null;
+  return (chat.lastMessage?.text ?? "").toLowerCase().includes(needle) || deepMatches?.has(chat.conversationId) ? "message" : null;
 }
 
 /** Search results: name and number matches first, then conversations that matched only on message text. */
-function groupBySearchMatch(chats: readonly ChatSummary[], searchQuery: string, deepMatchGuids?: ReadonlySet<string>): InboxRow[] {
+function groupBySearchMatch(chats: readonly ChatSummary[], searchQuery: string, deepMatches?: ReadonlySet<ConversationId>): InboxRow[] {
   const sections = [
     { label: "Conversations", match: "name" },
     { label: "Messages", match: "message" },
   ] as const;
   return sections.flatMap(({ label, match }): InboxRow[] => {
-    const group = chats.filter((chat) => searchMatch(chat, searchQuery, deepMatchGuids) === match);
+    const group = chats.filter((chat) => searchMatch(chat, searchQuery, deepMatches) === match);
     return group.length === 0 ? [] : [
       { kind: "section", key: `section-${label}`, label, count: group.length },
-      ...queueOrder(group).map((chat): InboxRow => ({ kind: "chat", key: chat.conversationId ?? chat.guid, chat })),
+      ...queueOrder(group).map((chat): InboxRow => ({ kind: "chat", key: chat.conversationId, chat })),
     ];
   });
 }
@@ -391,7 +389,7 @@ function groupByAttention(chats: readonly ChatSummary[], now: number, oldestFirs
       .sort((a, b) => direction * ((b.agent?.activityAt ?? 0) - (a.agent?.activityAt ?? 0)));
     return group.length === 0 ? [] : [
       { kind: "section", key: `section-${attention}`, label: AGENT_ATTENTION[attention].header, count: group.length },
-      ...group.map((chat): InboxRow => ({ kind: "chat", key: chat.conversationId ?? chat.guid, chat })),
+      ...group.map((chat): InboxRow => ({ kind: "chat", key: chat.conversationId, chat })),
     ];
   });
   // Also include can widen the lens with conversations that have no agent chat.
@@ -408,7 +406,7 @@ function todayRows(plan: TodayPlan, openFolds: ReadonlySet<TodaySectionKey>): In
         detail: section.detail, tone: section.tone, fold: section.foldable ? { key: section.key, open } : null,
       },
       ...(open ? section.rows.map(({ chat, rank, reason }): InboxRow => ({
-        kind: "chat", key: chat.conversationId ?? chat.guid, chat, today: { rank, reason },
+        kind: "chat", key: chat.conversationId, chat, today: { rank, reason },
       })) : []),
     ];
   });
@@ -419,20 +417,20 @@ export function deriveInboxModel(
   chats: readonly ChatSummary[],
   filters: InboxFilters,
   searchQuery: string,
-  deepMatchGuids?: ReadonlySet<string>,
-  browseGuids?: ReadonlySet<string>,
+  deepMatches?: ReadonlySet<ConversationId>,
+  browseIds?: ReadonlySet<ConversationId>,
   refine?: RefineContext,
   today?: { plan: TodayPlan; openFolds: ReadonlySet<TodaySectionKey> },
 ): InboxModel {
   const now = refine?.now ?? Date.now();
   const searching = searchQuery.trim().length > 0;
-  const filtered = !searching && filters.state === "today" ? [] : filterInbox(chats, filters, searchQuery, deepMatchGuids, browseGuids, refine);
+  const filtered = !searching && filters.state === "today" ? [] : filterInbox(chats, filters, searchQuery, deepMatches, browseIds, refine);
   const oldestFirst = refine?.refinements.oldestFirst;
-  const rows = searching ? groupBySearchMatch(filtered, searchQuery, deepMatchGuids)
+  const rows = searching ? groupBySearchMatch(filtered, searchQuery, deepMatches)
     : filters.state === "today" ? (today ? todayRows(today.plan, today.openFolds) : [])
     // Drafts read as one queue of prepared replies, ordered by when the draft was written, not by message age.
     : filters.state === "drafts" ? [...filtered].sort((a, b) => (oldestFirst ? -1 : 1) * ((b.draft?.updatedAt ?? 0) - (a.draft?.updatedAt ?? 0)))
-      .map((chat): InboxRow => ({ kind: "chat", key: chat.conversationId ?? chat.guid, chat }))
+      .map((chat): InboxRow => ({ kind: "chat", key: chat.conversationId, chat }))
     : filters.state === "agents" ? groupByAttention(filtered, now, oldestFirst)
     : groupByAge(filtered, now, oldestFirst);
   const navigationEntries = rows.flatMap((row, index) => (row.kind === "chat" ? [{ chat: row.chat, index }] : []));
@@ -443,10 +441,10 @@ export function deriveInboxModel(
 export function checkboxCounts(
   chats: readonly ChatSummary[],
   filters: InboxFilters,
-  browseGuids: ReadonlySet<string> | undefined,
+  browseIds: ReadonlySet<ConversationId> | undefined,
   ctx: RefineContext,
 ): Record<OnlyKey | IncludeKey, number> {
-  const count = (r: Refinements): number => filterInbox(chats, filters, "", undefined, browseGuids, { ...ctx, refinements: r }).length;
+  const count = (r: Refinements): number => filterInbox(chats, filters, "", undefined, browseIds, { ...ctx, refinements: r }).length;
   const r = ctx.refinements;
   const only = (key: OnlyKey) => count({ ...r, only: r.only.includes(key) ? r.only : [...r.only, key] });
   const include = (key: IncludeKey) => count({ ...r, include: r.include.includes(key) ? r.include : [...r.include, key] });

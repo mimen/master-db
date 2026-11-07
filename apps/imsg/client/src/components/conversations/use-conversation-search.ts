@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useReducer, useRef } from "react";
 import type { TextInput } from "react-native";
+import type { ConversationId } from "@shared/types";
 
 import { api } from "@/lib/api";
 import {
@@ -24,7 +25,7 @@ export interface ConversationSearchController {
   readonly active: boolean;
   readonly deepSearch: DeepSearchState;
   /** Deep-match GUIDs valid for the CURRENT query (empty otherwise). */
-  readonly deepMatches: ReadonlySet<string>;
+  readonly deepMatches: ReadonlySet<ConversationId>;
   /** Changes exactly when the rendered view changes (lens or query) — the
    * pane watches this to start each new view from the top. */
   readonly viewKey: string;
@@ -72,7 +73,7 @@ export function useConversationSearch(args: {
         .then((messages) => {
           // The reducer drops results tagged with a query that is no longer
           // current, so a late landing can never pollute a newer view.
-          dispatch({ type: "deep-ready", query: q, guids: new Set(messages.filter((m) => hasEveryWord(m.text, q)).map((m) => m.chatGuid)) });
+          dispatch({ type: "deep-ready", query: q, conversations: new Set(messages.filter((m) => hasEveryWord(m.text, q)).map((m) => m.conversationId)) });
         })
         .catch(() => dispatch({ type: "deep-failed", query: q }));
     }, 250);

@@ -1,4 +1,4 @@
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, ConversationId } from "@shared/types";
 import { useSyncExternalStore } from "react";
 
 export { queueOrder } from "@/lib/inbox-model";
@@ -7,10 +7,10 @@ export { queueOrder } from "@/lib/inbox-model";
 // thread's "2 of 41" and auto-advance follow what is on screen rather than re-deriving it.
 let rendered: readonly ChatSummary[] | null = null;
 
-/** Where auto-advance goes once `guid` is handled: the next conversation, else the previous. */
-export function advanceTarget(order: readonly ChatSummary[], guid: string): ChatSummary | null {
-  const list = rendered?.some((chat) => chat.guid === guid) ? rendered : order;
-  const at = list.findIndex((chat) => chat.guid === guid);
+/** Where auto-advance goes once `conversationId` is handled: the next conversation, else the previous. */
+export function advanceTarget(order: readonly ChatSummary[], conversationId: ConversationId): ChatSummary | null {
+  const list = rendered?.some((chat) => chat.conversationId === conversationId) ? rendered : order;
+  const at = list.findIndex((chat) => chat.conversationId === conversationId);
   if (at === -1) return null;
   return list[at + 1] ?? list[at - 1] ?? null;
 }
@@ -19,12 +19,12 @@ export interface QueuePosition {
   /** One-based. */
   readonly index: number;
   readonly total: number;
-  readonly guid: string;
+  readonly conversationId: ConversationId;
 }
 
-export function queuePosition(order: readonly ChatSummary[], guid: string | undefined): QueuePosition | null {
-  const at = guid === undefined ? -1 : order.findIndex((chat) => chat.guid === guid);
-  return at === -1 || guid === undefined ? null : { index: at + 1, total: order.length, guid };
+export function queuePosition(order: readonly ChatSummary[], conversationId: ConversationId | undefined): QueuePosition | null {
+  const at = conversationId === undefined ? -1 : order.findIndex((chat) => chat.conversationId === conversationId);
+  return at === -1 || conversationId === undefined ? null : { index: at + 1, total: order.length, conversationId };
 }
 
 // The messages workspace owns the selection; the thread top bar only reads where the open thread sits.
@@ -33,7 +33,7 @@ let current: QueuePosition | null = null;
 const listeners = new Set<() => void>();
 
 function recompute(): void {
-  const next = rendered && published ? queuePosition(rendered, published.guid) : published;
+  const next = rendered && published ? queuePosition(rendered, published.conversationId) : published;
   if (current?.index === next?.index && current?.total === next?.total) return;
   current = next;
   for (const listener of listeners) listener();
@@ -61,7 +61,7 @@ const orderListeners = new Set<() => void>();
 function sameGuids(a: readonly ChatSummary[] | null, b: readonly ChatSummary[] | null): boolean {
   if (a === b) return true;
   if (!a || !b || a.length !== b.length) return false;
-  return a.every((chat, index) => chat.guid === b[index]?.guid);
+  return a.every((chat, index) => chat.conversationId === b[index]?.conversationId);
 }
 
 function subscribeOrder(listener: () => void): () => void {

@@ -12,6 +12,9 @@ import type {
   DesktopShellState,
   Result,
 } from "./types";
+import type { ConversationId } from "@shared/types";
+
+const cid = (id: string) => id as ConversationId;
 
 function route(
   pathname: string,
@@ -41,18 +44,18 @@ function dispatchRoute(
 describe("desktop shell reducer", () => {
   test("initializes cold direct routes atomically", () => {
     const state = createInitialDesktopShellState(
-      route("/chat-info", { guid: "chat-1", name: "Ada" }),
+      route("/chat-info", { conversation: "chat-1", name: "Ada" }),
     );
     expect(state.activeWorkspace).toBe("messages");
     expect(state.messages.selection).toEqual({
-      guid: "chat-1",
+      conversationId: cid("chat-1"),
       name: "Ada",
       intent: "reply",
     });
     expect(state.utility).toEqual({
       kind: "chat-info",
       workspace: "messages",
-      guid: "chat-1",
+      conversationId: cid("chat-1"),
     });
   });
 
@@ -63,7 +66,7 @@ describe("desktop shell reducer", () => {
     });
     state = reduceDesktopShell(state, {
       type: "messages/chat-selected",
-      selection: { guid: "chat-1", name: "Group", intent: "preview" },
+      selection: { conversationId: cid("chat-1"), name: "Group", intent: "preview" },
     });
     state = dispatchRoute(state, "/contacts");
     state = reduceDesktopShell(state, {
@@ -75,7 +78,7 @@ describe("desktop shell reducer", () => {
     expect(state.activeWorkspace).toBe("messages");
     expect(state.messages.filters).toEqual({ state: "waiting", type: "group" });
     expect(state.messages.selection).toEqual({
-      guid: "chat-1",
+      conversationId: cid("chat-1"),
       name: "Group",
       intent: "preview",
     });
@@ -88,11 +91,11 @@ describe("desktop shell reducer", () => {
   test("clears the selected chat and its scoped panes atomically", () => {
     let state = reduceDesktopShell(INITIAL_DESKTOP_SHELL_STATE, {
       type: "messages/chat-selected",
-      selection: { guid: "chat-1", intent: "reply" },
+      selection: { conversationId: cid("chat-1"), intent: "reply" },
     });
     state = reduceDesktopShell(state, {
       type: "utility/toggled",
-      utility: { kind: "chat-info", workspace: "messages", guid: "chat-1" },
+      utility: { kind: "chat-info", workspace: "messages", conversationId: cid("chat-1") },
     });
     state = reduceDesktopShell(state, { type: "messages/chat-settled" });
 
@@ -119,11 +122,11 @@ describe("desktop shell reducer", () => {
   });
 
   test("the agent pane follows the open conversation and closes with it or on leaving Messages", () => {
-    let state = dispatchRoute(INITIAL_DESKTOP_SHELL_STATE, "/chat/chat-1");
+    let state = dispatchRoute(INITIAL_DESKTOP_SHELL_STATE, "/c/chat-1");
     state = reduceDesktopShell(state, { type: "utility/toggled", utility: { kind: "agent", workspace: "messages" } });
-    state = dispatchRoute(state, "/chat/chat-2");
+    state = dispatchRoute(state, "/c/chat-2");
     expect(state.utility).toEqual({ kind: "agent", workspace: "messages" });
-    expect(state.messages.selection?.guid).toBe("chat-2");
+    expect(state.messages.selection?.conversationId).toBe(cid("chat-2"));
 
     expect(reduceDesktopShell(state, { type: "messages/chat-settled" }).utility).toBeNull();
     expect(dispatchRoute(state, "/contacts").utility).toBeNull();
@@ -155,50 +158,50 @@ describe("desktop shell reducer", () => {
       transientOverlay: { kind: "command-palette", compose: false },
     };
     const after = dispatchRoute(before, "/chat-info", {
-      guid: "chat-2",
+      conversation: "chat-2",
       name: "Grace",
     });
 
     expect(after.messages.selection).toEqual({
-      guid: "chat-2",
+      conversationId: cid("chat-2"),
       name: "Grace",
       intent: "reply",
     });
     expect(after.utility).toEqual({
       kind: "chat-info",
       workspace: "messages",
-      guid: "chat-2",
+      conversationId: cid("chat-2"),
     });
   });
 
   test("root workspace commits retain selection while closing route-owned surfaces", () => {
     let state = createInitialDesktopShellState(
-      route("/chat/chat-1", { name: "Ada" }),
+      route("/c/chat-1", { name: "Ada" }),
     );
     state = dispatchRoute(state, "/search", { query: "invoice" });
     expect(state.routeOverlay).toEqual({ kind: "search", query: "invoice" });
     state = dispatchRoute(state, "/");
-    expect(state.messages.selection?.guid).toBe("chat-1");
+    expect(state.messages.selection?.conversationId).toBe(cid("chat-1"));
     expect(state.routeOverlay).toBeNull();
   });
 
   test("toggles only an identical utility and ignores stale overlay closes", () => {
     let state = reduceDesktopShell(INITIAL_DESKTOP_SHELL_STATE, {
       type: "utility/toggled",
-      utility: { kind: "chat-info", workspace: "messages", guid: "chat-1" },
+      utility: { kind: "chat-info", workspace: "messages", conversationId: cid("chat-1") },
     });
     state = reduceDesktopShell(state, {
       type: "utility/toggled",
-      utility: { kind: "chat-info", workspace: "messages", guid: "chat-2" },
+      utility: { kind: "chat-info", workspace: "messages", conversationId: cid("chat-2") },
     });
     expect(state.utility).toEqual({
       kind: "chat-info",
       workspace: "messages",
-      guid: "chat-2",
+      conversationId: cid("chat-2"),
     });
     state = reduceDesktopShell(state, {
       type: "utility/toggled",
-      utility: { kind: "chat-info", workspace: "messages", guid: "chat-2" },
+      utility: { kind: "chat-info", workspace: "messages", conversationId: cid("chat-2") },
     });
     expect(state.utility).toBeNull();
 

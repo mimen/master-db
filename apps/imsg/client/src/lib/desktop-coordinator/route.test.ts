@@ -6,6 +6,9 @@ import {
   workspacePath,
 } from "./route";
 import type { DesktopRouteProjection, Result, DesktopRouteError } from "./types";
+import type { ConversationId } from "@shared/types";
+
+const cid = (id: string) => id as ConversationId;
 
 function projected(
   result: Result<DesktopRouteProjection, DesktopRouteError>,
@@ -33,35 +36,42 @@ describe("projectDesktopRoute", () => {
   test("projects parameterized and concrete chat routes with normalized selection", () => {
     expect(
       projected(
-        projectDesktopRoute("/chat/[guid]", {
-          guid: "iMessage;-;+15551234567",
+        projectDesktopRoute("/c/[conversationId]", {
+          conversationId: "conv-1",
           name: "Ada",
           isGroup: "0",
-          count: "1",
           targetGuid: "message-1",
           targetDate: "1720000000000",
         }),
       ),
     ).toEqual({
       kind: "chat",
-      pathname: "/chat/[guid]",
+      pathname: "/c/[conversationId]",
       workspace: "messages",
       workspaceProvenance: { kind: "path" },
       selection: {
-        guid: "iMessage;-;+15551234567",
+        conversationId: cid("conv-1"),
         name: "Ada",
         isGroup: false,
-        participantCount: 1,
         jumpTarget: { guid: "message-1", dateCreated: 1720000000000 },
         intent: "reply",
       },
     });
 
-    const concrete = projected(projectDesktopRoute("/chat/iMessage%3B-%3B%2B1555"));
+    const concrete = projected(projectDesktopRoute("/c/conv-2"));
     expect(concrete.kind).toBe("chat");
     if (concrete.kind === "chat") {
-      expect(concrete.selection.guid).toBe("iMessage%3B-%3B%2B1555");
+      expect(concrete.selection.conversationId).toBe(cid("conv-2"));
     }
+  });
+
+  test("an old /chat link shows Messages while its redirect resolves the conversation", () => {
+    expect(projected(projectDesktopRoute("/chat/iMessage%3B-%3B%2B1555"))).toEqual({
+      kind: "workspace",
+      pathname: "/chat/iMessage%3B-%3B%2B1555",
+      workspace: "messages",
+      workspaceProvenance: { kind: "path" },
+    });
   });
 
   test("defaults person routes to Contacts and honors Messages provenance", () => {
@@ -79,7 +89,7 @@ describe("projectDesktopRoute", () => {
           address: "+1555",
           name: "Ada",
           workspace: "messages",
-          backGuid: "chat-1",
+          backConversation: "conv-1",
         }),
       ),
     ).toEqual({
@@ -91,21 +101,21 @@ describe("projectDesktopRoute", () => {
         kind: "person",
         workspace: "messages",
         target: { address: "+1555", name: "Ada" },
-        backGuid: "chat-1",
+        backConversation: cid("conv-1"),
       },
     });
   });
 
   test("projects chat info as one selection-and-utility commit", () => {
     expect(
-      projected(projectDesktopRoute("/chat-info", { guid: "chat-1", name: "Ada" })),
+      projected(projectDesktopRoute("/chat-info", { conversation: "conv-1", name: "Ada" })),
     ).toEqual({
       kind: "utility",
       pathname: "/chat-info",
       workspace: "messages",
       workspaceProvenance: { kind: "path" },
-      utility: { kind: "chat-info", workspace: "messages", guid: "chat-1" },
-      chatSelection: { guid: "chat-1", name: "Ada", intent: "reply" },
+      utility: { kind: "chat-info", workspace: "messages", conversationId: cid("conv-1") },
+      chatSelection: { conversationId: cid("conv-1"), name: "Ada", intent: "reply" },
     });
   });
 
@@ -135,7 +145,7 @@ describe("projectDesktopRoute", () => {
       projected(
         projectDesktopRoute(
           "/search",
-          { query: ["invoice", "ignored"], chat: "chat-1", name: "Ada" },
+          { query: ["invoice", "ignored"], conversation: "conv-1", name: "Ada" },
           "contacts",
         ),
       ),
@@ -147,7 +157,7 @@ describe("projectDesktopRoute", () => {
       overlay: {
         kind: "search",
         query: "invoice",
-        chatGuid: "chat-1",
+        conversationId: cid("conv-1"),
         chatName: "Ada",
       },
     });
@@ -179,7 +189,7 @@ describe("projectDesktopRoute", () => {
     });
     expect(projectDesktopRoute("/chat-info", {})).toEqual({
       ok: false,
-      error: { kind: "missing-parameter", pathname: "/chat-info", parameter: "guid" },
+      error: { kind: "missing-parameter", pathname: "/chat-info", parameter: "conversation" },
     });
     expect(projectDesktopRoute("/settings", { workspace: "calendar" })).toEqual({
       ok: false,
@@ -190,13 +200,13 @@ describe("projectDesktopRoute", () => {
         value: "calendar",
       },
     });
-    expect(projectDesktopRoute("/chat/chat-1", { count: "many" })).toEqual({
+    expect(projectDesktopRoute("/c/conv-1", { targetGuid: "m1", targetDate: "soon" })).toEqual({
       ok: false,
       error: {
         kind: "invalid-parameter",
-        pathname: "/chat/chat-1",
-        parameter: "count",
-        value: "many",
+        pathname: "/c/conv-1",
+        parameter: "targetDate",
+        value: "soon",
       },
     });
     expect(projectDesktopRoute("/unknown")).toEqual({

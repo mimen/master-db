@@ -9,7 +9,7 @@ import { HOVER_DIM, PRESS_DIM, Radii, Type } from "@/constants/theme";
 import { useQuery } from "convex/react";
 import { mediaApi } from "@/lib/media-api";
 import { runCommand } from "@/lib/convex-commands";
-import type { TranscriptState } from "@shared/types";
+import type { ConversationId, TranscriptState } from "@shared/types";
 
 function formatSeconds(total: number): string {
   const seconds = Math.max(0, Math.round(total));
@@ -47,7 +47,7 @@ export function MediaUnavailable({ onMac }: { onMac?: boolean }) {
 }
 
 /** `url` is null only while `sending`, before the recorder has handed over the file. */
-export function AudioBubble({ guid, chatGuid, url, mine, sending = false }: { guid: string; chatGuid: string; url: string | null; mine: boolean; sending?: boolean }) {
+export function AudioBubble({ guid, conversationId, url, mine, sending = false }: { guid: string; conversationId: ConversationId; url: string | null; mine: boolean; sending?: boolean }) {
   const theme = useTheme();
   const player = useAudioPlayer(url ? { uri: url } : null);
   const status = useAudioPlayerStatus(player);
@@ -64,7 +64,7 @@ export function AudioBubble({ guid, chatGuid, url, mine, sending = false }: { gu
   const requestTranscript = async () => {
     setRequestState({ state: "working" });
     try {
-      await runCommand(chatGuid, { kind: "transcribe", attachmentGuid: guid });
+      await runCommand(conversationId, { kind: "transcribe", attachmentGuid: guid });
       setRequestState(null);
     } catch {
       setRequestState({ state: "failed", error: "Transcript request failed" });

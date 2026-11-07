@@ -1,30 +1,30 @@
 import { useEffect, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import { api } from "@/lib/api";
+import { api, type SearchHit } from "@/lib/api";
 import { formatListTimestamp } from "@/lib/format";
-import { selectChat } from "@/lib/selection";
+import { conversationRoute, selectChat } from "@/lib/selection";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { addressesMatch } from "@shared/address";
-import type { Contact, Message } from "@shared/types";
+import type { Contact, ConversationId } from "@shared/types";
 import { ListRow } from "./list-row";
 import { useTheme } from "@/hooks/use-theme";
 
 type SearchRow =
   | { kind: "header"; key: string; label: string }
   | { kind: "contact"; key: string; contact: Contact }
-  | { kind: "message"; key: string; message: Message };
+  | { kind: "message"; key: string; message: SearchHit };
 
 /** Search UI shared by the mobile route and the desktop overlay panel. */
 export function SearchContent({
   initialQuery,
-  scopeChatGuid,
+  scopeConversation,
   scopeLabel,
   onClose,
 }: {
   initialQuery?: string;
   /** When set, search only this conversation (in-thread search). */
-  scopeChatGuid?: string;
+  scopeConversation?: ConversationId;
   scopeLabel?: string;
   onClose: () => void;
 }) {
@@ -35,7 +35,7 @@ export function SearchContent({
     if (initialQuery !== undefined) setQuery(initialQuery);
   }, [initialQuery]);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<SearchHit[]>([]);
   const [searching, setSearching] = useState(false);
 
   useEffect(() => {
@@ -47,8 +47,8 @@ export function SearchContent({
     const handle = setTimeout(() => {
       setSearching(true);
       Promise.all([
-        api.search(query.trim(), scopeChatGuid ? { chat: scopeChatGuid } : {}).catch(() => []),
-        scopeChatGuid ? Promise.resolve([]) : api.contacts(query.trim()).catch(() => []),
+        api.search(query.trim(), scopeConversation ? { conversationId: scopeConversation } : {}).catch(() => []),
+        scopeConversation ? Promise.resolve([]) : api.contacts(query.trim()).catch(() => []),
       ])
         .then(([messageResults, contactResults]) => {
           setMessages(messageResults);
@@ -57,39 +57,28 @@ export function SearchContent({
         .finally(() => setSearching(false));
     }, 350);
     return () => clearTimeout(handle);
-  }, [query, scopeChatGuid]);
+  }, [query, scopeConversation]);
 
   const directory = useChatDirectory();
-  const open = (chatGuid: string, name: string) => {
+  const open = (conversationId: ConversationId, name: string) => {
     onClose();
-    if (!selectChat({ guid: chatGuid, name })) {
-      router.push({ pathname: "/chat/[guid]", params: { guid: chatGuid, name } });
-    }
+    if (!selectChat({ conversationId, name })) router.push(conversationRoute(conversationId));
   };
   const openContact = (contact: Contact) => {
     // A listed 1:1 opens on the tap; findChat resolves the rest.
     const listed = directory?.find((chat) => !chat.isGroup && chat.participants.length === 1
       && addressesMatch(chat.participants[0]!.address, contact.address));
-    if (listed) return open(listed.guid, contact.name);
+    if (listed) return open(listed.conversationId, contact.name);
     api
       .findChat(contact.address)
-      .then(({ chatGuid }) => open(chatGuid, contact.name))
+      .then(({ conversationId }) => open(conversationId, contact.name))
       .catch(() => undefined);
   };
 
-  const openMessage = (message: Message) => {
+  const openMessage = (message: SearchHit) => {
     onClose();
     const jumpTarget = { guid: message.guid, dateCreated: message.dateCreated };
-    if (!selectChat({ guid: message.chatGuid, jumpTarget })) {
-      router.push({
-        pathname: "/chat/[guid]",
-        params: {
-          guid: message.chatGuid,
-          targetGuid: message.guid,
-          targetDate: String(message.dateCreated),
-        },
-      });
-    }
+    if (!selectChat({ conversationId: message.conversationId, jumpTarget })) router.push(conversationRoute(message.conversationId, jumpTarget));
   };
 
   const rows: SearchRow[] = [

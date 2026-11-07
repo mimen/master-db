@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { ForwardContent } from "@/components/lazy-surfaces";
 
 import { useLayoutMode } from "@/hooks/use-layout-mode";
-import { selectChat } from "@/lib/selection";
+import { conversationRoute, selectChat } from "@/lib/selection";
 
 export default function ForwardScreen(): React.JSX.Element | null {
   const { wide } = useLayoutMode();
@@ -11,8 +11,8 @@ export default function ForwardScreen(): React.JSX.Element | null {
     <ForwardContent
       onClose={() => router.back()}
       onOpenChat={(chat) => {
-        if (!selectChat({ guid: chat.guid, name: chat.displayName })) {
-          router.replace({ pathname: "/chat/[guid]", params: { guid: chat.guid, name: chat.displayName } });
+        if (!selectChat({ conversationId: chat.conversationId, name: chat.displayName })) {
+          router.replace(conversationRoute(chat.conversationId));
         }
       }}
     />

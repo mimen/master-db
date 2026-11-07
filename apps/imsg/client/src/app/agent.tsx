@@ -1,5 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect } from "react";
+import type { ConversationId } from "@shared/types";
 import { useAgentEnabled } from "@/hooks/use-agent";
 import { useAiStatus } from "@/hooks/use-ai";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
@@ -9,7 +10,7 @@ const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
 /** The phone's Agent tab. Wide screens open the same pane in the shell's utility surface. */
 export default function AgentScreen(): React.JSX.Element | null {
-  const { guid, chat } = useLocalSearchParams<{ guid: string; chat?: string }>();
+  const { conversation, chat } = useLocalSearchParams<{ conversation: ConversationId; chat?: string }>();
   const { wide } = useLayoutMode();
   const enabled = useAgentEnabled();
   const { loaded } = useAiStatus();
@@ -17,6 +18,6 @@ export default function AgentScreen(): React.JSX.Element | null {
   useEffect(() => {
     if (!wide && loaded && !enabled) close();
   }, [wide, loaded, enabled]);
-  if (wide || !guid || !enabled) return null;
-  return <AgentPane chatGuid={guid} requestedChatId={chat} onClose={close} />;
+  if (wide || !conversation || !enabled) return null;
+  return <AgentPane conversationId={conversation} requestedChatId={chat} onClose={close} />;
 }

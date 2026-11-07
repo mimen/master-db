@@ -5,7 +5,6 @@ import { bridgeSnapshot, readChatSnapshot, webStore, writeChatSnapshot } from "@
 import { agentApi } from "@/lib/agent-api";
 import { conversationToChat, withAgents, withDrafts } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
-import { publishKnownConversations } from "@/lib/convex-commands";
 import { setDesktopBadgeCount } from "@/lib/desktop-shell";
 import { usePendingRenames } from "@/lib/pending-renames";
 import { useAgentSettings } from "@/lib/settings";
@@ -74,7 +73,6 @@ export function ChatDirectoryProvider({ children }: { readonly children: ReactNo
     return joined.current;
   }, [drafted, agentChats]);
   const shown = usePendingRenames(chats);
-  useEffect(() => publishKnownConversations(chats ?? []), [chats]);
   return createElement(ChatDirectoryContext.Provider, { value: shown }, children);
 }
 
@@ -104,16 +102,16 @@ export function useChats(state: StateFilter, type: TypeFilter, freezeMembership 
   const chats = useMemo(() => {
     if (state === "all" || state === "unresponded" || state === "waiting" || state === "drafts" || state === "agents" || !freezeMembership) {
       frozenRef.current = { state, guids: new Set() };
-      return all.filter((c) => c.guid === held || matchesFilters(c, state, type));
+      return all.filter((c) => c.conversationId === held || matchesFilters(c, state, type));
     }
     if (frozenRef.current.state !== state) frozenRef.current = { state, guids: new Set() };
     const frozen = frozenRef.current.guids;
     return all.filter((c) => {
       if (matchesFilters(c, state, type)) {
-        frozen.add(c.guid);
+        frozen.add(c.conversationId);
         return true;
       }
-      return frozen.has(c.guid) && matchesFilters(c, "all", type);
+      return frozen.has(c.conversationId) && matchesFilters(c, "all", type);
     });
   }, [all, state, type, freezeMembership, held]);
   // Unknown, not zero, until the first list arrives: a zero would paint and then jump.

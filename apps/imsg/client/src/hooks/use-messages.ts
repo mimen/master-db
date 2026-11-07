@@ -7,8 +7,8 @@ import { localSends, useLocalSends } from "@/lib/local-sends";
 import { reconcileWindow, sortThread, hideSelfEchoes } from "@/lib/message-window";
 import { afterPaint, markOpenRendered } from "@/lib/open-timing";
 import { applyPendingEdits, retirePendingEdits, type PendingEdit, type PendingEdits } from "@/lib/pending-edits";
-import type { Message } from "@shared/types";
-import { useConversationRef } from "./use-chat-directory";
+import type { ConversationId, Message } from "@shared/types";
+import { useConversation } from "./use-chat-directory";
 import { useMessageWindow } from "./use-message-window";
 
 export interface JumpTarget {
@@ -40,36 +40,36 @@ export interface UseMessagesResult {
  * (matched by clientKey or guid) arrives, so the optimistic bubble never
  * blinks.
  */
-function useConvexMessages(conversationId: string | null, chatGuid: string | null, newest: readonly Message[]): UseMessagesResult {
+function useConvexMessages(conversationId: ConversationId | null, newest: readonly Message[]): UseMessagesResult {
   const { results, status, loadMore } = usePaginatedQuery(
     commaApi.listMessages,
-    conversationId ? { conversationId: conversationId as never } : "skip",
+    conversationId ? { conversationId } : "skip",
     { initialNumItems: 50 },
   );
-  const local = useLocalSends(chatGuid);
+  const local = useLocalSends(conversationId);
   useEffect(() => {
-    if (chatGuid && status !== "LoadingFirstPage") afterPaint(() => markOpenRendered(chatGuid, true));
-  }, [chatGuid, status]);
+    if (conversationId && status !== "LoadingFirstPage") afterPaint(() => markOpenRendered(conversationId, true));
+  }, [conversationId, status]);
   const remote = useMemo(() => sortThread(results.map(messageToMessage)), [results]);
   const mirrored = useMemo(() => reconcileWindow(remote, [...newest]), [newest, remote]);
   const messages = useMemo(() => hideSelfEchoes(mergeConvexMessages(mirrored, local)), [mirrored, local]);
   // Retire overlays once a real mirrored row owns the send. Otherwise an unsent
   // message could reappear from its old local acknowledgement after retraction.
   useEffect(() => {
-    if (!chatGuid) return;
+    if (!conversationId) return;
     const confirmed = mirrored.filter((message) => !message.guid.startsWith("temp-"));
-    localSends.retain(chatGuid, (message) => !confirmed.some((row) => row.guid === message.guid ||
+    localSends.retain(conversationId, (message) => !confirmed.some((row) => row.guid === message.guid ||
       (message.clientKey && row.clientKey === message.clientKey)));
-  }, [chatGuid, mirrored, local]);
+  }, [conversationId, mirrored, local]);
   const upsert = useCallback((message: Message) => {
-    if (chatGuid) localSends.upsert(chatGuid, message);
-  }, [chatGuid]);
+    if (conversationId) localSends.upsert(conversationId, message);
+  }, [conversationId]);
   const replaceTemp = useCallback((tempGuid: string, message: Message) => {
-    if (chatGuid) localSends.settle(chatGuid, tempGuid, message);
-  }, [chatGuid]);
+    if (conversationId) localSends.settle(conversationId, tempGuid, message);
+  }, [conversationId]);
   const remove = useCallback((guid: string) => {
-    if (chatGuid) localSends.retain(chatGuid, (m) => m.guid !== guid);
-  }, [chatGuid]);
+    if (conversationId) localSends.retain(conversationId, (m) => m.guid !== guid);
+  }, [conversationId]);
   const noop = useCallback(() => undefined, []);
   const loadOlder = useCallback(() => {
     if (status === "CanLoadMore") loadMore(50);
@@ -95,18 +95,19 @@ export interface ThreadMessages extends UseMessagesResult {
   pend: (messageGuid: string, edit: PendingEdit) => () => void;
 }
 
-export function useMessages(chatGuid: string | null, target: JumpTarget | null): ThreadMessages {
-  const { conversationId, lastMessageAt, resolving } = useConversationRef(chatGuid);
+export function useMessages(conversationId: ConversationId | null, target: JumpTarget | null): ThreadMessages {
+  const conversation = useConversation(conversationId);
+  const lastMessageAt = conversation?.lastMessage?.dateCreated ?? null;
   // This window can render the sidebar's newest message while pagination loads,
   // and keeps the active thread's read observer live during a historical jump.
   const newestRows = useQuery(messageWindow, conversationId && lastMessageAt !== null
     ? { conversationId, before: lastMessageAt + 1 } : "skip");
   const newest = useMemo(() => newestRows?.map(messageToMessage) ?? [], [newestRows]);
-  const convex = useConvexMessages(!target ? conversationId : null, !target ? chatGuid : null, target ? [] : newest);
-  const anchored = useMessageWindow(target ? conversationId : null, target ? chatGuid : null, target);
+  const convex = useConvexMessages(!target ? conversationId : null, target ? [] : newest);
+  const anchored = useMessageWindow(target ? conversationId : null, target);
   const selected = target ? anchored : convex;
   const [edits, setEdits] = useState<PendingEdits>(new Map());
-  useEffect(() => setEdits(new Map()), [chatGuid]);
+  useEffect(() => setEdits(new Map()), [conversationId]);
   useEffect(() => setEdits((current) => retirePendingEdits(current, selected.messages)), [selected.messages, edits]);
   const shown = useMemo(() => applyPendingEdits(selected.messages, edits), [selected.messages, edits]);
   const pend = useCallback((messageGuid: string, edit: PendingEdit) => {
@@ -123,7 +124,7 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
     messages: shown,
     pend,
     newestMessages: newest,
-    loading: chatGuid !== null && selected.messages.length === 0 && (resolving || selected.loading),
+    loading: conversationId !== null && selected.messages.length === 0 && (conversation === undefined || selected.loading),
   };
   return result;
 }

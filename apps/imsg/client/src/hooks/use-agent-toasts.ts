@@ -8,17 +8,15 @@ import { Platform } from "react-native";
 import { agentApi } from "@/lib/agent-api";
 import { openAgentPane, shownAgentChat } from "@/lib/agent-pane";
 import { AGENT_ATTENTION, agentArrivals } from "@/lib/inbox-model";
-import { selectChat } from "@/lib/selection";
+import { conversationRoute, selectChat } from "@/lib/selection";
 import { useAgentSettings } from "@/lib/settings";
 import { showToast } from "@/lib/toast";
 import { useChatDirectory } from "./use-chat-directory";
 
 /** Opens the conversation with its agent pane on `chatId`: a toast's Open and an Agent chats pick in ⌘K. */
-export function openAgentChat(chat: Pick<ChatSummary, "guid" | "displayName">, chatId: string): void {
-  if (!selectChat({ guid: chat.guid, name: chat.displayName })) {
-    router.push({ pathname: "/chat/[guid]", params: { guid: chat.guid, name: chat.displayName } });
-  }
-  openAgentPane(chat.guid, chatId);
+export function openAgentChat(chat: Pick<ChatSummary, "conversationId" | "displayName">, chatId: string): void {
+  if (!selectChat({ conversationId: chat.conversationId, name: chat.displayName })) router.push(conversationRoute(chat.conversationId));
+  openAgentPane(chat.conversationId, chatId);
 }
 
 /**
@@ -44,7 +42,7 @@ export function useAgentToasts(lookingAt: string | null): void {
     before.current = seen;
     for (const { chat, attention } of arrivals) {
       const row = latest.current.directory?.find((c) => c.conversationId === chat.conversationId);
-      if (!row || (row.guid === latest.current.lookingAt && chat._id === shownAgentChat())) continue;
+      if (!row || (row.conversationId === latest.current.lookingAt && chat._id === shownAgentChat())) continue;
       showToast(`${row.displayName} · ${AGENT_ATTENTION[attention].spoken}`, { label: "Open", onPress: () => openAgentChat(row, chat._id) });
     }
   }, [summaries]);

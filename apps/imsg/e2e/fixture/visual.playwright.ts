@@ -1,5 +1,6 @@
 import type { ElementHandle, Page } from "@playwright/test";
 import { expect, test } from "../fixtures/desk";
+import { fixtureConversationId } from "../../shared/fixture-ids";
 
 /** Element handles, not nth locators: hovering a row reveals its buttons and would shift every later index. */
 async function expectHoverStable(page: Page, control: ElementHandle): Promise<void> {
@@ -660,7 +661,7 @@ test("messages send through the real UI and fixture replies arrive through Conve
   // the outgoing mirror exists so the two messages retain their real order.
   await expect.poll(async () => {
     const response = await desk.request.post("/__fixture/convex", {
-      data: { name: "comma/queries:listMessages", args: { conversationId: desk.chats.needs, paginationOpts: { numItems: 100, cursor: null } } },
+      data: { name: "comma/queries:listMessages", args: { conversationId: fixtureConversationId(desk.chats.needs), paginationOpts: { numItems: 100, cursor: null } } },
     });
     const { page: messages } = await response.json() as { page: Array<{ guid: string; text: string }> };
     return messages.find((message) => message.text === outbound)?.guid ?? "";
