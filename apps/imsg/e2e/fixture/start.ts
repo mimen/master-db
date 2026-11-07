@@ -135,6 +135,13 @@ const faultableMethods = new Set<FaultableMethod>([
   "createFaceTimeLink",
 ]);
 
+const ai = new FixtureAi(db, identity, { bb, gatewayUrl: `http://${config.hostname}:${port}/__fixture/model` });
+const modelSuggestions = JSON.stringify({
+  noReply: false,
+  suggestions: [{ kind: "text", strategy: "clarify", vibe: "curious", text: "what time works?", reaction: "none", targetMessageGuid: "", targetPartIndex: 0, basisMessageGuids: [], decisionOption: false, introducesCommitment: false }],
+  event: { found: false, title: "", start: "", durationMinutes: 0, location: "" },
+});
+
 const { app, dispose } = await createApp({
   config,
   bb,
@@ -142,7 +149,7 @@ const { app, dispose } = await createApp({
   now: () => FIXTURE_NOW,
   names: identity,
   identity,
-  ai: new FixtureAi(db, identity),
+  ai,
   backgroundServices: false,
   staticRoot: Bun.env.IMSG_FIXTURE_DIST ?? join(fixtureDirectory, "dist"),
   configureFixtureRoutes: (fixtureApp, controls) => {
@@ -151,6 +158,7 @@ const { app, dispose } = await createApp({
     });
     fixtureApp.post("/__fixture/reset", (c) => {
       bb.reset(fixtureSeed());
+      ai.modelDelayMs = null;
       resetOverlay();
       resetConvex();
       return c.json({ ok: true, now: FIXTURE_NOW });
@@ -194,6 +202,23 @@ const { app, dispose } = await createApp({
       const body = (await c.req.json()) as { delayMs?: number; echo?: boolean };
       bb.setSendTiming(typeof body.delayMs === "number" ? { delayMs: body.delayMs, echo: body.echo === true } : null);
       return c.json({ ok: true });
+    });
+
+    // The Anthropic messages route the live suggestion path calls; it answers after `/__fixture/model`'s delay.
+    fixtureApp.post("/__fixture/model/v1/messages", async (c) => {
+      const signal = c.req.raw.signal;
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, ai.modelDelayMs ?? 0);
+        signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
+      });
+      return c.json({ id: "fixture", type: "message", role: "assistant", model: "fixture", stop_reason: "end_turn",
+        content: [{ type: "text", text: modelSuggestions }], usage: { input_tokens: 1, output_tokens: 1 } });
+    });
+
+    fixtureApp.post("/__fixture/model", async (c) => {
+      const body = (await c.req.json()) as { delayMs?: number | null };
+      ai.modelDelayMs = typeof body.delayMs === "number" ? body.delayMs : null;
+      return c.json({ ok: true, delayMs: ai.modelDelayMs });
     });
 
     fixtureApp.post("/__fixture/fault", async (c) => {

@@ -98,7 +98,7 @@ The `desk` fixture gives every drive four things:
 
 **Fixture time.** The server clock is pinned to `FIXTURE_NOW` (exported from `e2e/fixture/world.ts`). If a feature cares whether a message counts as fresh, shift the page clock with `page.addInitScript` the way `e2e/fixture/send.playwright.ts` does.
 
-**Faults.** Inject one with `POST /__fixture/fault {"method":"sendText","error":"offline"}`, and clear it with `{"method":null}`. Control echo delay with `POST /__fixture/send-timing {"delayMs":3000,"echo":false}`.
+**Faults.** Inject one with `POST /__fixture/fault {"method":"sendText","error":"offline"}`, and clear it with `{"method":null}`. Control echo delay with `POST /__fixture/send-timing {"delayMs":3000,"echo":false}`. Run reply suggestions through the real `AiService` and `Gateway`, with their real deadline, against a fake model that answers after a delay: `POST /__fixture/model {"delayMs":10300}`. `{"delayMs":null}` restores the canned shelf. A conversation's seeded cache still answers first, so receive a new inbound message before opening it (see `drives/suggestions-deadline.ts`).
 
 ## Evidence
 
