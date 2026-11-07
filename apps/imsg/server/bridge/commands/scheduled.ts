@@ -2,9 +2,9 @@ import type { BBScheduledMessage } from "../../bb-types";
 import { mapScheduledMessage } from "../../scheduled";
 import { ScheduledSendNow } from "../../scheduled-send-now";
 import { publishScheduled } from "../scheduled-mirror";
-import { accept, requireChat, type CommandContext, type HandlerMap } from "./types";
+import { accept, requireChat, type IMessageContext, type HandlerMap } from "./types";
 
-async function scheduledTarget(ctx: CommandContext, id: number): Promise<BBScheduledMessage> {
+async function scheduledTarget(ctx: IMessageContext, id: number): Promise<BBScheduledMessage> {
   if (!Number.isInteger(id) || id <= 0) throw new Error("invalid schedule id");
   const listed = await ctx.commands.bb.listScheduledMessages();
   if (!listed.ok) throw new Error(listed.error);
@@ -16,7 +16,7 @@ async function scheduledTarget(ctx: CommandContext, id: number): Promise<BBSched
   return scheduled;
 }
 
-async function scheduledResult(ctx: CommandContext, raw: BBScheduledMessage) {
+async function scheduledResult(ctx: IMessageContext, raw: BBScheduledMessage) {
   await publishScheduled(ctx.commands.bb, ctx.writer.deps.ingest);
   return mapScheduledMessage(raw, ctx.writer.conversation(raw.payload.chatGuid, ctx.commands.names)?.displayName ?? raw.payload.chatGuid);
 }

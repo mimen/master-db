@@ -1,7 +1,7 @@
 import { extractLinkPreview, parsePublicPreviewUrl } from "../../shared/link-preview";
 import type { Hono } from "hono";
 import type { GenericId, Infer } from "convex/values";
-import type { attachmentDoc, conversationDoc, draftView, messageDoc, scheduledDoc, CommaOutboxPayload, CommandResult } from "../../../../convex/schema/comma/validators";
+import { laneOf, type attachmentDoc, type conversationDoc, type draftView, type messageDoc, type scheduledDoc, type CommaOutboxLane, type CommaOutboxPayload, type CommandResult } from "../../../../convex/schema/comma/validators";
 import { conversationKey } from "../../../../convex/comma/conversationKey";
 import { resolveConversationNames } from "../../../../convex/comma/names";
 import { formatAddress } from "../../shared/address";
@@ -13,6 +13,7 @@ import { mapScheduledMessage } from "../../server/scheduled";
 import { ScheduledSendNow } from "../../server/scheduled-send-now";
 import { ChatCommands } from "../../server/commands";
 import { WhisperService } from "../../server/whisper";
+import type { ConversationId } from "../../server/ai/service";
 import type { OverlayDb } from "../../server/db";
 import type { ChatSummary, Contact, ReplySuggestions, TranscriptState } from "../../shared/types";
 import { createAgentFixture } from "./agent";
@@ -118,7 +119,13 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   const transcripts = new Map<string, TranscriptState>();
   const inFlight = new Map<string, Promise<string>>();
   const temps = new Map<string, ConvexMessage>();
-  let sendTurn: Promise<unknown> = Promise.resolve();
+  const turns = new Map<CommaOutboxLane, Promise<unknown>>();
+  // Drives slow one Convex function, or one command kind as `outbox:<kind>`, to watch the client across a long round trip.
+  const latency = new Map<string, number>();
+  const wait = async (name: string) => {
+    const delay = latency.get(name);
+    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+  };
   const peerTyping = new Map<string, { peerTyping: boolean; updatedAt: number; expiresAt: number }>();
   const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
   bb.onEvent((event) => {
@@ -299,8 +306,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       case "cancelScheduled": accept(await commands.cancelScheduled(payload.bbId)); break;
       case "sendScheduledNow": accept(await new ScheduledSendNow(bb).send(payload.bbId)); break;
       case "suggestions": {
-        const chat = (await chatSummaries()).find((row) => row.guid === chatGuid);
-        const result = await ai.replySuggestions(chatGuid, chat && !chat.isGroup ? chat.displayName : null, payload.refresh, payload.model);
+        const result = await ai.replySuggestions(chatGuid as ConversationId, payload.refresh, payload.model);
         if (!result.ok) throw new FixtureError(result.error, 502);
         const generated = result.value;
         const anchor = (await conversations()).find((row) => row.primaryChatGuid === chatGuid)?.lastMessage;
@@ -312,9 +318,9 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         return { kind: "suggestions" as const, suggestions };
       }
       case "suggestionFeedback": {
-        if (payload.feedback.suggestion.kind === "reaction") ai.recordReactionFeedback(chatGuid, payload.feedback);
+        if (payload.feedback.suggestion.kind === "reaction") ai.recordReactionFeedback(chatGuid as ConversationId, payload.feedback);
         else {
-          const result = ai.recordSuggestionFeedback(chatGuid, payload.feedback);
+          const result = ai.recordSuggestionFeedback(chatGuid as ConversationId, payload.feedback);
           if (!result.ok) throw new FixtureError(result.error, 400);
         }
         return { kind: "suggestionFeedback" as const, ok: true as const };
@@ -324,11 +330,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         shelves.clear();
         return { kind: "clearSuggestionLearning" as const, ok: true as const };
       case "identify": {
-        const chat = await bb.getChat(chatGuid);
-        if (!chat.ok) throw new FixtureError(chat.error, 502);
-        const address = chat.value.participants?.[0]?.address;
-        if (!address) throw new FixtureError("no participant address", 400);
-        const result = await ai.identify(chatGuid, address, names.lookup(address));
+        const result = await ai.identify(chatGuid as ConversationId);
         if (!result.ok) throw new FixtureError(result.error, 502);
         return { kind: "identify" as const, contact: result.value };
       }
@@ -355,7 +357,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       case "deleteChat":
         if (payload.chatGuid !== chatGuid) throw new FixtureError("Chat alias is not in this conversation", 400);
         accept(await commands.deleteChat(payload.chatGuid));
-        db.deleteSuggestionFeedbackForChat(payload.chatGuid);
+        db.deleteSuggestionLearningFor([payload.chatGuid]);
         deletedChats.add(payload.chatGuid);
         break;
       case "createFaceTimeLink": {
@@ -566,9 +568,13 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
             isGroupEvent: false, mentions: payload.mentions ?? [], attachmentGuids: [], clientKey, sourceVersion: 0, attachments: [],
           });
         }
-        // The Mini's bridge claims one command at a time, so a burst of sends lands one by one.
-        const run = payload.kind === "send" ? sendTurn.then(() => execute(chatGuid, payload, clientKey)) : execute(chatGuid, payload, clientKey);
-        if (payload.kind === "send") sendTurn = run.catch(() => undefined);
+        // Each lane on the Mini runs one command at a time, so a burst of sends lands one by one and a slow
+        // model command holds back only the model work behind it.
+        const lane = laneOf(payload.kind);
+        const ordered = payload.kind === "send" || lane === "ai";
+        const work = () => wait(`outbox:${payload.kind}`).then(() => execute(chatGuid, payload, clientKey));
+        const run = ordered ? (turns.get(lane) ?? Promise.resolve()).then(work) : work();
+        if (ordered) turns.set(lane, run.catch(() => undefined));
         const result = await run.finally(() => temps.delete(clientKey));
         const resultGuid = result && "message" in result ? result.message.guid : undefined;
         if (result && "message" in result) triage.replied(chatGuid, conversation?.lastMessage ?? null, result.message.dateCreated);
@@ -596,8 +602,6 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return row ? [{ clientKey, status: row.status }] : [];
     }),
   };
-  // Drives slow one function to watch the client across a long server round trip.
-  const latency = new Map<string, number>();
   app.post("/__fixture/latency", async (c) => {
     const { name, delayMs } = await c.req.json<{ name: string; delayMs: number | null }>();
     if (delayMs === null) latency.delete(name);
@@ -609,13 +613,12 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       const { name, args } = await c.req.json<{ name: string; args: Record<string, unknown> }>();
       const handler = Object.hasOwn(handlers, name) ? handlers[name] : undefined;
       if (!handler) return c.json({ error: `Unknown fixture Convex function: ${name}` }, 400);
-      const delay = latency.get(name);
-      if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+      await wait(name);
       return Response.json(await handler(args));
     } catch (error) {
       return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: error instanceof FixtureError ? error.status : 400 });
     }
   });
-  return () => { sendTurn = Promise.resolve(); names.reset(); agent.reset(); today.reset(); triage.reset(); latency.clear(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
+  return () => { turns.clear(); names.reset(); agent.reset(); today.reset(); triage.reset(); latency.clear(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
     for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };
 }

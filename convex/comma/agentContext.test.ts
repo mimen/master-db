@@ -107,3 +107,21 @@ test("agentAttachment returns a storage URL with the file's name and type", asyn
   });
   expect(await t.mutation(internal.comma.agentContext.agentAttachment, { guid: "nope" })).toBeNull();
 });
+
+describe("aiThread", () => {
+  test("reads the thread as wire messages, newest last, with contact names, folded reactions and attachment kinds", async () => {
+    const { t, conversationId } = await setup();
+    await t.run(async (ctx) => {
+      const m4 = await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "m4")).unique();
+      await ctx.db.patch(m4!._id, { reactions: [{ type: "love", isFromMe: true, senderName: null, senderAddress: null }] });
+    });
+    const thread = await t.mutation(internal.comma.agentContext.aiThread, { conversationId });
+    expect(thread).toMatchObject({ title: "Door crew", isGroup: true,
+      participants: [{ address: ALEX, name: "Alex Rivera" }, { address: SAM, name: null }] });
+    expect(thread.messages.map((m) => m.guid)).toEqual(["m1", "m2", "m3", "m4"]);
+    expect(thread.messages[0]).toMatchObject({ sender: { address: ALEX, name: "Alex Rivera" }, text: "the door code is 4411", reactions: [] });
+    expect(thread.messages[1]?.attachments).toEqual([{ guid: "att1", mimeType: "image/png", filename: "door.png", width: null, height: null, totalBytes: null }]);
+    expect(thread.messages[2]).toMatchObject({ isFromMe: true, sender: null });
+    expect(thread.messages[3]?.reactions).toEqual([{ type: "love", isFromMe: true, senderName: null, senderAddress: null }]);
+  });
+});

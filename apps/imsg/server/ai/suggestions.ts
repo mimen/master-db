@@ -219,17 +219,6 @@ export interface ValidateSuggestionOptions {
   messages: Message[];
   renderedGuids: Set<string>;
   reactionSuggestions: boolean;
-  verifiedReactionGuids: Set<string>;
-}
-
-export function suggestionTargetGuids(value: object): string[] {
-  const parsed = parseRawSet(value);
-  if (!parsed) return [];
-  return [...new Set(
-    parsed.suggestions
-      .filter((suggestion) => suggestion.kind === "reaction" && suggestion.targetMessageGuid)
-      .map((suggestion) => suggestion.targetMessageGuid),
-  )];
 }
 
 export function validateSuggestionSet(
@@ -288,7 +277,7 @@ function validateOne(
     if (!options.reactionSuggestions || raw.strategy !== "react") return reject("reaction-capability");
     if (!TAPBACKS.includes(raw.reaction as TapbackType)) return reject("reaction-type");
     const target = byGuid.get(raw.targetMessageGuid);
-    if (!target || !options.verifiedReactionGuids.has(target.guid) || target.isFromMe || raw.targetPartIndex !== 0) return reject("reaction-target");
+    if (!target || target.isFromMe || raw.targetPartIndex !== 0) return reject("reaction-target");
     if (target.guid !== latestInbound.guid && !raw.basisMessageGuids.includes(target.guid)) return reject("reaction-basis");
     if (target.reactions.some((reaction) => reaction.isFromMe && reaction.type === raw.reaction)) return reject("reaction-duplicate");
     return {

@@ -24,7 +24,6 @@ const options = (messages: Message[]) => ({
   messages,
   renderedGuids: new Set(messages.map((item) => item.guid)),
   reactionSuggestions: true,
-  verifiedReactionGuids: new Set(messages.map((item) => item.guid)),
 });
 
 describe("semantic suggestion validation", () => {

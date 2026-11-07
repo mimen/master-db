@@ -68,7 +68,7 @@ export const messagingHandlers = {
     }
     accept(await ctx.commands.deleteChat(payload.chatGuid));
     await mirrorAfterEffect(() => ctx.writer.exclusive(async () => {
-      ctx.writer.deps.db.deleteSuggestionFeedbackForChat(payload.chatGuid);
+      ctx.writer.deps.db.deleteSuggestionLearningFor([ctx.row.conversationId!, payload.chatGuid]);
       await deleteMirroredChat(ctx.writer.deps.ingest, payload.chatGuid, ctx.signal);
       ctx.writer.conversationIds.delete(payload.chatGuid);
       await ctx.writer.refreshChats();

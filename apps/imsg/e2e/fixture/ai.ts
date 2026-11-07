@@ -1,26 +1,27 @@
 import type { AiServiceLike } from "../../server/app";
 import type { Result } from "../../server/bluebubbles";
 import type { OverlayDb } from "../../server/db";
+import type { ConversationId } from "../../server/ai/service";
 import type {
   ContactSuggestion,
   ReplySuggestions,
   SuggestionFeedbackRequest,
   SuggestionModel,
 } from "../../shared/types";
-import { FIXTURE_NOW } from "./world";
+import { FIXTURE_NOW, type FixtureIdentity } from "./world";
 
 export class FixtureAi implements AiServiceLike {
   readonly available = true;
 
-  constructor(_db: OverlayDb) {}
+  // A fixture conversation id is its chat guid, and a direct chat's guid ends in the address.
+  constructor(_db: OverlayDb, private readonly names?: Pick<FixtureIdentity, "lookup">) {}
 
   replySuggestions(
-    chatGuid: string,
-    _peerName: string | null,
+    conversationId: ConversationId,
     _force: boolean,
     selectedModel: SuggestionModel,
   ): Promise<Result<ReplySuggestions>> {
-    const target = chatGuid.includes("50101") ? "needs-2" : "fixture-inbound";
+    const target = conversationId.includes("50101") ? "needs-2" : "fixture-inbound";
     return Promise.resolve({
       ok: true,
       value: {
@@ -41,15 +42,16 @@ export class FixtureAi implements AiServiceLike {
     });
   }
 
-  recordSuggestionFeedback(_chatGuid: string, _request: SuggestionFeedbackRequest): Result<true> {
+  recordSuggestionFeedback(_conversationId: ConversationId, _request: SuggestionFeedbackRequest): Result<true> {
     return { ok: true, value: true };
   }
 
-  recordReactionFeedback(_chatGuid: string, _request: Omit<SuggestionFeedbackRequest, "finalText">): void {}
+  recordReactionFeedback(_conversationId: ConversationId, _request: Omit<SuggestionFeedbackRequest, "finalText">): void {}
 
   clearSuggestionLearning(): void {}
 
-  identify(_chatGuid: string, _address: string, knownName: string | null): Promise<Result<ContactSuggestion>> {
+  identify(conversationId: ConversationId): Promise<Result<ContactSuggestion>> {
+    const knownName = this.names?.lookup(conversationId.slice(conversationId.lastIndexOf(";") + 1)) ?? null;
     return Promise.resolve({
       ok: true,
       value: { name: knownName, confidence: knownName ? "high" : "low", reasoning: "Deterministic fixture identity." },

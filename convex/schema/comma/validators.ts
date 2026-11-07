@@ -255,37 +255,64 @@ const editScheduledPayload = v.object({
 });
 const cancelScheduledPayload = v.object({ kind: v.literal("cancelScheduled"), bbId: v.number() });
 
-export const outboxPayload = v.union(
+/** Kinds every messaging platform executes. */
+export const coreMessagingPayload = v.union(
   sendPayload,
   reactPayload,
   editPayload,
   messageTargetPayload("unsend"),
   messageTargetPayload("delete"),
   flagPayload("markRead"),
+  renamePayload,
+  schedulePayload,
+  v.object({ kind: v.literal("createChat"), addresses: v.array(v.string()), text: v.string() }),
+  v.object({ kind: v.literal("sendAttachment"), storageId: v.id("_storage"), filename: v.string(), mimeType: v.string(), caption: v.optional(v.string()), isAudioMessage: v.boolean() }),
+  v.object({ kind: v.literal("typing"), active: v.boolean(), expiresAt: v.number() }),
+);
+
+/** Kinds only iMessage supports: BlueBubbles' scheduled ids, contact cards, group membership, chat aliases and FaceTime. */
+export const imessagePayload = v.union(
+  editScheduledPayload,
+  cancelScheduledPayload,
+  v.object({ kind: v.literal("sendScheduledNow"), bbId: v.number() }),
+  v.object({ kind: v.literal("sendContact"), name: v.string(), address: v.string(), caption: v.optional(v.string()) }),
+  v.object({ kind: v.literal("participant"), address: v.string(), action: v.union(v.literal("add"), v.literal("remove")) }),
+  v.object({ kind: v.literal("leaveGroup") }),
+  v.object({ kind: v.literal("deleteChat"), chatGuid: v.string() }),
+  v.object({ kind: v.literal("createFaceTimeLink") }),
+);
+
+/** Model work. It reads the conversation from Convex and never touches a messaging platform. */
+export const aiPayload = v.union(
+  v.object({ kind: v.literal("suggestions"), model: suggestionModel, refresh: v.boolean() }),
+  v.object({ kind: v.literal("suggestionFeedback"), feedback: suggestionFeedback }),
+  v.object({ kind: v.literal("clearSuggestionLearning") }),
+  v.object({ kind: v.literal("identify") }),
+  v.object({ kind: v.literal("transcribe"), attachmentGuid: v.string() }),
+);
+
+/** Triage kinds from clients older than comma/triage. Convex applies them; no lane executes them. */
+export const legacyTriagePayload = v.union(
   flagPayload("markUnread"),
   flagPayload("settle"),
   flagPayload("unsettle"),
   togglePayload("pin"),
   togglePayload("mute"),
-  renamePayload,
-  schedulePayload,
-  editScheduledPayload,
-  cancelScheduledPayload,
-  v.object({ kind: v.literal("createChat"), addresses: v.array(v.string()), text: v.string() }),
-  v.object({ kind: v.literal("sendContact"), name: v.string(), address: v.string(), caption: v.optional(v.string()) }),
-  v.object({ kind: v.literal("sendAttachment"), storageId: v.id("_storage"), filename: v.string(), mimeType: v.string(), caption: v.optional(v.string()), isAudioMessage: v.boolean() }),
-  v.object({ kind: v.literal("participant"), address: v.string(), action: v.union(v.literal("add"), v.literal("remove")) }),
-  v.object({ kind: v.literal("leaveGroup") }),
-  v.object({ kind: v.literal("deleteChat"), chatGuid: v.string() }),
-  v.object({ kind: v.literal("sendScheduledNow"), bbId: v.number() }),
-  v.object({ kind: v.literal("transcribe"), attachmentGuid: v.string() }),
-  v.object({ kind: v.literal("createFaceTimeLink") }),
-  v.object({ kind: v.literal("typing"), active: v.boolean(), expiresAt: v.number() }),
-  v.object({ kind: v.literal("suggestions"), model: suggestionModel, refresh: v.boolean() }),
-  v.object({ kind: v.literal("suggestionFeedback"), feedback: suggestionFeedback }),
-  v.object({ kind: v.literal("clearSuggestionLearning") }),
-  v.object({ kind: v.literal("identify") }),
 );
+
+export const outboxPayload = v.union(
+  ...coreMessagingPayload.members,
+  ...imessagePayload.members,
+  ...aiPayload.members,
+  ...legacyTriagePayload.members,
+);
+
+/** The executor a command waits for. One lane per messaging platform, plus one for model work. */
+export const outboxLane = v.union(v.literal("imessage"), v.literal("ai"));
+
+const AI_KINDS: ReadonlySet<string> = new Set(aiPayload.members.map((member) => member.fields.kind.value));
+/** Model work never waits behind a send. iMessage is the only messaging platform, so every other kind is its. */
+export const laneOf = (kind: Infer<typeof outboxPayload>["kind"]): Infer<typeof outboxLane> => AI_KINDS.has(kind) ? "ai" : "imessage";
 
 /**
  * `unknown` is a send whose outcome the bridge could not determine (for
@@ -355,6 +382,8 @@ export const outboxFields = {
   clientKey: v.string(),
   conversationId: v.optional(v.id("comma_conversations")),
   payload: outboxPayload,
+  /** Absent only on rows queued before lanes. */
+  lane: v.optional(outboxLane),
   status: outboxStatus,
   leaseUntil: v.optional(v.number()),
   claimToken: v.optional(v.string()),
@@ -451,6 +480,11 @@ export type CommaReaction = Infer<typeof reaction>;
 export type CommaTapback = Infer<typeof tapback>;
 export type CommaOutboxPayload = Infer<typeof outboxPayload>;
 export type CommaOutboxStatus = Infer<typeof outboxStatus>;
+export type CommaOutboxLane = Infer<typeof outboxLane>;
+export type CoreMessagingKind = Infer<typeof coreMessagingPayload>["kind"];
+export type IMessageOnlyKind = Infer<typeof imessagePayload>["kind"];
+export type AiKind = Infer<typeof aiPayload>["kind"];
+export type LegacyTriageKind = Infer<typeof legacyTriagePayload>["kind"];
 export type CommaConversationDoc = Infer<typeof conversationDoc>;
 export type CommaMessageDoc = Infer<typeof messageDoc>;
 export type CommaAttachmentDoc = Infer<typeof attachmentDoc>;

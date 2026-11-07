@@ -10,7 +10,7 @@ import { FakeIngest } from "../fake-ingest";
 import { MessageWriter } from "../live";
 import { OutboxBridge, type OutboxRow } from "../outbox";
 import { scheduledHandlers } from "./scheduled";
-import type { CommandContext } from "./types";
+import type { IMessageContext } from "./types";
 
 const CHAT = "iMessage;-;+15550001111";
 const SIBLING = "SMS;-;+15550001111";
@@ -28,7 +28,7 @@ async function harness() {
   const ingest = new FakeIngest();
   const writer = new MessageWriter({ bb, db, ingest });
   for (const guid of [CHAT, SIBLING]) writer.conversationIds.set(guid, ingest.id);
-  const ctx: CommandContext = { chatGuid: CHAT, commands, writer, row: {} as OutboxRow,
+  const ctx: IMessageContext = { chatGuid: CHAT, commands, writer, row: {} as OutboxRow,
     signal: new AbortController().signal, withLeaseRenewal: (work) => work() };
   return { bb, db, commands, ingest, ctx };
 }

@@ -7,7 +7,7 @@ import { ChatCommands } from "../commands";
 import { ContactBook } from "../contacts";
 import { OverlayDb } from "../db";
 import { typingHandler } from "./commands/presence";
-import type { CommandContext } from "./commands/types";
+import type { IMessageContext } from "./commands/types";
 import { FakeIngest } from "./fake-ingest";
 import { LiveBridge, MessageWriter } from "./live";
 import { OutboundTyping, type PresenceTimers } from "./presence";
@@ -118,7 +118,7 @@ test("typing handler skips superseded transitions and rechecks expiry after the 
   stops.push(() => { typing.stop(); sent.mockRestore(); });
   const contacts = new ContactBook(h.bb);
   const commands = new ChatCommands(h.bb, contacts);
-  const context: CommandContext = { chatGuid: CHAT, writer: h.writer, commands, signal: new AbortController().signal,
+  const context: IMessageContext = { chatGuid: CHAT, writer: h.writer, commands, signal: new AbortController().signal,
     withLeaseRenewal: async (work) => work(), row: {
       _id: "outbox-test" as GenericId<"comma_outbox">, _creationTime: 1000, clientKey: "typing", conversationId: h.ingest.id,
       payload: { kind: "typing", active: true, expiresAt: 6000 }, status: "claimed", attempts: 1, claimToken: "token", leaseUntil: 60_000, createdAt: 1000, updatedAt: 1000,

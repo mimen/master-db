@@ -56,7 +56,7 @@ function seedOverlay(): void {
     if (!last || last.isFromMe) continue;
     for (const selectedModel of ["opus", "terra"] as const) {
       db.setSuggestionCache({
-        chat_guid: chat.guid,
+        conversation_id: chat.guid,
         selected_model: selectedModel,
         anchor_guid: last.guid,
         recipe_version: 3,
@@ -142,7 +142,7 @@ const { app, dispose } = await createApp({
   now: () => FIXTURE_NOW,
   names: identity,
   identity,
-  ai: new FixtureAi(db),
+  ai: new FixtureAi(db, identity),
   backgroundServices: false,
   staticRoot: Bun.env.IMSG_FIXTURE_DIST ?? join(fixtureDirectory, "dist"),
   configureFixtureRoutes: (fixtureApp, controls) => {

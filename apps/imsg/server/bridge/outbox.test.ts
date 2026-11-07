@@ -11,17 +11,17 @@ import { OutboxBridge, type OutboxRow } from "./outbox";
 
 const CHAT = "iMessage;-;+15550001111";
 
-/** A ConvexClient stand-in whose subscription fires on demand. */
+/** A ConvexClient stand-in whose lane subscriptions fire on demand. */
 function fakeClient() {
-  let push: ((rows: OutboxRow[]) => void) | null = null;
+  const subscriptions = new Map<string, (rows: OutboxRow[]) => void>();
   const client = {
-    onUpdate: (_ref: unknown, _args: unknown, callback: (rows: OutboxRow[]) => void) => {
-      push = callback;
-      return () => { push = null; };
+    onUpdate: (_ref: unknown, args: { lane: string }, callback: (rows: OutboxRow[]) => void) => {
+      subscriptions.set(args.lane, callback);
+      return () => { subscriptions.delete(args.lane); };
     },
     close: () => Promise.resolve(),
   } as unknown as ConvexClient;
-  return { client, fire: (rows: OutboxRow[]) => push?.(rows) };
+  return { client, fire: (rows: OutboxRow[]) => { for (const push of subscriptions.values()) push(rows); }, lanes: () => [...subscriptions.keys()] };
 }
 
 function harness(now = 1_000) {
@@ -33,12 +33,12 @@ function harness(now = 1_000) {
   const commands = new ChatCommands(bb, contacts);
   const writer = new MessageWriter({ bb, db, ingest });
   writer.conversationIds.set(CHAT, ingest.id);
-  const { client, fire } = fakeClient();
+  const { client, fire, lanes } = fakeClient();
   const start = (options: Pick<ConstructorParameters<typeof OutboxBridge>[0], "handlers" | "leaseTimers"> = {}) => new OutboxBridge({
     config: { convexCloudUrl: "https://convex.test", commaBridgeSecret: "test" },
     writer, commands, client, now: () => now, ...options,
   });
-  return { bb, db, ingest, writer, start, fire, setNow: (value: number) => { now = value; } };
+  return { bb, db, ingest, writer, start, fire, lanes, setNow: (value: number) => { now = value; } };
 }
 
 function row(clientKey: string, payload: OutboxRow["payload"], now = 1_000): OutboxRow {
@@ -167,13 +167,13 @@ test("both global kinds skip conversation resolution, and stubs fail cleanly", a
   } finally { bridge.stop(); }
 });
 
-test("global handler receives a null chat and returns its typed result", async () => {
+test("global handler receives a null conversation and returns its typed result", async () => {
   const h = harness();
   const command = row("global", { kind: "clearSuggestionLearning" });
   delete command.conversationId;
   h.ingest.outboxRows.push(command);
   const bridge = h.start({ handlers: { clearSuggestionLearning: { execute: async (ctx) => {
-    expect(ctx.chatGuid).toBeNull();
+    expect(ctx.conversationId).toBeNull();
     return { kind: "clearSuggestionLearning", ok: true };
   } } } });
   try {
@@ -265,5 +265,30 @@ test("schedule and editScheduled return the persisted scheduler rows", async () 
     h.ingest.outboxRows.push(row("edit", { kind: "editScheduled", bbId: 1, text: "updated", sendAt: sendAt + 1000 }));
     h.fire(h.ingest.outboxRows); await bridge.flush();
     expect(completions(h.ingest)[1]).toMatchObject({ result: { kind: "editScheduled", scheduled: { id: 1, text: "updated", sendAt: sendAt + 1000 } } });
+  } finally { bridge.stop(); }
+});
+
+test("a send completes while a slow AI command is still running on its own lane", async () => {
+  const h = harness();
+  await h.writer.refreshChats();
+  let release: () => void = () => {};
+  const slow = new Promise<void>((resolve) => { release = resolve; });
+  h.ingest.outboxRows.push(row("ai", { kind: "suggestions", model: "opus", refresh: true }));
+  h.ingest.outboxRows.push(row("send", { kind: "send", text: "hi there" }));
+  const bridge = h.start({ handlers: { suggestions: { execute: async () => {
+    await slow;
+    return { kind: "suggestions", suggestions: { suggestions: [], event: null, recipeVersion: 3, selectedModel: "opus", servedModel: "opus",
+      fallback: false, noReply: true, basedOnMessageGuid: null, stale: false, generatedAt: 1 } };
+  } } } });
+  try {
+    for (let i = 0; i < 50 && !completions(h.ingest).length; i++) await Bun.sleep(5);
+    expect(completions(h.ingest)).toEqual([expect.objectContaining({ clientKey: "send", status: "sent" })]);
+    expect(h.bb.sentTexts).toEqual([{ chatGuid: CHAT, message: "hi there" }]);
+    release();
+    await bridge.flush();
+    expect(completions(h.ingest).map((done) => done.clientKey)).toEqual(["send", "ai"]);
+    const claims = h.ingest.calls.filter((call) => call.kind === "claim").map((call) => call.body.lane);
+    expect(new Set(claims)).toEqual(new Set(["imessage", "ai"]));
+    expect(h.lanes().sort()).toEqual(["ai", "imessage"]);
   } finally { bridge.stop(); }
 });

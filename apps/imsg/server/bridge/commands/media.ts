@@ -2,10 +2,9 @@ import type { GenericId } from "convex/values";
 import type { TranscriptState } from "../../../shared/types";
 import { UnknownSendError } from "../../commands";
 import { mapMessage } from "../../map";
-import { WhisperService } from "../../whisper";
 import type { ConvexIngest } from "../convex-ingest";
 import { unnamed } from "../mapper";
-import { requireChat, type CommandContext, type HandlerMap } from "./types";
+import { requireChat, type HandlerMap } from "./types";
 
 type MediaBridgeRequest =
   | { kind: "upload"; commandId: GenericId<"comma_outbox">; storageId: GenericId<"_storage"> }
@@ -16,11 +15,7 @@ export async function postMedia(ingest: Pick<ConvexIngest, "post">, request: Med
   return post.call(ingest, "media", { request });
 }
 
-export function createMediaHandlers(deps: {
-  fetch: typeof fetch;
-  whisper: (ctx: CommandContext) => Pick<WhisperService, "transcribe"> | undefined;
-  post: typeof postMedia;
-} = { fetch, whisper: (ctx) => WhisperService.forCache(ctx.writer.deps.db), post: postMedia }) {
+export function createMediaHandlers(deps: { fetch: typeof fetch; post: typeof postMedia } = { fetch, post: postMedia }) {
   return {
     sendAttachment: { longRunning: true, execute: async (ctx, payload) => {
       const chatGuid = requireChat(ctx);
@@ -49,23 +44,6 @@ export function createMediaHandlers(deps: {
       try { await ctx.writer.exclusive(() => ctx.writer.postMessages([{ ...sent.value, chats: [{ guid: chatGuid }] }])); }
       catch (error) { console.error(`comma attachment mirror: ${String(error)}`); }
       return { kind: "sendAttachment", message };
-    } },
-    transcribe: { longRunning: true, execute: async (ctx, payload) => {
-      requireChat(ctx);
-      const publish = async (transcript: TranscriptState) => {
-        const found = await deps.post(ctx.writer.deps.ingest, { kind: "transcript", attachmentGuid: payload.attachmentGuid, conversationId: ctx.row.conversationId, transcript });
-        if (!found) throw new Error("Attachment is not mirrored yet");
-      };
-      await publish({ state: "working" });
-      const whisper = deps.whisper(ctx);
-      let transcript: TranscriptState;
-      try {
-        transcript = whisper ? await whisper.transcribe(payload.attachmentGuid) : { state: "unavailable", detail: "Whisper service is unavailable" };
-      } catch (error) {
-        transcript = { state: "failed", error: error instanceof Error ? error.message : String(error) };
-      }
-      await publish(transcript);
-      return { kind: "transcribe", transcript };
     } },
   } satisfies Partial<HandlerMap>;
 }

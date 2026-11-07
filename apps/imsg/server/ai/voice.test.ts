@@ -4,7 +4,7 @@ import { deriveEditRules, deriveGlobalStyle } from "./voice";
 
 function row(id: string, suggested: string, finalText: string): SuggestionFeedbackRow {
   return {
-    id, chat_guid: "c", suggestion_id: id, kind: "text", strategy: "clarify", vibe: "curious",
+    id, conversation_id: "c", suggestion_id: id, kind: "text", strategy: "clarify", vibe: "curious",
     selected_model: "opus", served_model: "opus", recipe_version: 3,
     suggested_text: suggested, final_text: finalText, selected_at: 1, sent_at: 2,
   };

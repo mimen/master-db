@@ -1,3 +1,4 @@
+import type { GenericId } from "convex/values";
 import type { Result } from "../bluebubbles";
 import type { AiConfig } from "../config";
 import type { OverlayDb, SuggestionFeedbackRow } from "../db";
@@ -20,7 +21,6 @@ import {
   extractEventSuggestion,
   formatPromptNow,
   suggestionPrompt,
-  suggestionTargetGuids,
   validateSuggestionSet,
 } from "./suggestions";
 import { loadVoiceState } from "./voice";
@@ -34,10 +34,8 @@ export interface AiDeps {
   config: AiConfig;
   db: OverlayDb;
   gateway: Gateway;
-  /** Newest-last messages for a chat; read errors must remain distinguishable from an empty chat. */
-  fetchMessages: (chatGuid: string) => Promise<Result<Message[]>>;
-  /** One message enriched with current tapbacks for reaction validation. */
-  fetchMessageWithReactions: (chatGuid: string, messageGuid: string) => Promise<Result<Message>>;
+  /** The conversation from Convex; read errors must remain distinguishable from an empty thread. */
+  fetchThread: (conversationId: ConversationId) => Promise<Result<AiThread>>;
   /** Recent global outbound text, reduced locally into aggregate style. */
   recentOutboundText: () => Promise<string[]>;
   /** BlueBubbles Private API supports outbound tapbacks. */
@@ -46,6 +44,16 @@ export interface AiDeps {
   contactEmails: (address: string) => string[];
   /** Vault grep, injected so tests never touch the filesystem. */
   searchVault: (pattern: string) => Promise<Array<{ path: string; line: string }>>;
+}
+
+export type ConversationId = GenericId<"comma_conversations">;
+
+/** Newest-last messages with folded reactions, and the participants' names (null when unknown). */
+export interface AiThread {
+  title: string;
+  isGroup: boolean;
+  participants: Array<{ address: string; name: string | null }>;
+  messages: Message[];
 }
 
 /**
@@ -122,14 +130,14 @@ export class AiService {
 
   /** Returns the selected route's cached shelf unless it is missing, or `force` is set. */
   async replySuggestions(
-    chatGuid: string,
-    peerName: string | null,
+    conversationId: ConversationId,
     force: boolean,
     selectedModel: SuggestionModel,
   ): Promise<Result<ReplySuggestions>> {
-    const fetched = await this.deps.fetchMessages(chatGuid);
+    const fetched = await this.deps.fetchThread(conversationId);
     if (!fetched.ok) return fetched;
-    const messages = fetched.value;
+    const { messages } = fetched.value;
+    const peerName = fetched.value.isGroup ? null : fetched.value.title;
     const currentGuid = lastGuid(messages);
     if (!currentGuid) return { ok: false, error: "chat has no messages" };
     if (messages[messages.length - 1]?.isFromMe) {
@@ -139,11 +147,11 @@ export class AiService {
       };
     }
     const voice = loadVoiceState(this.deps.db, await this.deps.recentOutboundText());
-    const cached = force ? null : await this.cachedReplySuggestions(chatGuid, currentGuid, selectedModel, voice);
+    const cached = force ? null : await this.cachedReplySuggestions(conversationId, currentGuid, selectedModel, voice);
     if (cached) return { ok: true, value: cached };
 
     const key = [
-      chatGuid,
+      conversationId,
       currentGuid,
       selectedModel,
       SUGGESTION_RECIPE_VERSION,
@@ -154,7 +162,7 @@ export class AiService {
     const existing = this.suggestionInFlight.get(key);
     if (existing) return existing;
     const pending = this.generateReplySuggestions(
-      chatGuid,
+      conversationId,
       peerName,
       messages,
       currentGuid,
@@ -171,12 +179,12 @@ export class AiService {
   }
 
   async cachedReplySuggestions(
-    chatGuid: string,
+    conversationId: ConversationId,
     anchorGuid: string,
     selectedModel: SuggestionModel,
     voice?: ReturnType<typeof loadVoiceState>,
   ): Promise<ReplySuggestions | null> {
-    const cached = this.deps.db.getSuggestionCache(chatGuid, selectedModel);
+    const cached = this.deps.db.getSuggestionCache(conversationId, selectedModel);
     if (!cached || cached.anchor_guid !== anchorGuid || cached.recipe_version !== SUGGESTION_RECIPE_VERSION) return null;
     const currentVoice = voice ?? loadVoiceState(this.deps.db, await this.deps.recentOutboundText());
     if (cached.voice_revision !== currentVoice.voiceRevision || cached.edit_revision !== currentVoice.editRevision) return null;
@@ -187,7 +195,7 @@ export class AiService {
   }
 
   private async generateReplySuggestions(
-    chatGuid: string,
+    conversationId: ConversationId,
     peerName: string | null,
     messages: Message[],
     currentGuid: string,
@@ -211,16 +219,14 @@ export class AiService {
     let generated = await this.completeSuggestionWithFallback(prompt, selectedModel);
     if (!generated.ok) {
       const { kind, status, message } = generated.error;
-      console.warn(`suggestions ${chatGuid} (${selectedModel}): ${kind}${status ? ` ${status}` : ""}: ${message}`);
+      console.warn(`suggestions ${conversationId} (${selectedModel}): ${kind}${status ? ` ${status}` : ""}: ${message}`);
       return { ok: false, error: message };
     }
 
-    let validated = await this.validateGeneratedSuggestions(
-      chatGuid,
-      generated.value.value,
-      messages,
-      context.renderedGuids,
-    );
+    const validate = (value: object) => validateSuggestionSet(value, {
+      messages, renderedGuids: context.renderedGuids, reactionSuggestions: this.deps.reactionSuggestions(),
+    });
+    let validated = validate(generated.value.value);
     if (!validated.ok) {
       const repairPrompt = [
         prompt,
@@ -231,12 +237,7 @@ export class AiService {
       const repaired = await this.completeSuggestionWithFallback(repairPrompt, selectedModel);
       if (repaired.ok) {
         generated = repaired;
-        validated = await this.validateGeneratedSuggestions(
-          chatGuid,
-          repaired.value.value,
-          messages,
-          context.renderedGuids,
-        );
+        validated = validate(repaired.value.value);
       }
     }
     // The event rides the same generation but validates independently, so a
@@ -252,11 +253,11 @@ export class AiService {
       suggestions: validated.ok ? validated.value.suggestions : [],
       event,
     };
-    const latest = await this.deps.fetchMessages(chatGuid);
+    const latest = await this.deps.fetchThread(conversationId);
     if (!latest.ok) return latest;
-    const stale = isStale(currentGuid, lastGuid(latest.value)) || learningEpoch !== this.learningEpoch;
+    const stale = isStale(currentGuid, lastGuid(latest.value.messages)) || learningEpoch !== this.learningEpoch;
     if (!stale && validated.ok) this.deps.db.setSuggestionCache({
-      chat_guid: chatGuid,
+      conversation_id: conversationId,
       selected_model: selectedModel,
       anchor_guid: currentGuid,
       recipe_version: SUGGESTION_RECIPE_VERSION,
@@ -290,29 +291,6 @@ export class AiService {
       if (first) emails.add(first.toLowerCase());
     }
     return [...emails].slice(0, 10);
-  }
-
-  private async validateGeneratedSuggestions(
-    chatGuid: string,
-    value: object,
-    messages: Message[],
-    renderedGuids: Set<string>,
-  ) {
-    const enriched = [...messages];
-    const verifiedReactionGuids = new Set<string>();
-    for (const targetGuid of suggestionTargetGuids(value)) {
-      const reactionMessage = await this.deps.fetchMessageWithReactions(chatGuid, targetGuid);
-      if (!reactionMessage.ok) continue;
-      const index = enriched.findIndex((message) => message.guid === targetGuid);
-      if (index >= 0) enriched[index] = reactionMessage.value;
-      verifiedReactionGuids.add(targetGuid);
-    }
-    return validateSuggestionSet(value, {
-      messages: enriched,
-      renderedGuids,
-      reactionSuggestions: this.deps.reactionSuggestions(),
-      verifiedReactionGuids,
-    });
   }
 
   private async completeSuggestionWithFallback(
@@ -371,14 +349,14 @@ export class AiService {
     );
   }
 
-  recordSuggestionFeedback(chatGuid: string, request: SuggestionFeedbackRequest, clientKey?: string): Result<true> {
+  recordSuggestionFeedback(conversationId: ConversationId, request: SuggestionFeedbackRequest, clientKey?: string): Result<true> {
     if (request.suggestion.kind !== "text") return { ok: false, error: "reaction feedback is recorded at send" };
     if (!hasFeedbackLineage(request.suggestion.text, request.finalText)) {
       return { ok: false, error: "suggestion attribution was abandoned" };
     }
     this.recordFeedback({
       id: clientKey ? `command-${clientKey}` : newId(),
-      chat_guid: chatGuid,
+      conversation_id: conversationId,
       suggestion_id: request.suggestion.id,
       kind: request.suggestion.kind,
       strategy: request.suggestion.strategy,
@@ -395,13 +373,13 @@ export class AiService {
   }
 
   recordReactionFeedback(
-    chatGuid: string,
+    conversationId: ConversationId,
     request: Omit<SuggestionFeedbackRequest, "finalText">,
     clientKey?: string,
   ): void {
     this.recordFeedback({
       id: clientKey ? `command-${clientKey}` : newId(),
-      chat_guid: chatGuid,
+      conversation_id: conversationId,
       suggestion_id: request.suggestion.id,
       kind: request.suggestion.kind,
       strategy: request.suggestion.strategy,
@@ -448,18 +426,16 @@ export class AiService {
     }
   }
 
-  async identify(
-    chatGuid: string,
-    address: string,
-    knownName: string | null,
-  ): Promise<Result<ContactSuggestion>> {
-    const [messages, vault] = await Promise.all([
-      this.deps.fetchMessages(chatGuid),
-      vaultCandidates(address, { search: this.deps.searchVault }),
-    ]);
-    if (!messages.ok) return messages;
-    const candidates = mergeCandidates([contactCandidate(knownName), vault]);
-    const transcript = renderTranscript(messages.value, { limit: 25 });
+  /** Who the conversation's first participant is, from the thread, the name Convex knows and the vault. */
+  async identify(conversationId: ConversationId): Promise<Result<ContactSuggestion>> {
+    const thread = await this.deps.fetchThread(conversationId);
+    if (!thread.ok) return thread;
+    const participant = thread.value.participants[0];
+    if (!participant) return { ok: false, error: "no participant address" };
+    const { address } = participant;
+    const vault = await vaultCandidates(address, { search: this.deps.searchVault });
+    const candidates = mergeCandidates([contactCandidate(participant.name), vault]);
+    const transcript = renderTranscript(thread.value.messages, { limit: 25 });
     return this.completeJsonLimited<ContactSuggestion>(
       identifyPrompt(address, transcript, candidates),
       { maxTokens: 400 },

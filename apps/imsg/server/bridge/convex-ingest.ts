@@ -41,6 +41,7 @@ export interface Bodies {
   photo: FunctionArgs<typeof internal.comma.photos.setContactPhoto>;
   groupPhoto: FunctionArgs<typeof internal.comma.groupPhotos.setGroupPhoto>;
   mediaBacklog: FunctionArgs<typeof internal.comma.internal.mediaBacklog>;
+  aiThread: FunctionArgs<typeof internal.comma.agentContext.aiThread>;
 }
 export interface Results {
   ephemeral: boolean;
@@ -59,6 +60,7 @@ export interface Results {
   groupPhoto: boolean;
   transcript: boolean;
   mediaBacklog: FunctionReturnType<typeof internal.comma.internal.mediaBacklog>;
+  aiThread: FunctionReturnType<typeof internal.comma.agentContext.aiThread>;
 }
 
 export class ConvexIngest {
