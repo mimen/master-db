@@ -20,9 +20,8 @@ import { v } from "convex/values";
  *
  * `conversation_id` owns the row: the Comma conversation, whichever service
  * chat it sends through. `chat_guid` is the chat that was the conversation's
- * primary when the row was written, the key before conversations owned CRM;
- * rows without `conversation_id` predate that and comma/migrations:rekeyGroupCrm
- * moves them. See convex/identity/groupCrm.ts.
+ * primary when the row was written, the key before conversations owned CRM.
+ * See convex/identity/groupCrm.ts.
  *
  * Priority is P1–P5, ONE = HIGHEST — same numeric convention as
  * `people.priority` (see that field's docstring for the non-inverted,

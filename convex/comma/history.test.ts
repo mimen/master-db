@@ -85,12 +85,13 @@ describe("message history windows", () => {
     }
   });
 
-  test("joins storage URLs and embedded reactions, excluding hidden attachments", async () => {
+  test("joins storage URLs and reactions, excluding hidden attachments", async () => {
     const t = authed();
     const seeded = await t.run(async (ctx) => {
       const id = await ctx.db.insert("comma_conversations", conversation());
-      const reactions = [{ type: "love" as const, isFromMe: false, senderAddress: "them", senderName: null }];
-      await ctx.db.insert("comma_messages", { ...message(id, 1, "photo-message"), reactions });
+      await ctx.db.insert("comma_messages", message(id, 1, "photo-message"));
+      await ctx.db.insert("comma_reactions", { platform: "imessage", conversationId: id, targetKey: "imessage:photo-message", key: "love", emoji: "❤️",
+        isFromMe: false, senderAddress: "them", at: 1, removed: false });
       const thumb = await ctx.storage.store(new Blob(["thumbnail"]));
       const original = await ctx.storage.store(new Blob(["original"]));
       const attachment = { conversationId: id, messageGuid: "photo-message", isSticker: false, hideAttachment: false, isOnDisk: true, sourceVersion: 1 };

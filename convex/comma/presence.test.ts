@@ -91,10 +91,13 @@ test("durable expiry queues a clear after the bridge dies and never clears a new
   const pending = await t.run((ctx) => ctx.db.query("comma_outbox").withIndex("by_status_createdAt", (q) => q.eq("status", "pending")).collect());
   expect(pending).toHaveLength(1);
   expect(pending[0]).toMatchObject({ clientKey: `typing-expire:${commandId}`, payload: { kind: "typing", active: false, expiresAt: 2000 } });
+  // The clear waits in the iMessage lane, on the chat the typing went to.
+  const [clear] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 2500, leaseMs: 60_000, limit: 1, lane: "imessage" });
+  expect(clear).toMatchObject({ clientKey: `typing-expire:${commandId}`, route: on.route });
+  expect(on.route).toBeDefined();
 
   vi.setSystemTime(3000);
   await as.mutation(api.comma.outbox.enqueue, { ...onArgs, clientKey: "superseded-on", payload: { kind: "typing", active: true, expiresAt: 4000 } });
-  await t.mutation(internal.comma.outbox.claimOutbox, { now: 3000, leaseMs: 60_000, limit: 1 });
   const [old] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 3000, leaseMs: 60_000, limit: 1 });
   await t.mutation(publish, { state: { kind: "typingCurrent", clientKey: old.clientKey, claimToken: old.claimToken! } });
   const newerId = await as.mutation(api.comma.outbox.enqueue, { ...onArgs, clientKey: "newer-on", payload: { kind: "typing", active: true, expiresAt: 10_000 } });

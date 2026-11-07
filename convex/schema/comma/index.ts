@@ -39,7 +39,6 @@ export const comma_messages = defineTable(messageRowFields)
   .index("by_guid", ["guid"])
   .index("by_conversation_date", ["conversationId", "dateCreated"])
   .index("by_clientKey", ["clientKey"])
-  .index("by_tapbackTargetGuid", ["tapbackTargetGuid"])
   .searchIndex("search_text", {
     searchField: "text",
     filterFields: ["conversationId", "isTapback", "retracted", "isFromMe"],

@@ -75,8 +75,8 @@ async function seed(ctx: MutationCtx & { storage: StorageActionWriter }) {
       sender: { address: g % 2 === 0 ? `${members[g % 5]} (smsfp)` : members[g % 5], name: "Mirrored" },
     });
     if (g % 4 === 0) {
-      await ctx.db.insert("chat_crm", { chat_guid: chatGuid, priority: 2, created_at: "x", updated_at: "x" });
-      await ctx.db.insert("tags", { chat_guid: chatGuid, tag: "crew", created_at: "x" });
+      await ctx.db.insert("chat_crm", { chat_guid: chatGuid, conversation_id: id, priority: 2, created_at: "x", updated_at: "x" });
+      await ctx.db.insert("tags", { chat_guid: chatGuid, conversation_id: id, tag: "crew", created_at: "x" });
     }
   }
   for (let i = 0; i < 60; i++) await insert(`dm-${i}`, false, [phone(i)], i % 2 === 0);
@@ -172,9 +172,8 @@ test("listConversations reads per page on a 100-conversation inbox, with byte-id
   ]);
   // e357f707 made 110 identity lookups, 85 people gets, 95 tag reads and 98 getUrl calls here.
   // The 101st identities lookup is the once-per-query Apple-contacts check.
-  // Group CRM reads twice per group (conversation_id, then unmoved chat_guid rows) until rekeyGroupCrm runs: 20 and 80 after.
   expect(all.lookups).toEqual({
-    chat_crm: 40, comma_conversation_state: 100, comma_conversations: 1, comma_messages: 20,
-    identities: 101, "people.get": 60, "storage.getUrl": 40, tags: 100,
+    chat_crm: 20, comma_conversation_state: 100, comma_conversations: 1, comma_messages: 20,
+    identities: 101, "people.get": 60, "storage.getUrl": 40, tags: 80,
   });
 });

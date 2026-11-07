@@ -10,7 +10,7 @@ const ALEX = "+16195550101";
 
 type Row = { guid: string; text: string; reactions: Array<{ key: string; emoji?: string; isFromMe: boolean; senderName: string | null }> };
 
-test("reactions: react, change, remove; a peer's reaction and a legacy fold show in the new form", async ({ desk }) => {
+test("reactions: react, change, remove; a peer's reactions come and go", async ({ desk }) => {
   const page = desk.page;
   const enqueued: unknown[] = [];
   page.on("request", (request) => {
@@ -26,21 +26,20 @@ test("reactions: react, change, remove; a peer's reaction and a legacy fold show
   };
   const reactionsOn = async (text: string) => (await rows()).find((row) => row.text === text)?.reactions ?? [];
   const mine = async () => (await reactionsOn(INBOUND)).filter((r) => r.isFromMe).map((r) => r.key);
-  const tapback = (targetGuid: string, reaction: string, legacy: boolean) =>
-    desk.request.post("/__fixture/tapback", { data: { chatGuid: desk.chats.needs, targetGuid, reaction, handle: ALEX, legacy } });
+  const tapback = (targetGuid: string, reaction: string) =>
+    desk.request.post("/__fixture/tapback", { data: { chatGuid: desk.chats.needs, targetGuid, reaction, handle: ALEX } });
   const stored: Record<string, unknown> = {};
 
-  // A message ingested before comma_reactions: Alex's love lives only in the row's legacy fold.
-  expect((await tapback("needs-1", "love", true)).ok()).toBe(true);
-  stored.legacyOnly = await reactionsOn(MINE);
-  expect(stored.legacyOnly).toEqual([{ key: "love", emoji: "❤️", isFromMe: false, senderName: "Alex Rivera", senderAddress: ALEX, type: "love" }]);
+  expect((await tapback("needs-1", "love")).ok()).toBe(true);
+  stored.peerLove = await reactionsOn(MINE);
+  expect(stored.peerLove).toEqual([{ key: "love", emoji: "❤️", isFromMe: false, senderName: "Alex Rivera", senderAddress: ALEX, type: "love" }]);
 
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
   const thread = page.getByTestId("thread-view");
   const chip = (name: string) => thread.getByRole("button", { name, exact: true });
   await expect(chip("Love")).toBeVisible();
-  await page.screenshot({ path: join(evidence, "1-legacy-love.png") });
+  await page.screenshot({ path: join(evidence, "1-peer-love.png") });
 
   const bubble = thread.getByRole("button", { name: `Alex Rivera: ${INBOUND}` });
   const tray = page.getByRole("toolbar", { name: "Tapbacks" });
@@ -71,15 +70,15 @@ test("reactions: react, change, remove; a peer's reaction and a legacy fold show
   await expect.poll(mine).toEqual([]);
   await expect(chip("Laugh")).toHaveCount(0);
 
-  // Alex reacts through ingest's new form, then takes back the legacy love: the newer event hides the old fold.
-  expect((await tapback("needs-1", "emphasize", false)).ok()).toBe(true);
+  // Alex adds a second reaction, then takes back the love.
+  expect((await tapback("needs-1", "emphasize")).ok()).toBe(true);
   await expect(chip("Emphasize")).toBeVisible();
   await expect(chip("Love")).toBeVisible();
-  expect((await tapback("needs-1", "-love", false)).ok()).toBe(true);
+  expect((await tapback("needs-1", "-love")).ok()).toBe(true);
   await expect(chip("Love")).toHaveCount(0);
   await expect(chip("Emphasize")).toBeVisible();
-  stored.peerAfterLegacy = await reactionsOn(MINE);
-  expect(stored.peerAfterLegacy).toEqual([expect.objectContaining({ key: "emphasize", emoji: "‼️", isFromMe: false, senderName: "Alex Rivera" })]);
+  stored.peerAfterRemoval = await reactionsOn(MINE);
+  expect(stored.peerAfterRemoval).toEqual([expect.objectContaining({ key: "emphasize", emoji: "‼️", isFromMe: false, senderName: "Alex Rivera" })]);
   await page.screenshot({ path: join(evidence, "4-peer-new-form.png") });
 
   writeFileSync(join(evidence, "aria.txt"), await thread.ariaSnapshot());

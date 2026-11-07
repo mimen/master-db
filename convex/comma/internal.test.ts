@@ -197,22 +197,6 @@ describe("upsertMessages", () => {
     expect(await t.mutation(internal.comma.internal.upsertMessages, { messages: batch.slice(1) })).toEqual({ written: 0, skipped: 3 });
   });
 
-  test("a message ingested before comma_reactions keeps its folded tapbacks until a newer event decides them", async () => {
-    const t = convexTest(schema, modules);
-    const c = await seedDm(t, "+15550001111", [{ chatGuid: "iMessage;-;+15550001111", lastMessageAt: 1000 }]);
-    await t.run(async (ctx) => {
-      await ctx.db.insert("comma_messages", { ...message(c, "m1"), reactions: [
-        { type: "love", isFromMe: false, senderName: "Alex", senderAddress: "+15550001111" },
-        { type: "laugh", isFromMe: true, senderName: null, senderAddress: null },
-      ] });
-    });
-    expect((await shown(t, "m1")).map((r) => [r.key, r.isFromMe])).toEqual([["love", false], ["laugh", true]]);
-    await t.mutation(internal.comma.internal.upsertMessages, {
-      messages: [tapbackRow(c, "tb9", "m1", { dateCreated: 1500, reaction: "love", remove: true })],
-    });
-    expect((await shown(t, "m1")).map((r) => [r.key, r.isFromMe])).toEqual([["laugh", true]]);
-  });
-
   test("lastMessage ignores tapbacks and retracted messages", async () => {
     const t = convexTest(schema, modules);
     const c = await seedDm(t, "+15550001111", [{ chatGuid: "iMessage;-;+15550001111", lastMessageAt: 1000 }]);

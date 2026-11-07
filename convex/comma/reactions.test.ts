@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import type { Id } from "../_generated/dataModel";
 import type { CommaReactionState } from "../schema/comma/validators";
 
-import { fromTapback, mergeReactions, messageKey, sameReaction, supersedes } from "./reactions";
+import { fromTapback, messageKey, sameReaction, shownReactions, supersedes } from "./reactions";
 
 const conversationId = "c1" as Id<"comma_conversations">;
 const state = (overrides: Partial<CommaReactionState> = {}): CommaReactionState => ({
@@ -54,18 +54,12 @@ describe("sameReaction and supersedes", () => {
   });
 });
 
-describe("mergeReactions", () => {
-  const legacyLove = { type: "love", isFromMe: false, senderName: "Alex", senderAddress: "+15550001111" };
-
-  test("a legacy fold shows in the new form while no row has decided it", () => {
-    expect(mergeReactions([legacyLove, { type: "emoji", emoji: "🔥", isFromMe: true, senderName: null, senderAddress: "me" }], [])).toEqual([
-      { key: "love", emoji: "❤️", isFromMe: false, senderName: null, senderAddress: "+15550001111", type: "love" },
-      { key: "🔥", emoji: "🔥", isFromMe: true, senderName: null, senderAddress: null, type: "emoji" },
-    ]);
-  });
-
-  test("a row replaces the legacy entry for its sender and key, removed or not; live rows follow oldest first", () => {
+describe("shownReactions", () => {
+  test("shows live rows oldest first in the read form and drops removals", () => {
     const rows = [state({ at: 30, key: "like", emoji: "👍" }), state({ at: 20, removed: true }), state({ at: 25, key: "laugh", emoji: "😂", isFromMe: true, senderAddress: undefined })];
-    expect(mergeReactions([legacyLove], rows).map((r) => [r.key, r.isFromMe])).toEqual([["laugh", true], ["like", false]]);
+    expect(shownReactions(rows)).toEqual([
+      { key: "laugh", emoji: "😂", isFromMe: true, senderName: null, senderAddress: null, type: "laugh" },
+      { key: "like", emoji: "👍", isFromMe: false, senderName: null, senderAddress: "+15550001111", type: "like" },
+    ]);
   });
 });

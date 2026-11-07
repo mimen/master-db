@@ -3,7 +3,6 @@ import { v } from "convex/values";
 import { internalMutation } from "../_generated/server";
 
 import { choosePrimary } from "./conversationIdentity";
-import { foldTapbacks } from "./internal";
 
 const phases = ["messages", "reactions", "attachments", "scheduled", "suggestions", "events", "state", "drafts", "presence", "finalize"] as const;
 const phase = v.union(...phases.map((name) => v.literal(name)));
@@ -30,19 +29,8 @@ export const deleteChat = internalMutation({
     if (current === "messages") {
       const page = await ctx.db.query("comma_messages")
         .withIndex("by_conversation_date", (q) => q.eq("conversationId", conversationId)).paginate(pagination);
-      const targets = new Set<string>();
       for (const row of page.page) {
-        if (!siblings.length || row.chatGuid === args.chatGuid) {
-          await ctx.db.delete(row._id);
-          if (row.tapbackTargetGuid) targets.add(row.tapbackTargetGuid);
-        }
-      }
-      for (const guid of targets) {
-        const target = await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", guid)).unique();
-        if (!target) continue;
-        const tapbacks = await ctx.db.query("comma_messages")
-          .withIndex("by_tapbackTargetGuid", (q) => q.eq("tapbackTargetGuid", guid)).collect();
-        await ctx.db.patch(target._id, { reactions: foldTapbacks(tapbacks) });
+        if (!siblings.length || row.chatGuid === args.chatGuid) await ctx.db.delete(row._id);
       }
       return next(page);
     }

@@ -12,7 +12,7 @@ import {
 import { askTitle, chatPreview } from "./agentSummary";
 import { sameSecret } from "./bridgeAuth";
 import { recordedAttachments, writeAgentDraft } from "./drafts";
-import { enqueueCommand } from "./outbox";
+import { enqueueCommand } from "./enqueue";
 
 /**
  * The agent pane. The client asks, answers, and stops through the public mutations; the runner on

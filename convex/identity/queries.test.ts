@@ -73,9 +73,10 @@ async function seedTag(t: TestConvex<typeof schema>, personId: Id<"people">, tag
 }
 
 async function seedChatTag(t: TestConvex<typeof schema>, chatGuid: string, tag: string): Promise<void> {
-  await t.run((ctx) =>
-    ctx.db.insert("tags", { chat_guid: chatGuid, tag, created_at: new Date().toISOString() }),
-  );
+  await t.run(async (ctx) => {
+    const alias = await ctx.db.query("comma_chat_aliases").withIndex("by_chatGuid", (q) => q.eq("chatGuid", chatGuid)).unique();
+    await ctx.db.insert("tags", { chat_guid: chatGuid, conversation_id: alias?.conversationId, tag, created_at: new Date().toISOString() });
+  });
 }
 
 async function seedIdentity(

@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, query, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
-import { presenceFields } from "../schema/comma/validators";
+import { laneOf, presenceFields } from "../schema/comma/validators";
 
 import { bridgeStateValue, publishBridgeState } from "./bridgeState";
 
@@ -47,8 +47,10 @@ export const expireTyping = internalMutation({
     if (!await ctx.db.get(row.conversationId)) return null;
     const clientKey = `typing-expire:${row._id}`;
     const existing = await ctx.db.query("comma_outbox").withIndex("by_clientKey", (q) => q.eq("clientKey", clientKey)).unique();
+    // The clear goes where the typing went, which enqueue already checked supports it.
     if (!existing) await ctx.db.insert("comma_outbox", {
-      clientKey, conversationId: row.conversationId, payload: { kind: "typing", active: false, expiresAt: row.payload.expiresAt },
+      clientKey, conversationId: row.conversationId, route: row.route, lane: laneOf("typing"),
+      payload: { kind: "typing", active: false, expiresAt: row.payload.expiresAt },
       status: "pending", attempts: 0, createdAt: Date.now(), updatedAt: Date.now(),
     });
     return null;

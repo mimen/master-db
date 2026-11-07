@@ -2,7 +2,7 @@ import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { CommaReaction, CommaReactionState } from "../schema/comma/validators";
 
-import { mergeReactions, messageKey, sameReaction, supersedes } from "./reactions";
+import { messageKey, sameReaction, shownReactions, supersedes } from "./reactions";
 
 async function reactionRows(ctx: QueryCtx, targetKey: string): Promise<Doc<"comma_reactions">[]> {
   return await ctx.db.query("comma_reactions").withIndex("by_targetKey", (q) => q.eq("targetKey", targetKey)).collect();
@@ -19,6 +19,6 @@ export async function applyReaction(ctx: MutationCtx, event: CommaReactionState,
 }
 
 /** A message's reactions, sender names unset. */
-export async function reactionsOf(ctx: QueryCtx, message: Pick<Doc<"comma_messages">, "platform" | "guid" | "reactions">): Promise<CommaReaction[]> {
-  return mergeReactions(message.reactions, await reactionRows(ctx, messageKey(message.platform ?? "imessage", message.guid)));
+export async function reactionsOf(ctx: QueryCtx, message: Pick<Doc<"comma_messages">, "platform" | "guid">): Promise<CommaReaction[]> {
+  return shownReactions(await reactionRows(ctx, messageKey(message.platform ?? "imessage", message.guid)));
 }

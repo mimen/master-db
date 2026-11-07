@@ -1,0 +1,86 @@
+import { makeFunctionReference } from "convex/server";
+import { ConvexError } from "convex/values";
+
+import { NOT_SENT_AFTER_MS, pendingGuid } from "../../apps/imsg/shared/pending-send";
+import { messageService } from "../../apps/imsg/shared/platform-profile";
+import type { Doc, Id } from "../_generated/dataModel";
+import type { MutationCtx } from "../_generated/server";
+import { laneOf, type CommaOutboxPayload, type CommaRoute } from "../schema/comma/validators";
+
+import { sendRoute } from "./conversationIdentity";
+import { profileRoute, unsupportedReason } from "./routeSupport";
+
+/**
+ * Queues one command for an executor, stamped with its conversation's route and its lane. A send also creates its
+ * pending row here, the first step of the lifecycle in pendingSends.ts.
+ */
+
+type SendPayload = Extract<CommaOutboxPayload, { kind: "send" }>;
+
+const GLOBAL_KINDS = new Set<CommaOutboxPayload["kind"]>(["createChat", "clearSuggestionLearning"]);
+const expireRef = makeFunctionReference<"mutation", { clientKey: string }, null>("comma/pendingSends:expire");
+
+/** Idempotent on clientKey. A send shows its pending bubble at once. */
+export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversationId, payload }: {
+  clientKey: string; conversationId?: Id<"comma_conversations">; payload: CommaOutboxPayload;
+}): Promise<{ id: Id<"comma_outbox">; created: boolean }> {
+  const existing = await ctx.db
+    .query("comma_outbox")
+    .withIndex("by_clientKey", (q) => q.eq("clientKey", clientKey))
+    .unique();
+  if (existing) return { id: existing._id, created: false };
+  if (!conversationId && !GLOBAL_KINDS.has(payload.kind)) throw new Error("conversationId is required for this command");
+  const conversation = conversationId ? await ctx.db.get(conversationId) : null;
+  if (conversationId && !conversation) throw new Error("Conversation not found");
+  const route = conversation ? sendRoute(conversation) : undefined;
+  const unsupported = conversation && route && unsupportedReason(route, conversation.isGroup, payload);
+  if (unsupported) throw new ConvexError(unsupported);
+  const now = Date.now();
+  const id = await ctx.db.insert("comma_outbox", {
+    clientKey,
+    conversationId,
+    route,
+    payload,
+    lane: laneOf(payload.kind),
+    status: "pending",
+    attempts: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
+  if (payload.kind === "send" && conversation && route) await createPendingSend(ctx, { conversation, route, clientKey, payload, now });
+  return { id, created: true };
+}
+
+/** The bubble shows at once, and the sidebar moves with it rather than a platform round trip later. */
+async function createPendingSend(ctx: MutationCtx, { conversation, route, clientKey, payload, now }: {
+  conversation: Doc<"comma_conversations">; route: CommaRoute; clientKey: string; payload: SendPayload; now: number;
+}): Promise<void> {
+  // The real row's refreshLastMessage overwrites this preview, and a stranded send stays the preview.
+  await ctx.db.patch(conversation._id, {
+    lastMessage: { guid: pendingGuid(clientKey), text: payload.text, dateCreated: now, isFromMe: true, senderName: null, hasAttachments: false },
+    lastMessageAt: Math.max(conversation.lastMessageAt, now),
+  });
+  await ctx.db.insert("comma_messages", {
+    platform: route.platform,
+    guid: pendingGuid(clientKey),
+    conversationId: conversation._id,
+    chatGuid: route.chatGuid,
+    dateCreated: now,
+    isFromMe: true,
+    text: payload.text,
+    service: messageService(profileRoute(route, conversation.isGroup).service),
+    error: 0,
+    edited: false,
+    retracted: false,
+    isTapback: false,
+    replyToGuid: payload.replyToGuid,
+    isGroupEvent: false,
+    mentions: payload.mentions ?? [],
+    attachmentGuids: [],
+    clientKey,
+    sourceVersion: 0,
+    sendState: "queued",
+  });
+  await ctx.scheduler.runAfter(NOT_SENT_AFTER_MS, expireRef, { clientKey });
+}
+

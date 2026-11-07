@@ -10,10 +10,9 @@ import {
 
 import { settleDraftChat } from "./agent";
 import { sameSecret } from "./bridgeAuth";
-import { sendRoute } from "./conversationIdentity";
+import { enqueueCommand } from "./enqueue";
 import { applyIMessageResult } from "./imessageResults";
-import { claimPendingSend, completePendingSend, createPendingSend, expireIfStale, strandPendingSend } from "./pendingSends";
-import { unsupportedReason } from "./routeSupport";
+import { claimPendingSend, completePendingSend, expireIfStale, strandPendingSend } from "./pendingSends";
 import { readConversation, setConversationFlag, settleConversation, unsettleConversation } from "./triage";
 
 /**
@@ -35,7 +34,6 @@ export const AUTO_RETRY = {
   suggestionFeedback: false, typing: true, clearSuggestionLearning: true, suggestions: true, identify: true, transcribe: true,
 } satisfies Record<CommaOutboxPayload["kind"], boolean>;
 export const IDEMPOTENT_KINDS = new Set(Object.entries(AUTO_RETRY).filter(([, retry]) => retry).map(([kind]) => kind));
-export const GLOBAL_KINDS = new Set<CommaOutboxPayload["kind"]>(["createChat", "clearSuggestionLearning"]);
 
 type TriagePayload = typeof legacyTriagePayload.type;
 
@@ -104,37 +102,6 @@ export const enqueue = mutation({
   },
 });
 
-/** Idempotent on clientKey. A send shows its pending bubble at once. */
-export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversationId, payload }: {
-  clientKey: string; conversationId?: Id<"comma_conversations">; payload: CommaOutboxPayload;
-}): Promise<{ id: Id<"comma_outbox">; created: boolean }> {
-  const existing = await ctx.db
-    .query("comma_outbox")
-    .withIndex("by_clientKey", (q) => q.eq("clientKey", clientKey))
-    .unique();
-  if (existing) return { id: existing._id, created: false };
-  if (!conversationId && !GLOBAL_KINDS.has(payload.kind)) throw new Error("conversationId is required for this command");
-  const conversation = conversationId ? await ctx.db.get(conversationId) : null;
-  if (conversationId && !conversation) throw new Error("Conversation not found");
-  const route = conversation ? sendRoute(conversation) : undefined;
-  const unsupported = conversation && route && unsupportedReason(route, conversation.isGroup, payload);
-  if (unsupported) throw new ConvexError(unsupported);
-  const now = Date.now();
-  const id = await ctx.db.insert("comma_outbox", {
-    clientKey,
-    conversationId,
-    route,
-    payload,
-    lane: laneOf(payload.kind),
-    status: "pending",
-    attempts: 0,
-    createdAt: now,
-    updatedAt: now,
-  });
-  if (payload.kind === "send" && conversation && route) await createPendingSend(ctx, { conversation, route, clientKey, payload, now });
-  return { id, created: true };
-}
-
 export const getCommand = query({
   args: { commandId: v.id("comma_outbox") },
   returns: v.union(commandReceipt, v.null()),
@@ -165,18 +132,11 @@ export const outboxStatusFor = query({
   },
 });
 
-/**
- * One status's rows in a lane, oldest first. No lane is every lane, for a bridge from before lanes. A row
- * queued before lanes has none and belongs to the lane its kind maps to.
- */
+/** One status's rows in a lane, oldest first. No lane is every lane, for a bridge from before lanes. */
 async function laneRows(ctx: QueryCtx, lane: CommaOutboxLane | undefined, status: CommaOutboxStatus, limit: number) {
   if (!lane) return await ctx.db.query("comma_outbox").withIndex("by_status_createdAt", (q) => q.eq("status", status)).order("asc").take(limit);
-  const scan = (stamp: CommaOutboxLane | undefined) => ctx.db.query("comma_outbox")
-    .withIndex("by_lane_status_createdAt", (q) => q.eq("lane", stamp).eq("status", status)).order("asc").take(limit);
-  // ponytail: the unstamped scan outlives the rows it serves; drop it once none are pending or claimed.
-  const unstamped = (await scan(undefined)).filter((row) => laneOf(row.payload.kind) === lane);
-  const stamped = await scan(lane);
-  return unstamped.length ? [...unstamped, ...stamped].sort((a, b) => a.createdAt - b.createdAt).slice(0, limit) : stamped;
+  return await ctx.db.query("comma_outbox")
+    .withIndex("by_lane_status_createdAt", (q) => q.eq("lane", lane).eq("status", status)).order("asc").take(limit);
 }
 
 /**
@@ -221,10 +181,7 @@ export const claimOutbox = internalMutation({
       if (await expireIfStale(ctx, row, now)) continue;
       if (row.payload.kind === "send") await claimPendingSend(ctx, row.clientKey);
       if (row.conversationId && row.payload.kind === "markRead") await readConversation(ctx, row.conversationId, row.createdAt);
-      // A row inserted without a route (queued before routes existed, or a typing expiry) gets its conversation's route now.
-      const conversation = row.conversationId && !row.route ? await ctx.db.get(row.conversationId) : null;
-      const route = row.route ?? (conversation ? sendRoute(conversation) : undefined);
-      const patch = { claimToken: `${row._id}:${row.attempts + 1}`, error: undefined, status: "claimed" as const, leaseUntil: now + leaseMs, attempts: row.attempts + 1, route, updatedAt: now };
+      const patch = { claimToken: `${row._id}:${row.attempts + 1}`, error: undefined, status: "claimed" as const, leaseUntil: now + leaseMs, attempts: row.attempts + 1, updatedAt: now };
       await ctx.db.patch(row._id, patch);
       claimed.push({ ...row, ...patch });
     }
@@ -260,7 +217,7 @@ export const completeOutbox = internalMutation({
       result,
     });
     if (row.payload.kind === "send") await completePendingSend(ctx, clientKey, status, resultGuid);
-    if (status === "sent" && (row.lane ?? laneOf(row.payload.kind)) === "imessage") await applyIMessageResult(ctx, row);
+    if (status === "sent" && row.lane === "imessage") await applyIMessageResult(ctx, row);
     return true;
   },
 });
