@@ -1,5 +1,5 @@
 import { WANTS_YOU } from "./agent-attention";
-import type { ChatFlags, ChatSummary, Message, StateCounts, StateFilter, TypeFilter } from "./types";
+import type { ChatFlags, ChatSummary, StateCounts, StateFilter, TypeFilter } from "./types";
 
 /**
  * Chat State — the pure rules for a chat's flags: how Unresponded / Waiting /
@@ -182,55 +182,4 @@ export function computeCounts(chats: ChatSummary[], type: TypeFilter): StateCoun
   return Object.fromEntries(
     STATES.map((state) => [state, chats.filter((c) => counts(c, state, type)).length]),
   ) as StateCounts;
-}
-
-/**
- * The Mini directory's socket fast path: applies a message we already know about
- * directly to a summary list, ahead of a full rebuild — new last message, unread
- * count, chat moved to the top.
- *
- * Returns the input array unchanged when the message is stale (older than the
- * chat's last message), or null when the chat isn't in the list — the caller
- * decides whether that means "ignore" or "rebuild".
- */
-export function applyMessage<Chat extends Omit<ChatSummary, "flags">>(
-  chats: Chat[],
-  chatGuid: string,
-  message: Message,
-): Chat[] | null {
-  const index = chats.findIndex((c) => c.guid === chatGuid);
-  const chat = index >= 0 ? chats[index] : undefined;
-  if (!chat) return null;
-  if ((chat.lastMessage?.dateCreated ?? 0) > message.dateCreated) return chats;
-  // Replying reads the conversation, so an outbound message clears the count.
-  // A manual mark-unread (flag set with no count) survives it.
-  const qualifiesForUnreadAge =
-    !message.isFromMe &&
-    message.dateRead === null &&
-    !message.retracted &&
-    !message.isGroupEvent &&
-    message.isAssociatedMessage !== true;
-  const firstUnreadAt = message.isFromMe
-    ? null
-    : qualifiesForUnreadAge
-      ? Math.min(chat.firstUnreadAt ?? message.dateCreated, message.dateCreated)
-      : chat.firstUnreadAt;
-  const updated: Chat = {
-    ...chat,
-    isSpam: message.isSpam === true,
-    firstUnreadAt,
-    unreadCount: message.isFromMe ? 0 : qualifiesForUnreadAge ? chat.unreadCount + 1 : chat.unreadCount,
-    lastMessage: {
-      guid: message.guid,
-      text: message.text || (message.attachments.length > 0 ? "Attachment" : ""),
-      dateCreated: message.dateCreated,
-      isFromMe: message.isFromMe,
-      senderName: message.sender?.name ?? message.sender?.address ?? null,
-      hasAttachments: message.attachments.length > 0,
-    },
-  };
-  const next = [...chats];
-  next.splice(index, 1);
-  next.unshift(updated);
-  return next;
 }

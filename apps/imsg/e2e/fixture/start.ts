@@ -153,7 +153,6 @@ const { app, dispose } = await createApp({
       bb.reset(fixtureSeed());
       resetOverlay();
       resetConvex();
-      controls.directory.invalidate(true);
       return c.json({ ok: true, now: FIXTURE_NOW });
     });
 

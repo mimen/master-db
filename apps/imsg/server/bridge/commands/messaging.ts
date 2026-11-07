@@ -9,7 +9,8 @@ export const messagingHandlers = {
     return { kind: "send", message: sent.value };
   } },
   react: { execute: async (ctx, payload) => {
-    accept(await ctx.commands.react(payload.messageGuid, { ...payload, chatGuid: requireChat(ctx) }));
+    const chatGuid = requireChat(ctx);
+    accept(await ctx.commands.react(payload.messageGuid, { ...payload, chatGuid, siblings: ctx.writer.siblingGuids(chatGuid) }));
     return { kind: "react", ok: true };
   } },
   edit: { execute: async (ctx, payload) => {
@@ -21,12 +22,12 @@ export const messagingHandlers = {
     return { kind: "unsend", ok: true };
   } },
   delete: { execute: async (ctx, payload) => {
-    accept(await ctx.commands.delete(payload.messageGuid, requireChat(ctx)));
+    accept(await ctx.commands.delete(payload.messageGuid, ctx.writer.siblingGuids(requireChat(ctx))));
     return { kind: "delete", ok: true };
   } },
   // Convex has already read the conversation; this only sends iMessage's read receipt.
   markRead: { execute: async (ctx) => {
-    accept({ ok: await ctx.commands.markRead(requireChat(ctx)), error: "BlueBubbles mark read failed" });
+    accept({ ok: await ctx.commands.markRead(ctx.writer.siblingGuids(requireChat(ctx))), error: "BlueBubbles mark read failed" });
     return { kind: "markRead", ok: true };
   } },
   markUnread: ownedByConvex(), pin: ownedByConvex(), mute: ownedByConvex(), settle: ownedByConvex(), unsettle: ownedByConvex(),
@@ -62,7 +63,7 @@ export const messagingHandlers = {
     return { kind: "leaveGroup", ok: true };
   } },
   deleteChat: { longRunning: true, execute: async (ctx, payload) => {
-    if (!ctx.commands.directory.siblingGuids(requireChat(ctx)).includes(payload.chatGuid)) {
+    if (!ctx.writer.siblingGuids(requireChat(ctx)).includes(payload.chatGuid)) {
       throw new Error("Chat alias is not in this conversation");
     }
     accept(await ctx.commands.deleteChat(payload.chatGuid));

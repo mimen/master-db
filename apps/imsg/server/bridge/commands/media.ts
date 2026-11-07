@@ -45,7 +45,6 @@ export function createMediaHandlers(deps: {
       }
       if (!sent.ok) throw new Error(sent.error);
       const message = mapMessage(sent.value, chatGuid, unnamed);
-      ctx.commands.directory.applyKnownMessage(chatGuid, message);
       // Sending already succeeded. A failed mirror must never turn into a second send.
       try { await ctx.writer.exclusive(() => ctx.writer.postMessages([{ ...sent.value, chats: [{ guid: chatGuid }] }])); }
       catch (error) { console.error(`comma attachment mirror: ${String(error)}`); }

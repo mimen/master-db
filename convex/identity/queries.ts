@@ -381,7 +381,7 @@ export const topLinkedPeople = query({
  * actually annotated get a row/tag/link at all), so "give me everything" is
  * cheap and is what the mirror's periodic refresh uses, since it has no
  * independent way to know which chat guids currently exist (that's
- * BlueBubbles/ChatDirectory's domain, not Convex's). Passing an explicit list
+ * BlueBubbles' domain, not Convex's). Passing an explicit list
  * scopes the result to just those guids, for a future targeted lookup (e.g.
  * a single open chat's info screen).
  */

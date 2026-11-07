@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import type { GenericId } from "convex/values";
 import { ChatCommands, UnknownSendError } from "../../commands";
-import { ChatDirectory } from "../../chat-directory";
 import { ContactBook } from "../../contacts";
 import { FakeBlueBubbles } from "../../bluebubbles-fake";
 import { OverlayDb } from "../../db";
@@ -17,7 +16,7 @@ async function harness() {
   const bb = new FakeBlueBubbles({ chats: [{ guid: CHAT, messages: [] }] });
   const db = new OverlayDb(":memory:"); const ingest = new FakeIngest();
   const contacts = new ContactBook(bb);
-  const commands = new ChatCommands(bb, new ChatDirectory(bb, contacts), contacts);
+  const commands = new ChatCommands(bb, contacts);
   const writer = new MessageWriter({ bb, db, ingest });
   await writer.refreshChats();
   const row = { _id: "command", _creationTime: 1, clientKey: "send-file", conversationId: ingest.id, payload, status: "claimed", attempts: 1, createdAt: 1, updatedAt: 1 } as CommandContext["row"];

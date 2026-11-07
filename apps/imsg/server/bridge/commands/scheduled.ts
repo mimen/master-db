@@ -10,7 +10,7 @@ async function scheduledTarget(ctx: CommandContext, id: number): Promise<BBSched
   if (!listed.ok) throw new Error(listed.error);
   const scheduled = listed.value.find((item) => Number(item.id) === id);
   if (!scheduled) throw new Error("scheduled message not found");
-  if (!ctx.commands.directory.siblingGuids(requireChat(ctx)).includes(scheduled.payload.chatGuid)) {
+  if (!ctx.writer.siblingGuids(requireChat(ctx)).includes(scheduled.payload.chatGuid)) {
     throw new Error("scheduled message is not in this conversation");
   }
   return scheduled;
@@ -18,10 +18,7 @@ async function scheduledTarget(ctx: CommandContext, id: number): Promise<BBSched
 
 async function scheduledResult(ctx: CommandContext, raw: BBScheduledMessage) {
   await publishScheduled(ctx.commands.bb, ctx.writer.deps.ingest);
-  const summaries = await ctx.commands.directory.summaries();
-  const name = summaries.ok ? summaries.chats.find((chat) =>
-    ctx.commands.directory.siblingGuids(chat.guid).includes(raw.payload.chatGuid))?.displayName : undefined;
-  return mapScheduledMessage(raw, name ?? raw.payload.chatGuid);
+  return mapScheduledMessage(raw, ctx.writer.conversation(raw.payload.chatGuid, ctx.commands.names)?.displayName ?? raw.payload.chatGuid);
 }
 
 export const scheduledHandlers = {

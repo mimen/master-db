@@ -19,7 +19,7 @@ fronting the Mac Mini's BlueBubbles. Read `CONTEXT.md` for the domain model/voca
   on a physical iPhone also requires a signed manifest: `comma:expo` reads `EXPO_TOKEN` (account
   `mimen1994`, EAS project in `app.json`) from `~/.config/comma/expo-token` on the Mini, and the
   phone's Expo Go must be signed in to the same account. Server: `server/`. Shared types/logic: `shared/`
-  (imported as `@shared/*`; the client keeps a synced copy at `client/src/lib/types.ts`).
+  (imported as `@shared/*` by the server and the client).
 - Desktop shell: `desktop/` (Tauri v2). Thin remote window — loads the Mini tailnet
   URL with native AppKit chrome and menu. `bun run dev:desktop` is the only supported
   development launcher; it derives a branch-specific Comma Dev identity.

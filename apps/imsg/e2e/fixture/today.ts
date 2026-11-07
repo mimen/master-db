@@ -41,7 +41,7 @@ const REGENERATED_GROUPS = [
 export function createTodayFixture(deps: {
   chats: () => Promise<ChatSummary[]>;
   clears: () => { chatGuid: string; clearedAt: number }[];
-  canonical: (chatGuid: string) => string;
+  canonical: (chatGuid: string) => Promise<string>;
 }) {
   const dayStart = todayWindow(FIXTURE_NOW).start;
   let run: TodayRun | null = null;
@@ -93,7 +93,7 @@ export function createTodayFixture(deps: {
       const latest = new Map<string, number>();
       for (const { chatGuid, clearedAt } of deps.clears()) {
         if (clearedAt < dayStart) continue;
-        const key = deps.canonical(chatGuid);
+        const key = await deps.canonical(chatGuid);
         latest.set(key, Math.max(latest.get(key) ?? 0, clearedAt));
       }
       return {

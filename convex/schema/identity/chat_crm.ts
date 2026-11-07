@@ -19,7 +19,7 @@ import { v } from "convex/values";
  * `convex/identity/crm.ts` that targets chats is the enforcement point.
  *
  * `chat_guid` is BlueBubbles' merged-conversation guid (the "primary" guid
- * after imsg's service-sibling merge — see apps/imsg's chat-directory.ts) —
+ * after imsg's service-sibling merge — see apps/imsg's bridge/mapper.ts) —
  * Convex has no chats table of its own, this is the only place a chat guid
  * appears in the identity graph.
  *

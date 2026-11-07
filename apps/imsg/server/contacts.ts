@@ -20,7 +20,6 @@ export class ContactBook {
   private all: Contact[] = [];
   private lastRefresh = 0;
   private loaded = false;
-  private availabilityListeners = new Set<(available: boolean) => void>();
 
   constructor(private client: BlueBubbles) {}
 
@@ -29,29 +28,18 @@ export class ContactBook {
     return this.loaded;
   }
 
-  onAvailabilityChange(listener: (available: boolean) => void): () => void {
-    this.availabilityListeners.add(listener);
-    return () => this.availabilityListeners.delete(listener);
-  }
-
-  private setAvailable(available: boolean): void {
-    if (available === this.loaded) return;
-    this.loaded = available;
-    for (const listener of this.availabilityListeners) listener(available);
-  }
-
   async refresh(force = false): Promise<void> {
     if (!force && Date.now() - this.lastRefresh < REFRESH_MS) return;
     let result: Awaited<ReturnType<BlueBubbles["contacts"]>>;
     try {
       result = await this.client.contacts();
     } catch {
-      this.setAvailable(false);
+      this.loaded = false;
       this.lastRefresh = 0;
       return;
     }
     if (!result.ok) {
-      this.setAvailable(false);
+      this.loaded = false;
       this.lastRefresh = 0;
       return;
     }
@@ -94,7 +82,7 @@ export class ContactBook {
       }
     }
     this.all = flat;
-    this.setAvailable(true);
+    this.loaded = true;
   }
 
   /** Base64 image bytes for the contact photo, if any. */

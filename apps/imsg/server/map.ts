@@ -143,25 +143,6 @@ function sameReaction(a: Reaction, b: Reaction): boolean {
   return sameSender && a.type === b.type && (!a.emoji || a.emoji === b.emoji);
 }
 
-/**
- * Live-event view of a tapback: which message it targets and the reaction to
- * add or remove. The thread builder folds these on reload; this powers the
- * same folding in realtime so the client never renders a "Loved …" bubble.
- */
-export function tapbackReactionEvent(
-  m: BBMessage,
-  contacts: NameSource,
-  participants: readonly BBHandle[] = [],
-): { targetGuid: string; reaction: Reaction; remove: boolean } | null {
-  const tapback = parseTapback(m);
-  if (!tapback || !m.associatedMessageGuid) return null;
-  return {
-    targetGuid: stripPartPrefix(m.associatedMessageGuid),
-    remove: tapback.remove,
-    reaction: reactionOf(tapback, m.isFromMe === true, sender(m, contacts, participants)),
-  };
-}
-
 function isGroupEvent(m: BBMessage): boolean {
   return (m.itemType ?? 0) !== 0 || (m.groupActionType ?? 0) !== 0;
 }
@@ -333,7 +314,7 @@ export interface UnreadSummary {
   firstUnreadAt: number | null;
 }
 
-function isGenuineUnreadInbound(m: BBMessage): boolean {
+export function isGenuineUnreadInbound(m: BBMessage): boolean {
   return (
     m.isFromMe !== true &&
     !m.dateRead &&
@@ -385,13 +366,13 @@ function chatCrmField(
 }
 
 /** A conversation as the Mini sees it in BlueBubbles. Triage flags are Convex's, so it carries none. */
-export type DirectoryChat = Omit<ChatSummary, "flags">;
+export type MappedChat = Omit<ChatSummary, "flags">;
 
 export function mapChat(
   chat: BBChat,
   contacts: NameSource,
   scannedUnread?: UnreadSummary,
-): DirectoryChat {
+): MappedChat {
   const last = chat.lastMessage ?? null;
   const participants = chat.participants ?? [];
   const isGroup = chat.guid.includes(";+;") || participants.length > 1;

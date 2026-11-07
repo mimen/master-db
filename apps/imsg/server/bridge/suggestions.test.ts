@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import { OverlayDb } from "../db";
-import type { ChatSummary, ReplySuggestions } from "../../shared/types";
+import type { ReplySuggestions } from "../../shared/types";
 import { FakeIngest } from "./fake-ingest";
 import type { MessageRow } from "./convex-ingest";
+import type { MappedChat } from "../map";
 import { SUGGESTION_PRECOMPUTE, SuggestionsBridge, type ShelfUpdate } from "./suggestions";
 
 const CHAT = "iMessage;-;+15550001111";
@@ -15,12 +16,10 @@ function message(guid: string, overrides: Partial<MessageRow> = {}): MessageRow 
   } as MessageRow;
 }
 
-function chat(lastGuid: string, overrides: Partial<ChatSummary> = {}): ChatSummary {
+function chat(overrides: Partial<MappedChat> = {}): MappedChat {
   return {
-    guid: CHAT, displayName: "Alex", isGroup: false, participants: [{ address: "+15550001111", name: "Alex" }],
-    lastMessage: { guid: lastGuid, text: "hey?", dateCreated: 1000, isFromMe: false, senderName: "Alex", hasAttachments: false },
-    isSpam: false, ...overrides,
-  } as ChatSummary;
+    displayName: "Alex", isGroup: false, participants: [{ address: "+15550001111", name: "Alex" }], ...overrides,
+  } as MappedChat;
 }
 
 function result(anchor: string): ReplySuggestions {
@@ -30,7 +29,7 @@ function result(anchor: string): ReplySuggestions {
   };
 }
 
-function harness(current: ChatSummary | null) {
+function harness(current: MappedChat | undefined, during: (bridge: SuggestionsBridge) => void = () => {}) {
   const db = new OverlayDb(":memory:");
   const ingest = new FakeIngest();
   let generations = 0;
@@ -41,10 +40,11 @@ function harness(current: ChatSummary | null) {
       available: true,
       replySuggestions: (_chat, _peer, _refresh, _model) => {
         generations++;
-        return Promise.resolve({ ok: true as const, value: result(current?.lastMessage?.guid ?? "") });
+        during(bridge);
+        return Promise.resolve({ ok: true as const, value: result("m1") });
       },
     },
-    getChat: () => Promise.resolve(current),
+    conversation: () => current,
     now: () => now,
   });
   return {
@@ -56,7 +56,7 @@ function harness(current: ChatSummary | null) {
 }
 
 test("an inbound DM from a known contact precomputes once after the debounce", async () => {
-  const h = harness(chat("m1"));
+  const h = harness(chat());
   h.bridge.observe([message("m1")]);
   await h.bridge.flush();
   expect(h.generations()).toBe(0);
@@ -67,14 +67,15 @@ test("an inbound DM from a known contact precomputes once after the debounce", a
   h.bridge.stop();
 });
 
-test("groups, unknown senders, and chats I replied to are skipped", async () => {
-  for (const current of [
-    chat("m1", { isGroup: true }),
-    chat("m1", { participants: [{ address: "+15550001111", name: null }] }),
-    chat("m1", { lastMessage: { guid: "m1", text: "ok", dateCreated: 1000, isFromMe: true, senderName: null, hasAttachments: false } }),
-  ]) {
+test("groups, unknown senders, spam, and unmirrored chats are skipped", async () => {
+  for (const [current, spam] of [
+    [chat({ isGroup: true }), false],
+    [chat({ participants: [{ address: "+15550001111", name: null }] }), false],
+    [chat(), true],
+    [undefined, false],
+  ] as const) {
     const h = harness(current);
-    h.bridge.observe([message("m1")]);
+    h.bridge.observe([message("m1", { isSpam: spam })]);
     h.advance(SUGGESTION_PRECOMPUTE.debounceMs);
     await h.bridge.flush();
     expect(h.generations()).toBe(0);
@@ -83,7 +84,7 @@ test("groups, unknown senders, and chats I replied to are skipped", async () => 
 });
 
 test("my own reply cancels a pending precompute", async () => {
-  const h = harness(chat("m1"));
+  const h = harness(chat());
   h.bridge.observe([message("m1"), message("m2", { isFromMe: true, dateCreated: 2000 })]);
   h.advance(SUGGESTION_PRECOMPUTE.debounceMs);
   await h.bridge.flush();
@@ -91,15 +92,25 @@ test("my own reply cancels a pending precompute", async () => {
   h.bridge.stop();
 });
 
+test("a reply that lands while generating keeps the shelf unpublished", async () => {
+  const h = harness(chat(), (bridge) => bridge.observe([message("m2", { isFromMe: true, dateCreated: 2000 })]));
+  h.bridge.observe([message("m1")]);
+  h.advance(SUGGESTION_PRECOMPUTE.debounceMs);
+  await h.bridge.flush();
+  expect(h.generations()).toBe(1);
+  expect(h.posted()).toEqual([]);
+  h.bridge.stop();
+});
+
 test("the daily cap stops generation and survives a restart", async () => {
-  const h = harness(chat("m1"));
+  const h = harness(chat());
   h.db.setAiMeta("suggestion_precompute_budget", JSON.stringify({
     day: new Date(10_000).toISOString().slice(0, 10), generatedToday: SUGGESTION_PRECOMPUTE.dailyCap, lastAt: 1,
   }));
   const capped = new SuggestionsBridge({
     db: h.db, ingest: h.ingest,
     ai: { available: true, replySuggestions: () => { throw new Error("should not generate"); } },
-    getChat: () => Promise.resolve(chat("m1")),
+    conversation: () => chat(),
     now: () => 20_000,
   });
   capped.observe([message("m1")]);

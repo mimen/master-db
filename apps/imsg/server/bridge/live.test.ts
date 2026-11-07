@@ -7,6 +7,7 @@ import { FakeBlueBubbles } from "../bluebubbles-fake";
 import { OverlayDb } from "../db";
 import { FakeIngest } from "./fake-ingest";
 import { LiveBridge, MessageWriter } from "./live";
+import { unnamed } from "./mapper";
 
 const CHAT = "iMessage;-;+15550001111";
 const stops: (() => void)[] = [];
@@ -141,4 +142,28 @@ test("a group change during a refresh is not lost", async () => {
   await flushing;
   expect(read).toHaveBeenCalledTimes(2);
   read.mockRestore();
+});
+
+test("siblings and the conversation row follow the Convex conversation each chat mirrored into", async () => {
+  const SMS = "SMS;-;+15550001111";
+  const OTHER = "iMessage;-;+15550002222";
+  const chat = (guid: string, address: string, dateCreated: number) => ({ guid, participants: [{ address }],
+    messages: [{ guid: `${guid}-m`, originalROWID: dateCreated, text: "hi", dateCreated, chats: [{ guid }] }] });
+  const bb = new FakeBlueBubbles({ chats: [chat(CHAT, "+15550001111", 2000), chat(SMS, "+15550001111", 1000), chat(OTHER, "+15550002222", 3000)] });
+  const ingest = new FakeIngest();
+  const post = ingest.post.bind(ingest);
+  spyOn(ingest, "post").mockImplementation((async (kind: string, body: never) => kind === "conversations"
+    ? Object.fromEntries((body as { conversations: Array<{ conversationKey: string; chats: Array<{ chatGuid: string }> }> }).conversations
+      .flatMap((row) => row.chats.map((chat) => [chat.chatGuid, row.conversationKey])))
+    : post(kind as never, body)) as never);
+  const writer = new MessageWriter({ bb, db: new OverlayDb(":memory:"), ingest });
+  expect(writer.siblingGuids(CHAT)).toEqual([CHAT]);
+  await writer.refreshChats();
+  expect(writer.siblingGuids(SMS).toSorted()).toEqual([CHAT, SMS].toSorted());
+  expect(writer.siblingGuids(OTHER)).toEqual([OTHER]);
+  const names = { ...unnamed, lookup: (address: string) => address === "+15550001111" ? "Alex" : null };
+  // The newest sibling speaks for the conversation, named through the caller's source.
+  expect(writer.conversation(SMS, names)).toMatchObject({ guid: CHAT, displayName: "Alex", isGroup: false,
+    participants: [{ address: "+15550001111", name: "Alex" }] });
+  expect(writer.conversation("iMessage;-;missing", names)).toBeUndefined();
 });

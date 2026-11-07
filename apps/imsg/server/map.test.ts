@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { BBAttachment, BBChat, BBMessage } from "./bb-types";
-import { buildThread, mapChat, mapMessage, tapbackReactionEvent, visibleAttachments } from "./map";
+import { buildThread, mapChat, mapMessage, visibleAttachments } from "./map";
 import type { CrmData, NameSource } from "./name-resolver";
 
 /**
@@ -291,28 +291,20 @@ describe("custom-emoji tapbacks", () => {
   });
 
   test("reads the emoji from the localized and hair-space text forms, ignoring emoji in the quote", () => {
-    const spanish = tapbackReactionEvent(emojiTapback({ text: "Reaccionó con 🥩 a “Bueno 😂”" }), names);
-    const spaced = tapbackReactionEvent(emojiTapback({ text: " ​👍​ to “ fun 😭 ” " }), names);
-    expect(spanish?.reaction.emoji).toBe("🥩");
-    expect(spaced?.reaction.emoji).toBe("👍");
+    const emojiOf = (tapback: BBMessage) => buildThread([tapback, target], chat, names)[0]?.reactions.map((r) => r.emoji);
+    expect(emojiOf(emojiTapback({ text: "Reaccionó con 🥩 a “Bueno 😂”" }))).toEqual(["🥩"]);
+    expect(emojiOf(emojiTapback({ text: " ​👍​ to “ fun 😭 ” " }))).toEqual(["👍"]);
   });
 
   test("falls back to the attributed body when BlueBubbles sends no text", () => {
-    const event = tapbackReactionEvent(
-      emojiTapback({ text: null, attributedBody: [{ string: "Reacted 🫶🏽 to “Hahaha”", runs: [] }] }),
-      names,
-    );
-    expect(event?.reaction.emoji).toBe("🫶🏽");
+    const tapback = emojiTapback({ text: null, attributedBody: [{ string: "Reacted 🫶🏽 to “Hahaha”", runs: [] }] });
+    expect(buildThread([tapback, target], chat, names)[0]?.reactions.map((r) => r.emoji)).toEqual(["🫶🏽"]);
   });
 
   test("an unparseable 2006 still becomes a generic emoji reaction, not a bubble", () => {
-    const event = tapbackReactionEvent(emojiTapback({ text: "" }), names);
-    expect(event).toEqual({
-      targetGuid: target.guid,
-      remove: false,
-      reaction: { type: "emoji", isFromMe: false, senderName: "Marla", senderAddress: "+16195550101" },
-    });
-    expect(buildThread([emojiTapback({ text: "" }), target], chat, names).map((m) => m.guid)).toEqual([target.guid]);
+    const thread = buildThread([emojiTapback({ text: "" }), target], chat, names);
+    expect(thread.map((m) => m.guid)).toEqual([target.guid]);
+    expect(thread[0]?.reactions).toEqual([{ type: "emoji", isFromMe: false, senderName: "Marla", senderAddress: "+16195550101" }]);
   });
 
   test("the chat-list preview names the emoji instead of a removal", () => {

@@ -7,7 +7,7 @@ const REFRESH_MS = 10 * 60 * 1000; // piggybacks ContactBook's own refresh caden
 /**
  * Pushes Apple Contacts to the identity graph in master-db, so imsg's person
  * view can resolve "who is this handle" beyond what BlueBubbles' contact
- * cache already gives the ChatDirectory. Each BlueBubbles contact card is
+ * cache already gives the Mini. Each BlueBubbles contact card is
  * sent pre-grouped (all its phones/emails together) — see
  * convex/identity/ingestContacts.ts in the monorepo root for why that
  * grouping is load-bearing.

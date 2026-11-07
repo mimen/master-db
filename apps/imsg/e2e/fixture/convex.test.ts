@@ -20,14 +20,13 @@ let fixture: Awaited<ReturnType<typeof createApp>>;
 let bb: FixtureBlueBubbles;
 let db: OverlayDb;
 let reset: () => void;
-let directory: import("../../server/chat-directory").ChatDirectory;
 beforeEach(async () => {
   bb = new FixtureBlueBubbles(fixtureSeed());
   db = new OverlayDb(":memory:");
   const identity = new FixtureIdentity();
   fixture = await createApp({
     config, bb, db, now: () => FIXTURE_NOW, names: identity, identity, backgroundServices: false,
-    configureFixtureRoutes: (app, controls) => { directory = controls.directory; reset = registerConvexFixture(app, controls, bb, db, identity, {
+    configureFixtureRoutes: (app, controls) => { reset = registerConvexFixture(app, controls, bb, db, identity, {
       "comma/history:messageWindow": (args) => fixtureMessageWindow(bb, identity, args),
     }); },
   });
@@ -46,15 +45,15 @@ const conversation = (guid = CHAT_GUIDS.needs as string) => query<{ _id: string;
 const messages = (guid = CHAT_GUIDS.needs as string) => query<{ page: Array<Message & { attachments: unknown[]; clientKey?: string }> }>("listMessages", { conversationId: guid, paginationOpts: { numItems: 100, cursor: null } });
 const command = (payload: CommaOutboxPayload, guid = CHAT_GUIDS.needs as string, clientKey: string = crypto.randomUUID()) => call<string>("comma/outbox:enqueue", { clientKey, conversationId: guid, payload });
 
-test("Convex pagination and resolution use the fixture directory", async () => {
-  const result = await directory.summaries();
-  if (!result.ok) throw new Error(result.error);
-  const chats = result.chats;
-  const first = await query<{ page: Array<{ _id: string; primaryChatGuid: string }>; isDone: boolean; continueCursor: string }>("listConversations", { paginationOpts: { numItems: 2, cursor: null } });
-  expect(first.page.map((row) => row.primaryChatGuid)).toEqual(chats.slice(0, 2).map((row) => row.guid));
+test("Convex pagination and resolution use the fixture world", async () => {
+  type Page = { page: Array<{ _id: string; primaryChatGuid: string }>; isDone: boolean; continueCursor: string };
+  const all = (await query<Page>("listConversations", { paginationOpts: { numItems: 1000, cursor: null } })).page;
+  expect(all.map((row) => row.primaryChatGuid)).toContain(CHAT_GUIDS.needs);
+  const first = await query<Page>("listConversations", { paginationOpts: { numItems: 2, cursor: null } });
+  expect(first.page).toEqual(all.slice(0, 2));
   expect(first.isDone).toBe(false);
   const remainder = await query<typeof first>("listConversations", { paginationOpts: { numItems: 100, cursor: first.continueCursor } });
-  expect(remainder.page.length).toBe(chats.length - 2);
+  expect(remainder.page).toEqual(all.slice(2));
   expect(remainder.isDone).toBe(true);
   expect((await conversation())._id).toBe(CHAT_GUIDS.needs);
   expect(await query("resolveChat", { chatGuid: "missing" })).toBeNull();

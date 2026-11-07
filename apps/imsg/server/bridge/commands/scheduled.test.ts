@@ -2,7 +2,6 @@ import { expect, spyOn, test } from "bun:test";
 import type { ConvexClient } from "convex/browser";
 import { BlueBubblesClient } from "../../bluebubbles";
 import { FakeBlueBubbles } from "../../bluebubbles-fake";
-import { ChatDirectory } from "../../chat-directory";
 import { ChatCommands } from "../../commands";
 import { ContactBook } from "../../contacts";
 import { OverlayDb } from "../../db";
@@ -25,11 +24,10 @@ async function harness() {
   }] });
   const db = new OverlayDb(":memory:");
   const names = new ContactBook(bb);
-  const commands = new ChatCommands(bb, new ChatDirectory(bb, names), names);
+  const commands = new ChatCommands(bb, names);
   const ingest = new FakeIngest();
   const writer = new MessageWriter({ bb, db, ingest });
-  writer.conversationIds.set(CHAT, ingest.id);
-  await commands.directory.ensureSiblings();
+  for (const guid of [CHAT, SIBLING]) writer.conversationIds.set(guid, ingest.id);
   const ctx: CommandContext = { chatGuid: CHAT, commands, writer, row: {} as OutboxRow,
     signal: new AbortController().signal, withLeaseRenewal: (work) => work() };
   return { bb, db, commands, ingest, ctx };

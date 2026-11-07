@@ -1,7 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import type { BBMessage } from "../../bb-types";
 import { FakeBlueBubbles } from "../../bluebubbles-fake";
-import { ChatDirectory } from "../../chat-directory";
 import { ChatCommands, UnknownSendError } from "../../commands";
 import { ContactBook } from "../../contacts";
 import { OverlayDb } from "../../db";
@@ -27,7 +26,7 @@ function harness(chatGuid = CHAT, privateApi = true) {
   };
   const db = new OverlayDb(":memory:");
   const names = new ContactBook(bb);
-  const commands = new ChatCommands(bb, new ChatDirectory(bb, names), names);
+  const commands = new ChatCommands(bb, names);
   const ingest = new FakeIngest();
   const writer = new MessageWriter({ bb, db, ingest });
   const context: CommandContext = { chatGuid, commands, writer, signal: new AbortController().signal,

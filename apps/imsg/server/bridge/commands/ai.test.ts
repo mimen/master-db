@@ -25,10 +25,9 @@ function fixture() {
   const context = {
     chatGuid: "chat", row: { conversationId: "conversation", clientKey: "client-key" }, signal: new AbortController().signal,
     commands: {
-      directory: { summaries: async () => ({ ok: true, chats: [{ guid: "chat", displayName: "Alex", isGroup: false }] }) },
       bb: { getChat: async () => ({ ok: true, value: { participants: [{ address: "+15550001111" }] } }) },
     },
-    writer: { deps: { ingest: {
+    writer: { conversation: () => ({ displayName: "Alex", isGroup: false }), deps: { ingest: {
       post: async <K extends keyof Bodies>(_kind: K, body: Bodies[K]): Promise<Results[K]> => {
         publications.push((body as unknown as { update: ShelfUpdate }).update);
         return publish as Results[K];
