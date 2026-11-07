@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { conversationService, dmAddress, imessageChat } from "./imessage";
+import { conversationRoute, conversationService, dmAddress, imessageChat } from "./imessage";
 
 describe("imessageChat.service", () => {
   test("RCS chats send as SMS, so their optimistic bubbles draw green", () => {
@@ -25,4 +25,9 @@ test("a one-to-one conversation's handle comes from its participant, then its ch
   expect(dmAddress({ ...chat, participants: [{ address: "a@b.c", name: null }] })).toBe("a@b.c");
   expect(dmAddress({ ...chat, participants: [] })).toBe("+15550001111");
   expect(dmAddress({ ...chat, isGroup: true, participants: [] })).toBeNull();
+});
+
+test("a conversation's route keeps RCS apart from SMS for its profile", () => {
+  expect(conversationRoute({ isGroup: false, imessage: { chatGuid: "RCS;-;+16199813959" } })).toEqual({ platform: "imessage", service: "RCS", isGroup: false });
+  expect(conversationRoute({ isGroup: true, imessage: { chatGuid: "any;+;x" } })).toEqual({ platform: "imessage", service: "iMessage", isGroup: true });
 });

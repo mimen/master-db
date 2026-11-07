@@ -73,6 +73,65 @@ describe("enqueue", () => {
   });
 });
 
+describe("the route's profile", () => {
+  const onSms = async (isGroup = false) => {
+    const env = await setup();
+    await env.t.run((ctx) => ctx.db.patch(env.c, { primaryChatGuid: "SMS;-;+15550001111", chatGuids: ["SMS;-;+15550001111"], isGroup }));
+    return env;
+  };
+  const enqueue = (as: Awaited<ReturnType<typeof setup>>["as"], c: Id<"comma_conversations">, payload: CommaOutboxPayload, clientKey = "k") =>
+    as.mutation(api.comma.outbox.enqueue, { clientKey, conversationId: c, payload });
+
+  test.each<[CommaOutboxPayload, string]>([
+    [{ kind: "react", messageGuid: "m1", reaction: "love", remove: false }, "SMS can't send reactions"],
+    [{ kind: "edit", messageGuid: "m1", text: "fixed" }, "SMS can't edit messages"],
+    [{ kind: "unsend", messageGuid: "m1" }, "SMS can't unsend messages"],
+    [{ kind: "typing", active: true, expiresAt: 1 }, "SMS can't show typing"],
+    [{ kind: "send", text: "hi", replyToGuid: "m1" }, "SMS can't reply to a message"],
+  ])("an SMS route rejects %o with its reason and queues nothing", async (payload, reason) => {
+    const { t, as, c } = await onSms();
+    await expect(enqueue(as, c, payload)).rejects.toThrow(reason);
+    expect(await t.run((ctx) => ctx.db.query("comma_outbox").collect())).toEqual([]);
+    expect(await t.run((ctx) => ctx.db.query("comma_messages").collect())).toEqual([]);
+  });
+
+  test("an SMS group can't be renamed or managed", async () => {
+    const { as, c } = await onSms(true);
+    await expect(enqueue(as, c, { kind: "rename", name: "Crew" })).rejects.toThrow("SMS can't name a group");
+    await expect(enqueue(as, c, { kind: "participant", address: "+15550002222", action: "add" })).rejects.toThrow("SMS can't add or remove people");
+    await expect(enqueue(as, c, { kind: "leaveGroup" })).rejects.toThrow("SMS can't leave a group");
+  });
+
+  test("an SMS route still sends text, attachments, schedules and deletes", async () => {
+    const { as, c } = await onSms();
+    await enqueue(as, c, send, "k1");
+    await enqueue(as, c, { kind: "schedule", text: "later", sendAt: 2 }, "k2");
+    await enqueue(as, c, { kind: "delete", messageGuid: "m1" }, "k3");
+    await enqueue(as, c, { kind: "sendContact", name: "Sam", address: "+15550002222" }, "k4");
+  });
+
+  test("iMessage takes every one of them, but only the six tapbacks", async () => {
+    const { as, c } = await setup();
+    await enqueue(as, c, { kind: "react", messageGuid: "m1", reaction: "love", remove: false }, "k1");
+    await enqueue(as, c, { kind: "edit", messageGuid: "m1", text: "fixed" }, "k2");
+    await enqueue(as, c, { kind: "typing", active: true, expiresAt: 1 }, "k3");
+    await enqueue(as, c, { kind: "send", text: "hi", replyToGuid: "m1" }, "k4");
+    await expect(enqueue(as, c, { kind: "react", messageGuid: "m1", reaction: "emoji", remove: false }, "k5")).rejects.toThrow("iMessage can't send that reaction");
+  });
+
+  test("a group command in a one-to-one conversation is rejected", async () => {
+    const { as, c } = await setup();
+    await expect(enqueue(as, c, { kind: "leaveGroup" })).rejects.toThrow("That only works in a group conversation");
+  });
+
+  test("model work and triage never consult the route", async () => {
+    const { as, c } = await onSms();
+    await enqueue(as, c, { kind: "identify" }, "k1");
+    await enqueue(as, c, { kind: "markRead" }, "k2");
+    await enqueue(as, c, { kind: "pin", value: true }, "k3");
+  });
+});
+
 describe("the echo", () => {
   test("replaces the temp row that carries the same clientKey", async () => {
     const { t, as, c } = await setup();

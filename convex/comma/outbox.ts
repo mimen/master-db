@@ -13,6 +13,7 @@ import { sameSecret } from "./bridgeAuth";
 import { imessage, sendRoute } from "./conversationIdentity";
 import { applyIMessageResult } from "./imessageResults";
 import { refreshLastMessage } from "./internal";
+import { unsupportedReason } from "./routeSupport";
 import { tempGuid } from "./tempMessage";
 import { carryTempAnchor, readConversation, setConversationFlag, settleConversation, unsettleConversation } from "./triage";
 
@@ -127,6 +128,8 @@ export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversation
   const conversation = conversationId ? await ctx.db.get(conversationId) : null;
   if (conversationId && !conversation) throw new Error("Conversation not found");
   const route = conversation ? sendRoute(conversation) : undefined;
+  const unsupported = conversation && route && unsupportedReason(route, conversation.isGroup, payload);
+  if (unsupported) throw new ConvexError(unsupported);
   const now = Date.now();
   const id = await ctx.db.insert("comma_outbox", {
     clientKey,

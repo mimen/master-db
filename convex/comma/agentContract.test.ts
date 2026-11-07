@@ -116,7 +116,8 @@ test("ask, claim, transcript, draft, a model switch and an image round-trip betw
       { kind: "turn_end", outcome: "completed", durationMs: 0, model: "claude-opus-5-5", effort: "high" },
     ]);
   });
-  expect(await t.run((ctx) => ctx.db.get(chatId))).toMatchObject({ sessionId: "session-1", state: "idle", seenThroughMessageAt: 100 });
+  // The session queues the idle state after the turn's items, so it can land a beat after them.
+  await eventually(async () => expect(await t.run((ctx) => ctx.db.get(chatId))).toMatchObject({ sessionId: "session-1", state: "idle", seenThroughMessageAt: 100 }));
   expect(await milad.query(api.comma.agent.chatsFor, { conversationId })).toMatchObject([
     { _id: chatId, title: "Friday plans", state: "idle", lastTurnEndedAt: expect.any(Number), preview: { kind: "draft", text: "Yes, Friday works!" } },
   ]);

@@ -7,6 +7,7 @@ import { resolveConversationNames } from "../../../../convex/comma/names";
 import { formatAddress } from "../../shared/address";
 import { fixtureChatGuid, fixtureConversationId } from "../../shared/fixture-ids";
 import { tempGuid } from "../../../../convex/comma/tempMessage";
+import { unsupportedReason } from "../../../../convex/comma/routeSupport";
 import type { FixtureRouteControls } from "../../server/app";
 import { buildThread, isGenuineUnreadInbound, mapChat, mapMessage, type UnreadSummary } from "../../server/map";
 import { toConversationInputs } from "../../server/bridge/mapper";
@@ -569,6 +570,8 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         if (payload.kind === "createChat" || payload.kind === "clearSuggestionLearning") {
           if (chatGuid) throw new FixtureError(`${payload.kind} must be global`, 400);
         } else if (!conversation) throw new FixtureError("Conversation not found", 400);
+        const unsupported = conversation && unsupportedReason({ platform: "imessage", chatGuid: conversation.primaryChatGuid }, conversation.isGroup, payload);
+        if (unsupported) throw new FixtureError(unsupported, 400);
         // Production's enqueue writes this temp row; the bridge's completion retires it.
         if (payload.kind === "send") {
           const primaryChatGuid = (await conversations()).find((row) => row._id === chatGuid)!.primaryChatGuid;

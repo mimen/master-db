@@ -40,3 +40,4 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Agent pane](./agent-pane.md) covers ⌘J, asking, the work log, question cards, composer and pane drafts, New chat, and the state strip. Its drive is `drives/agent-pane.ts`.
 - [Agent chats in the conversation list](./agent-list.md) covers the avatar badges, Needs you, the Agents tab, settle, the pane opening itself, toasts and the ⌘K group. Its drive is `drives/agent-list.ts`.
 - [Conversation identity](./conversation-identity.md) covers `/c/<id>` URLs, conversation ids in commands and queries, the `/chat/` redirect, and a group's CRM by id. Its drive is `drives/conversation-identity.ts`.
+- [Platform profile](./platform-profile.md) covers greyed reactions, Reply, Edit and Undo send on SMS, the tray's keyboard pick, Convex refusing an unsupported command, and an unchanged iMessage thread. Its drive is `drives/platform-profile.ts`.

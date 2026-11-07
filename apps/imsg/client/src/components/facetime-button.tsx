@@ -10,6 +10,9 @@ import { faceTimeTargetUrl, type FaceTimeKind } from "@/lib/message-actions";
 import { useActionSheet } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
 import { useTheme } from "@/hooks/use-theme";
+import { useConversation } from "@/hooks/use-chat-directory";
+import { useRouteSupport } from "@/hooks/use-route-support";
+import { gated } from "@/lib/route-support";
 
 interface FaceTimeButtonProps {
   conversationId: ConversationId;
@@ -30,6 +33,7 @@ export function FaceTimeButton({
 }: FaceTimeButtonProps): ReactElement {
   const showSheet = useActionSheet();
   const theme = useTheme();
+  const can = useRouteSupport(useConversation(conversationId));
 
   const openDirect = async (kind: FaceTimeKind): Promise<void> => {
     if (!address) {
@@ -57,7 +61,7 @@ export function FaceTimeButton({
     showSheet({
       title: "FaceTime",
       actions: isGroup
-        ? [{ label: "Create & Send FaceTime Link", onPress: () => void createGroupLink() }]
+        ? gated(can("faceTimeLink"), { label: "Create & Send FaceTime Link", onPress: () => void createGroupLink() })
         : [
             { label: "FaceTime Audio", onPress: () => void openDirect("audio") },
             { label: "FaceTime Video", onPress: () => void openDirect("video") },
