@@ -31,10 +31,10 @@ function message(guid: string, text: string, dateCreated: number, extra: Partial
 }
 
 const older = message("m-1", "see you at 8", 1_000, { isFromMe: false });
-const temp = message("temp-1", "on my way", 5_000, { pending: true, clientKey: "temp-1" });
+const temp = message("temp-1", "on my way", 5_000, { sendState: "queued", clientKey: "temp-1" });
 const sent = message("real-1", "on my way", 5_200);
 
-const rows = (messages: Message[]) => messages.map((m) => [m.clientKey ?? m.guid, m.guid, m.pending === true]);
+const rows = (messages: Message[]) => messages.map((m) => [m.clientKey ?? m.guid, m.guid, m.sendState === "queued"]);
 
 describe("a send settles into the optimistic row it started as", () => {
   test("echo before response", () => {
@@ -60,8 +60,8 @@ describe("a send settles into the optimistic row it started as", () => {
   });
 
   test("a retried send settles into the failed bubble's row", () => {
-    const failed = { ...temp, pending: false, failed: true };
-    const revived = { ...failed, pending: true, failed: false };
+    const failed = { ...temp, sendState: "failed" as const };
+    const revived = { ...failed, sendState: "queued" as const };
     const retrying = settleTemp([older, failed], failed.guid, revived);
     expect(rows(retrying)).toEqual([["m-1", "m-1", false], ["temp-1", "temp-1", true]]);
     expect(rows(settleTemp(retrying, revived.guid, sent))).toEqual([["m-1", "m-1", false], ["temp-1", "real-1", false]]);
@@ -74,7 +74,7 @@ describe("a send settles into the optimistic row it started as", () => {
   });
 
   test("an echo never claims an old message with the same text", () => {
-    const ok = message("temp-2", "ok", 100_000, { pending: true, clientKey: "temp-2" });
+    const ok = message("temp-2", "ok", 100_000, { sendState: "queued", clientKey: "temp-2" });
     const stale = message("old-ok", "ok", 1_000);
     expect(rows(upsertMessage([ok], stale))).toEqual([["old-ok", "old-ok", false], ["temp-2", "temp-2", true]]);
   });
@@ -87,7 +87,7 @@ describe("a send settles into the optimistic row it started as", () => {
 
 describe("a burst of sends in an anchored window", () => {
   test("a send that settles stays above the sends still queued behind it", () => {
-    const second = message("temp-2", "running late", 5_100, { pending: true, clientKey: "temp-2" });
+    const second = message("temp-2", "running late", 5_100, { sendState: "queued", clientKey: "temp-2" });
     const landed = settleTemp([older, temp, second], "temp-1", { ...sent, dateCreated: 6_000 });
     expect(rows(landed)).toEqual([["m-1", "m-1", false], ["temp-1", "real-1", false], ["temp-2", "temp-2", true]]);
   });
@@ -109,12 +109,12 @@ describe("a window fetch that lands mid-send", () => {
   });
 
   test("keeps a failed send", () => {
-    const failed = { ...temp, pending: false, failed: true };
+    const failed = { ...temp, sendState: "failed" as const };
     expect(rows(mergeWindow([older, failed], [older]))).toEqual([["m-1", "m-1", false], ["temp-1", "temp-1", false]]);
   });
 
   test("drops a failed row that is not this session's own send", () => {
-    const orphan = message("tapback-1", "", 3_000, { error: 3, failed: true });
+    const orphan = message("tapback-1", "", 3_000, { error: 3 });
     expect(rows(mergeWindow([older, orphan, sent], [older, sent]))).toEqual([["m-1", "m-1", false], ["real-1", "real-1", false]]);
   });
 
@@ -145,7 +145,7 @@ describe("reconcile after an event-stream gap", () => {
   });
 
   test("keeps this session's failed send", () => {
-    const failed = { ...temp, dateCreated: 3_000, pending: false, failed: true };
+    const failed = { ...temp, dateCreated: 3_000, sendState: "failed" as const };
     expect(rows(reconcileWindow([older, failed, sent], [older, sent]))).toEqual([
       ["m-1", "m-1", false],
       ["temp-1", "temp-1", false],

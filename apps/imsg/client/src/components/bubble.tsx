@@ -1,7 +1,7 @@
 import { memo, useEffect, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle } from "react-native";
-import { useConvexConnectionState } from "convex/react";
 import { deliveryState } from "@/lib/delivery-state";
+import { useSendWaiting } from "@/lib/pending-sends";
 import { openExternalUrl } from "@/lib/external-link";
 import { Image } from "expo-image";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -137,8 +137,8 @@ function Attachments({ message, conversationId, mine, paneWidth = 0 }: { message
         const thumbnail = attachmentThumbnailUrl(att, mediaW);
         const audio = att.mimeType?.startsWith("audio/") || /\.(caf|amr|m4a|mp3|wav)$/i.test(att.filename ?? "");
         // A voice memo still sending draws its bubble before the recorder has handed over the file.
-        if (audio && (url || message.pending)) {
-          return <AudioBubble key={att.guid} guid={att.guid} conversationId={conversationId} url={url} mine={mine} sending={message.pending === true} />;
+        if (audio && (url || message.sendState)) {
+          return <AudioBubble key={att.guid} guid={att.guid} conversationId={conversationId} url={url} mine={mine} sending={message.sendState !== undefined} />;
         }
         if (!url && !(att.mimeType?.startsWith("image/") && thumbnail)) return <MediaUnavailable key={att.guid} onMac={att.onMac} />;
         if (isVideo(att)) {
@@ -223,6 +223,8 @@ interface BubbleProps {
   highlighted?: boolean;
   onLongPress: (message: Message, anchor?: { x: number; y: number }) => void;
   onRetry: (message: Message) => void;
+  /** Takes back a send that is still waiting to go out. */
+  onCancel: (message: Message) => void;
   /** Resend the failed message over SMS. The button shows only when this is given. */
   onSendAsText?: (message: Message) => void;
   onShowReactions: (message: Message) => void;
@@ -254,6 +256,7 @@ export const Bubble = memo(function Bubble({
   highlighted = false,
   onLongPress,
   onRetry,
+  onCancel,
   onSendAsText,
   onShowReactions,
 }: BubbleProps) {
@@ -261,7 +264,7 @@ export const Bubble = memo(function Bubble({
   const { width: winW, wide } = useLayoutMode();
   const contextRef = useWebContextMenu<View>((anchor) => onLongPress(message, anchor));
   const [showTime, setShowTime] = useState(false);
-  const slowSend = useSlowSend(message.pending === true);
+  const slowSend = useSlowSend(message.sendState === "queued" || message.sendState === "sending");
   const mine = message.isFromMe;
   const mineColor = message.service === "SMS" ? theme.sms : theme.bubbleMine;
   const senderName =
@@ -272,7 +275,7 @@ export const Bubble = memo(function Bubble({
   const bubbleMaxWidth = paneWidth > 0 ? paneWidth * share : wide ? Math.min(winW * 0.5, 520) : "76%";
   const url = message.text ? firstUrl(message.text) : null;
   const delivery = deliveryState(message, latestInboundAt, Date.now());
-  const notDelivered = delivery === "failed";
+  const notDelivered = delivery === "failed" || delivery === "notSent";
   const caption = { fontSize: wide ? 11 : 12, color: theme.textTertiary };
   const tapbacks = Object.entries(
     message.reactions.reduce<Record<string, number>>((acc, r) => {
@@ -384,7 +387,7 @@ export const Bubble = memo(function Bubble({
 
           {notDelivered ? (
             <View style={styles.failedRow}>
-              <Text style={[styles.failedLabel, { color: theme.destructive }]}>Not delivered</Text>
+              <Text style={[styles.failedLabel, { color: theme.destructive }]}>{delivery === "notSent" ? "Not sent" : "Not delivered"}</Text>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Retry sending"
@@ -394,7 +397,7 @@ export const Bubble = memo(function Bubble({
               >
                 <Text style={[styles.failedAction, { color: theme.text }]}>Retry</Text>
               </Pressable>
-              {onSendAsText && (
+              {onSendAsText && delivery === "failed" && (
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => onSendAsText(message)}
@@ -407,8 +410,9 @@ export const Bubble = memo(function Bubble({
             </View>
           ) : delivery === "uncertain" ? (
             <Text style={[styles.meta, caption]}>May not have delivered</Text>
-          ) : mine && isLatestOutgoing && message.pending && slowSend ? (
-            <PendingReceipt style={[styles.meta, caption]} />
+          ) : message.sendState === "queued" ? (
+            <QueuedReceipt message={message} onCancel={onCancel} style={[styles.meta, caption]}
+              text={receiptText({ message, isLatestOutgoing, slowSend, showTime })} />
           ) : (
             <Receipt style={[styles.meta, caption]} text={receiptText({ message, isLatestOutgoing, slowSend, showTime })} />
           )}
@@ -443,10 +447,27 @@ function Receipt({ text, style }: { text: string | null; style: StyleProp<TextSt
   return text === null ? null : <Text style={style}>{text}</Text>;
 }
 
-/** A send still out after the slow-send delay names why when the connection is down. */
-function PendingReceipt({ style }: { style: StyleProp<TextStyle> }) {
-  const { isWebSocketConnected } = useConvexConnectionState();
-  return <Text style={style}>{isWebSocketConnected ? "Sending…" : "Waiting for connection"}</Text>;
+/** A send nothing has taken yet says so, with a way to take it back, once it is plainly waiting. */
+function QueuedReceipt({ message, onCancel, text, style }: {
+  message: Message; onCancel: (message: Message) => void; text: string | null; style: StyleProp<TextStyle>;
+}) {
+  const theme = useTheme();
+  const waiting = useSendWaiting(true);
+  if (!waiting) return <Receipt style={style} text={text} />;
+  return (
+    <View style={styles.failedRow}>
+      <Text style={[styles.failedLabel, { color: theme.textTertiary }]}>Waiting to send</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Cancel sending"
+        onPress={() => onCancel(message)}
+        hitSlop={6}
+        style={({ hovered, pressed }) => [(hovered || pressed) && { opacity: HOVER_DIM }]}
+      >
+        <Text style={[styles.failedAction, { color: theme.text }]}>Cancel</Text>
+      </Pressable>
+    </View>
+  );
 }
 
 const AVATAR = 30;

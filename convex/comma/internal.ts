@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 
+import { isPendingGuid } from "../../apps/imsg/shared/pending-send";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, type MutationCtx } from "../_generated/server";
 import {
@@ -14,10 +15,10 @@ import {
 
 import { choosePrimary, imessage } from "./conversationIdentity";
 import { findByChatGuid, findByKey } from "./conversationLookup";
+import { landEcho, newestInFlight } from "./pendingSends";
 import { fromTapback } from "./reactions";
 import { applyReaction } from "./reactionStore";
-import { tempGuid } from "./tempMessage";
-import { carryTempAnchor, logReplies } from "./triage";
+import { logReplies } from "./triage";
 
 /**
  * Bridge write path for the Comma mirror. The bridge on the Mini calls these
@@ -155,24 +156,11 @@ export async function refoldTarget(ctx: MutationCtx, targetGuid: string): Promis
   await ctx.db.patch(target._id, { reactions: foldTapbacks(tapbacks) });
 }
 
-/** The temp row of the newest send the bridge has not finished. */
-async function newestQueuedSend(ctx: MutationCtx, conversationId: Id<"comma_conversations">): Promise<Doc<"comma_messages"> | null> {
-  let newest: Doc<"comma_outbox"> | null = null;
-  for (const status of ["pending", "claimed"] as const) {
-    // ponytail: scans only the 50 newest commands per status; past that the preview falls back to date order.
-    const queued = await ctx.db.query("comma_outbox").withIndex("by_status_createdAt", (q) => q.eq("status", status)).order("desc").take(50);
-    const send = queued.find((row) => row.conversationId === conversationId && row.payload.kind === "send");
-    if (send && (!newest || send._creationTime > newest._creationTime)) newest = send;
-  }
-  const clientKey = newest?.clientKey;
-  return clientKey ? await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", tempGuid(clientKey))).unique() : null;
-}
-
 export async function refreshLastMessage(ctx: MutationCtx, conversationId: Id<"comma_conversations">): Promise<void> {
   const conversation = await ctx.db.get(conversationId);
   if (!conversation) return;
   // A send lands with the time the Mac sent it, later than the sends still queued behind it.
-  let newest = await newestQueuedSend(ctx, conversationId);
+  let newest = await newestInFlight(ctx, conversationId);
   if (!newest) {
     for await (const message of ctx.db
       .query("comma_messages")
@@ -226,22 +214,9 @@ export const upsertMessages = internalMutation({
       const row = { ...message, platform: imessage.platform, reactions: existing?.reactions ?? [] };
       if (existing) await ctx.db.patch(existing._id, row);
       else await ctx.db.insert("comma_messages", row);
-      // The real echo of a queued send replaces its optimistic temp row, matched by the
-      // clientKey it carries or, when BlueBubbles drops it, the send the outbox confirmed.
-      if (!message.guid.startsWith("temp-")) {
-        const clientKey = message.clientKey ?? (await ctx.db.query("comma_outbox")
-          .withIndex("by_resultGuid", (q) => q.eq("resultGuid", message.guid)).first())?.clientKey;
-        const temp = clientKey ? await ctx.db
-          .query("comma_messages")
-          .withIndex("by_guid", (q) => q.eq("guid", `temp-${clientKey}`))
-          .unique() : null;
-        if (temp) {
-          await ctx.db.delete(temp._id);
-          await carryTempAnchor(ctx, temp.conversationId, temp.guid, message.guid);
-        }
-      }
+      await landEcho(ctx, message);
       written++;
-      if (!message.guid.startsWith("temp-") && !message.isTapback && !message.retracted) real.push(message);
+      if (!isPendingGuid(message.guid) && !message.isTapback && !message.retracted) real.push(message);
       touchedConversations.add(message.conversationId);
       // A message folds legacy tapbacks that were ingested before it.
       touchedTargets.add(message.guid);

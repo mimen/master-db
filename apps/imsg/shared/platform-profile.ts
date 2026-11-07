@@ -72,6 +72,11 @@ export function routeService(prefix: string): RouteService {
   return prefix === "SMS" || prefix === "RCS" ? prefix : "iMessage";
 }
 
+/** The service a message sent through the route draws as: RCS draws green, as BlueBubbles reports its messages as SMS. */
+export function messageService(service: RouteService): "iMessage" | "SMS" {
+  return service === "iMessage" ? "iMessage" : "SMS";
+}
+
 /**
  * Whether the route can do `feature`, and if not, the reason to show. Null when the feature does not exist
  * in this conversation at all. `privateApi` is the Mac's live state; Convex leaves it out and lets the bridge fail.

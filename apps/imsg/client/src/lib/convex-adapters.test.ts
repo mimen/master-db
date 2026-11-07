@@ -200,17 +200,24 @@ describe("mergeConvexMessages", () => {
 });
 
 describe("queued sends", () => {
-  test("an optimistic outbox row reads as pending, and as failed once the bridge reports it", () => {
+  test("a pending send's row reads its state, and a row from before sendState reads queued until it errors", () => {
     const temp = message({ guid: "temp-k1", isFromMe: true, clientKey: "k1", sourceVersion: 0 } as Partial<ConvexMessage>);
-    expect(messageToMessage(temp).pending).toBe(true);
-    expect(messageToMessage({ ...temp, error: 1 }).failed).toBe(true);
-    expect(messageToMessage(message()).pending).toBeUndefined();
+    expect(messageToMessage({ ...temp, sendState: "notSent" }).sendState).toBe("notSent");
+    expect(messageToMessage(temp).sendState).toBe("queued");
+    expect(messageToMessage({ ...temp, error: 1 }).sendState).toBe("failed");
+    expect(messageToMessage(message()).sendState).toBeUndefined();
+  });
+
+  test("a retried bubble outranks the stale row of the send it replaced", () => {
+    const stale = messageToMessage(message({ guid: "temp-k1", isFromMe: true, clientKey: "k1", sendState: "notSent", error: 1 } as Partial<ConvexMessage>));
+    const revived = { ...stale, clientKey: "k2", sendState: "queued" as const, error: 0 };
+    expect(mergeConvexMessages([stale], [revived]).map((m) => [m.guid, m.clientKey, m.sendState])).toEqual([["temp-k1", "k2", "queued"]]);
   });
 });
 
 describe("queued send dedupe", () => {
   test("the Convex temp row and the local bubble for one send render once", () => {
-    const local = { ...messageToMessage(message({ guid: "temp-1", isFromMe: true, dateCreated: 20 })), clientKey: "temp-1", pending: true } as Message;
+    const local = { ...messageToMessage(message({ guid: "temp-1", isFromMe: true, dateCreated: 20 })), clientKey: "temp-1", sendState: "queued" } as Message;
     const convexTemp = messageToMessage(message({ guid: "temp-temp-1", isFromMe: true, clientKey: "temp-1", dateCreated: 20 } as Partial<ConvexMessage>));
     const merged = mergeConvexMessages([convexTemp], [local]);
     expect(merged.map((m) => m.guid)).toEqual(["temp-1"]);
@@ -240,10 +247,10 @@ describe("a burst of sends resolving one at a time", () => {
   type Key = keyof typeof queuedAt;
   const temp = (key: Key, error = 0) => row(`temp-temp-${key}`, key, queuedAt[key], { isFromMe: true, clientKey: `temp-${key}`, error });
   const real = (key: Key) => row(`out-${key}`, key, sentAt[key], { isFromMe: true });
-  const local = (key: Key): Message => ({ ...row(`temp-${key}`, key, queuedAt[key], { isFromMe: true }), clientKey: `temp-${key}`, pending: true });
-  const failed = (key: Key): Message => ({ ...local(key), pending: false, failed: true });
+  const local = (key: Key): Message => ({ ...row(`temp-${key}`, key, queuedAt[key], { isFromMe: true }), clientKey: `temp-${key}`, sendState: "queued" });
+  const failed = (key: Key): Message => ({ ...local(key), sendState: "failed" });
   const settled = (key: Key): Message => ({ ...real(key), clientKey: `temp-${key}` });
-  const thread = (remote: Message[], own: Message[]) => mergeConvexMessages(remote, own).map((m) => `${m.text}${m.failed ? "!" : m.pending ? "…" : ""}`);
+  const thread = (remote: Message[], own: Message[]) => mergeConvexMessages(remote, own).map((m) => `${m.text}${m.sendState === "failed" ? "!" : m.sendState ? "…" : ""}`);
 
   test("a send that lands stays above the sends still queued behind it", () => {
     expect(thread([older, temp("a"), temp("b"), temp("c")], [local("a"), local("b"), local("c")]))

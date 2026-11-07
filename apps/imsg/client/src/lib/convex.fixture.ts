@@ -127,8 +127,22 @@ async function mutation<Ref extends Mutation>(ref: Ref, args: FunctionArgs<Ref>,
   return value;
 }
 
+/** The browser's own online signal stands in for the Convex socket, so a drive can take the page offline. */
+const online = () => typeof navigator === "undefined" || navigator.onLine;
+function subscribeToConnectionState(callback: () => void): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  window.addEventListener("online", callback);
+  window.addEventListener("offline", callback);
+  return () => {
+    window.removeEventListener("online", callback);
+    window.removeEventListener("offline", callback);
+  };
+}
+
 export const convexClient = { query: call, mutation, action: call,
   watchQuery: <Ref extends Query>(ref: Ref, args: FunctionArgs<Ref>) => fixtureCommandWatch(() => call(ref, args)),
+  connectionState: () => ({ isWebSocketConnected: online() }),
+  subscribeToConnectionState,
 };
 
 export function useAction<Ref extends Action>(ref: Ref) {
@@ -198,5 +212,7 @@ export function useConvexAuth() {
 }
 
 export function useConvexConnectionState() {
-  return { isWebSocketConnected: true, hasEverConnected: true };
+  const [isWebSocketConnected, setConnected] = useState(online);
+  useEffect(() => subscribeToConnectionState(() => setConnected(online())), []);
+  return { isWebSocketConnected, hasEverConnected: true };
 }

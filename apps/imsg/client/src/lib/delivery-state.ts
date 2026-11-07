@@ -1,17 +1,18 @@
 import type { Message } from "@shared/types";
 
 /**
- * - `failed`: this session's own send failed; tap to retry.
+ * - `failed`: a send that failed, or whose outcome is unknown; tap to retry.
+ * - `notSent`: a send that never went out; tap to retry.
  * - `uncertain`: a persisted error code with no evidence the message landed.
  * - `ok`: anything else.
  */
-export type DeliveryState = "ok" | "failed" | "uncertain";
+export type DeliveryState = "ok" | "failed" | "notSent" | "uncertain";
 
 /** chat.db keeps stale error codes on messages that did deliver, so a young error is not yet a verdict. */
 const ERROR_SETTLE_MS = 5 * 60_000;
 
 export function deliveryState(message: Message, latestInboundAt: number | null, now: number): DeliveryState {
-  if (message.failed) return "failed";
+  if (message.sendState === "failed" || message.sendState === "notSent") return message.sendState;
   if (!message.isFromMe || message.error === 0) return "ok";
   const evidence =
     message.dateDelivered !== null ||

@@ -1,4 +1,3 @@
-import { runCommand } from "@/lib/convex-commands";
 import { messagingCommandError } from "@/lib/messaging-api";
 import type { ChatSummary } from "@shared/types";
 import { Redirect } from "expo-router";
@@ -6,7 +5,7 @@ import { useEffect, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { takeForwardText } from "@/lib/forward";
-import { failedSend, localSends, tempMessage } from "@/lib/local-sends";
+import { pendingSends, SendCancelledError } from "@/lib/pending-sends";
 import { showToast } from "@/lib/toast";
 import { useForwardTargets } from "@/hooks/use-forward-targets";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
@@ -32,16 +31,12 @@ export function ForwardContent({ onClose, onOpenChat }: ForwardContentProps): Re
   // The copy lands in the destination thread on the click, the way a composer send does.
   const forwardTo = (chat: ChatSummary): void => {
     if (!text) return;
-    const temp = tempMessage(chat, text);
-    localSends.upsert(chat.conversationId, temp);
+    const landed = pendingSends.send(chat, { text });
     onClose();
     onOpenChat(chat);
-    void runCommand(chat.conversationId, { kind: "send", text }, { clientKey: temp.guid })
-      .then(({ message }) => localSends.settle(chat.conversationId, temp.guid, message))
-      .catch((error: unknown) => {
-        localSends.settle(chat.conversationId, temp.guid, failedSend(temp));
-        showToast(messagingCommandError(error, "Forward failed"));
-      });
+    landed.catch((error: unknown) => {
+      if (!(error instanceof SendCancelledError)) showToast(messagingCommandError(error, "Forward failed"));
+    });
   };
 
   // Forward only opens from a message. Reached any other way (a reload, a

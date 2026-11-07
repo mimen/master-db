@@ -31,7 +31,7 @@ const base = { isLatestOutgoing: true, slowSend: false, showTime: false };
 
 describe("receiptText", () => {
   test("your newest bubble walks Sending, Delivered, Read", () => {
-    expect(receiptText({ ...base, message: message({ pending: true }), slowSend: true })).toBe("Sending…");
+    expect(receiptText({ ...base, message: message({ sendState: "queued" }), slowSend: true })).toBe("Sending…");
     expect(receiptText({ ...base, message: message({ dateDelivered: AT }) })).toBe("Delivered");
     expect(receiptText({ ...base, message: message({ dateDelivered: AT, dateRead: READ_AT }) })).toBe(
       `Read ${formatReceiptTime(READ_AT)}`,
@@ -39,7 +39,7 @@ describe("receiptText", () => {
   });
 
   test("a quick pending send stays silent", () => {
-    expect(receiptText({ ...base, message: message({ pending: true }) })).toBeNull();
+    expect(receiptText({ ...base, message: message({ sendState: "queued" }) })).toBeNull();
   });
 
   test("other bubbles show their time only when tapped; the date separators carry it otherwise", () => {

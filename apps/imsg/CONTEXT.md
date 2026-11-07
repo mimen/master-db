@@ -71,6 +71,17 @@ Its `chat_state`, `triage_clear_event` and `triage_open_item` tables held triage
 Convex took it over; nothing writes them, and they stay as a rollback copy.
 _Avoid_: overlay DB rows (when meaning the concept)
 
+**Pending send**:
+A message the user sent that has not landed as the platform's own copy, keyed by its outbox `clientKey` and drawn
+as the row `temp-<clientKey>`. Convex owns its lifecycle in `convex/comma/pendingSends.ts` and the client in
+`client/src/lib/pending-sends.ts`, for every platform. It is queued (cancellable: Cancel removes the bubble and the
+outbox row, and it never goes out), then sending once the executor claims it, then lands; or it strands as Not sent
+(nothing took it within `NOT_SENT_AFTER_MS`, so a retry is safe) or failed (refused, or its outcome is unknown).
+Nothing retries a stranded send but the user's tap. A send made while Convex is unreachable waits on the device and
+goes out on reconnect, under the same deadline. The bubble says "Waiting to send" at once when Convex or the Mini is
+out of reach. See `shared/pending-send.ts`.
+_Avoid_: temp message, optimistic send, local send
+
 **Outbox lane**:
 The executor a queued command waits for, stamped on its `comma_outbox` row at enqueue: one lane per
 messaging platform (only `imessage` today) and an `ai` lane for suggestions, identify, suggestion

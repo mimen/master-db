@@ -2,7 +2,7 @@ import { runCommand } from "@/lib/convex-commands";
 import { requestSavedView } from "@/lib/palette/saved-views";
 import { messagingCommandError } from "@/lib/messaging-api";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import type { ChatSummary, Contact, StateFilter, TypeFilter } from "@shared/types";
+import type { ChatSummary, Contact, Message, StateFilter, TypeFilter } from "@shared/types";
 import { useQuery } from "convex/react";
 import { router } from "expo-router";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
@@ -41,7 +41,7 @@ import { openAgentChat } from "@/hooks/use-agent-toasts";
 import { agentApi, type AgentChatSummary } from "@/lib/agent-api";
 import { AGENT_ATTENTION } from "@/lib/inbox-model";
 import { useAgentSettings } from "@/lib/settings";
-import { failedSend, localSends, tempMessage } from "@/lib/local-sends";
+import { draftBubble, pendingSends } from "@/lib/pending-sends";
 import { afterPaint } from "@/lib/open-timing";
 import { AgentBadge } from "./agent-badge";
 import { ChatAvatar, PersonAvatar } from "./avatar";
@@ -569,9 +569,10 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
     setSending(true);
     // createChat lands one recipient in their iMessage conversation; when that already exists,
     // the message shows there on the click, as a composer send does.
-    const temp = existing ? tempMessage(existing, body) : null;
+    // A new chat's first message is not a queued send, so it cannot be cancelled.
+    const temp: Message | null = existing ? { ...draftBubble(existing, { text: body }), sendState: "sending" } : null;
     if (existing && temp) {
-      localSends.upsert(existing.conversationId, temp);
+      pendingSends.upsert(existing.conversationId, temp);
       // Mounting the thread costs a long frame; the Sending ring paints first, on the frame of the click.
       afterPaint(() => {
         onClose();
@@ -580,13 +581,13 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
     }
     runCommand(null, { kind: "createChat", addresses: recipients.map((c) => c.address), text: body })
       .then(({ conversationId, message }) => {
-        if (existing && temp && conversationId === existing.conversationId) return localSends.settle(conversationId, temp.guid, message);
-        if (existing && temp) localSends.retain(existing.conversationId, (m) => m.guid !== temp.guid);
+        if (existing && temp && conversationId === existing.conversationId) return pendingSends.settle(conversationId, temp.guid, message);
+        if (existing && temp) pendingSends.retain(existing.conversationId, (m) => m.guid !== temp.guid);
         onClose();
         if (conversationId) selectChat({ conversationId });
       })
       .catch((e: unknown) => {
-        if (existing && temp) localSends.settle(existing.conversationId, temp.guid, failedSend(temp));
+        if (existing && temp) pendingSends.strand(existing.conversationId, temp);
         const detail =
           e instanceof Error ? /"error"\s*:\s*"([^"]+)"/.exec(e.message)?.[1] : undefined;
         showToast(messagingCommandError(e, detail ? `Couldn't start: ${detail.slice(0, 120)}` : e instanceof Error ? `Couldn't start: ${e.message.slice(0, 120)}` : "Couldn't start the conversation"));

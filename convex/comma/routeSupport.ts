@@ -1,4 +1,4 @@
-import { reactionSupport, routeService, support, type Feature, type Support } from "../../apps/imsg/shared/platform-profile";
+import { reactionSupport, routeService, support, type Feature, type ProfileRoute, type Support } from "../../apps/imsg/shared/platform-profile";
 import type { CommaOutboxPayload, CommaRoute, CoreMessagingKind, IMessageOnlyKind } from "../schema/comma/validators";
 
 import { imessage } from "./conversationIdentity";
@@ -25,11 +25,16 @@ function neededFeatures(payload: CommaOutboxPayload): Feature[] {
   return feature ? [feature] : [];
 }
 
+/** A stamped route as its platform profile reads it. */
+export function profileRoute(route: CommaRoute, isGroup: boolean): ProfileRoute {
+  return { platform: route.platform, service: routeService(imessage.service(route.chatGuid)), isGroup };
+}
+
 function routeSupport(route: CommaRoute, isGroup: boolean, payload: CommaOutboxPayload): Support | null {
-  const profileRoute = { platform: route.platform, service: routeService(imessage.service(route.chatGuid)), isGroup };
-  if (payload.kind === "react") return reactionSupport(profileRoute, payload.reaction);
+  const profile = profileRoute(route, isGroup);
+  if (payload.kind === "react") return reactionSupport(profile, payload.reaction);
   for (const feature of neededFeatures(payload)) {
-    const result = support(profileRoute, feature);
+    const result = support(profile, feature);
     if (!result?.ok) return result;
   }
   return { ok: true };

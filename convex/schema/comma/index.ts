@@ -14,7 +14,7 @@ import {
   conversationFields,
   conversationStateFields,
   draftFields,
-  messageFields,
+  messageRowFields,
   outboxFields,
   reactionFields,
   scheduledFields,
@@ -35,7 +35,7 @@ export const comma_chat_aliases = defineTable(chatAliasFields)
   .index("by_chatGuid", ["chatGuid"])
   .index("by_conversationId", ["conversationId"]);
 
-export const comma_messages = defineTable(messageFields)
+export const comma_messages = defineTable(messageRowFields)
   .index("by_guid", ["guid"])
   .index("by_conversation_date", ["conversationId", "dateCreated"])
   .index("by_clientKey", ["clientKey"])
