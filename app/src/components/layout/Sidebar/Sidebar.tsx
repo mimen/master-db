@@ -11,6 +11,7 @@ import {
   Sidebar as SidebarPrimitive,
   SidebarContent,
   SidebarHeader,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { useCountRegistry } from "@/contexts/CountContext"
 import type { ViewKey, ViewSelection } from "@/lib/views/types"
@@ -20,7 +21,13 @@ interface SidebarProps {
   onViewChange: (view: ViewSelection) => void
 }
 
-function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
+function SidebarContent_({ currentViewKey, onViewChange: changeView }: SidebarProps) {
+  const { isMobile, setOpenMobile } = useSidebar()
+  // On a phone the sidebar is a drawer over the page; picking a view should reveal it.
+  const onViewChange = (view: ViewSelection) => {
+    changeView(view)
+    if (isMobile) setOpenMobile(false)
+  }
   const {
     projectTree,
     labels,
