@@ -25,7 +25,7 @@ export interface PeopleFirst {
   ages: ReadonlyMap<string, RowAge>;
 }
 
-const conversation = (chat: ChatSummary): PaletteItem => ({ kind: "conversation", key: `chat-${chat.guid}`, chat });
+const conversation = (chat: ChatSummary): PaletteItem => ({ kind: "conversation", key: `chat-${chat.conversationId}`, chat });
 
 /**
  * The empty-query palette: the four conversations that have been the owner's turn longest, then
@@ -34,15 +34,15 @@ const conversation = (chat: ChatSummary): PaletteItem => ({ kind: "conversation"
 export function peopleFirstSections(chats: readonly ChatSummary[], now: number): PeopleFirst {
   const ages = new Map<string, RowAge>();
   const longest = yourTurnLongest(chats, 4, now);
-  const listed = new Set(longest.map(({ chat }) => chat.guid));
-  const recent = chats.filter((chat) => !listed.has(chat.guid)).slice(0, 3);
+  const listed = new Set(longest.map(({ chat }) => chat.conversationId));
+  const recent = chats.filter((chat) => !listed.has(chat.conversationId)).slice(0, 3);
   for (const { chat } of longest) {
     const age = turnAge(chat, now);
-    if (age) ages.set(`chat-${chat.guid}`, age);
+    if (age) ages.set(`chat-${chat.conversationId}`, age);
   }
   for (const chat of recent) {
     const age = recencyAge(chat, now);
-    if (age) ages.set(`chat-${chat.guid}`, age);
+    if (age) ages.set(`chat-${chat.conversationId}`, age);
   }
   const sections: PaletteSection[] = [];
   if (longest.length > 0) sections.push({ title: "Your turn the longest", items: longest.map(({ chat }) => conversation(chat)) });

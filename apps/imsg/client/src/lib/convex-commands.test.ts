@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { enqueueVia, publishKnownConversations, sendMovesSidebar, type CommandClient } from "./convex-commands";
+import type { ConversationId } from "@shared/types";
+import { enqueueVia, sendMovesSidebar, type CommandClient } from "./convex-commands";
 
-function client(resolved: { _id: string } | null) {
+const conv = "conv-1" as ConversationId;
+
+function client() {
   const calls: { kind: string; args: unknown }[] = [];
   const fake: CommandClient = {
-    query: (_ref, args) => {
-      calls.push({ kind: "query", args });
-      return Promise.resolve(resolved);
-    },
     mutation: (_ref, args) => {
       calls.push({ kind: "mutation", args });
       return Promise.resolve("outbox-1");
@@ -17,34 +16,20 @@ function client(resolved: { _id: string } | null) {
 }
 
 describe("enqueueVia", () => {
-  test("queues the command on the resolved conversation", async () => {
-    const { fake, calls } = client({ _id: "conv-1" });
-    await enqueueVia(fake, "iMessage;-;+15550001111", { kind: "pin", value: true });
-    const mutation = calls.find((call) => call.kind === "mutation")?.args as { conversationId: string; payload: unknown; clientKey: string };
+  test("queues the command on the conversation it was given, with no lookup first", async () => {
+    const { fake, calls } = client();
+    await enqueueVia(fake, conv, { kind: "pin", value: true });
+    expect(calls.map((call) => call.kind)).toEqual(["mutation"]);
+    const mutation = calls[0]?.args as { conversationId: string; payload: unknown; clientKey: string };
     expect(mutation.conversationId).toBe("conv-1");
     expect(mutation.payload).toEqual({ kind: "pin", value: true });
     expect(mutation.clientKey.startsWith("command-")).toBe(true);
   });
 
-  test("rejects an unmirrored chat without sending via REST", async () => {
-    const { fake, calls } = client(null);
-    await expect(enqueueVia(fake, "SMS;-;+15550009999", { kind: "settle" })).rejects.toThrow("Conversation is not mirrored yet");
-    expect(calls.some((call) => call.kind === "mutation")).toBe(false);
-  });
-
-  test("a chat the directory lists enqueues without a resolveChat round trip", async () => {
-    const { fake, calls } = client(null);
-    publishKnownConversations([{ guid: "iMessage;-;+15550002222", conversationId: "conv-known" }]);
-    await enqueueVia(fake, "iMessage;-;+15550002222", { kind: "pin", value: true });
-    publishKnownConversations([]);
-    expect(calls.map((call) => call.kind)).toEqual(["mutation"]);
-    expect((calls[0]?.args as { conversationId: string }).conversationId).toBe("conv-known");
-  });
-
   test("propagates a rejected outbox write", async () => {
-    const { fake } = client({ _id: "conv-1" });
+    const { fake } = client();
     fake.mutation = async () => { throw new Error("outbox unavailable"); };
-    await expect(enqueueVia(fake, "chat", { kind: "markRead" })).rejects.toThrow("outbox unavailable");
+    await expect(enqueueVia(fake, conv, { kind: "markRead" })).rejects.toThrow("outbox unavailable");
   });
 });
 
@@ -59,7 +44,6 @@ function subscriptionClient(initial?: import("./command-results").CommandReceipt
   let ready!: () => void;
   const subscribed = new Promise<void>((resolve) => { ready = resolve; });
   const fake: ResultClient = {
-    query: async (_ref, args) => { calls.push({ kind: "query", args }); return { _id: "conv-1" }; },
     mutation: async (_ref, args) => { calls.push({ kind: "mutation", args }); return "command-1"; },
     watchQuery: (_ref, args) => {
       calls.push({ kind: "watch", args });
@@ -90,7 +74,7 @@ import { commaApi, commaOutbox } from "./convex-api";
 describe("runCommandVia", () => {
   test("subscribes through pending and claimed to the typed terminal result and unsubscribes", async () => {
     const h = subscriptionClient();
-    const pending = runCommandVia(h.fake, "chat", { kind: "pin", value: true });
+    const pending = runCommandVia(h.fake, conv, { kind: "pin", value: true });
     await h.subscribed;
     h.push(receipt("pending")); h.push(receipt("claimed"));
     expect(h.cleanupCount()).toBe(0);
@@ -106,7 +90,7 @@ describe("runCommandVia", () => {
   test("reports the command queued before the bridge has run it", async () => {
     const h = subscriptionClient();
     let queued = false;
-    const pending = runCommandVia(h.fake, "chat", { kind: "settle" }, { onQueued: () => { queued = true; } });
+    const pending = runCommandVia(h.fake, conv, { kind: "settle" }, { onQueued: () => { queued = true; } });
     await h.subscribed;
     expect(queued).toBe(true);
     h.push(receipt("sent", { kind: "settle", ok: true }));
@@ -117,24 +101,23 @@ describe("runCommandVia", () => {
     for (const synchronous of [false, true]) {
       const h = subscriptionClient(receipt("sent", { kind: "clearSuggestionLearning", ok: true }), synchronous);
       expect(await runCommandVia(h.fake, null, { kind: "clearSuggestionLearning" })).toEqual({ kind: "clearSuggestionLearning", ok: true });
-      expect(h.calls.some((call) => call.kind === "query")).toBe(false);
       expect(h.calls.find((call) => call.kind === "mutation")?.args).not.toHaveProperty("conversationId");
       expect(h.listeners()).toBe(0);
       expect(h.cleanupCount()).toBe(1);
     }
   });
 
-  test("non-global kinds require a chat before making any request", async () => {
+  test("non-global kinds require a conversation before making any request", async () => {
     const h = subscriptionClient();
-    await expect(runCommandVia(h.fake, null, { kind: "identify" })).rejects.toThrow("requires a chat");
+    await expect(runCommandVia(h.fake, null, { kind: "identify" })).rejects.toThrow("requires a conversation");
     expect(h.calls).toEqual([]);
   });
 
   test("duplicate client keys subscribe to the existing command result", async () => {
     const h = subscriptionClient(receipt("sent", { kind: "pin", ok: true }));
     const options = { clientKey: "same-logical-command" };
-    await runCommandVia(h.fake, "chat", { kind: "pin", value: true }, options);
-    await runCommandVia(h.fake, "chat", { kind: "pin", value: true }, options);
+    await runCommandVia(h.fake, conv, { kind: "pin", value: true }, options);
+    await runCommandVia(h.fake, conv, { kind: "pin", value: true }, options);
     expect(h.calls.filter((call) => call.kind === "mutation").map((call) => (call.args as { clientKey: string }).clientKey)).toEqual([options.clientKey, options.clientKey]);
     expect(h.calls.filter((call) => call.kind === "watch").map((call) => call.args)).toEqual([{ commandId: "command-1" }, { commandId: "command-1" }]);
   });
@@ -142,7 +125,7 @@ describe("runCommandVia", () => {
   test("failed results reject with the bridge error; unknown results use a distinct error", async () => {
     for (const status of ["failed", "unknown"] as const) {
       const h = subscriptionClient({ ...receipt(status), error: "bridge stopped" });
-      const error = await runCommandVia(h.fake, "chat", { kind: "pin", value: true }).catch((cause: unknown) => cause);
+      const error = await runCommandVia(h.fake, conv, { kind: "pin", value: true }).catch((cause: unknown) => cause);
       expect(error).toBeInstanceOf(status === "unknown" ? UnknownCommandError : CommandExecutionError);
       expect((error as Error).message).toBe("bridge stopped");
       expect(String((error as CommandExecutionError).commandId)).toBe("command-1");
@@ -153,16 +136,16 @@ describe("runCommandVia", () => {
   test("missing and mismatched results reject as protocol errors", async () => {
     for (const result of [undefined, { kind: "mute" as const, ok: true as const }]) {
       const h = subscriptionClient(receipt("sent", result));
-      await expect(runCommandVia(h.fake, "chat", { kind: "pin", value: true })).rejects.toBeInstanceOf(CommandResultError);
+      await expect(runCommandVia(h.fake, conv, { kind: "pin", value: true })).rejects.toBeInstanceOf(CommandResultError);
       expect(h.listeners()).toBe(0);
     }
   });
 
   test("missing commands and subscription errors reject and clean up", async () => {
     const missing = subscriptionClient(null);
-    await expect(runCommandVia(missing.fake, "chat", { kind: "pin", value: true })).rejects.toThrow("Command not found");
+    await expect(runCommandVia(missing.fake, conv, { kind: "pin", value: true })).rejects.toThrow("Command not found");
     const h = subscriptionClient();
-    const pending = runCommandVia(h.fake, "chat", { kind: "pin", value: true });
+    const pending = runCommandVia(h.fake, conv, { kind: "pin", value: true });
     await h.subscribed;
     h.failRead(new Error("Unauthorized"));
     await expect(pending).rejects.toThrow("Unauthorized");
@@ -172,13 +155,13 @@ describe("runCommandVia", () => {
   test("abort cancels observation and a pre-aborted call never enqueues", async () => {
     const h = subscriptionClient();
     const controller = new AbortController();
-    const pending = runCommandVia(h.fake, "chat", { kind: "pin", value: true }, { signal: controller.signal });
+    const pending = runCommandVia(h.fake, conv, { kind: "pin", value: true }, { signal: controller.signal });
     await h.subscribed;
     controller.abort(new Error("cancel waiting"));
     await expect(pending).rejects.toThrow("cancel waiting");
     expect(h.listeners()).toBe(0);
     const before = h.calls.length;
-    await expect(runCommandVia(h.fake, "chat", { kind: "pin", value: true }, { signal: controller.signal })).rejects.toThrow("cancel waiting");
+    await expect(runCommandVia(h.fake, conv, { kind: "pin", value: true }, { signal: controller.signal })).rejects.toThrow("cancel waiting");
     expect(h.calls.length).toBe(before);
   });
 
@@ -204,7 +187,7 @@ test("hook tracks command state and releases a pending subscription on unmount",
   try {
     await act(async () => { root.render(createElement(Probe)); });
     let pending!: ReturnType<typeof state.runCommand>;
-    await act(async () => { pending = state.runCommand("chat", { kind: "pin", value: true }); await h.subscribed; });
+    await act(async () => { pending = state.runCommand(conv, { kind: "pin", value: true }); await h.subscribed; });
     expect(state.isPending).toBe(true);
     await act(async () => { h.push(receipt("sent", { kind: "pin", ok: true })); await pending; });
     expect(state.isPending).toBe(false);
@@ -213,7 +196,7 @@ test("hook tracks command state and releases a pending subscription on unmount",
     h.push(receipt("pending"));
     let canceled!: Promise<unknown>;
     await act(async () => {
-      canceled = state.runCommand("chat", { kind: "pin", value: false }).catch((cause: unknown) => cause);
+      canceled = state.runCommand(conv, { kind: "pin", value: false }).catch((cause: unknown) => cause);
       await Promise.resolve(); await Promise.resolve();
     });
     expect(h.listeners()).toBe(1);

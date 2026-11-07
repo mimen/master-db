@@ -9,7 +9,7 @@ import { type ContactListRow, primaryHandle, useAddHandle, useCreatePerson, useL
 import { showToast } from "@/lib/toast";
 import { PersonAvatar } from "./avatar";
 import { useTheme } from "@/hooks/use-theme";
-import { chatIsSMS } from "@/lib/chat-service";
+import { conversationService, dmAddress } from "@shared/imessage";
 import { ServiceDot } from "./contacts-theme";
 import { ContactsButton, IconAction } from "./contacts-ui";
 
@@ -151,12 +151,12 @@ export function ContactAddPanel({ handle, service = "iMessage", message, title =
  */
 export function UnknownSenderBanner({ chat }: { readonly chat: ChatSummary }) {
   const colors = useTheme();
-  const address = chat.isGroup ? null : (chat.participants[0]?.address ?? chat.guid.split(";").pop() ?? null);
+  const address = dmAddress(chat);
   const who = useWhoIs(address);
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   if (!address || who?.found !== false || dismissed) return null;
-  const service: HandleService = chatIsSMS(chat.guid) ? "SMS" : "iMessage";
+  const service: HandleService = conversationService(chat);
   const inbound = chat.lastMessage && !chat.lastMessage.isFromMe ? chat.lastMessage.text : undefined;
   return (
     <View pointerEvents="box-none" style={styles.overlay}>

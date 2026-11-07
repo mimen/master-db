@@ -1,3 +1,4 @@
+import type { ConversationId } from "@shared/types";
 /**
  * Pure state machine for Messages (inbox) search — the policy half of the
  * search feature, extracted so "what clears search" and "which deep results
@@ -13,7 +14,7 @@
 export type DeepSearchState =
   | { readonly kind: "idle" }
   | { readonly kind: "pending"; readonly query: string }
-  | { readonly kind: "ready"; readonly query: string; readonly guids: ReadonlySet<string> }
+  | { readonly kind: "ready"; readonly query: string; readonly conversations: ReadonlySet<ConversationId> }
   | { readonly kind: "failed"; readonly query: string };
 
 export interface ConversationSearchState {
@@ -25,7 +26,7 @@ export type ConversationSearchAction =
   | { readonly type: "set-query"; readonly value: string }
   | { readonly type: "clear" }
   | { readonly type: "deep-pending"; readonly query: string }
-  | { readonly type: "deep-ready"; readonly query: string; readonly guids: ReadonlySet<string> }
+  | { readonly type: "deep-ready"; readonly query: string; readonly conversations: ReadonlySet<ConversationId> }
   | { readonly type: "deep-failed"; readonly query: string };
 
 export const INITIAL_CONVERSATION_SEARCH: ConversationSearchState = {
@@ -71,7 +72,7 @@ export function conversationSearchReducer(
     case "deep-ready":
       // A late response for an old query is dropped, not applied.
       return action.query === normalizeSearchQuery(state.query)
-        ? { ...state, deepSearch: { kind: "ready", query: action.query, guids: action.guids } }
+        ? { ...state, deepSearch: { kind: "ready", query: action.query, conversations: action.conversations } }
         : state;
     case "deep-failed":
       return action.query === normalizeSearchQuery(state.query)
@@ -80,12 +81,12 @@ export function conversationSearchReducer(
   }
 }
 
-const EMPTY_GUIDS: ReadonlySet<string> = new Set();
+const NO_MATCHES: ReadonlySet<ConversationId> = new Set();
 
-/** Deep-match GUIDs that are valid for the CURRENT query — empty otherwise. */
-export function usableDeepMatches(state: ConversationSearchState): ReadonlySet<string> {
+/** Deep-match conversations that are valid for the CURRENT query — empty otherwise. */
+export function usableDeepMatches(state: ConversationSearchState): ReadonlySet<ConversationId> {
   return state.deepSearch.kind === "ready" &&
     state.deepSearch.query === normalizeSearchQuery(state.query)
-    ? state.deepSearch.guids
-    : EMPTY_GUIDS;
+    ? state.deepSearch.conversations
+    : NO_MATCHES;
 }

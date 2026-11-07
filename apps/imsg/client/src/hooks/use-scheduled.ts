@@ -46,7 +46,8 @@ export function useScheduledState(
     }
   }, [actions]);
   const edit = useCallback(async (item: ScheduledMessage, text: string, sendAt: number): Promise<void> => {
-    await actions.updateScheduled(item.id, item.chatGuid, text, sendAt);
+    if (!item.conversationId) throw new Error("Scheduled message is unavailable");
+    await actions.updateScheduled(item.id, item.conversationId, text, sendAt);
   }, [actions]);
   return { items, loading: rows === undefined, cancel, sendNow, edit };
 }

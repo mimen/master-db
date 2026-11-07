@@ -1,23 +1,23 @@
 import { describe, expect, test } from "bun:test";
 
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, ConversationId } from "@shared/types";
 
 import { applyRenames, retireRenames, type PendingRenames } from "./pending-renames";
 
 function chat(overrides: Partial<ChatSummary> = {}): ChatSummary {
   return {
-    guid: "c1", displayName: "Alex", isGroup: true, known: true, isSpam: false, participants: [],
+    conversationId: "c1" as ConversationId, imessage: { chatGuid: "iMessage;+;c1" }, displayName: "Alex", isGroup: true, known: true, isSpam: false, participants: [],
     lastMessage: null, unreadCount: 0, firstUnreadAt: null,
     flags: { unresponded: false, waiting: false, unread: false, mutedUnresponded: false, pinned: false },
     ...overrides,
   };
 }
 
-const pending = (name: string, confirmed = false): PendingRenames => new Map([["c1", { name, confirmed }]]);
+const pending = (name: string, confirmed = false): PendingRenames => new Map([["c1" as ConversationId, { name, confirmed }]]);
 
 describe("applyRenames", () => {
   test("a rename shows the new name on its row and leaves every other row as it was", () => {
-    const rows = [chat(), chat({ guid: "c2" })];
+    const rows = [chat(), chat({ conversationId: "c2" as ConversationId })];
     const shown = applyRenames(rows, pending("Crew"));
     expect(shown[0]).toEqual({ ...rows[0], displayName: "Crew" });
     expect(shown[1]).toBe(rows[1]);

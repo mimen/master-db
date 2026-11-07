@@ -133,7 +133,7 @@ export function EmptyLens(props: EmptyLensProps) {
               );
               return (
                 <Pressable
-                  key={chat.guid}
+                  key={chat.conversationId}
                   accessibilityRole="button"
                   accessibilityLabel={chat.displayName}
                   onPress={() => onOpenChat(chat, { focusComposer: true })}

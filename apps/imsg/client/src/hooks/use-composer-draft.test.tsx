@@ -1,4 +1,5 @@
 import { expect, mock, test } from "bun:test";
+import type { ConversationId } from "@shared/types";
 
 if (process.env.COMMA_DRAFT_HOOK_CHILD !== "1") {
   test("composer draft hook respects auth, remote merges and lifecycle flushes", async () => {
@@ -26,15 +27,12 @@ if (process.env.COMMA_DRAFT_HOOK_CHILD !== "1") {
   const local = new Map<string, string>();
   const listeners = new Set<(guid: string, text: string) => void>();
   const writes: Array<{ conversationId: string; text: string }> = [];
-  const queries: Array<{ name: string; skipped: boolean }> = [];
-  let imports = 0;
+  const queries: Array<{ name: string; args: { conversationId: string } | "skip" }> = [];
 
   mock.module("convex/react", () => ({
-    useQuery: (ref: Parameters<typeof getFunctionName>[0], args: { chatGuid?: string } | "skip") => {
-      const name = getFunctionName(ref);
-      queries.push({ name, skipped: args === "skip" });
-      if (args === "skip") return undefined;
-      return name.endsWith(":resolveChat") ? { _id: `id-${args.chatGuid}` } : remote;
+    useQuery: (ref: Parameters<typeof getFunctionName>[0], args: { conversationId: string } | "skip") => {
+      queries.push({ name: getFunctionName(ref), args });
+      return args === "skip" ? undefined : remote && { ...remote, conversationId: args.conversationId };
     },
   }));
   mock.module("@/lib/convex-auth", () => ({ useConvexAuth: () => ({ isAuthenticated: authenticated }) }));
@@ -50,19 +48,17 @@ if (process.env.COMMA_DRAFT_HOOK_CHILD !== "1") {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
     },
-    uploadLocalDrafts: async () => { imports++; },
   }));
   mock.module("@/lib/identity", () => ({
     convexClient: {
-      query: async (_ref: unknown, args: { chatGuid: string }) => ({ _id: `id-${args.chatGuid}` }),
       mutation: async (_ref: unknown, args: { conversationId: string; text: string }) => { writes.push(args); },
     },
   }));
   const { useComposerDraft } = await import("./use-composer-draft");
   let events: ReturnType<typeof useComposerDraft> | undefined;
-  function Composer({ guid, editing = false }: { guid: string; editing?: boolean }) {
+  function Composer({ conversationId, editing = false }: { conversationId: ConversationId; editing?: boolean }) {
     const [text, setText] = useState("");
-    events = useComposerDraft(guid, editing, setText);
+    events = useComposerDraft(conversationId, editing, setText);
     return createElement("textarea", { value: text, readOnly: true });
   }
 
@@ -70,14 +66,14 @@ if (process.env.COMMA_DRAFT_HOOK_CHILD !== "1") {
     const container = document.getElementById("root");
     if (!container) throw new Error("Missing test root");
     const root = createRoot(container);
-    const render = async (guid = "one", editing = false) => {
-      await act(async () => { root.render(createElement(Composer, { guid, editing })); });
+    const render = async (conversationId = "one", editing = false) => {
+      await act(async () => { root.render(createElement(Composer, { conversationId: conversationId as ConversationId, editing })); });
     };
     await render();
-    expect(queries.every((query) => query.skipped)).toBe(true);
-    expect(imports).toBe(0);
+    expect(queries.every((query) => query.args === "skip")).toBe(true);
     authenticated = true;
     await render();
+    expect(queries.at(-1)).toEqual({ name: "comma/queries:getDraft", args: { conversationId: "one" } });
     expect(container.querySelector("textarea")?.value).toBe("cloud");
     expect(local.get("one")).toBe("cloud");
     expect(writes).toEqual([]);
@@ -87,7 +83,7 @@ if (process.env.COMMA_DRAFT_HOOK_CHILD !== "1") {
     await render();
     expect(local.get("one")).toBe("typing");
     await act(async () => { events?.onBlur(); });
-    expect(writes).toEqual([{ conversationId: "id-one", text: "typing" }]);
+    expect(writes).toEqual([{ conversationId: "one", text: "typing" }]);
     remote = { text: "newest", updatedAt: 30 };
     await render();
     expect(container.querySelector("textarea")?.value).toBe("newest");
@@ -96,10 +92,10 @@ if (process.env.COMMA_DRAFT_HOOK_CHILD !== "1") {
     expect(local.get("one")).toBe("newest");
     save("one", "switch draft");
     await render("two");
-    expect(writes.at(-1)).toEqual({ conversationId: "id-one", text: "switch draft" });
+    expect(writes.at(-1)).toEqual({ conversationId: "one", text: "switch draft" });
     save("two", "closing draft");
     await act(async () => { root.unmount(); });
-    expect(writes.at(-1)).toEqual({ conversationId: "id-two", text: "closing draft" });
+    expect(writes.at(-1)).toEqual({ conversationId: "two", text: "closing draft" });
     expect(listeners.size).toBe(0);
     dom.window.close();
   });

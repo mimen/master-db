@@ -1,7 +1,7 @@
 import type { FunctionReturnType } from "convex/server";
 import { matchesFilters } from "@shared/chat-state";
 import { TODAY_SETTLE_GROUP, TODAY_TIME_ZONE, todayWindow } from "@shared/today";
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, ConversationId } from "@shared/types";
 import type { todayApi } from "./convex-api";
 import { queueOrder } from "./inbox-model";
 
@@ -163,13 +163,13 @@ const newestFirst = (a: ChatSummary, b: ChatSummary) => (b.lastMessage?.dateCrea
 export function planToday(
   view: TodayView | null | undefined,
   chats: readonly ChatSummary[],
-  opts: { held: string | null; heldSection?: TodaySectionKey },
+  opts: { held: ConversationId | null; heldSection?: TodaySectionKey },
 ): TodayPlan {
   const settled = view ? chats.filter((chat) => chat.conversationId !== undefined && view.cleared.has(chat.conversationId) && matchesFilters(chat, "all", "known")).length : 0;
   const queue = view?.queue;
   if (!queue) {
     const open = new Set(chats.filter((chat) => matchesFilters(chat, "unresponded", "known")));
-    const rows = queueOrder(chats.filter((chat) => chat.guid === opts.held || open.has(chat))).map(entry);
+    const rows = queueOrder(chats.filter((chat) => chat.conversationId === opts.held || open.has(chat))).map(entry);
     const sections: TodaySection[] = rows.length ? [{ key: "fallback", label: "Needs you", detail: null, tone: null, foldable: false, rows }] : [];
     return { mode: "fallback", sections, toGo: open.size, newSince: 0, settled };
   }
@@ -182,7 +182,7 @@ export function planToday(
   let heldFresh = 0;
   for (const chat of chats) {
     const place = classifyToday(view, chat);
-    if ((place.at === "settled" || place.at === "out") && chat.guid === opts.held) {
+    if ((place.at === "settled" || place.at === "out") && chat.conversationId === opts.held) {
       if (opts.heldSection === "new") {
         fresh.push(chat);
         heldFresh++;
@@ -195,7 +195,7 @@ export function planToday(
     }
     switch (place.at) {
       case "done":
-        if (chat.guid !== opts.held) break;
+        if (chat.conversationId !== opts.held) break;
       // falls through: the held row stays where it was ranked
       case "ranked": {
         const rows = ranked.get(place.group) ?? [];

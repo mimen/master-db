@@ -1,4 +1,4 @@
-import type { Contact, SendTextRequest } from "@shared/types";
+import type { Contact, ConversationId, SendTextRequest } from "@shared/types";
 import { UnknownCommandError } from "./command-results";
 import type { RunCommandOptions, runCommand } from "./convex-commands";
 
@@ -10,13 +10,14 @@ export function messagingCommandError(error: unknown, fallback: string): string 
 
 export function createMessagingApi(run: typeof runCommand) {
   return {
-    sendText: async (chatGuid: string, body: SendTextRequest, options?: RunCommandOptions) => (await run(chatGuid, { kind: "send", ...body }, options)).message,
-    sendContactCard: async (chatGuid: string, contact: Contact, caption?: string) =>
-      (await run(chatGuid, { kind: "sendContact", name: contact.name, address: contact.address, ...(caption !== undefined ? { caption } : {}) })).message,
+    sendText: async (conversationId: ConversationId, body: SendTextRequest, options?: RunCommandOptions) => (await run(conversationId, { kind: "send", ...body }, options)).message,
+    sendContactCard: async (conversationId: ConversationId, contact: Contact, caption?: string) =>
+      (await run(conversationId, { kind: "sendContact", name: contact.name, address: contact.address, ...(caption !== undefined ? { caption } : {}) })).message,
     newChat: async (body: { addresses: string[]; text: string }) => run(null, { kind: "createChat", ...body }),
-    participant: async (chatGuid: string, address: string, action: "add" | "remove") => run(chatGuid, { kind: "participant", address, action }),
-    leaveGroup: async (chatGuid: string) => run(chatGuid, { kind: "leaveGroup" }),
-    deleteChat: async (chatGuid: string) => run(chatGuid, { kind: "deleteChat", chatGuid }),
-    createFaceTimeLink: async (chatGuid: string) => ({ message: (await run(chatGuid, { kind: "createFaceTimeLink" })).message }),
+    participant: async (conversationId: ConversationId, address: string, action: "add" | "remove") => run(conversationId, { kind: "participant", address, action }),
+    leaveGroup: async (conversationId: ConversationId) => run(conversationId, { kind: "leaveGroup" }),
+    deleteChat: async (chat: { conversationId: ConversationId; imessage: { chatGuid: string } }) =>
+      run(chat.conversationId, { kind: "deleteChat", chatGuid: chat.imessage.chatGuid }),
+    createFaceTimeLink: async (conversationId: ConversationId) => ({ message: (await run(conversationId, { kind: "createFaceTimeLink" })).message }),
   };
 }

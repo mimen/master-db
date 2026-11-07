@@ -5,14 +5,14 @@ import { Pressable, StyleSheet } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import Video01Icon from "@hugeicons/core-free-icons/Video01Icon";
 import * as Linking from "expo-linking";
-import type { Message } from "@shared/types";
+import type { ConversationId, Message } from "@shared/types";
 import { faceTimeTargetUrl, type FaceTimeKind } from "@/lib/message-actions";
 import { useActionSheet } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
 import { useTheme } from "@/hooks/use-theme";
 
 interface FaceTimeButtonProps {
-  chatGuid: string;
+  conversationId: ConversationId;
   isGroup: boolean;
   address: string | null;
   color: string;
@@ -21,7 +21,7 @@ interface FaceTimeButtonProps {
 }
 
 export function FaceTimeButton({
-  chatGuid,
+  conversationId,
   isGroup,
   address,
   color,
@@ -45,7 +45,7 @@ export function FaceTimeButton({
 
   const createGroupLink = async (): Promise<void> => {
     try {
-      const result = await runCommand(chatGuid, { kind: "createFaceTimeLink" });
+      const result = await runCommand(conversationId, { kind: "createFaceTimeLink" });
       onSent?.(result.message);
       showToast("FaceTime link sent");
     } catch (error) {

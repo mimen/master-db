@@ -1,5 +1,5 @@
 import { beforeEach, expect, mock, test } from "bun:test";
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, ConversationId } from "@shared/types";
 
 if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
   test("the settle gesture writes what the conversation's state calls for", async () => {
@@ -101,21 +101,21 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
   /** A conversation as the directory lists it, registered on the server side. */
   const chat = (overrides: Partial<ChatSummary>): ChatSummary => {
     const summary: ChatSummary = {
-      guid: "iMessage;-;+16195550206", conversationId: "conv-marcus", displayName: "Marcus Reed", isGroup: false, known: true,
+      conversationId: "conv-marcus" as ConversationId, imessage: { chatGuid: "iMessage;-;+16195550206" }, displayName: "Marcus Reed", isGroup: false, known: true,
       isSpam: false, participants: [], unreadCount: 0,
       lastMessage: { guid: "m1", text: "Ninety minutes works", dateCreated: 1, isFromMe: true, senderName: null, hasAttachments: false },
       flags: flags(), agent,
       ...overrides,
     };
-    rows.set(summary.conversationId!, {
-      _id: summary.conversationId!, primaryChatGuid: summary.guid, ...(summary.lastMessage ? { lastMessage: summary.lastMessage } : {}),
+    rows.set(summary.conversationId, {
+      _id: summary.conversationId, primaryChatGuid: summary.imessage.chatGuid, ...(summary.lastMessage ? { lastMessage: summary.lastMessage } : {}),
       lastMessageAt: summary.lastMessage?.dateCreated ?? 0, unreadCount: 0, flags: summary.flags,
     });
-    if (summary.agent) agentChats.push({ conversationId: summary.conversationId! });
+    if (summary.agent) agentChats.push({ conversationId: summary.conversationId });
     return summary;
   };
   const owed = (n: number) => chat({
-    guid: `iMessage;-;+1619555030${n}`, conversationId: `conv-${n}`, displayName: `Person ${n}`, agent: undefined,
+    conversationId: `conv-${n}` as ConversationId, imessage: { chatGuid: `iMessage;-;+1619555030${n}` }, displayName: `Person ${n}`, agent: undefined,
     lastMessage: { guid: `m${n}`, text: "thanks!", dateCreated: 2, isFromMe: false, senderName: null, hasAttachments: false },
     flags: flags({ unresponded: true }),
   });
@@ -230,7 +230,7 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
   });
 
   test("Settle all settles every open row as one action: one toast, and one Undo reopens all of them", async () => {
-    const quiet = chat({ guid: "iMessage;-;+16195550399", conversationId: "conv-quiet", agent: undefined, lastMessage: null });
+    const quiet = chat({ conversationId: "conv-quiet" as ConversationId, imessage: { chatGuid: "iMessage;-;+16195550399" }, agent: undefined, lastMessage: null });
     const first = target(1);
     await settleAllChats([first, target(2), { chat: quiet, anchor: "q" }]);
     expect(toasts.map((t) => t.message)).toEqual(["Settled 2 threads"]);

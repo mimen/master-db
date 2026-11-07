@@ -1,14 +1,14 @@
-import type { ChatSummary, Message } from "@shared/types";
+import type { ChatSummary, ConversationId, Message } from "@shared/types";
 
 /** Observe new inbound GUIDs once per mounted thread. An older page, below everything seen, stays silent. */
 export function createInboundReadObserver() {
-  let chat: string | null = null;
+  let chat: ConversationId | null = null;
   let oldestSeen = Infinity;
   const seen = new Set<string>();
   return {
-    observe(chatGuid: string, messages: readonly Message[], active: boolean): boolean {
-      if (chat !== chatGuid) {
-        chat = chatGuid;
+    observe(conversationId: ConversationId, messages: readonly Message[], active: boolean): boolean {
+      if (chat !== conversationId) {
+        chat = conversationId;
         oldestSeen = Infinity;
         seen.clear();
       }
@@ -30,26 +30,26 @@ export function createReceiveSoundObserver(now = Date.now()) {
   let initialized = false;
   let liveSince = now;
   const seen = new Set<string>();
-  const latestAt = new Map<string, number>();
+  const latestAt = new Map<ConversationId, number>();
   return {
     reconnect(now: number): void {
       // Catch-up messages predate the new live connection, even if unseen.
       liveSince = now;
     },
-    observe(chats: readonly Pick<ChatSummary, "guid" | "lastMessage">[] | null, now: number, connected = true): string[] {
+    observe(chats: readonly Pick<ChatSummary, "conversationId" | "lastMessage">[] | null, now: number, connected = true): string[] {
       if (!chats) return [];
       const received: string[] = [];
       for (const chat of chats) {
         const message = chat.lastMessage;
         if (!message) continue;
-        const previousAt = latestAt.get(chat.guid) ?? -Infinity;
+        const previousAt = latestAt.get(chat.conversationId) ?? -Infinity;
         // No upper bound: dates come from the Mac's clock, which may run ahead of this device.
         if (initialized && connected && !seen.has(message.guid) && !message.isFromMe &&
           message.dateCreated >= liveSince && message.dateCreated > previousAt) {
           received.push(message.guid);
         }
         seen.add(message.guid);
-        latestAt.set(chat.guid, Math.max(previousAt, message.dateCreated));
+        latestAt.set(chat.conversationId, Math.max(previousAt, message.dateCreated));
       }
       initialized = true;
       return received;

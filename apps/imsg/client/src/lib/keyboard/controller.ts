@@ -110,7 +110,7 @@ let pendingFocusTimer: ReturnType<typeof setTimeout> | null = null;
  * Arms BOTH paths deliberately. Callers request focus while reacting to a
  * selection change (see index.tsx's openChat), at which point the currently
  * registered target is often the one about to be torn down — ThreadView is
- * keyed by chat guid, so switching conversations unmounts the old composer
+ * keyed by conversation, so switching conversations unmounts the old composer
  * and mounts a new one. Focusing only the live target would hand focus to a
  * dying element and lose it; arming only the pending path would miss the
  * case where nothing remounts (re-opening the SAME chat). So: try the

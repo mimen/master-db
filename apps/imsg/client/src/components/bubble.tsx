@@ -7,7 +7,7 @@ import { Image } from "expo-image";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { attachmentThumbnailUrl, attachmentUrl } from "@/lib/api";
 import { formatAddress } from "@shared/address";
-import type { Message, SpecialContent } from "@shared/types";
+import type { ConversationId, Message, SpecialContent } from "@shared/types";
 import type { MentionAnnotation } from "@shared/mentions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
@@ -117,7 +117,7 @@ function ImageSkeleton() {
   return <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: theme.skeleton }]} />;
 }
 
-function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine: boolean; paneWidth?: number }) {
+function Attachments({ message, conversationId, mine, paneWidth = 0 }: { message: Message; conversationId: ConversationId; mine: boolean; paneWidth?: number }) {
   const theme = useTheme();
   const { width: winW } = useLayoutMode();
   const openLightbox = useLightbox();
@@ -145,7 +145,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
         const audio = att.mimeType?.startsWith("audio/") || /\.(caf|amr|m4a|mp3|wav)$/i.test(att.filename ?? "");
         // A voice memo still sending draws its bubble before the recorder has handed over the file.
         if (audio && (url || message.pending)) {
-          return <AudioBubble key={att.guid} guid={att.guid} chatGuid={message.chatGuid} url={url} mine={mine} sending={message.pending === true} />;
+          return <AudioBubble key={att.guid} guid={att.guid} conversationId={conversationId} url={url} mine={mine} sending={message.pending === true} />;
         }
         if (!url && !(att.mimeType?.startsWith("image/") && thumbnail)) return <MediaUnavailable key={att.guid} onMac={att.onMac} />;
         if (isVideo(att)) {
@@ -218,6 +218,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
 
 interface BubbleProps {
   message: Message;
+  conversationId: ConversationId;
   /** Rendering pane's width — bubbles cap against THIS, not the window. */
   paneWidth?: number;
   groupStart: boolean;
@@ -250,6 +251,7 @@ function useSlowSend(pending: boolean): boolean {
 
 export const Bubble = memo(function Bubble({
   message,
+  conversationId,
   paneWidth = 0,
   groupStart,
   groupEnd,
@@ -336,7 +338,7 @@ export const Bubble = memo(function Bubble({
         <View style={{ maxWidth: bubbleMaxWidth, alignItems: mine ? "flex-end" : "flex-start", gap: 4 }}>
           {/* Media and link cards render bare, no colored bubble around them. */}
           {message.attachments.length > 0 && (
-            <Attachments message={message} mine={mine} paneWidth={paneWidth} />
+            <Attachments message={message} conversationId={conversationId} mine={mine} paneWidth={paneWidth} />
           )}
           {url && <LinkPreviewCard url={url} mine={mine} />}
 

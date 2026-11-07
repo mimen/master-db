@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, ConversationId } from "@shared/types";
 import { compactAge, isLateTurn, waitingLongest, yourTurnLongest } from "./turn-age";
 
 const NOW = 1_800_000_000_000;
@@ -7,7 +7,7 @@ const H = 3_600_000;
 
 function chat(guid: string, flags: Partial<ChatSummary["flags"]>, lastAt: number, firstUnreadAt: number | null = null): ChatSummary {
   return {
-    guid, displayName: guid, isGroup: false, known: true, isSpam: false, participants: [], unreadCount: 0, firstUnreadAt,
+    conversationId: guid as ConversationId, imessage: { chatGuid: `iMessage;-;${guid}` }, displayName: guid, isGroup: false, known: true, isSpam: false, participants: [], unreadCount: 0, firstUnreadAt,
     lastMessage: { guid: `${guid}-m`, text: "", dateCreated: lastAt, isFromMe: false, senderName: null, hasAttachments: false },
     flags: { unresponded: false, waiting: false, unread: false, mutedUnresponded: false, pinned: false, ...flags },
   };
@@ -32,10 +32,10 @@ test("your turn the longest ranks Needs you by the oldest unread, oldest first",
     chat("waiting", { waiting: true }, NOW - 99 * H),
     chat("mid", { unresponded: true }, NOW - 10 * H),
   ];
-  expect(yourTurnLongest(chats, 2, NOW).map((a) => [a.chat.guid, a.ageMs])).toEqual([["old-unread", 50 * H], ["mid", 10 * H]]);
+  expect(yourTurnLongest(chats, 2, NOW).map((a) => [String(a.chat.conversationId), a.ageMs])).toEqual([["old-unread", 50 * H], ["mid", 10 * H]]);
 });
 
 test("waiting on them the longest only ranks Waiting conversations", () => {
   const chats = [chat("a", { waiting: true }, NOW - 2 * H), chat("b", { unresponded: true }, NOW - 9 * H), chat("c", { waiting: true }, NOW - 7 * H)];
-  expect(waitingLongest(chats, 3, NOW).map((a) => a.chat.guid)).toEqual(["c", "a"]);
+  expect(waitingLongest(chats, 3, NOW).map((a) => String(a.chat.conversationId))).toEqual(["c", "a"]);
 });

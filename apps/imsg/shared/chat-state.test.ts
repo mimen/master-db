@@ -8,7 +8,7 @@ import {
   settleActionFor,
   settleLeavesLens,
 } from "./chat-state";
-import type { ChatFlags, ChatSummary } from "./types";
+import type { ChatFlags, ChatSummary, ConversationId } from "./types";
 
 // ---------------------------------------------------------------- fixtures
 
@@ -45,7 +45,8 @@ function makeFlags(overrides: Partial<ChatFlags> = {}): ChatFlags {
 
 function makeChat(overrides: Partial<ChatSummary> = {}): ChatSummary {
   return {
-    guid: "chat-1",
+    conversationId: "chat-1" as ConversationId,
+    imessage: { chatGuid: "iMessage;-;chat-1" },
     displayName: "Chat 1",
     isGroup: false,
     known: true,
@@ -404,7 +405,7 @@ describe("agent chats", () => {
     ({ attention, chatId: "agent-1", title: "Guest list", openCount: 1, activityAt: 1 });
   // Flags clear and an outbound last message: settled but for the agent chat.
   const quiet = (attention: NonNullable<ChatSummary["agent"]>["attention"]) =>
-    makeChat({ guid: `quiet-${attention}`, agent: agent(attention), lastMessage: { ...makeChat().lastMessage!, isFromMe: true } });
+    makeChat({ conversationId: `quiet-${attention}` as ConversationId, agent: agent(attention), lastMessage: { ...makeChat().lastMessage!, isFromMe: true } });
 
   test("an open agent chat puts a conversation with clear flags in Needs you and Agents, not Settled", () => {
     const row = quiet("working");
@@ -430,7 +431,7 @@ describe("agent chats", () => {
 
   test("Needs you counts agent rows; Agents counts only the ones that want the user", () => {
     const rows = (["needs_you", "failed", "ready", "working", "open"] as const).map(quiet);
-    const counts = computeCounts([...rows, makeChat({ guid: "inbound", flags: makeFlags({ unresponded: true }) })], "all");
+    const counts = computeCounts([...rows, makeChat({ conversationId: "inbound" as ConversationId, flags: makeFlags({ unresponded: true }) })], "all");
     expect(counts.unresponded).toBe(6);
     expect(counts.agents).toBe(3);
     expect(counts.settled).toBe(0);
@@ -440,9 +441,9 @@ describe("agent chats", () => {
 describe("computeCounts", () => {
   test("counts each state lens", () => {
     const chats = [
-      makeChat({ guid: "a", flags: makeFlags({ unread: true, unresponded: true }) }),
-      makeChat({ guid: "b", flags: makeFlags({ waiting: true }) }),
-      makeChat({ guid: "c", flags: makeFlags() }),
+      makeChat({ conversationId: "a" as ConversationId, flags: makeFlags({ unread: true, unresponded: true }) }),
+      makeChat({ conversationId: "b" as ConversationId, flags: makeFlags({ waiting: true }) }),
+      makeChat({ conversationId: "c" as ConversationId, flags: makeFlags() }),
     ];
     const counts = computeCounts(chats, "all");
     expect(counts.all).toBe(3); // every chat, nothing is hidden from All
@@ -454,16 +455,16 @@ describe("computeCounts", () => {
   });
 
   test("Drafts counts conversations with a draft and never drops a row on settle", () => {
-    const drafted = makeChat({ guid: "d", draft: { source: "agent", text: "hi", attachmentCount: 0, updatedAt: 1 } });
-    expect(computeCounts([drafted, makeChat({ guid: "e" })], "all").drafts).toBe(1);
+    const drafted = makeChat({ conversationId: "d" as ConversationId, draft: { source: "agent", text: "hi", attachmentCount: 0, updatedAt: 1 } });
+    expect(computeCounts([drafted, makeChat({ conversationId: "e"  as ConversationId})], "all").drafts).toBe(1);
     expect(matchesFilters(drafted, "drafts", "all")).toBe(true);
     expect(settleLeavesLens("settle", "drafts")).toBe(false);
   });
 
   test("counts a settled conversation with no last message as neither settled nor waiting", () => {
     const chats = [
-      makeChat({ guid: "empty", lastMessage: null, flags: makeFlags() }),
-      makeChat({ guid: "settled", flags: makeFlags() }),
+      makeChat({ conversationId: "empty" as ConversationId, lastMessage: null, flags: makeFlags() }),
+      makeChat({ conversationId: "settled" as ConversationId, flags: makeFlags() }),
     ];
     const counts = computeCounts(chats, "all");
 
@@ -475,10 +476,10 @@ describe("computeCounts", () => {
 
   test("each type lens counts exactly the conversations its lens shows", () => {
     const chats = [
-      makeChat({ guid: "friend", flags: makeFlags({ unread: true }) }),
-      makeChat({ guid: "crew", isGroup: true, flags: makeFlags({ unread: true }) }),
-      makeChat({ guid: "stranger", known: false, flags: makeFlags({ unread: true }) }),
-      makeChat({ guid: "junk", isSpam: true, flags: makeFlags({ unread: true }) }),
+      makeChat({ conversationId: "friend" as ConversationId, flags: makeFlags({ unread: true }) }),
+      makeChat({ conversationId: "crew" as ConversationId, isGroup: true, flags: makeFlags({ unread: true }) }),
+      makeChat({ conversationId: "stranger" as ConversationId, known: false, flags: makeFlags({ unread: true }) }),
+      makeChat({ conversationId: "junk" as ConversationId, isSpam: true, flags: makeFlags({ unread: true }) }),
     ];
 
     // Everyone now counts the screened pair too; Known is the old All.

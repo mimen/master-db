@@ -4,13 +4,14 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useConvex } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
+import type { ConversationId } from "@shared/types";
 
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { PaneHeader } from "@/components/ui/pane-header";
 import { Radius, Space } from "@/constants/tokens";
 import { useAgentChats, useAgentItems } from "@/hooks/use-agent";
-import { useChatDirectory, useConversationRef } from "@/hooks/use-chat-directory";
+import { useConversation } from "@/hooks/use-chat-directory";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
@@ -43,8 +44,8 @@ function pendingAsk(chatId: AgentChatId, key: string, text: string, steer: boole
   };
 }
 
-export function AgentPane({ chatGuid, requestedChatId, onClose }: {
-  readonly chatGuid: string;
+export function AgentPane({ conversationId, requestedChatId, onClose }: {
+  readonly conversationId: ConversationId;
   /** The phone route's `chat` param; the wide shell passes requests through openAgentPane instead. */
   readonly requestedChatId?: string;
   readonly onClose?: () => void;
@@ -53,10 +54,9 @@ export function AgentPane({ chatGuid, requestedChatId, onClose }: {
   const type = useTypeRamp();
   const convex = useConvex();
   const settings = useAgentSettings();
-  const name = useChatDirectory()?.find((chat) => chat.guid === chatGuid)?.displayName ?? "this conversation";
-  const { conversationId } = useConversationRef(chatGuid);
+  const name = useConversation(conversationId)?.displayName ?? "this conversation";
   const chats = useAgentChats(conversationId);
-  const [selection, select] = usePaneSelection(chatGuid, requestedChatId, chats);
+  const [selection, select] = usePaneSelection(conversationId, requestedChatId, chats);
   const chatId = selection?.kind === "chat" ? selection.chatId : undefined;
   const chat = chats?.find((row) => row._id === chatId);
   const items = useAgentItems(chatId);

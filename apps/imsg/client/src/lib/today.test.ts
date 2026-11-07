@@ -1,4 +1,4 @@
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, ConversationId } from "@shared/types";
 import { describe, expect, test } from "bun:test";
 
 import { builtLine, busyCopy, classifyToday, planToday, settleAllTargets, todayHeader, toTodayView, type TodayHeader, type TodayRun, type TodayView } from "./today";
@@ -9,7 +9,7 @@ const done: TodayRun = { status: "done", attempt: 1, source: "schedule", finishe
 
 function chat(id: string, flags: Partial<ChatSummary["flags"]> = {}, extra: Partial<ChatSummary> = {}): ChatSummary {
   return {
-    conversationId: id, guid: `g-${id}`, displayName: id, isGroup: false, known: true, isSpam: false, participants: [],
+    conversationId: id as ConversationId, imessage: { chatGuid: `iMessage;-;${id}` }, displayName: id, isGroup: false, known: true, isSpam: false, participants: [],
     lastMessage: { guid: `m-${id}`, text: "hi", dateCreated: 1, isFromMe: false, senderName: null, hasAttachments: false },
     unreadCount: 0,
     flags: { unresponded: false, waiting: false, unread: false, mutedUnresponded: false, pinned: false, ...flags },
@@ -108,9 +108,9 @@ describe("the settle group against the message the build read", () => {
   test("Settle all takes only unchanged ranked settle rows, each with its stored anchor", () => {
     const handled = view([{ id: "t", group: "settle", anchor: "m-t" }, { id: "h", group: "settle", anchor: "m-h" }], ["t", "h"], { h: SNAPSHOT + 1 });
     const chats = [chat("t", needsYou), chat("h"), chat("old", needsYou)];
-    expect(planToday(handled, chats, { held: "g-h" }).sections.find((s) => s.key === "group:settle")?.rows.map((r) => r.chat.conversationId),
+    expect(planToday(handled, chats, { held: "h" as ConversationId }).sections.find((s) => s.key === "group:settle")?.rows.map((r) => r.chat.conversationId as string),
       "the held, handled row still displays").toEqual(["t", "h"]);
-    expect(settleAllTargets(handled, chats).map(({ chat: c, anchor }) => [c.conversationId, anchor])).toEqual([["t", "m-t"]]);
+    expect(settleAllTargets(handled, chats).map(({ chat: c, anchor }) => [c.conversationId as string, anchor])).toEqual([["t", "m-t"]]);
     expect(settleAllTargets(v, [urgent("t"), chat("old", needsYou)])).toEqual([]);
   });
 });
@@ -127,7 +127,7 @@ describe("planToday", () => {
   test("New since leads newest first, groups follow in build order by rank, folds close the list", () => {
     const plan = planToday(view(items, ["a", "b", "m", "low"], { s: DAY_START + 3 }), chats, { held: null });
     expect(plan.mode).toBe("queue");
-    expect(plan.sections.map((s) => [s.key, s.rows.map((r) => r.chat.conversationId)])).toEqual([
+    expect(plan.sections.map((s) => [s.key, s.rows.map((r) => r.chat.conversationId as string)])).toEqual([
       ["new", ["n2", "n1"]], ["group:friday", ["a", "b"]], ["group:money", ["m"]], ["below", ["low"]], ["settled", ["s"]],
     ]);
     expect(plan.sections[0]).toMatchObject({ label: expect.stringMatching(/^New since /), tone: "fresh" });
@@ -136,15 +136,15 @@ describe("planToday", () => {
   });
 
   test("a settled ranked row leaves its gap and bumps progress", () => {
-    const after = chats.map((c) => (c.conversationId === "a" ? chat("a") : c));
+    const after = chats.map((c) => (c.conversationId === ("a" as ConversationId) ? chat("a") : c));
     const plan = planToday(view(items, ["a", "b", "m", "low"], { s: DAY_START + 3, a: SNAPSHOT + 1 }), after, { held: null });
     expect(plan.sections.find((s) => s.key === "group:friday")?.rows.map((r) => r.rank)).toEqual([2]);
     expect(plan).toMatchObject({ toGo: 4, settled: 2 });
   });
 
   test("the held conversation keeps its slot after it is handled, without counting as to go", () => {
-    const after = chats.map((c) => (c.conversationId === "a" ? chat("a") : c));
-    const plan = planToday(view(items, ["a", "b", "m", "low"], { a: SNAPSHOT + 1 }), after, { held: "g-a" });
+    const after = chats.map((c) => (c.conversationId === ("a" as ConversationId) ? chat("a") : c));
+    const plan = planToday(view(items, ["a", "b", "m", "low"], { a: SNAPSHOT + 1 }), after, { held: "a" as ConversationId });
     expect(plan.sections.find((s) => s.key === "group:friday")?.rows.map((r) => r.rank)).toEqual([1, 2]);
     expect(plan.toGo).toBe(4);
   });
@@ -152,12 +152,12 @@ describe("planToday", () => {
   test("a conversation held from New since or Below the line stays in that section after a reply, without counting as to go", () => {
     const replied = chats.map((c) => (c.conversationId === "n2" ? { ...c, flags: chat("n2", waiting).flags } : c.conversationId === "low" ? chat("low", waiting) : c));
     const v = view(items, ["a", "b", "m", "low"], { n2: SNAPSHOT + 9, low: SNAPSHOT + 9 });
-    const rows = (p: ReturnType<typeof planToday>, key: string) => p.sections.find((s) => s.key === key)?.rows.map((r) => r.chat.conversationId);
-    const fromNew = planToday(v, replied, { held: "g-n2", heldSection: "new" });
+    const rows = (p: ReturnType<typeof planToday>, key: string) => p.sections.find((s) => s.key === key)?.rows.map((r) => r.chat.conversationId as string);
+    const fromNew = planToday(v, replied, { held: "n2" as ConversationId, heldSection: "new" });
     expect(rows(fromNew, "new")).toEqual(["n2", "n1"]);
     expect(rows(fromNew, "settled")).toEqual(["low"]);
     expect(fromNew).toMatchObject({ toGo: 4, newSince: 1 });
-    const fromBelow = planToday(v, replied, { held: "g-low", heldSection: "below" });
+    const fromBelow = planToday(v, replied, { held: "low" as ConversationId, heldSection: "below" });
     expect(rows(fromBelow, "below")).toEqual(["low"]);
     expect(rows(fromBelow, "settled")).toEqual(["n2"]);
     expect(fromBelow.toGo).toBe(4);
@@ -175,13 +175,13 @@ describe("planToday", () => {
     const pinned = chat("p", needsYou, { flags: { ...chat("p").flags, unresponded: true, pinned: true } });
     const plan = planToday(null, [chat("x", needsYou), pinned, chat("q")], { held: null });
     expect(plan.mode).toBe("fallback");
-    expect(plan.sections.map((s) => [s.label, s.rows.map((r) => r.chat.conversationId)])).toEqual([["Needs you", ["p", "x"]]]);
+    expect(plan.sections.map((s) => [s.label, s.rows.map((r) => r.chat.conversationId as string)])).toEqual([["Needs you", ["p", "x"]]]);
     expect(plan.toGo).toBe(2);
   });
 
   test("without a queue today, the held conversation stays after a reply without counting as to go", () => {
-    const plan = planToday(null, [chat("x", needsYou), chat("h", waiting)], { held: "g-h" });
-    expect(plan.sections[0]?.rows.map((r) => r.chat.conversationId)).toEqual(["x", "h"]);
+    const plan = planToday(null, [chat("x", needsYou), chat("h", waiting)], { held: "h" as ConversationId });
+    expect(plan.sections[0]?.rows.map((r) => r.chat.conversationId as string)).toEqual(["x", "h"]);
     expect(plan.toGo).toBe(1);
   });
 });
@@ -244,7 +244,7 @@ describe("todayHeader", () => {
     const updated = view([{ id: "n", group: "friday" }, { id: "a", group: "friday" }], ["a", "n"], {}, { snapshotAt: SNAPSHOT + 3_600_000, session: { id: "s", startedAt: SNAPSHOT, updates: 1 } });
     const after = planToday(updated, chats, { held: null });
     expect(after.sections.map((section) => section.key)).toEqual(["group:friday"]);
-    expect(after.sections[0]?.rows.map((row) => [row.chat.conversationId, row.rank])).toEqual([["n", 1], ["a", 2]]);
+    expect(after.sections[0]?.rows.map((row) => [row.chat.conversationId as string, row.rank])).toEqual([["n", 1], ["a", 2]]);
     expect(planToday(updated, [...chats, chat("late", needsYou)], { held: null }).sections[0]?.label, "New since names the Update's snapshot")
       .toBe(`New since ${new Date(SNAPSHOT + 3_600_000).toLocaleTimeString("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit" })}`);
   });

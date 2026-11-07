@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createApp } from "../../server/app";
 import type { Config } from "../../server/config";
 import { OverlayDb } from "../../server/db";
+import { fixtureConversationId } from "../../shared/fixture-ids";
 import type { ChatSummary, Message } from "../../shared/types";
 import type { CommaOutboxPayload } from "../../../../convex/schema/comma/validators";
 import { fixtureMessageWindow, registerConvexFixture } from "./convex";
@@ -42,8 +43,8 @@ async function call<T>(name: string, args: Record<string, unknown> = {}): Promis
 }
 const query = <T>(name: string, args?: Record<string, unknown>) => call<T>(`comma/queries:${name}`, args);
 const conversation = (guid = CHAT_GUIDS.needs as string) => query<{ _id: string; primaryChatGuid: string; displayName: string; flags: ChatSummary["flags"] }>("resolveChat", { chatGuid: guid });
-const messages = (guid = CHAT_GUIDS.needs as string) => query<{ page: Array<Message & { attachments: unknown[]; clientKey?: string }> }>("listMessages", { conversationId: guid, paginationOpts: { numItems: 100, cursor: null } });
-const command = (payload: CommaOutboxPayload, guid = CHAT_GUIDS.needs as string, clientKey: string = crypto.randomUUID()) => call<string>("comma/outbox:enqueue", { clientKey, conversationId: guid, payload });
+const messages = (guid = CHAT_GUIDS.needs as string) => query<{ page: Array<Message & { attachments: unknown[]; clientKey?: string }> }>("listMessages", { conversationId: fixtureConversationId(guid), paginationOpts: { numItems: 100, cursor: null } });
+const command = (payload: CommaOutboxPayload, guid = CHAT_GUIDS.needs as string, clientKey: string = crypto.randomUUID()) => call<string>("comma/outbox:enqueue", { clientKey, conversationId: fixtureConversationId(guid), payload });
 
 test("Convex pagination and resolution use the fixture world", async () => {
   type Page = { page: Array<{ _id: string; primaryChatGuid: string }>; isDone: boolean; continueCursor: string };
@@ -55,20 +56,20 @@ test("Convex pagination and resolution use the fixture world", async () => {
   const remainder = await query<typeof first>("listConversations", { paginationOpts: { numItems: 100, cursor: first.continueCursor } });
   expect(remainder.page).toEqual(all.slice(2));
   expect(remainder.isDone).toBe(true);
-  expect((await conversation())._id).toBe(CHAT_GUIDS.needs);
+  expect((await conversation())._id).toBe(fixtureConversationId(CHAT_GUIDS.needs));
   expect(await query("resolveChat", { chatGuid: "missing" })).toBeNull();
   const page = await messages();
   expect(page.page.map((row) => row.guid)).toEqual(["needs-2", "needs-1"]);
-  expect(page.page[0]).toMatchObject({ conversationId: CHAT_GUIDS.needs, sourceVersion: 1, mentions: [], isTapback: false });
+  expect(page.page[0]).toMatchObject({ conversationId: fixtureConversationId(CHAT_GUIDS.needs), sourceVersion: 1, mentions: [], isTapback: false });
 });
 
 test("sends share BlueBubbles history, preserve the client key, clear drafts, and deduplicate", async () => {
-  await call("comma/drafts:setDraft", { conversationId: CHAT_GUIDS.needs, text: "draft" });
-  expect(await query("getDraft", { conversationId: CHAT_GUIDS.needs })).toMatchObject({ text: "draft" });
+  await call("comma/drafts:setDraft", { conversationId: fixtureConversationId(CHAT_GUIDS.needs), text: "draft" });
+  expect(await query("getDraft", { conversationId: fixtureConversationId(CHAT_GUIDS.needs) })).toMatchObject({ text: "draft" });
   const clientKey = "fixture-send-key";
   const receipt = await command({ kind: "send", text: "sent through Convex", replyToGuid: "needs-2" }, CHAT_GUIDS.needs, clientKey);
   expect(await command({ kind: "send", text: "sent through Convex" }, CHAT_GUIDS.needs, clientKey)).toBe(receipt);
-  expect(await query("getDraft", { conversationId: CHAT_GUIDS.needs })).toBeNull();
+  expect(await query("getDraft", { conversationId: fixtureConversationId(CHAT_GUIDS.needs) })).toBeNull();
   const page = await messages();
   expect(page.page[0]).toMatchObject({ text: "sent through Convex", clientKey, replyToGuid: "needs-2", replyToPreview: "Can you send the final arrival time?" });
   expect(page.page.filter((row) => row.clientKey === clientKey)).toHaveLength(1);
@@ -94,7 +95,7 @@ test("read, unread, settle, unsettle, pin, and mute enqueued by an older client 
 });
 
 test("comma/triage settles against the shown last message, reads with a receipt, and a reply joins the clear log", async () => {
-  const triage = (name: string, args: Record<string, unknown> = {}) => call<unknown>(`comma/triage:${name}`, { conversationId: CHAT_GUIDS.needs, ...args });
+  const triage = (name: string, args: Record<string, unknown> = {}) => call<unknown>(`comma/triage:${name}`, { conversationId: fixtureConversationId(CHAT_GUIDS.needs), ...args });
   await expect(triage("settle", { anchor: "needs-1" })).rejects.toThrow("latest message changed");
   await triage("settle", { anchor: "needs-2" });
   expect((await conversation()).flags.unresponded).toBe(false);
@@ -106,13 +107,13 @@ test("comma/triage settles against the shown last message, reads with a receipt,
   expect(await call("comma/outbox:getCommand", { commandId: receipt })).toMatchObject({ status: "sent", result: { kind: "markRead", ok: true } });
   await command({ kind: "send", text: "on it" });
   const today = await call<{ cleared: unknown[] }>("comma/today:get", { day: "2026-10-27" });
-  expect(today.cleared).toEqual([{ conversationId: CHAT_GUIDS.needs, at: expect.any(Number) }]);
+  expect(today.cleared).toEqual([{ conversationId: fixtureConversationId(CHAT_GUIDS.needs), at: expect.any(Number) }]);
 });
 
 test("settle and un-settle carry the conversation's agent chats, and sending a chat's draft settles it", async () => {
   type Summary = { _id: string; settledAt?: number; state: string };
-  const ask = (key: string, text: string) => call<string>("comma/agent:ask", { conversationId: CHAT_GUIDS.needs, key, text, steer: false, model: "claude-opus-5-5", effort: "high" });
-  const chat = async (chatId: string) => (await call<Summary[]>("comma/agent:chatsFor", { conversationId: CHAT_GUIDS.needs })).find((row) => row._id === chatId)!;
+  const ask = (key: string, text: string) => call<string>("comma/agent:ask", { conversationId: fixtureConversationId(CHAT_GUIDS.needs), key, text, steer: false, model: "claude-opus-5-5", effort: "high" });
+  const chat = async (chatId: string) => (await call<Summary[]>("comma/agent:chatsFor", { conversationId: fixtureConversationId(CHAT_GUIDS.needs) })).find((row) => row._id === chatId)!;
   const working = await ask("k1", "take your time");
   const own = await ask("k2", "take your time too");
   await call("comma/agent:settle", { chatId: own });
@@ -126,10 +127,10 @@ test("settle and un-settle carry the conversation's agent chats, and sending a c
   const drafted = await ask("k3", "add them to the guest list");
   await until(async () => (await chat(drafted)).state === "waiting_input");
   await call("comma/agent:answer", { chatId: drafted, requestId: "k3-turn-question", answers: { "Which list?": "Freaquency 10/31" } });
-  const draft = () => query<{ agentChatId?: string } | null>("getDraft", { conversationId: CHAT_GUIDS.needs });
+  const draft = () => query<{ agentChatId?: string } | null>("getDraft", { conversationId: fixtureConversationId(CHAT_GUIDS.needs) });
   await until(async () => (await draft()) !== null);
   expect((await draft())?.agentChatId).toBe(drafted);
-  await call("comma/drafts:setDraft", { conversationId: CHAT_GUIDS.needs, text: "See you there" });
+  await call("comma/drafts:setDraft", { conversationId: fixtureConversationId(CHAT_GUIDS.needs), text: "See you there" });
   await command({ kind: "send", text: "See you there" });
   expect((await chat(drafted)).settledAt).toEqual(expect.any(Number));
   expect((await chat(working)).settledAt).toBeUndefined();
@@ -137,11 +138,11 @@ test("settle and un-settle carry the conversation's agent chats, and sending a c
 
 test("a conversation's agent chats settle and reopen without a bridge command", async () => {
   type Summary = { settledAt?: number };
-  const open = async () => (await call<Summary[]>("comma/agent:chatsFor", { conversationId: AGENT_CHAT_GUIDS.several })).map((chat) => chat.settledAt === undefined);
+  const open = async () => (await call<Summary[]>("comma/agent:chatsFor", { conversationId: fixtureConversationId(AGENT_CHAT_GUIDS.several) })).map((chat) => chat.settledAt === undefined);
   expect(await open()).toEqual([true, true, false, false]);
-  await call("comma/agent:settleConversationAgents", { conversationId: AGENT_CHAT_GUIDS.several });
+  await call("comma/agent:settleConversationAgents", { conversationId: fixtureConversationId(AGENT_CHAT_GUIDS.several) });
   expect(await open()).toEqual([false, false, false, false]);
-  await call("comma/agent:reopenConversationAgents", { conversationId: AGENT_CHAT_GUIDS.several });
+  await call("comma/agent:reopenConversationAgents", { conversationId: fixtureConversationId(AGENT_CHAT_GUIDS.several) });
   expect(await open()).toEqual([true, true, false, false]);
 
   await command({ kind: "settle" }, AGENT_CHAT_GUIDS.several);
@@ -155,19 +156,19 @@ test("the seeded agent chats cover every attention, come back on reset, and Leah
   const attentions = async () => {
     const open = await call<Summary[]>("comma/agent:listAgentChats");
     const people = Object.entries(AGENT_CHAT_GUIDS).map(([name, guid]) => {
-      const top = mostUrgent(open.filter((chat) => chat.conversationId === guid));
+      const top = mostUrgent(open.filter((chat) => chat.conversationId === fixtureConversationId(guid)));
       return [name, top ? agentAttention(top) : "none"];
     });
     return { count: open.length, people: Object.fromEntries(people) };
   };
   const seeded = { count: 7, people: { needsYou: "needs_you", ready: "ready", working: "working", failed: "failed", open: "open", several: "ready" } };
   expect(await attentions()).toEqual(seeded);
-  const leah = await call<Summary[]>("comma/agent:chatsFor", { conversationId: AGENT_CHAT_GUIDS.several });
+  const leah = await call<Summary[]>("comma/agent:chatsFor", { conversationId: fixtureConversationId(AGENT_CHAT_GUIDS.several) });
   expect(leah.map((chat) => [chat.title, chat.settledAt !== undefined, agentAttention(chat)])).toEqual([
     ["Rideshare codes", false, "ready"], ["Hotel block for the crew", false, "open"],
     ["Flyer feedback", true, "settled"], ["Leah's birthday dinner", true, "settled"],
   ]);
-  const ready = await call<Summary[]>("comma/agent:chatsFor", { conversationId: AGENT_CHAT_GUIDS.ready });
+  const ready = await call<Summary[]>("comma/agent:chatsFor", { conversationId: fixtureConversationId(AGENT_CHAT_GUIDS.ready) });
   expect(ready[0]?.preview).toEqual({ kind: "draft", text: "You're on the list for Friday, see you there" });
 
   await command({ kind: "settle" }, AGENT_CHAT_GUIDS.needsYou);
@@ -239,9 +240,9 @@ test("unknown function names return a diagnostic 400 and reset clears fixture dr
   const response = await fixture.app.request("/__fixture/convex", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "comma/queries:missing", args: {} }) });
   expect(response.status).toBe(400);
   expect(await response.json()).toEqual({ error: "Unknown fixture Convex function: comma/queries:missing" });
-  await call("comma/drafts:setDraft", { conversationId: CHAT_GUIDS.needs, text: "draft" });
+  await call("comma/drafts:setDraft", { conversationId: fixtureConversationId(CHAT_GUIDS.needs), text: "draft" });
   reset();
-  expect(await query("getDraft", { conversationId: CHAT_GUIDS.needs })).toBeNull();
+  expect(await query("getDraft", { conversationId: fixtureConversationId(CHAT_GUIDS.needs) })).toBeNull();
 });
 
 test("link preview actions return deterministic public previews and null for blocked URLs", async () => {
@@ -259,7 +260,7 @@ test("link preview actions return deterministic public previews and null for blo
 });
 
 const history = (bounds: { before?: number; after?: number; around?: number }) => call<Array<Message & { attachments: unknown[] }>>(
-  "comma/history:messageWindow", { conversationId: CHAT_GUIDS.needs, ...bounds },
+  "comma/history:messageWindow", { conversationId: fixtureConversationId(CHAT_GUIDS.needs), ...bounds },
 );
 
 test("history fixture serves strict windows, joins reactions and stays live", async () => {
@@ -284,12 +285,12 @@ test("fixture contact search, normalized DM lookup and raw chat info use the fix
     chatGuid: CHAT_GUIDS.needs, service: "iMessage", isGroup: false, participants: ["+16195550101"],
   });
   expect(await call("comma/conversationInfo:findChat", { address: "+16195550101", service: "SMS" })).toBeNull();
-  expect(await call("comma/conversationInfo:chatInfo", { chatGuid: CHAT_GUIDS.needs })).toMatchObject({
+  expect(await call("comma/conversationInfo:chatInfo", { conversationId: fixtureConversationId(CHAT_GUIDS.needs) })).toMatchObject({
     displayName: null, participants: [{ address: "+16195550101", name: "Alex Rivera", is_favorite: true }],
   });
   await bb.renameGroup(CHAT_GUIDS.unreadGroup, "");
-  expect(await call("comma/conversationInfo:chatInfo", { chatGuid: CHAT_GUIDS.unreadGroup })).toMatchObject({ displayName: null, isGroup: true });
-  expect(await call("comma/conversationInfo:chatInfo", { chatGuid: "missing" })).toBeNull();
+  expect(await call("comma/conversationInfo:chatInfo", { conversationId: fixtureConversationId(CHAT_GUIDS.unreadGroup) })).toMatchObject({ displayName: null, isGroup: true });
+  expect(await call("comma/conversationInfo:chatInfo", { conversationId: fixtureConversationId("missing") })).toBeNull();
   expect(await call("comma/conversationInfo:findChat", { address: "missing@example.com" })).toBeNull();
   const capped = await call<unknown[]>("identity/queries:searchContacts", { key: "fixture-only", q: "contact", limit: 100 });
   expect(capped.length).toBeLessThanOrEqual(25);
@@ -299,7 +300,7 @@ test("presence and bridge capabilities queries support the typing command fixtur
   const state = await call<{ privateApi: boolean; suggestions: boolean; whisperAvailable: boolean; lastSeenAt: number }>("comma/bridgeState:bridgeState");
   expect(state).toMatchObject({ privateApi: true, suggestions: false, whisperAvailable: false });
   expect(state.lastSeenAt).toBeGreaterThan(0);
-  expect(await call("comma/presence:presence", { conversationId: CHAT_GUIDS.needs })).toBeNull();
+  expect(await call("comma/presence:presence", { conversationId: fixtureConversationId(CHAT_GUIDS.needs) })).toBeNull();
   const receipt = await command({ kind: "typing", active: true, expiresAt: Date.now() + 1000 });
   expect(await call("comma/outbox:getCommand", { commandId: receipt })).toMatchObject({ status: "sent", result: { kind: "typing", ok: true } });
   await command({ kind: "typing", active: false, expiresAt: Date.now() });
@@ -307,7 +308,7 @@ test("presence and bridge capabilities queries support the typing command fixtur
 });
 
 test("Convex media fixture serves gallery objects, storage URLs, upload finalization, and command results", async () => {
-  const gallery = await call<Array<{ guid: string; originalUrl: string | null; thumbUrl: string | null }>>("comma/media:gallery", { conversationId: CHAT_GUIDS.unreadGroup });
+  const gallery = await call<Array<{ guid: string; originalUrl: string | null; thumbUrl: string | null }>>("comma/media:gallery", { conversationId: fixtureConversationId(CHAT_GUIDS.unreadGroup) });
   expect(gallery).toHaveLength(1);
   expect(gallery[0]).toMatchObject({ guid: "fixture-image", originalUrl: "/__fixture/media/fixture-image", thumbUrl: "/__fixture/media/fixture-image" });
   expect(await call("comma/media:attachmentMedia", { guid: "fixture-image" })).toMatchObject({ guid: "fixture-image", originalUrl: gallery[0]!.originalUrl, thumbUrl: gallery[0]!.thumbUrl });
@@ -331,11 +332,11 @@ test("peer presence survives fixture resets and follows on/off bridge events", a
   for (let index = 0; index < 2; index++) {
     reset();
     bb.receiveTyping(CHAT_GUIDS.needs, true);
-    const presence = await call<{ peerTyping: boolean; expiresAt: number }>("comma/presence:presence", { conversationId: CHAT_GUIDS.needs });
+    const presence = await call<{ peerTyping: boolean; expiresAt: number }>("comma/presence:presence", { conversationId: fixtureConversationId(CHAT_GUIDS.needs) });
     expect(presence.peerTyping).toBe(true);
     expect(presence.expiresAt).toBeGreaterThan(new Date().getTime());
     bb.receiveTyping(CHAT_GUIDS.needs, false);
-    expect(await call("comma/presence:presence", { conversationId: CHAT_GUIDS.needs })).toMatchObject({ peerTyping: false });
+    expect(await call("comma/presence:presence", { conversationId: fixtureConversationId(CHAT_GUIDS.needs) })).toMatchObject({ peerTyping: false });
   }
 });
 

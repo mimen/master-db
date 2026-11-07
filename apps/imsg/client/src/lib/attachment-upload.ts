@@ -1,5 +1,5 @@
 import type { GenericId } from "convex/values";
-import type { Message } from "@shared/types";
+import type { ConversationId, Message } from "@shared/types";
 import { mediaApi } from "./media-api";
 import { runCommand, type CommandPayload } from "./convex-commands";
 
@@ -18,13 +18,13 @@ export interface StoreDeps {
   readUri(uri: string): Promise<Blob | ArrayBuffer>;
 }
 export interface AttachmentUploadDeps extends StoreDeps {
-  send(chatGuid: string, payload: Extract<CommandPayload, { kind: "sendAttachment" }>): Promise<{ message: Message }>;
+  send(conversationId: ConversationId, payload: Extract<CommandPayload, { kind: "sendAttachment" }>): Promise<{ message: Message }>;
 }
 export interface StoredAttachment { storageId: GenericId<"_storage">; size: number }
 
-export async function uploadAndSendAttachmentVia(deps: AttachmentUploadDeps, chatGuid: string, attachment: AttachmentUpload): Promise<Message> {
+export async function uploadAndSendAttachmentVia(deps: AttachmentUploadDeps, conversationId: ConversationId, attachment: AttachmentUpload): Promise<Message> {
   const storageId = attachment.storageId ?? (await storeAttachmentVia(deps, attachment as AttachmentFile)).storageId;
-  const sent = await deps.send(chatGuid, {
+  const sent = await deps.send(conversationId, {
     kind: "sendAttachment", storageId, filename: attachment.filename, mimeType: attachment.mimeType,
     ...(attachment.caption !== undefined ? { caption: attachment.caption } : {}), isAudioMessage: attachment.isAudioMessage,
   });
@@ -64,8 +64,8 @@ async function productionDeps(): Promise<StoreDeps> {
   };
 }
 
-export async function uploadAndSendAttachment(chatGuid: string, attachment: AttachmentUpload): Promise<Message> {
-  return uploadAndSendAttachmentVia({ ...await productionDeps(), send: (chat, payload) => runCommand(chat, payload) }, chatGuid, attachment);
+export async function uploadAndSendAttachment(conversationId: ConversationId, attachment: AttachmentUpload): Promise<Message> {
+  return uploadAndSendAttachmentVia({ ...await productionDeps(), send: (chat, payload) => runCommand(chat, payload) }, conversationId, attachment);
 }
 
 export async function storeAttachment(attachment: AttachmentFile): Promise<StoredAttachment> {

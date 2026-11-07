@@ -1,14 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { ConversationId } from "@shared/types";
 
 /**
- * Per-chat draft text. Kept in memory for instant read/write and mirrored to
+ * Per-conversation draft text. Kept in memory for instant read/write and mirrored to
  * AsyncStorage so drafts survive a reload.
  */
-const memory = new Map<string, string>();
+const memory = new Map<ConversationId, string>();
 let hydration: Promise<void> | undefined;
-const touched = new Set<string>();
-const listeners = new Set<(chatGuid: string, text: string) => void>();
-const KEY = "imsg.drafts.v1";
+const touched = new Set<ConversationId>();
+const listeners = new Set<(conversationId: ConversationId, text: string) => void>();
+// v1 was keyed by chat GUID and has been imported into Convex drafts.
+const KEY = "imsg.drafts.v2";
 
 export function hydrateDrafts(): Promise<void> {
   return hydration ??= (async () => {
@@ -16,8 +18,9 @@ export function hydrateDrafts(): Promise<void> {
       const raw = await AsyncStorage.getItem(KEY);
       const stored: unknown = raw ? JSON.parse(raw) : null;
       if (stored && typeof stored === "object") {
-        for (const [guid, text] of Object.entries(stored)) {
-          if (typeof text === "string" && !touched.has(guid)) memory.set(guid, text);
+        for (const [id, text] of Object.entries(stored)) {
+          const conversationId = id as ConversationId;
+          if (typeof text === "string" && !touched.has(conversationId)) memory.set(conversationId, text);
         }
       }
     } catch {
@@ -26,8 +29,8 @@ export function hydrateDrafts(): Promise<void> {
   })();
 }
 
-export function getDraft(chatGuid: string): string {
-  return memory.get(chatGuid) ?? "";
+export function getDraft(conversationId: ConversationId): string {
+  return memory.get(conversationId) ?? "";
 }
 
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -38,31 +41,15 @@ function scheduleFlush(): void {
   }, 400);
 }
 
-export function setDraft(chatGuid: string, text: string, source: "local" | "remote" = "local"): void {
-  touched.add(chatGuid);
-  if (text.trim()) memory.set(chatGuid, text);
-  else memory.delete(chatGuid);
+export function setDraft(conversationId: ConversationId, text: string, source: "local" | "remote" = "local"): void {
+  touched.add(conversationId);
+  if (text.trim()) memory.set(conversationId, text);
+  else memory.delete(conversationId);
   scheduleFlush();
-  if (source === "local") for (const listener of listeners) listener(chatGuid, text);
+  if (source === "local") for (const listener of listeners) listener(conversationId, text);
 }
 
-export function subscribeDrafts(listener: (chatGuid: string, text: string) => void): () => void {
+export function subscribeDrafts(listener: (conversationId: ConversationId, text: string) => void): () => void {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
-}
-
-let upload: Promise<void> | undefined;
-export function uploadLocalDrafts(write: (chatGuid: string, text: string) => Promise<void>): Promise<void> {
-  return upload ??= (async () => {
-    await hydrateDrafts();
-    if (await AsyncStorage.getItem(`${KEY}.convex-uploaded`)) return;
-    // ponytail: import at most 50 drafts, paginate if a larger local backlog matters.
-    for (const [guid, text] of [...memory].filter(([, text]) => text.trim()).slice(0, 50)) {
-      await write(guid, text);
-    }
-    await AsyncStorage.setItem(`${KEY}.convex-uploaded`, "1");
-  })().catch((error: unknown) => {
-    upload = undefined;
-    throw error;
-  });
 }

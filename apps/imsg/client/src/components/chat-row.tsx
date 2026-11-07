@@ -184,7 +184,7 @@ function ChatRowInner({
       node.removeEventListener("focusin", focusIn);
       node.removeEventListener("focusout", focusOut);
     };
-  }, [chat.guid, contextRef]);
+  }, [chat.conversationId, contextRef]);
 
   // The row buzzes once as a phone swipe arms; dragging back under the threshold disarms.
   const offset = useSharedValue(0);
@@ -220,7 +220,7 @@ function ChatRowInner({
       aria-label={[chat.displayName, chat.flags.unread || chat.unreadCount > 0 ? "unread" : null, chat.agent ? AGENT_ATTENTION[chat.agent.attention].spoken : null, ...spoken].filter(Boolean).join(", ")}
       aria-selected={selected}
       onPress={() => onOpen(chat)}
-      onPressIn={() => markOpenStart(chat.guid)}
+      onPressIn={() => markOpenStart(chat.conversationId)}
       onLongPress={() => openMenu(chat)}
       style={({ pressed }) => [
         styles.row,

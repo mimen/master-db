@@ -1,4 +1,5 @@
 import { afterAll, expect, mock, test } from "bun:test";
+import type { ConversationId } from "@shared/types";
 
 if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
   test("avatars use Convex photos and render initials on a missing or failed photo", async () => {
@@ -41,7 +42,10 @@ if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
   }));
   mock.module("@/hooks/use-theme", () => ({ useTheme: () => ({ avatar: ["#ECECEE", "#E6E6E9"], avatarText: "#3C3C42" }) }));
   let groupPhotoUrl: string | null = null;
-  mock.module("convex/react", () => ({ useQuery: () => ({ groupPhotoUrl }), optimisticallyUpdateValueInPaginatedQuery: () => undefined }));
+  const conversations: string[] = [];
+  mock.module("@/hooks/use-chat-directory", () => ({
+    useConversation: (conversationId: string) => { conversations.push(conversationId); return { groupPhotoUrl }; },
+  }));
   const { PersonAvatar, GroupPhotoAvatar, avatarSlot } = await import("./avatar");
 
   test("a contact keeps one ramp slot, and the slot stays inside the ramp", () => {
@@ -82,7 +86,7 @@ if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
     const container = document.getElementById("root");
     if (!container) throw new Error("Missing test root");
     const root = createRoot(container);
-    const render = () => act(async () => { root.render(createElement(GroupPhotoAvatar, { guid: "group", size: 40, hasPhoto: true })); });
+    const render = () => act(async () => { root.render(createElement(GroupPhotoAvatar, { conversationId: "group" as ConversationId, size: 40 })); });
     try {
       await render();
       expect(container.querySelector("img")).toBeNull();
@@ -94,6 +98,7 @@ if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
       groupPhotoUrl = "https://convex.test/group-2";
       await render();
       expect(container.querySelector("img")?.src).toBe(groupPhotoUrl);
+      expect(new Set(conversations)).toEqual(new Set(["group"]));
     } finally { await act(async () => root.unmount()); }
   });
 }

@@ -11,22 +11,22 @@ import { aiApi, shelfSuggestions } from "@/lib/ai-api";
 import { calendarTemplateUrl, eventShelfLabel } from "@/lib/calendar-link";
 import { openExternalUrl } from "@/lib/external-link";
 import { fillComposer } from "@/lib/composer-fill";
-import { commaApi } from "@/lib/convex-api";
+import { useConversation } from "@/hooks/use-chat-directory";
 import { useTheme } from "@/hooks/use-theme";
 import { useSuggestionMode, useSuggestionModel } from "@/lib/settings";
 import { useActionSheet } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
 import { alternateIndexForKey, suggestionSlots, type SuggestionSlots } from "@/lib/suggestion-slots";
 import { TAPBACK_EMOJI } from "./bubble";
-import type { EventSuggestion, ReplySuggestion, ReplySuggestions, SuggestionModel } from "@shared/types";
+import type { ConversationId, EventSuggestion, ReplySuggestion, ReplySuggestions, SuggestionModel } from "@shared/types";
 
 /**
  * Precomputed suggestions for this chat when they answer its current last
  * message. `undefined` while Convex is still answering, `null` to fall back to
  * the on-demand fetch (nothing precomputed or a stale anchor).
  */
-function usePrecomputedSuggestions(chatGuid: string, model: SuggestionModel): ReplySuggestions | null | undefined {
-  const row = useQuery(aiApi.getSuggestions, { chatGuid, model });
+function usePrecomputedSuggestions(conversationId: ConversationId, model: SuggestionModel): ReplySuggestions | null | undefined {
+  const row = useQuery(aiApi.getSuggestions, { conversationId, model });
   return useMemo(() => shelfSuggestions(row), [row]);
 }
 
@@ -53,7 +53,7 @@ export interface ReplySuggestionsState {
 const SKELETON_DELAY_MS = 600;
 
 export function useReplySuggestions(
-  chatGuid: string,
+  conversationId: ConversationId,
   { enabled, awaitingReply, reactionSuggestions, reactionPreview, pend }: SuggestionSource,
 ): ReplySuggestionsState {
   const mode = useSuggestionMode();
@@ -66,7 +66,7 @@ export function useReplySuggestions(
   const [failed, setFailed] = useState(false);
   const [resolved, setResolved] = useState(false);
   const activeRequest = useRef(0);
-  const conversation = useQuery(commaApi.resolveChat, { chatGuid });
+  const conversation = useConversation(conversationId);
   const anchorGuid = conversation?.lastMessage?.guid;
   const currentAnchor = useRef(anchorGuid);
   currentAnchor.current = anchorGuid;
@@ -85,7 +85,7 @@ export function useReplySuggestions(
       setLoading(true);
       setFailed(false);
       try {
-        const next = await api.aiSuggestions(chatGuid, selectedModel, refresh);
+        const next = await api.aiSuggestions(conversationId, selectedModel, refresh);
         if (activeRequest.current !== requestId) return;
         setResult({ ...next, stale: next.stale || currentAnchor.current !== startedAtAnchor });
         setResolved(true);
@@ -95,12 +95,12 @@ export function useReplySuggestions(
         if (activeRequest.current === requestId) setLoading(false);
       }
     },
-    [chatGuid, selectedModel],
+    [conversationId, selectedModel],
   );
 
   // The bridge precomputes suggestions for the newest inbound message, so a fresh one renders
   // instantly instead of after a model call.
-  const precomputed = usePrecomputedSuggestions(chatGuid, selectedModel);
+  const precomputed = usePrecomputedSuggestions(conversationId, selectedModel);
 
   useEffect(() => {
     activeRequest.current++;
@@ -109,7 +109,7 @@ export function useReplySuggestions(
     setLoading(false);
     setResolved(false);
     setFailed(false);
-  }, [chatGuid, enabled, awaitingReply, mode, selectedModel]);
+  }, [conversationId, enabled, awaitingReply, mode, selectedModel]);
 
   useEffect(() => {
     if (!enabled || !awaitingReply || mode !== "auto" || !anchorGuid || precomputed === undefined) return;
@@ -127,7 +127,7 @@ export function useReplySuggestions(
     } else {
       void fetchSuggestions(false);
     }
-  }, [chatGuid, enabled, awaitingReply, mode, selectedModel, anchorGuid, precomputed, fetchSuggestions]);
+  }, [conversationId, enabled, awaitingReply, mode, selectedModel, anchorGuid, precomputed, fetchSuggestions]);
 
   useEffect(() => {
     const request = activeRequest;
@@ -147,13 +147,13 @@ export function useReplySuggestions(
         label: `React ${emoji}`,
         onPress: () => {
           const rollback = pend?.(suggestion.targetMessageGuid!, { kind: "react", type: suggestion.reaction!, remove: false });
-          void runCommand(chatGuid, {
+          void runCommand(conversationId, {
             kind: "react", messageGuid: suggestion.targetMessageGuid!, remove: false,
             reaction: suggestion.reaction!,
             partIndex: suggestion.targetPartIndex ?? 0,
             suggested: true,
           }).then(() => {
-            void api.recordSuggestionFeedback(chatGuid, {
+            void api.recordSuggestionFeedback(conversationId, {
               suggestion,
               selectedModel: from.selectedModel,
               servedModel: from.servedModel,

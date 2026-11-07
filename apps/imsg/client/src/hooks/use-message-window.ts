@@ -1,4 +1,4 @@
-import type { Message } from "@shared/types";
+import type { ConversationId, Message } from "@shared/types";
 import { useConvex, useQuery } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -9,12 +9,12 @@ import { messageWindow, type MessageWindowArgs } from "@/lib/history-api";
 import { mergeWindow, reconcileWindow, settleTemp, upsertMessage } from "@/lib/message-window";
 import { afterPaint, markOpenRendered, markOpenStart } from "@/lib/open-timing";
 
-export function useMessageWindow(conversationId: string | null, chatGuid: string | null, target: JumpTarget | null): UseMessagesResult {
+export function useMessageWindow(conversationId: ConversationId | null, target: JumpTarget | null): UseMessagesResult {
   const convexClient = useConvex();
   const around = target?.dateCreated;
   const targetGuid = target?.guid;
   const batch = useQuery(messageWindow, conversationId && around !== undefined
-    ? { conversationId: conversationId as MessageWindowArgs["conversationId"], around } : "skip");
+    ? { conversationId, around } : "skip");
   const [messages, setMessages] = useState<Message[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [hasNewer, setHasNewer] = useState(false);
@@ -36,17 +36,17 @@ export function useMessageWindow(conversationId: string | null, chatGuid: string
     setMessages([]);
     setHasMore(false);
     setHasNewer(false);
-    if (chatGuid) markOpenStart(chatGuid);
+    if (conversationId) markOpenStart(conversationId);
     const subscriptions = pageSubscriptions.current;
     return () => {
       generation.current++;
       for (const unsubscribe of subscriptions.values()) unsubscribe();
       subscriptions.clear();
     };
-  }, [conversationId, chatGuid, around, targetGuid]);
+  }, [conversationId, around, targetGuid]);
 
   useEffect(() => {
-    if (!batch || !chatGuid || around === undefined) return;
+    if (!batch || !conversationId || around === undefined) return;
     const remote = batch.map(messageToMessage);
     const fetched = new Set(remote.map((message) => message.guid));
     const removed = new Set((previousBatch.current ?? []).filter((message) => !fetched.has(message.guid)).map((message) => message.guid));
@@ -56,8 +56,8 @@ export function useMessageWindow(conversationId: string | null, chatGuid: string
     previousBatch.current = remote;
     if (!loadedOlder.current) setHasMore(remote.filter((message) => message.dateCreated <= around).length >= 40);
     if (!loadedNewer.current) setHasNewer(remote.filter((message) => message.dateCreated > around).length >= 40);
-    afterPaint(() => markOpenRendered(chatGuid, true));
-  }, [batch, chatGuid, around, targetGuid]);
+    afterPaint(() => markOpenRendered(conversationId, true));
+  }, [batch, conversationId, around, targetGuid]);
 
   const load = useCallback((direction: "before" | "after") => {
     const latch = direction === "before" ? pagingOlder : pagingNewer;

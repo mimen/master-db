@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { ConversationId } from "./types";
 import {
   addressesMatch,
   disambiguators,
@@ -75,7 +76,7 @@ test("matchesAnyAddress checks a candidate against a whole list", () => {
 
 describe("disambiguators", () => {
   const dm = (guid: string, displayName: string, address: string) =>
-    ({ guid, displayName, isGroup: false, participants: [{ address, name: displayName }] });
+    ({ conversationId: `c-${guid}` as ConversationId, imessage: { chatGuid: guid }, displayName, isGroup: false, participants: [{ address, name: displayName }] });
   test("labels only DMs whose display name repeats, with each one's own handle", () => {
     const chats = [
       dm("iMessage;-;+19259976370", "Sprout Imen", "+19259976370"),
@@ -83,15 +84,15 @@ describe("disambiguators", () => {
       dm("iMessage;-;miladmaaan@gmail.com", "Sprout Imen", "miladmaaan@gmail.com"),
       dm("iMessage;-;+16195550101", "Alex Rivera", "+16195550101"),
     ];
-    expect(disambiguators(chats)).toEqual(new Map([
-      ["iMessage;-;+19259976370", "(925) 997-6370"],
-      ["SMS;-;+19253759404", "(925) 375-9404"],
-      ["iMessage;-;miladmaaan@gmail.com", "miladmaaan@gmail.com"],
+    expect(disambiguators(chats)).toEqual(new Map<ConversationId, string>([
+      ["c-iMessage;-;+19259976370" as ConversationId, "(925) 997-6370"],
+      ["c-SMS;-;+19253759404" as ConversationId, "(925) 375-9404"],
+      ["c-iMessage;-;miladmaaan@gmail.com" as ConversationId, "miladmaaan@gmail.com"],
     ]));
   });
 
   test("leaves groups alone, and ignores a name that repeats only across a group and a DM", () => {
-    const group = { guid: "iMessage;+;crew", displayName: "Alex Rivera", isGroup: true, participants: [] };
+    const group = { conversationId: "c-crew" as ConversationId, imessage: { chatGuid: "iMessage;+;crew" }, displayName: "Alex Rivera", isGroup: true, participants: [] };
     expect(disambiguators([group, dm("iMessage;-;+16195550101", "Alex Rivera", "+16195550101")])).toEqual(new Map());
   });
 });

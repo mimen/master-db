@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, ConversationId } from "@shared/types";
 import { bridgeSnapshot, readChatSnapshot, writeChatSnapshot, SNAPSHOT_MAX } from "./chat-snapshot";
 
 function memory(): Pick<Storage, "getItem" | "setItem"> {
@@ -8,7 +8,7 @@ function memory(): Pick<Storage, "getItem" | "setItem"> {
 }
 
 const chat = (i: number): ChatSummary => ({
-  guid: `iMessage;-;+1555000${String(i).padStart(4, "0")}`, displayName: `Person ${i}`, isGroup: false, known: true,
+  conversationId: `conv-${i}` as ConversationId, imessage: { chatGuid: `iMessage;-;+1555000${String(i).padStart(4, "0")}` }, displayName: `Person ${i}`, isGroup: false, known: true,
   isSpam: false, participants: [{ address: `+1555000${i}`, name: `Person ${i}` }], unreadCount: 0,
   lastMessage: { guid: `m${i}`, text: "hi", dateCreated: 1000 - i, isFromMe: false, senderName: null, hasAttachments: false },
   flags: { unresponded: true, waiting: false, unread: false, mutedUnresponded: false, pinned: false },
@@ -49,7 +49,7 @@ describe("bridgeSnapshot", () => {
   test("live data wins for a conversation in both", () => {
     const settled = { ...chat(1), flags: { ...chat(1).flags, unresponded: false } };
     const bridged = bridgeSnapshot([settled], [chat(1), chat(2)]);
-    expect(bridged.filter((c) => c.guid === chat(1).guid)).toEqual([settled]);
+    expect(bridged.filter((c) => c.conversationId === chat(1).conversationId)).toEqual([settled]);
   });
 
   test("a snapshot row newer than the live page's oldest row is stale and dropped", () => {

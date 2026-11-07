@@ -2,7 +2,7 @@ import { runCommand } from "@/lib/convex-commands";
 import { requestSavedView } from "@/lib/palette/saved-views";
 import { messagingCommandError } from "@/lib/messaging-api";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import type { ChatSummary, Contact, Message, StateFilter, TypeFilter } from "@shared/types";
+import type { ChatSummary, Contact, StateFilter, TypeFilter } from "@shared/types";
 import { useQuery } from "convex/react";
 import { router } from "expo-router";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
@@ -12,7 +12,7 @@ import { Springs } from "@/constants/springs";
 
 import { useAirtableSearch } from "@/hooks/use-airtable-search";
 import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
-import { api } from "@/lib/api";
+import { api, type SearchHit } from "@/lib/api";
 import { formatReceiptTime } from "@/lib/format";
 import {
   agentChatsSection,
@@ -34,6 +34,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { useToday } from "@/hooks/use-today";
 
 import { addressesMatch, formatAddress } from "@shared/address";
+import { imessageChat } from "@shared/imessage";
 import { composeSections, type ComposeRow } from "@/lib/palette/compose-rows";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { openAgentChat } from "@/hooks/use-agent-toasts";
@@ -129,7 +130,7 @@ function PaletteRoot({
 }) {
   const theme = useTheme();
   const [query, setQuery] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<SearchHit[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [searching, setSearching] = useState(false);
   // One clock per open: ages must not tick while the cursor moves.
@@ -239,7 +240,7 @@ function PaletteRoot({
       case "message": {
         const m = item.message;
         selectChat({
-          guid: m.chatGuid,
+          conversationId: m.conversationId,
           jumpTarget: { guid: m.guid, dateCreated: m.dateCreated },
         });
         return;
@@ -249,7 +250,7 @@ function PaletteRoot({
       case "contact":
         // Opens the person card in the desktop right pane (no back target —
         // the palette jump has no originating conversation).
-        openPersonPane({ address: item.contact.address, name: item.contact.name, backGuid: "" });
+        openPersonPane({ address: item.contact.address, name: item.contact.name });
         return;
     }
   };
@@ -560,7 +561,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
   useEffect(() => reset(), [needle, reset]);
 
   const [only] = recipients;
-  const existing = recipients.length === 1 && only ? directory?.find((chat) => !chat.isGroup && chat.guid.startsWith("iMessage;") &&
+  const existing = recipients.length === 1 && only ? directory?.find((chat) => !chat.isGroup && imessageChat.service(chat.imessage.chatGuid) === "iMessage" &&
     chat.participants.length === 1 && addressesMatch(chat.participants[0]?.address ?? "", only.address)) : undefined;
   const send = (): void => {
     const body = text.trim();
@@ -568,24 +569,24 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
     setSending(true);
     // createChat lands one recipient in their iMessage conversation; when that already exists,
     // the message shows there on the click, as a composer send does.
-    const temp = existing ? tempMessage(existing.guid, body) : null;
+    const temp = existing ? tempMessage(existing, body) : null;
     if (existing && temp) {
-      localSends.upsert(existing.guid, temp);
+      localSends.upsert(existing.conversationId, temp);
       // Mounting the thread costs a long frame; the Sending ring paints first, on the frame of the click.
       afterPaint(() => {
         onClose();
-        selectChat({ guid: existing.guid, name: existing.displayName });
+        selectChat({ conversationId: existing.conversationId, name: existing.displayName });
       });
     }
     runCommand(null, { kind: "createChat", addresses: recipients.map((c) => c.address), text: body })
-      .then(({ chatGuid, message }) => {
-        if (existing && temp && chatGuid === existing.guid) return localSends.settle(chatGuid, temp.guid, message);
-        if (existing && temp) localSends.retain(existing.guid, (m) => m.guid !== temp.guid);
+      .then(({ conversationId, message }) => {
+        if (existing && temp && conversationId === existing.conversationId) return localSends.settle(conversationId, temp.guid, message);
+        if (existing && temp) localSends.retain(existing.conversationId, (m) => m.guid !== temp.guid);
         onClose();
-        selectChat({ guid: chatGuid });
+        if (conversationId) selectChat({ conversationId });
       })
       .catch((e: unknown) => {
-        if (existing && temp) localSends.settle(existing.guid, temp.guid, failedSend(temp));
+        if (existing && temp) localSends.settle(existing.conversationId, temp.guid, failedSend(temp));
         const detail =
           e instanceof Error ? /"error"\s*:\s*"([^"]+)"/.exec(e.message)?.[1] : undefined;
         showToast(messagingCommandError(e, detail ? `Couldn't start: ${detail.slice(0, 120)}` : e instanceof Error ? `Couldn't start: ${e.message.slice(0, 120)}` : "Couldn't start the conversation"));

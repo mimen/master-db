@@ -5,6 +5,7 @@ import type { Config } from "../../server/config";
 import { OverlayDb } from "../../server/db";
 import type { SuggestionFeedbackRequest } from "../../shared/types";
 import { FixtureAi } from "./ai";
+import { fixtureConversationId } from "../../shared/fixture-ids";
 import { registerConvexFixture } from "./convex";
 import { FixtureBlueBubbles } from "./fake-bluebubbles";
 import { CHAT_GUIDS, FIXTURE_NOW, FixtureIdentity, fixtureSeed } from "./world";
@@ -52,11 +53,11 @@ async function call<T>(name: string, args: Record<string, unknown> = {}): Promis
   return response.json() as Promise<T>;
 }
 async function command(payload: unknown, clientKey: string, global = false) {
-  const commandId = await call<string>("comma/outbox:enqueue", { clientKey, payload, ...(!global ? { conversationId: CHAT_GUIDS.needs } : {}) });
+  const commandId = await call<string>("comma/outbox:enqueue", { clientKey, payload, ...(!global ? { conversationId: fixtureConversationId(CHAT_GUIDS.needs) } : {}) });
   return call<typeof commandReceipt.type>("comma/outbox:getCommand", { commandId });
 }
 
-const cache = (model: "opus" | "terra") => call<typeof suggestionDoc.type | null>("comma/suggestions:getSuggestions", { chatGuid: CHAT_GUIDS.needs, model });
+const cache = (model: "opus" | "terra") => call<typeof suggestionDoc.type | null>("comma/suggestions:getSuggestions", { conversationId: fixtureConversationId(CHAT_GUIDS.needs), model });
 
 test("fixture supplies model-specific shelves, command receipts, refresh, capabilities, and identity", async () => {
   expect(await call("comma/suggestions:aiStatus")).toMatchObject({ suggestions: true });

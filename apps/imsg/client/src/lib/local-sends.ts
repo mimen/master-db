@@ -1,36 +1,36 @@
 import { useSyncExternalStore } from "react";
 import type { MentionAnnotation } from "@shared/mentions";
-import type { Message } from "@shared/types";
-import { chatIsSMS } from "./chat-service";
+import { conversationService } from "@shared/imessage";
+import type { ChatSummary, ConversationId, Message } from "@shared/types";
 import { settleTemp, upsertMessage } from "./message-window";
 
 /**
- * This session's own sends per chat, shown in the thread until the mirror owns them. The store
+ * This session's own sends per conversation, shown in the thread until the mirror owns them. The store
  * outlives any one thread, so the forward picker and the palette can put a bubble in a chat on
  * the frame of the click, before that chat's thread has mounted.
  */
-let sends: ReadonlyMap<string, readonly Message[]> = new Map();
+let sends: ReadonlyMap<ConversationId, readonly Message[]> = new Map();
 const listeners = new Set<() => void>();
 const EMPTY: readonly Message[] = [];
 
-function update(chatGuid: string, change: (current: readonly Message[]) => readonly Message[]): void {
-  const current = sends.get(chatGuid) ?? EMPTY;
+function update(conversationId: ConversationId, change: (current: readonly Message[]) => readonly Message[]): void {
+  const current = sends.get(conversationId) ?? EMPTY;
   const next = change(current);
   if (next === current) return;
   const copy = new Map(sends);
-  if (next.length === 0) copy.delete(chatGuid);
-  else copy.set(chatGuid, next);
+  if (next.length === 0) copy.delete(conversationId);
+  else copy.set(conversationId, next);
   sends = copy;
   for (const listener of listeners) listener();
 }
 
 export const localSends = {
-  read: (chatGuid: string | null): readonly Message[] => (chatGuid ? sends.get(chatGuid) : undefined) ?? EMPTY,
-  upsert: (chatGuid: string, message: Message) => update(chatGuid, (current) => upsertMessage([...current], message)),
-  settle: (chatGuid: string, tempGuid: string, message: Message) => update(chatGuid, (current) => settleTemp([...current], tempGuid, message)),
+  read: (conversationId: ConversationId | null): readonly Message[] => (conversationId ? sends.get(conversationId) : undefined) ?? EMPTY,
+  upsert: (conversationId: ConversationId, message: Message) => update(conversationId, (current) => upsertMessage([...current], message)),
+  settle: (conversationId: ConversationId, tempGuid: string, message: Message) => update(conversationId, (current) => settleTemp([...current], tempGuid, message)),
   /** Drops the sends `keep` rejects. */
-  retain: (chatGuid: string, keep: (message: Message) => boolean) =>
-    update(chatGuid, (current) => current.every(keep) ? current : current.filter(keep)),
+  retain: (conversationId: ConversationId, keep: (message: Message) => boolean) =>
+    update(conversationId, (current) => current.every(keep) ? current : current.filter(keep)),
 };
 
 function subscribe(listener: () => void): () => void {
@@ -38,8 +38,8 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function useLocalSends(chatGuid: string | null): readonly Message[] {
-  const read = () => localSends.read(chatGuid);
+export function useLocalSends(conversationId: ConversationId | null): readonly Message[] {
+  const read = () => localSends.read(conversationId);
   return useSyncExternalStore(subscribe, read, read);
 }
 
@@ -57,7 +57,7 @@ export function failedSend(temp: Message): Message {
 
 /** An outgoing text message drawn before the send is queued; its guid doubles as the outbox clientKey. */
 export function tempMessage(
-  chatGuid: string,
+  chat: Pick<ChatSummary, "imessage">,
   text: string,
   replyTo: Message | null = null,
   mentions: readonly MentionAnnotation[] = [],
@@ -66,13 +66,13 @@ export function tempMessage(
   return {
     guid,
     clientKey: guid,
-    chatGuid,
+    chatGuid: chat.imessage.chatGuid,
     text,
     dateCreated: Date.now(),
     dateRead: null,
     dateDelivered: null,
     isFromMe: true,
-    service: chatIsSMS(chatGuid) ? "SMS" : "iMessage",
+    service: conversationService(chat),
     sender: null,
     attachments: [],
     mentions: [...mentions],

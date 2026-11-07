@@ -3,11 +3,10 @@ import { Image } from "expo-image";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { StyleSheet, Text, View } from "react-native";
 import { avatarUrl, groupPhotoUrl } from "@/lib/api";
-import { useQuery } from "convex/react";
-import { commaApi } from "@/lib/convex-api";
 import { initials } from "@/lib/format";
 import { useWhoIs, type Person } from "@/lib/identity";
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, ConversationId } from "@shared/types";
+import { useConversation } from "@/hooks/use-chat-directory";
 import { useTheme } from "@/hooks/use-theme";
 
 
@@ -120,7 +119,7 @@ export function ChatAvatar({ chat, size }: { chat: ChatSummary; size: number }) 
           style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
           contentFit="cover"
           transition={80}
-          recyclingKey={chat.guid}
+          recyclingKey={chat.conversationId}
           cachePolicy="memory-disk"
         />
       ) : null}
@@ -171,23 +170,20 @@ export function GroupAvatarStack({ chat, size }: { chat: ChatSummary; size: numb
 }
 
 /**
- * Group avatar for call sites that only know a chat guid — no participant
- * list to build ChatAvatar's stacked-circle art from (e.g. the thread
- * header, which is fed by route params). Falls back to a people glyph
- * behind the cached group photo.
+ * Group avatar for call sites that know only the conversation, before its
+ * participants load. Falls back to a people glyph behind the cached group photo.
  */
 export function GroupPhotoAvatar({
-  guid,
+  conversationId,
   size,
   iconSize,
 }: {
-  guid: string;
+  conversationId: ConversationId;
   size: number;
   iconSize?: number;
-  hasPhoto?: boolean;
 }) {
   const theme = useTheme();
-  const conversation = useQuery(commaApi.resolveChat, { chatGuid: guid });
+  const conversation = useConversation(conversationId);
   const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
   const uri = conversation ? groupPhotoUrl(conversation) : null;
   return (
@@ -205,7 +201,7 @@ export function GroupPhotoAvatar({
           style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
           contentFit="cover"
           transition={80}
-          recyclingKey={guid}
+          recyclingKey={conversationId}
           cachePolicy="memory-disk"
         />
       ) : null}

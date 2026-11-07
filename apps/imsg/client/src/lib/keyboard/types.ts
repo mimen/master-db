@@ -1,3 +1,5 @@
+import type { ConversationId } from "@shared/types";
+
 /**
  * Keyboard system types — see docs/keyboard-design.md.
  * Commands are semantic (callable from keyboard, palette, buttons, or the
@@ -86,7 +88,7 @@ export interface ListAdapter {
    * the Esc ladder consumes the keypress in that case. Optional so in-flight
    * pane work isn't broken; wired by the search-mode redesign. */
   clearSearch(): boolean;
-  /** After an action removes `guid` from the current lens (settle), glide onto
+  /** After an action removes a conversation from the current lens (settle), glide onto
    * its neighbor (next, else previous) instead of leaving the cursor dangling. */
-  selectNeighborOf(guid: string): void;
+  selectNeighborOf(conversationId: ConversationId): void;
 }

@@ -1,4 +1,4 @@
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, ConversationId } from "@shared/types";
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -23,10 +23,12 @@ import type { TodayPlan } from "./today";
 
 const NOW = new Date(2026, 9, 4, 15, 0).getTime();
 const HOUR = 3_600_000;
+const cid = (id: string) => id as ConversationId;
 
 function makeChat(overrides: Partial<ChatSummary> = {}): ChatSummary {
   return {
-    guid: "chat-1",
+    conversationId: cid("chat-1"),
+    imessage: { chatGuid: "iMessage;-;chat-1" },
     displayName: "Chat 1",
     isGroup: false,
     known: true,
@@ -77,24 +79,24 @@ describe("desktopInboxTitle", () => {
 describe("deriveInboxModel", () => {
   test("the default All view lists every conversation, pinned first", () => {
     const chats = Array.from({ length: 14 }, (_, i) =>
-      makeChat({ guid: `unread-${i}`, firstUnreadAt: i, flags: { ...makeChat().flags, unread: true } }),
+      makeChat({ conversationId: cid(`unread-${i}`), firstUnreadAt: i, flags: { ...makeChat().flags, unread: true } }),
     );
-    const pinned = makeChat({ guid: "pinned", flags: { ...makeChat().flags, pinned: true } });
+    const pinned = makeChat({ conversationId: cid("pinned"), flags: { ...makeChat().flags, pinned: true } });
 
     const model = deriveInboxModel([...chats, pinned], DEFAULT_INBOX_FILTERS, "  ");
 
-    expect(model.listChats.map((c) => c.guid)).toEqual([
+    expect(model.listChats.map((c) => c.conversationId as string)).toEqual([
       "pinned",
-      ...chats.map((c) => c.guid),
+      ...chats.map((c) => c.conversationId as string),
     ]);
     // Index 0 is the age section row, so keyboard indices point past it.
     expect(model.navigationEntries.map((e) => e.index)).toEqual(model.listChats.map((_, i) => i + 1));
       });
 
   test("hides unknown and spam by default, reveals them under Unknown and Everyone", () => {
-    const known = makeChat({ guid: "known" });
-    const unknown = makeChat({ guid: "unknown", known: false });
-    const spam = makeChat({ guid: "spam", isSpam: true });
+    const known = makeChat({ conversationId: cid("known") });
+    const unknown = makeChat({ conversationId: cid("unknown"), known: false });
+    const spam = makeChat({ conversationId: cid("spam"), isSpam: true });
 
     expect(deriveInboxModel([known, unknown, spam], DEFAULT_INBOX_FILTERS, "").listChats).toEqual([
       known,
@@ -108,29 +110,29 @@ describe("deriveInboxModel", () => {
   });
 
   test("search lists name and number matches before conversations that matched only on a message", () => {
-    const mentions = makeChat({ guid: "mentions", displayName: "Shonna Gillis", lastMessage: { ...makeChat().lastMessage!, dateCreated: 3 } });
-    const deep = makeChat({ guid: "deep", displayName: "Taylah Luna", lastMessage: { ...makeChat().lastMessage!, dateCreated: 2 } });
-    const nick = makeChat({ guid: "nick", displayName: "Nick Chase", lastMessage: { ...makeChat().lastMessage!, dateCreated: 1 } });
-    const model = deriveInboxModel([mentions, deep, nick], DEFAULT_INBOX_FILTERS, "nick chase", new Set(["mentions", "deep"]));
-    expect(model.rows.map((r) => (r.kind === "section" ? `${r.label}:${r.count}` : r.chat.guid))).toEqual([
+    const mentions = makeChat({ conversationId: cid("mentions"), displayName: "Shonna Gillis", lastMessage: { ...makeChat().lastMessage!, dateCreated: 3 } });
+    const deep = makeChat({ conversationId: cid("deep"), displayName: "Taylah Luna", lastMessage: { ...makeChat().lastMessage!, dateCreated: 2 } });
+    const nick = makeChat({ conversationId: cid("nick"), displayName: "Nick Chase", lastMessage: { ...makeChat().lastMessage!, dateCreated: 1 } });
+    const model = deriveInboxModel([mentions, deep, nick], DEFAULT_INBOX_FILTERS, "nick chase", new Set(["mentions", "deep"].map(cid)));
+    expect(model.rows.map((r) => (r.kind === "section" ? `${r.label}:${r.count}` : r.chat.conversationId))).toEqual([
       "Conversations:1", "nick", "Messages:2", "mentions", "deep",
     ]);
   });
 
   test("search supersedes the state/type lenses (matches across everything)", () => {
     const groupUnread = makeChat({
-      guid: "group-unread",
+      conversationId: cid("group-unread"),
       displayName: "Project group",
       isGroup: true,
       flags: { ...makeChat().flags, unread: true },
     });
     const directUnread = makeChat({
-      guid: "direct-unread",
+      conversationId: cid("direct-unread"),
       displayName: "Project direct",
       flags: { ...makeChat().flags, unread: true },
     });
     const groupWaiting = makeChat({
-      guid: "group-waiting",
+      conversationId: cid("group-waiting"),
       displayName: "Project waiting",
       isGroup: true,
       flags: { ...makeChat().flags, waiting: true },
@@ -147,13 +149,13 @@ describe("deriveInboxModel", () => {
   });
 
   test("the settled lens lists only conversations with neither triage flag", () => {
-    const settled = makeChat({ guid: "settled" });
+    const settled = makeChat({ conversationId: cid("settled") });
     const needsReply = makeChat({
-      guid: "needs-reply",
+      conversationId: cid("needs-reply"),
       flags: { ...makeChat().flags, unresponded: true },
     });
-    const waiting = makeChat({ guid: "waiting", flags: { ...makeChat().flags, waiting: true } });
-    const empty = makeChat({ guid: "empty", lastMessage: null });
+    const waiting = makeChat({ conversationId: cid("waiting"), flags: { ...makeChat().flags, waiting: true } });
+    const empty = makeChat({ conversationId: cid("empty"), lastMessage: null });
 
     const model = deriveInboxModel(
       [settled, needsReply, waiting, empty],
@@ -165,7 +167,7 @@ describe("deriveInboxModel", () => {
   });
 
   test("labels the settled lens beside a type lens", () => {
-    const group = makeChat({ guid: "group", isGroup: true });
+    const group = makeChat({ conversationId: cid("group"), isGroup: true });
 
     const model = deriveInboxModel([group], { state: "settled", type: "group" }, "");
 
@@ -174,11 +176,11 @@ describe("deriveInboxModel", () => {
 
   test("keeps pinned conversations first in filtered views", () => {
     const regular = makeChat({
-      guid: "regular",
+      conversationId: cid("regular"),
       flags: { ...makeChat().flags, unread: true },
     });
     const pinned = makeChat({
-      guid: "pinned",
+      conversationId: cid("pinned"),
       flags: { ...makeChat().flags, unread: true, pinned: true },
     });
 
@@ -189,7 +191,7 @@ describe("deriveInboxModel", () => {
 
   test("matches message text searches and labels the results", () => {
     const chat = makeChat({
-      guid: "message-match",
+      conversationId: cid("message-match"),
       displayName: "No name match",
       lastMessage: { ...makeChat().lastMessage!, text: "Need a response about invoices" },
     });
@@ -201,12 +203,12 @@ describe("deriveInboxModel", () => {
 });
 
 const at = (hoursAgo: number) => NOW - hoursAgo * HOUR;
-function chatAt(guid: string, hoursAgo: number, overrides: Partial<ChatSummary> = {}): ChatSummary {
-  return makeChat({ guid, lastMessage: { ...makeChat().lastMessage!, dateCreated: at(hoursAgo) }, ...overrides });
+function chatAt(id: string, hoursAgo: number, overrides: Partial<ChatSummary> = {}): ChatSummary {
+  return makeChat({ conversationId: cid(id), lastMessage: { ...makeChat().lastMessage!, dateCreated: at(hoursAgo) }, ...overrides });
 }
 const ctx = (refinements: Partial<Refinements>, scheduled: string[] = []): RefineContext => ({
   refinements: { ...DEFAULT_REFINEMENTS, ...refinements },
-  scheduled: new Set(scheduled),
+  scheduled: new Set(scheduled.map(cid)),
   now: NOW,
 });
 const needsReply = { ...DEFAULT_INBOX_FILTERS, state: "unresponded" as const };
@@ -215,7 +217,7 @@ const replyFlags = { ...makeChat().flags, unresponded: true };
 describe("groupByAge", () => {
   test("sections Today, This week and Older with counts, skipping empty ones", () => {
     const rows = groupByAge([chatAt("a", 1), chatAt("b", 30), chatAt("c", 50), chatAt("d", 24 * 20)], NOW);
-    expect(rows.map((r) => (r.kind === "section" ? `${r.label}:${r.count}` : r.chat.guid))).toEqual([
+    expect(rows.map((r) => (r.kind === "section" ? `${r.label}:${r.count}` : r.chat.conversationId))).toEqual([
       "Today:1", "a", "This week:2", "b", "c", "Older:1", "d",
     ]);
   });
@@ -224,48 +226,48 @@ describe("groupByAge", () => {
     const pinned = chatAt("pinned", 40, { flags: { ...makeChat().flags, pinned: true } });
     const priority = chatAt("priority", 35, { crm: { priority: 2 } as ChatSummary["crm"] });
     const rows = groupByAge([chatAt("today", 1), chatAt("newer", 30), priority, pinned], NOW);
-    expect(rows.map((r) => (r.kind === "section" ? r.label : r.chat.guid))).toEqual([
+    expect(rows.map((r) => (r.kind === "section" ? r.label : r.chat.conversationId))).toEqual([
       "Today", "today", "This week", "pinned", "priority", "newer",
     ]);
   });
 
   test("oldest first runs Older to Today and oldest to newest inside each group", () => {
     const rows = groupByAge([chatAt("a", 1), chatAt("b", 30), chatAt("c", 50), chatAt("d", 24 * 20)], NOW, true);
-    expect(rows.map((r) => (r.kind === "section" ? r.label : r.chat.guid))).toEqual([
+    expect(rows.map((r) => (r.kind === "section" ? r.label : r.chat.conversationId))).toEqual([
       "Older", "d", "This week", "c", "b", "Today", "a",
     ]);
   });
 });
 
 describe("refinements", () => {
-  const sms = chatAt("SMS;-;+1555", 1, { flags: replyFlags });
-  const imsg = chatAt("iMessage;-;a@b.c", 1, { flags: replyFlags, crm: { priority: 1, tags: ["showcase"], is_favorite: true } });
-  const old = chatAt("iMessage;-;old", 24 * 10, { flags: replyFlags, crm: { priority: 4, tags: ["press"] } });
-  const settled = chatAt("iMessage;-;settled", 2, { conversationId: "conv-s" });
+  const sms = chatAt("sms", 1, { imessage: { chatGuid: "SMS;-;+1555" }, flags: replyFlags });
+  const imsg = chatAt("imsg", 1, { imessage: { chatGuid: "iMessage;-;a@b.c" }, flags: replyFlags, crm: { priority: 1, tags: ["showcase"], is_favorite: true } });
+  const old = chatAt("old", 24 * 10, { imessage: { chatGuid: "iMessage;-;old" }, flags: replyFlags, crm: { priority: 4, tags: ["press"] } });
+  const settled = chatAt("conv-s", 2, { imessage: { chatGuid: "iMessage;-;settled" } });
   const chats = [sms, imsg, old, settled];
   const guids = (r: Partial<Refinements>, scheduled?: string[]) =>
-    deriveInboxModel(chats, needsReply, "", undefined, undefined, ctx(r, scheduled)).listChats.map((c) => c.guid);
+    deriveInboxModel(chats, needsReply, "", undefined, undefined, ctx(r, scheduled)).listChats.map((c) => c.conversationId);
 
   test("service, time, priority and tags narrow the lens", () => {
-    expect(guids({ service: "SMS" })).toEqual([sms.guid]);
-    expect(guids({ service: "iMessage" })).toEqual([imsg.guid, old.guid]);
+    expect(guids({ service: "SMS" })).toEqual([sms.conversationId]);
+    expect(guids({ service: "iMessage" })).toEqual([imsg.conversationId, old.conversationId]);
     // Within an age group the lens order holds: CRM P1 ahead of a newer conversation.
-    expect(guids({ time: "week" })).toEqual([imsg.guid, sms.guid]);
-    expect(guids({ priority: "high" })).toEqual([imsg.guid]);
-    expect(guids({ priority: "low" })).toEqual([old.guid]);
-    expect(guids({ tags: ["press", "showcase"] })).toEqual([imsg.guid, old.guid]);
+    expect(guids({ time: "week" })).toEqual([imsg.conversationId, sms.conversationId]);
+    expect(guids({ priority: "high" })).toEqual([imsg.conversationId]);
+    expect(guids({ priority: "low" })).toEqual([old.conversationId]);
+    expect(guids({ tags: ["press", "showcase"] })).toEqual([imsg.conversationId, old.conversationId]);
   });
 
   test("only-show boxes all have to hold", () => {
-    expect(guids({ only: ["favorites"] })).toEqual([imsg.guid]);
+    expect(guids({ only: ["favorites"] })).toEqual([imsg.conversationId]);
     expect(guids({ only: ["favorites", "pinned"] })).toEqual([]);
   });
 
   test("also-include widens the lens with settled or scheduled conversations", () => {
-    expect(guids({})).not.toContain(settled.guid);
-    expect(guids({ include: ["settled"] })).toContain(settled.guid);
-    expect(guids({ include: ["scheduled"] }, ["conv-s"])).toContain(settled.guid);
-    expect(guids({ include: ["scheduled"] }, [])).not.toContain(settled.guid);
+    expect(guids({})).not.toContain(settled.conversationId);
+    expect(guids({ include: ["settled"] })).toContain(settled.conversationId);
+    expect(guids({ include: ["scheduled"] }, ["conv-s"])).toContain(settled.conversationId);
+    expect(guids({ include: ["scheduled"] }, [])).not.toContain(settled.conversationId);
   });
 
   test("search ignores refinements", () => {
@@ -318,14 +320,14 @@ describe("Drafts lens", () => {
 
   test("lists only drafted conversations, newest draft first, without age sections", () => {
     const chats = [
-      makeChat({ guid: "old-draft", draft: draft(10), lastMessage: { ...makeChat().lastMessage!, dateCreated: NOW } }),
-      makeChat({ guid: "none" }),
-      makeChat({ guid: "new-draft", draft: draft(20, { source: "agent" }) }),
+      makeChat({ conversationId: cid("old-draft"), draft: draft(10), lastMessage: { ...makeChat().lastMessage!, dateCreated: NOW } }),
+      makeChat({ conversationId: cid("none") }),
+      makeChat({ conversationId: cid("new-draft"), draft: draft(20, { source: "agent" }) }),
     ];
     const model = deriveInboxModel(chats, { state: "drafts", type: "all" }, "", undefined, undefined, { refinements: DEFAULT_REFINEMENTS, scheduled: new Set(), now: NOW });
-    expect(model.rows.map((row) => row.kind === "chat" ? row.chat.guid : row.label)).toEqual(["new-draft", "old-draft"]);
+    expect(model.rows.map((row) => row.kind === "chat" ? row.chat.conversationId : row.label)).toEqual(["new-draft", "old-draft"]);
     const oldest = deriveInboxModel(chats, { state: "drafts", type: "all" }, "", undefined, undefined, { refinements: { ...DEFAULT_REFINEMENTS, oldestFirst: true }, scheduled: new Set(), now: NOW });
-    expect(oldest.listChats.map((chat) => chat.guid)).toEqual(["old-draft", "new-draft"]);
+    expect(oldest.listChats.map((chat) => chat.conversationId as string)).toEqual(["old-draft", "new-draft"]);
   });
 
   test("an agent draft previews the note's first non-empty line, a user draft its text", () => {
@@ -344,25 +346,25 @@ describe("Agents lens", () => {
 
   test("groups people by their most urgent chat under Needs you, Failed, Ready, Working, Open, newest activity first", () => {
     const chats = [
-      makeChat({ guid: "open", agent: agent("open", 50) }),
-      makeChat({ guid: "ready-old", agent: agent("ready", 10), lastMessage: { ...makeChat().lastMessage!, dateCreated: NOW } }),
-      makeChat({ guid: "none" }),
-      makeChat({ guid: "working", agent: agent("working", 40) }),
-      makeChat({ guid: "ready-new", agent: agent("ready", 30) }),
-      makeChat({ guid: "failed", agent: agent("failed", 5) }),
-      makeChat({ guid: "asking", agent: agent("needs_you", 1) }),
+      makeChat({ conversationId: cid("open"), agent: agent("open", 50) }),
+      makeChat({ conversationId: cid("ready-old"), agent: agent("ready", 10), lastMessage: { ...makeChat().lastMessage!, dateCreated: NOW } }),
+      makeChat({ conversationId: cid("none") }),
+      makeChat({ conversationId: cid("working"), agent: agent("working", 40) }),
+      makeChat({ conversationId: cid("ready-new"), agent: agent("ready", 30) }),
+      makeChat({ conversationId: cid("failed"), agent: agent("failed", 5) }),
+      makeChat({ conversationId: cid("asking"), agent: agent("needs_you", 1) }),
     ];
     const model = deriveInboxModel(chats, { state: "agents", type: "all" }, "", undefined, undefined, refine);
-    expect(model.rows.map((row) => row.kind === "chat" ? row.chat.guid : `${row.label} ${row.count}`)).toEqual([
+    expect(model.rows.map((row) => row.kind === "chat" ? row.chat.conversationId : `${row.label} ${row.count}`)).toEqual([
       "Needs you 1", "asking", "Failed 1", "failed", "Ready 2", "ready-new", "ready-old", "Working 1", "working", "Open 1", "open",
     ]);
-    expect(model.listChats.map((chat) => chat.guid)).toEqual(["asking", "failed", "ready-new", "ready-old", "working", "open"]);
+    expect(model.listChats.map((chat) => chat.conversationId as string)).toEqual(["asking", "failed", "ready-new", "ready-old", "working", "open"]);
   });
 
   test("search still spans every conversation and groups by match, not attention", () => {
-    const chats = [makeChat({ guid: "riley", displayName: "Riley Chen", agent: agent("ready", 1) }), makeChat({ guid: "rita", displayName: "Rita" })];
+    const chats = [makeChat({ conversationId: cid("riley"), displayName: "Riley Chen", agent: agent("ready", 1) }), makeChat({ conversationId: cid("rita"), displayName: "Rita" })];
     const model = deriveInboxModel(chats, { state: "agents", type: "all" }, "ri", undefined, undefined, refine);
-    expect(model.rows.map((row) => row.kind === "chat" ? row.chat.guid : row.label)).toEqual(["Conversations", "riley", "rita"]);
+    expect(model.rows.map((row) => row.kind === "chat" ? row.chat.conversationId : row.label)).toEqual(["Conversations", "riley", "rita"]);
   });
 
   test("the status line names the state, says Draft ready for a draft, and keeps a working chat to its first thought", () => {
@@ -406,34 +408,34 @@ describe("agentArrivals", () => {
 
 describe("Today lens", () => {
   const refine: RefineContext = { refinements: DEFAULT_REFINEMENTS, scheduled: new Set(), now: NOW };
-  const row = (chat: ChatSummary, rank: number | null) => ({ chat, rank, reason: rank === null ? null : `why ${chat.guid}` });
-  const low = makeChat({ guid: "low", displayName: "Low", flags: { ...makeChat().flags, unresponded: true } });
+  const row = (chat: ChatSummary, rank: number | null) => ({ chat, rank, reason: rank === null ? null : `why ${chat.conversationId}` });
+  const low = makeChat({ conversationId: cid("low"), displayName: "Low", flags: { ...makeChat().flags, unresponded: true } });
   // Pinned and P1 would lead queueOrder; Today keeps the build's ranks instead.
-  const pinned = makeChat({ guid: "pinned", displayName: "Pinned", flags: { ...makeChat().flags, unresponded: true, pinned: true }, crm: { priority: 1 } });
+  const pinned = makeChat({ conversationId: cid("pinned"), displayName: "Pinned", flags: { ...makeChat().flags, unresponded: true, pinned: true }, crm: { priority: 1 } });
   const plan: TodayPlan = {
     mode: "queue", toGo: 2, newSince: 0, settled: 0,
     sections: [
       { key: "group:friday", label: "Friday", detail: "Tonight.", tone: null, foldable: false, rows: [row(low, 1), row(pinned, 2)] },
-      { key: "below", label: "Below the line", detail: "Left out.", tone: null, foldable: true, rows: [row(makeChat({ guid: "folded" }), null)] },
+      { key: "below", label: "Below the line", detail: "Left out.", tone: null, foldable: true, rows: [row(makeChat({ conversationId: cid("folded") }), null)] },
     ],
   };
 
   test("keeps rank order against pins and CRM priority", () => {
     const model = deriveInboxModel([pinned, low], { state: "today", type: "known" }, "", undefined, undefined, refine, { plan, openFolds: new Set() });
-    expect(model.rows.map((r) => (r.kind === "chat" ? `${r.chat.guid}#${r.today?.rank}` : r.label))).toEqual(["Friday", "low#1", "pinned#2", "Below the line"]);
+    expect(model.rows.map((r) => (r.kind === "chat" ? `${r.chat.conversationId}#${r.today?.rank}` : r.label))).toEqual(["Friday", "low#1", "pinned#2", "Below the line"]);
     expect(model.rows[0]).toMatchObject({ detail: "Tonight.", fold: null });
   });
 
   test("a folded section renders its header without its chats, so navigation skips them", () => {
     const closed = deriveInboxModel([pinned, low], { state: "today", type: "known" }, "", undefined, undefined, refine, { plan, openFolds: new Set() });
     expect(closed.rows.at(-1)).toMatchObject({ kind: "section", count: 1, fold: { key: "below", open: false } });
-    expect(closed.navigationEntries.map((e) => e.chat.guid)).toEqual(["low", "pinned"]);
+    expect(closed.navigationEntries.map((e) => e.chat.conversationId as string)).toEqual(["low", "pinned"]);
     const open = deriveInboxModel([pinned, low], { state: "today", type: "known" }, "", undefined, undefined, refine, { plan, openFolds: new Set(["below"]) });
-    expect(open.navigationEntries.map((e) => e.chat.guid)).toEqual(["low", "pinned", "folded"]);
+    expect(open.navigationEntries.map((e) => e.chat.conversationId as string)).toEqual(["low", "pinned", "folded"]);
   });
 
   test("search supersedes the plan", () => {
     const model = deriveInboxModel([pinned, low], { state: "today", type: "known" }, "low", undefined, undefined, refine, { plan, openFolds: new Set() });
-    expect(model.rows.map((r) => (r.kind === "chat" ? r.chat.guid : r.label))).toEqual(["Conversations", "low"]);
+    expect(model.rows.map((r) => (r.kind === "chat" ? r.chat.conversationId : r.label))).toEqual(["Conversations", "low"]);
   });
 });

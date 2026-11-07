@@ -2,6 +2,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "../fixtures/desk";
+import { fixtureConversationId } from "../../shared/fixture-ids";
 import { AGENT_CHAT_GUIDS } from "./world";
 
 const evidence = process.env.VERIFY_IMSG_EVIDENCE!;
@@ -128,9 +129,9 @@ test("agent-list: badges in every lens, agent rows in Needs you, the Agents tab,
   // The runner finishing Taylor's turn, simulated through the fixture's scripted agent.
   await row("Alex Rivera").click();
   const open = await convex<Summary[]>("comma/agent:listAgentChats", {});
-  const taylor = open.find((chat) => chat.conversationId === AGENT_CHAT_GUIDS.working)!;
+  const taylor = open.find((chat) => chat.conversationId === fixtureConversationId(AGENT_CHAT_GUIDS.working))!;
   await convex("comma/agent:ask", {
-    conversationId: AGENT_CHAT_GUIDS.working, chatId: taylor._id, key: "agent-list-finish", text: "wrap up", steer: true, model: "claude-opus-5-5", effort: "high",
+    conversationId: fixtureConversationId(AGENT_CHAT_GUIDS.working), chatId: taylor._id, key: "agent-list-finish", text: "wrap up", steer: true, model: "claude-opus-5-5", effort: "high",
   });
   const toast = page.getByText("Taylor Morgan · agent finished");
   await expect(toast, "a finished chat elsewhere toasts").toBeVisible({ timeout: 10_000 });
@@ -161,9 +162,9 @@ test("agent-list: badges in every lens, agent rows in Needs you, the Agents tab,
   await page.screenshot({ path: shot("09-before-settle"), clip: SIDEBAR });
   await page.keyboard.press("Meta+e");
   await expect(row("Diego Santos"), "⌘E takes Diego out of Needs you").toHaveCount(0);
-  await expect.poll(async () => (await convex<Summary[]>("comma/agent:chatsFor", { conversationId: AGENT_CHAT_GUIDS.needsYou }))
+  await expect.poll(async () => (await convex<Summary[]>("comma/agent:chatsFor", { conversationId: fixtureConversationId(AGENT_CHAT_GUIDS.needsYou) }))
     .map((chat) => chat.settledAt !== undefined)).toEqual([true]);
-  effects.settled = await convex<Summary[]>("comma/agent:chatsFor", { conversationId: AGENT_CHAT_GUIDS.needsYou });
+  effects.settled = await convex<Summary[]>("comma/agent:chatsFor", { conversationId: fixtureConversationId(AGENT_CHAT_GUIDS.needsYou) });
   await page.screenshot({ path: shot("10-settled"), clip: SIDEBAR });
   await lens(/^All/).click();
   await row("Diego Santos").hover();
@@ -171,18 +172,18 @@ test("agent-list: badges in every lens, agent rows in Needs you, the Agents tab,
   await lens(/^Needs you/).click();
   await expect(row("Diego Santos"), "Un-settle brings Diego back with his chat").toBeVisible();
   await expect(row("Diego Santos").getByTestId("agent-badge")).toBeVisible();
-  await expect.poll(async () => (await convex<Summary[]>("comma/agent:chatsFor", { conversationId: AGENT_CHAT_GUIDS.needsYou }))
+  await expect.poll(async () => (await convex<Summary[]>("comma/agent:chatsFor", { conversationId: fixtureConversationId(AGENT_CHAT_GUIDS.needsYou) }))
     .map((chat) => chat.settledAt)).toEqual([undefined]);
-  effects.unsettled = await convex<Summary[]>("comma/agent:chatsFor", { conversationId: AGENT_CHAT_GUIDS.needsYou });
+  effects.unsettled = await convex<Summary[]>("comma/agent:chatsFor", { conversationId: fixtureConversationId(AGENT_CHAT_GUIDS.needsYou) });
   effects.enqueued = enqueued;
   expect(enqueued).toEqual(expect.arrayContaining(["settle", "unsettle"]));
   await page.screenshot({ path: shot("11-unsettled"), clip: SIDEBAR });
   await closePane();
 
   type Chat = Summary & { title: string };
-  const leahChats = () => convex<Chat[]>("comma/agent:chatsFor", { conversationId: AGENT_CHAT_GUIDS.several });
+  const leahChats = () => convex<Chat[]>("comma/agent:chatsFor", { conversationId: fixtureConversationId(AGENT_CHAT_GUIDS.several) });
   const finish = async (chatId: string, key: string) => {
-    await convex("comma/agent:ask", { conversationId: AGENT_CHAT_GUIDS.several, chatId, key, text: "wrap up", steer: true, model: "claude-opus-5-5", effort: "high" });
+    await convex("comma/agent:ask", { conversationId: fixtureConversationId(AGENT_CHAT_GUIDS.several), chatId, key, text: "wrap up", steer: true, model: "claude-opus-5-5", effort: "high" });
     await expect.poll(async () => (await leahChats()).find((chat) => chat._id === chatId)?.state).toBe("idle");
   };
   await lens(/^All/).click();
@@ -200,7 +201,7 @@ test("agent-list: badges in every lens, agent rows in Needs you, the Agents tab,
   await page.screenshot({ path: shot("17-toast-other-chat") });
   await closePane();
 
-  const alex = desk.chats.needs;
+  const alex = fixtureConversationId(desk.chats.needs);
   const alexChats = () => convex<Summary[]>("comma/agent:chatsFor", { conversationId: alex });
   const owesAlex = async () => (await convex<{ flags: { unresponded: boolean } }>("comma/queries:getConversation", { conversationId: alex })).flags.unresponded;
   await row("Alex Rivera").click();

@@ -1,6 +1,6 @@
 import type { ChatSummary } from "@shared/types";
 import { emailMatchKey, formatAddress, matchesAnyAddress, phoneMatchKey } from "@shared/address";
-import { chatIsSMS } from "./chat-service";
+import { conversationService } from "@shared/imessage";
 import type { ContactListRow } from "./identity";
 import type { NameOrder } from "./settings";
 
@@ -149,7 +149,7 @@ export function serviceIndex(chats: readonly ChatSummary[]): ServiceLookup {
     if (!key) continue;
     const at = chat.lastMessage?.dateCreated ?? 0;
     const prior = newest.get(key);
-    if (!prior || at > prior.at) newest.set(key, { at, sms: chatIsSMS(chat.guid) });
+    if (!prior || at > prior.at) newest.set(key, { at, sms: conversationService(chat) === "SMS" });
   }
   return (handle) => {
     const hit = newest.get(phoneMatchKey(handle) || emailMatchKey(handle));

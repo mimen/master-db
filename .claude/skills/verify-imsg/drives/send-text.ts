@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "../fixtures/desk";
+import { fixtureConversationId } from "../../shared/fixture-ids";
 
 const evidence = process.env.VERIFY_IMSG_EVIDENCE!;
 const text = "verify-imsg send-text probe";
@@ -30,7 +31,7 @@ test("send-text: a typed message goes out through the Convex outbox and stays in
   let stored: { guid: string; text: string; isFromMe: boolean } | undefined;
   await expect.poll(async () => {
     const response = await desk.request.post("/__fixture/convex", {
-      data: { name: "comma/queries:listMessages", args: { conversationId: desk.chats.needs, paginationOpts: { numItems: 50, cursor: null } } },
+      data: { name: "comma/queries:listMessages", args: { conversationId: fixtureConversationId(desk.chats.needs), paginationOpts: { numItems: 50, cursor: null } } },
     });
     const { page: rows } = await response.json() as { page: Array<{ guid: string; text: string; isFromMe: boolean }> };
     stored = rows.find((row) => row.text === text);

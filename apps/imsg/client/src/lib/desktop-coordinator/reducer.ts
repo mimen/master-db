@@ -30,12 +30,12 @@ function sameUtility(left: DesktopUtility, right: DesktopUtility): boolean {
   if (left.kind !== right.kind || left.workspace !== right.workspace) return false;
   switch (left.kind) {
     case "chat-info":
-      return right.kind === "chat-info" && left.guid === right.guid;
+      return right.kind === "chat-info" && left.conversationId === right.conversationId;
     case "person":
       return (
         right.kind === "person" &&
         left.target.address === right.target.address &&
-        left.backGuid === right.backGuid
+        left.backConversation === right.backConversation
       );
     case "scheduled":
     case "settings":

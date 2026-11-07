@@ -1,43 +1,37 @@
 import { expect, mock, test } from "bun:test";
+import type { ConversationId } from "@shared/types";
 
 const stored = new Map<string, string>();
 let hydrate: (value: string) => void = () => {};
 const initial = new Promise<string>((resolve) => { hydrate = resolve; });
 mock.module("@react-native-async-storage/async-storage", () => ({
   default: {
-    getItem: async (key: string) => key === "imsg.drafts.v1" ? initial : stored.get(key) ?? null,
+    getItem: async (key: string) => key === "imsg.drafts.v2" ? initial : stored.get(key) ?? null,
     setItem: async (key: string, value: string) => { stored.set(key, value); },
   },
 }));
-const { getDraft, hydrateDrafts, setDraft, subscribeDrafts, uploadLocalDrafts } = await import("./drafts");
+const { getDraft, hydrateDrafts, setDraft, subscribeDrafts } = await import("./drafts");
 
-test("local fallback, remote caching, safe hydration and a bounded one-time cloud import", async () => {
+const id = (value: string) => value as ConversationId;
+
+test("local edits win over hydration, invalid entries are dropped, and remote writes stay silent", async () => {
   const loading = hydrateDrafts();
   const alsoLoading = hydrateDrafts();
   const changes: string[] = [];
-  const unsubscribe = subscribeDrafts((guid, text) => changes.push(`${guid}:${text}`));
-  setDraft("typed", "new edit");
-  setDraft("cleared", "");
+  const unsubscribe = subscribeDrafts((conversationId, text) => changes.push(`${conversationId}:${text}`));
+  setDraft(id("typed"), "new edit");
+  setDraft(id("cleared"), "");
   hydrate(JSON.stringify({ typed: "old", cleared: "old", invalid: 42, disk: "from disk" }));
   await Promise.all([loading, alsoLoading]);
-  expect(getDraft("typed")).toBe("new edit");
-  expect(getDraft("cleared")).toBe("");
-  expect(getDraft("invalid")).toBe("");
-  expect(getDraft("disk")).toBe("from disk");
-  setDraft("remote", "cloud", "remote");
-  expect(getDraft("remote")).toBe("cloud");
+  expect(getDraft(id("typed"))).toBe("new edit");
+  expect(getDraft(id("cleared"))).toBe("");
+  expect(getDraft(id("invalid"))).toBe("");
+  expect(getDraft(id("disk"))).toBe("from disk");
+  setDraft(id("remote"), "cloud", "remote");
+  expect(getDraft(id("remote"))).toBe("cloud");
   expect(changes).toEqual(["typed:new edit", "cleared:"]);
   unsubscribe();
-  setDraft("blank", "   ");
-  for (let i = 0; i < 55; i++) setDraft(`chat-${i}`, `draft-${i}`);
-  const uploaded: string[] = [];
-  await expect(uploadLocalDrafts(async () => { throw new Error("offline"); })).rejects.toThrow("offline");
-  const write = async (guid: string, text: string) => { uploaded.push(`${guid}:${text}`); };
-  await Promise.all([uploadLocalDrafts(write), uploadLocalDrafts(write)]);
-  expect(uploaded).toHaveLength(50);
-  expect(uploaded.slice(0, 3)).toEqual(["typed:new edit", "disk:from disk", "remote:cloud"]);
-  expect(new Set(uploaded).size).toBe(50);
-  await uploadLocalDrafts(write);
-  expect(uploaded).toHaveLength(50);
-  expect(stored.get("imsg.drafts.v1.convex-uploaded")).toBe("1");
+  setDraft(id("blank"), "   ");
+  expect(getDraft(id("blank"))).toBe("");
+  expect(changes).toHaveLength(2);
 });

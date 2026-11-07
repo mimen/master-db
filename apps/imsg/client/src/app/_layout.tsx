@@ -84,9 +84,10 @@ export default function RootLayout() {
                       just the chevron (React Navigation 7 replaced
                       headerBackTitleVisible with this). */}
                   <Stack.Screen
-                    name="chat/[guid]"
+                    name="c/[conversationId]"
                     options={{ headerBackButtonDisplayMode: "minimal" }}
                   />
+                  <Stack.Screen name="chat/[guid]" options={{ headerShown: false }} />
                   <Stack.Screen name="search" options={{ presentation: "modal", title: "Search" }} />
                   <Stack.Screen name="new-chat" options={{ presentation: "modal", title: "New message" }} />
                   <Stack.Screen name="chat-info" options={{ presentation: "modal", title: "Details" }} />

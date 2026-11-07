@@ -7,7 +7,7 @@ const KEY = "imsg.triageTrace";
 const MAX = 40;
 
 export type TriageTraceEvent =
-  | { readonly kind: "settle-key"; readonly guid: string; readonly lens: string; readonly action: string; readonly next: string | null }
+  | { readonly kind: "settle-key"; readonly conversationId: string; readonly lens: string; readonly action: string; readonly next: string | null }
   | { readonly kind: "advance"; readonly from: string; readonly to: string | null; readonly reason: string }
   | { readonly kind: "clear"; readonly via: string }
   // Modifier chords only, so typed text is never recorded.
@@ -25,7 +25,7 @@ export function traceTriage(event: TriageTraceEvent): void {
     const entry = {
       at: new Date().toISOString(),
       ...event,
-      ...("guid" in event ? { guid: short(event.guid) } : {}),
+      ...("conversationId" in event ? { conversationId: short(event.conversationId) } : {}),
       ...("next" in event ? { next: short(event.next) } : {}),
       ...("from" in event ? { from: short(event.from), to: short(event.to) } : {}),
     };

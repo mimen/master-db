@@ -24,17 +24,16 @@ import { contactService } from "@/lib/contact-service";
 import { useAddChatTag, useWhoIs } from "@/lib/identity";
 import { useLightbox } from "@/lib/lightbox";
 import { showToast } from "@/lib/toast";
-import type { ChatSummary, Contact, ContactSuggestion } from "@shared/types";
+import type { ChatSummary, Contact, ContactSuggestion, ConversationId } from "@shared/types";
 import { formatAddress } from "@shared/address";
 import { useTypeRamp } from "@/hooks/use-type";
 import { useAiStatus } from "@/hooks/use-ai";
-import { useChatDirectory } from "@/hooks/use-chat-directory";
+import { useChatDirectory, useConversation } from "@/hooks/use-chat-directory";
 import { ChatAvatar, GroupPhotoAvatar, PersonAvatar } from "./avatar";
 import { ChatCrmSection } from "./chat-crm-section";
 import { useGuestLists } from "@/hooks/use-guest-lists";
 import { GuestListRows } from "./guest-list-quick-add";
 import { useQuery } from "convex/react";
-import { commaApi } from "@/lib/convex-api";
 import { mediaApi } from "@/lib/media-api";
 import { MediaUnavailable } from "./media";
 import { CenteredSpinner } from "./empty-state";
@@ -48,7 +47,7 @@ const GRID_GAP = 4;
 const GRID_MAX = 6;
 
 export interface ChatInfoContentProps {
-  guid: string;
+  conversationId: ConversationId;
   /** Close the info surface (pane dismiss on desktop, router.back on native). */
   onClose: () => void;
   /** The conversation was deleted; caller clears selection / navigates home. */
@@ -60,7 +59,7 @@ export interface ChatInfoContentProps {
 }
 
 export function ChatInfoContent({
-  guid,
+  conversationId,
   onClose,
   onDeleted,
   showHeader = false,
@@ -71,20 +70,19 @@ export function ChatInfoContent({
   const showSheet = useActionSheet();
   const openLightbox = useLightbox();
   const chats = useChatDirectory();
+  const summary = useConversation(conversationId) ?? null;
   const [fetched, setInfo] = useState<{
     displayName: string | null;
     isGroup: boolean;
     participants: Contact[];
   } | null>(null);
   // The directory already holds the name and people, so Details paints on open; chatInfo refines it.
-  const listed = chats?.find((chat) => chat.guid === guid);
-  const info = fetched ?? (listed ? {
-    displayName: listed.isGroup ? listed.displayName : null,
-    isGroup: listed.isGroup,
-    participants: listed.participants.map((p) => ({ address: p.address, name: p.name ?? formatAddress(p.address) })),
+  const info = fetched ?? (summary ? {
+    displayName: summary.isGroup ? summary.displayName : null,
+    isGroup: summary.isGroup,
+    participants: summary.participants.map((p) => ({ address: p.address, name: p.name ?? formatAddress(p.address) })),
   } : null);
-  const conversation = useQuery(commaApi.resolveChat, guid ? { chatGuid: guid } : "skip");
-  const gallery = useQuery(mediaApi.gallery, conversation ? { conversationId: conversation._id } : "skip") ?? [];
+  const gallery = useQuery(mediaApi.gallery, { conversationId }) ?? [];
   const [gridWidth, setGridWidth] = useState(0);
   const onGridLayout = useCallback((width: number): void => {
     const next = Math.round(width);
@@ -104,19 +102,18 @@ export function ChatInfoContent({
   const identify = () => {
     setIdentifying(true);
     api
-      .aiIdentify(guid)
+      .aiIdentify(conversationId)
       .then(setIdentity)
       .catch(() => showToast("Couldn't look up this contact. Try again."))
       .finally(() => setIdentifying(false));
   };
 
   const load = useCallback(() => {
-    if (!guid) return;
-    api.chatInfo(guid).then((i) => {
+    api.chatInfo(conversationId).then((i) => {
       setInfo(i);
       setName(i.displayName ?? "");
     }).catch(() => undefined);
-  }, [guid]);
+  }, [conversationId]);
 
   useEffect(load, [load]);
 
@@ -135,7 +132,7 @@ export function ChatInfoContent({
     </View>
   ) : null;
 
-  if (!guid || !info) {
+  if (!info) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.background }}>
         {header}
@@ -150,7 +147,7 @@ export function ChatInfoContent({
     if (!next || next === info.displayName) return;
     const previous = fetched?.displayName ?? null;
     setInfo((current) => current && { ...current, displayName: next });
-    renameChat(guid, next).catch((error: unknown) => {
+    renameChat(conversationId, next).catch((error: unknown) => {
       setInfo((current) => current && { ...current, displayName: previous });
       showToast(messagingCommandError(error, "Couldn't rename the conversation. Try again."));
     });
@@ -166,13 +163,12 @@ export function ChatInfoContent({
           label: "Remove from conversation",
           destructive: true,
           onPress: () =>
-            runCommand(guid, { kind: "participant", address: p.address, action: "remove" }).then(load).catch((error: unknown) => showToast(messagingCommandError(error, `Couldn't remove ${p.name ?? formatAddress(p.address)}. Try again.`))),
+            runCommand(conversationId, { kind: "participant", address: p.address, action: "remove" }).then(load).catch((error: unknown) => showToast(messagingCommandError(error, `Couldn't remove ${p.name ?? formatAddress(p.address)}. Try again.`))),
         },
       ],
     });
   };
 
-  const summary = chats?.find((c) => c.guid === guid) ?? null;
   const peer = info.isGroup ? null : info.participants[0];
   const peerName = peer ? peer.name ?? formatAddress(peer.address) : null;
   const crm = summary?.crm;
@@ -188,7 +184,7 @@ export function ChatInfoContent({
     const tag = tagInput.trim();
     setTagInput("");
     setTagging(false);
-    if (tag) addChatTag({ chatGuid: guid, tag }).catch(() => showToast("Couldn't add the tag. Try again."));
+    if (tag) addChatTag({ conversationId, tag }).catch(() => showToast("Couldn't add the tag. Try again."));
   };
   const confirmDelete = (): void =>
     showSheet({
@@ -198,7 +194,7 @@ export function ChatInfoContent({
           label: "Delete conversation",
           destructive: true,
           onPress: () =>
-            runCommand(guid, { kind: "deleteChat", chatGuid: guid })
+            (summary ? api.deleteChat(summary) : Promise.reject(new Error("Conversation is still loading")))
               .then(() => onDeleted())
               .catch((error: unknown) => showToast(messagingCommandError(error, "Couldn't delete the conversation. Try again."))),
         },
@@ -212,7 +208,7 @@ export function ChatInfoContent({
           label: "Leave conversation",
           destructive: true,
           onPress: () =>
-            runCommand(guid, { kind: "leaveGroup" }).then(() => onClose()).catch((error: unknown) => showToast(messagingCommandError(error, "Couldn't leave the conversation. Try again."))),
+            runCommand(conversationId, { kind: "leaveGroup" }).then(() => onClose()).catch((error: unknown) => showToast(messagingCommandError(error, "Couldn't leave the conversation. Try again."))),
         },
       ],
     });
@@ -228,7 +224,7 @@ export function ChatInfoContent({
         contentContainerStyle={styles.body}
       >
         <View style={styles.hero}>
-          {summary ? <ChatAvatar chat={summary} size={64} /> : peer ? <PersonAvatar address={peer.address} name={peerName ?? ""} size={64} /> : <GroupPhotoAvatar guid={guid} size={64} />}
+          {summary ? <ChatAvatar chat={summary} size={64} /> : peer ? <PersonAvatar address={peer.address} name={peerName ?? ""} size={64} /> : <GroupPhotoAvatar conversationId={conversationId} size={64} />}
         </View>
         {info.isGroup && renaming ? (
           <View style={styles.renameRow}>
@@ -386,7 +382,7 @@ export function ChatInfoContent({
                   onSubmitEditing={() => {
                     const address = participantAddress.trim();
                     if (!address) return;
-                    void runCommand(guid, { kind: "participant", address, action: "add" }).then(() => { setParticipantAddress(""); setAddingParticipant(false); load(); }, (error: unknown) => showToast(messagingCommandError(error, "Could not add person")));
+                    void runCommand(conversationId, { kind: "participant", address, action: "add" }).then(() => { setParticipantAddress(""); setAddingParticipant(false); load(); }, (error: unknown) => showToast(messagingCommandError(error, "Could not add person")));
                   }}
                   placeholder="Phone number or email"
                   placeholderTextColor={theme.textTertiary}
@@ -453,13 +449,13 @@ export function ChatInfoContent({
         )}
 
         {/* CRM: a GROUP gets its own editable favorite/priority/tags/event
-            section (ChatCrmSection, Convex-native, chat_guid-keyed). A DM
+            section (ChatCrmSection, Convex-native, keyed by conversation). A DM
             has no CRM of its own; it INHERITS the linked person's (see
             server/map.ts's mapChat), shown read-only here with a pointer to
             the real edit surface, so there's never a second, driftable copy. */}
         {info.isGroup ? (
           <View style={[styles.section, { borderTopColor: theme.divider }]}>
-            <ChatCrmSection chatGuid={guid} />
+            <ChatCrmSection conversationId={conversationId} />
           </View>
         ) : (
           <>

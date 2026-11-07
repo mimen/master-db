@@ -1,4 +1,5 @@
 import { mostUrgent } from "@shared/agent-attention";
+import type { ConversationId } from "@shared/types";
 import { useConvex } from "convex/react";
 import { useEffect, useState, useSyncExternalStore, type Dispatch, type SetStateAction } from "react";
 import { AppState, Platform } from "react-native";
@@ -17,20 +18,20 @@ const requestedChat = (chatId: string | undefined): PaneSelection | undefined =>
  * else a new chat. Once decided it holds, so a chat that stops being the most urgent stays in view.
  */
 export function usePaneSelection(
-  chatGuid: string,
+  conversationId: ConversationId,
   requested: string | undefined,
   chats: readonly AgentChatSummary[] | undefined,
 ): readonly [PaneSelection | undefined, Dispatch<SetStateAction<PaneSelection | undefined>>] {
-  const [chosen, setChosen] = useState(() => requestedChat(requested ?? takeRequestedAgentChat(chatGuid)));
+  const [chosen, setChosen] = useState(() => requestedChat(requested ?? takeRequestedAgentChat(conversationId)));
   // Only the wide shell's pane listens: on a phone, openAgentPane pushes the route because nothing does.
   const { wide } = useLayoutMode();
   useEffect(() => {
     if (!wide) return;
     return onOpenAgentPane(() => {
-      const next = requestedChat(takeRequestedAgentChat(chatGuid));
+      const next = requestedChat(takeRequestedAgentChat(conversationId));
       if (next) setChosen(next);
     });
-  }, [chatGuid, wide]);
+  }, [conversationId, wide]);
   if (chosen === undefined && chats !== undefined) {
     const urgent = mostUrgent(chats);
     const decided: PaneSelection = urgent ? { kind: "chat", chatId: urgent._id } : { kind: "new" };

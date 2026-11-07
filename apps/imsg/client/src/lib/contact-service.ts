@@ -1,6 +1,6 @@
 import type { ChatSummary } from "@shared/types";
 import { addressesMatch } from "@shared/address";
-import { chatIsSMS } from "./chat-service";
+import { conversationService } from "@shared/imessage";
 
 export type Service = "iMessage" | "SMS";
 
@@ -11,7 +11,7 @@ export type Service = "iMessage" | "SMS";
  */
 export function contactService(address: string, chats: readonly ChatSummary[] | null): Service | null {
   const dm = chats?.find((chat) => !chat.isGroup && chat.participants.some((p) => addressesMatch(p.address, address)));
-  if (dm) return chatIsSMS(dm.guid) ? "SMS" : "iMessage";
+  if (dm) return conversationService(dm);
   return address.includes("@") ? "iMessage" : null;
 }
 

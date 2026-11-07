@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "../fixtures/desk";
+import { fixtureConversationId } from "../../shared/fixture-ids";
 
 const INBOUND = "Can you send the final arrival time?";
 // The repo's gitignored artifacts dir; the drive is staged into apps/imsg/e2e/fixture/.
@@ -9,7 +10,7 @@ const SHOTS = join(import.meta.dirname, "..", "..", "artifacts", "2026-10-07-rea
 
 async function storedReactions(desk: { request: Page["request"]; chats: { needs: string } }): Promise<string[]> {
   const response = await desk.request.post("/__fixture/convex", {
-    data: { name: "comma/queries:listMessages", args: { conversationId: desk.chats.needs, paginationOpts: { numItems: 50, cursor: null } } },
+    data: { name: "comma/queries:listMessages", args: { conversationId: fixtureConversationId(desk.chats.needs), paginationOpts: { numItems: 50, cursor: null } } },
   });
   const { page: rows } = await response.json() as { page: Array<{ text: string; reactions: Array<{ type: string; isFromMe: boolean }> }> };
   return rows.find((row) => row.text === INBOUND)?.reactions.filter((r) => r.isFromMe).map((r) => r.type) ?? [];
@@ -24,7 +25,7 @@ for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
     // A chosen tapback shows the accent fill in every shot.
     const react = await desk.request.post("/__fixture/convex", {
-      data: { name: "comma/outbox:enqueue", args: { conversationId: desk.chats.needs, clientKey: `shot-${scheme}`,
+      data: { name: "comma/outbox:enqueue", args: { conversationId: fixtureConversationId(desk.chats.needs), clientKey: `shot-${scheme}`,
         payload: { kind: "react", messageGuid: "needs-2", reaction: "laugh", remove: false } } },
     });
     expect(react.ok()).toBe(true);

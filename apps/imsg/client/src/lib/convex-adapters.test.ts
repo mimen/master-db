@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { Message } from "@shared/types";
+import type { ConversationId, Message } from "@shared/types";
 
 import {
   attachmentSource,
@@ -80,8 +80,8 @@ const attachment = {
 describe("conversationToChat", () => {
   test("keys REST calls by the primary chat guid and keeps the conversation id", () => {
     const chat = conversationToChat(conversation());
-    expect(chat.guid).toBe("iMessage;-;+15550001111");
-    expect(chat.conversationId).toBe("c1");
+    expect(chat.imessage.chatGuid).toBe("iMessage;-;+15550001111");
+    expect(chat.conversationId).toBe("c1" as ConversationId);
     expect(chat.flags.pinned).toBe(true);
   });
 
