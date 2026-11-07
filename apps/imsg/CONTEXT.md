@@ -7,6 +7,21 @@ The client has no feature REST calls or Mini event-stream connection.
 
 ## Language
 
+**Conversation**:
+One thread in Comma, whatever carries it, named everywhere by its Convex id (`comma_conversations`).
+Its identity is a platform plus a key unique within that platform; iMessage is the only platform, and
+its service siblings (the iMessage, SMS and RCS chats with one person or group) share one key. Convex
+owns the identity in `convex/comma/conversationIdentity.ts`: the key, the primary chat (newest
+activity, ties to iMessage, then RCS, then SMS), and lookups by chat GUID or handle. Group CRM
+(`chat_crm`, chat `tags`, chat `event_links`) belongs to the conversation.
+_Avoid_: chat (for the merged thread), chat GUID (as an app-level id)
+
+**Route**:
+Where a command executes: a platform and that platform's thread id, for iMessage a chat GUID.
+Enqueue stamps the conversation's primary chat on each outbox row; the bridge runs exactly the
+stamped route and never picks one.
+_Avoid_: send target, resolved chat
+
 **Chat State**:
 The pure rules for a chat's flags: how Unresponded/Waiting/Unread derive from its triage
 state and last message, and which lens it matches. Convex computes flags with them and the

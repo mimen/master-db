@@ -34,13 +34,15 @@ async function fixture(isGroup = false, rawDisplayName = "") {
 }
 
 test("findChat normalizes addresses, respects service choice and resolves sibling aliases", async () => {
-  const { t } = await fixture();
+  const { t, conversationId } = await fixture();
   expect(await t.query(api.comma.conversationInfo.findChat, { address: " (619) 555-1234 " }))
-    .toMatchObject({ chatGuid: "SMS;-;+16195551234", service: "SMS", isGroup: false });
+    .toMatchObject({ conversationId, chatGuid: "SMS;-;+16195551234", service: "SMS", isGroup: false });
   expect(await t.query(api.comma.conversationInfo.findChat, { address: "+16195551234 (iMessage)", service: "iMessage" }))
     .toMatchObject({ chatGuid: "iMessage;-;+16195551234", service: "iMessage", participants: ["+16195551234 (smsfp)"] });
   expect(await t.query(api.comma.conversationInfo.chatInfo, { chatGuid: "iMessage;-;+16195551234" }))
     .toMatchObject({ guid: "iMessage;-;+16195551234", participants: [{ name: "Current Name", is_favorite: true }] });
+  expect(await t.query(api.comma.conversationInfo.chatInfo, { conversationId }))
+    .toMatchObject({ guid: "SMS;-;+16195551234", participants: [{ name: "Current Name" }] });
   expect(await t.query(api.comma.conversationInfo.findChat, { address: "missing@example.com" })).toBeNull();
   expect(await t.query(api.comma.conversationInfo.chatInfo, { chatGuid: "missing" })).toBeNull();
 });
@@ -52,7 +54,7 @@ test("findChat excludes groups even with one participant and reports a missing s
   });
   expect(await t.query(api.comma.conversationInfo.findChat, { address: "+16195551234" })).toBeNull();
   await t.run(async (ctx) => {
-    await ctx.db.patch(conversationId, { isGroup: false });
+    await ctx.db.patch(conversationId, { isGroup: false, primaryChatGuid: "iMessage;-;+16195551234", chatGuids: ["iMessage;-;+16195551234"] });
     const aliases = await ctx.db.query("comma_chat_aliases").collect();
     for (const alias of aliases) if (alias.service === "SMS") await ctx.db.delete(alias._id);
   });
@@ -78,6 +80,14 @@ test("conversation info queries reject unauthenticated callers", async () => {
   const t = convexTest(schema, commaModules);
   await expect(t.query(api.comma.conversationInfo.findChat, { address: "+16195551234" })).rejects.toThrow("Unauthorized");
   await expect(t.query(api.comma.conversationInfo.chatInfo, { chatGuid: "missing" })).rejects.toThrow("Unauthorized");
+});
+
+test("findChat finds an iMessage conversation written before platforms existed or after", async () => {
+  const { t, conversationId } = await fixture();
+  expect(await t.run(async (ctx) => (await ctx.db.get(conversationId))?.platform ?? "none")).toBe("none");
+  expect(await t.query(api.comma.conversationInfo.findChat, { address: "+16195551234" })).toMatchObject({ conversationId });
+  await t.run((ctx) => ctx.db.patch(conversationId, { platform: "imessage" }));
+  expect(await t.query(api.comma.conversationInfo.findChat, { address: "+16195551234" })).toMatchObject({ conversationId });
 });
 
 test("findChat normalizes email case and service suffixes without crossing addresses", async () => {

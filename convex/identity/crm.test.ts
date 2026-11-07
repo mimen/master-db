@@ -11,6 +11,7 @@ import {
   addTagRef,
   removeChatTagRef,
   removeTagRef,
+  seedGroup,
   setChatFavoriteRef,
   setChatPriorityRef,
   setFavoriteRef,
@@ -239,6 +240,7 @@ describe("setChatFavorite", () => {
 
   test("sets is_favorite true on a chat with no chat_crm row yet (lazy create)", async () => {
     const t = convexTest(schema, modules);
+    await seedGroup(t, [GUID]);
     await t.mutation(setChatFavoriteRef, { key: TEST_KEY, chatGuid: GUID, is_favorite: true });
     const rows = await t.run((ctx) =>
       ctx.db.query("chat_crm").withIndex("by_chat_guid", (q) => q.eq("chat_guid", GUID)).collect(),
@@ -249,6 +251,7 @@ describe("setChatFavorite", () => {
 
   test("no-op: setting false on a chat with no row yet doesn't create one", async () => {
     const t = convexTest(schema, modules);
+    await seedGroup(t, [GUID]);
     await t.mutation(setChatFavoriteRef, { key: TEST_KEY, chatGuid: GUID, is_favorite: false });
     const rows = await t.run((ctx) =>
       ctx.db.query("chat_crm").withIndex("by_chat_guid", (q) => q.eq("chat_guid", GUID)).collect(),
@@ -258,6 +261,7 @@ describe("setChatFavorite", () => {
 
   test("clears is_favorite back to false on an existing row", async () => {
     const t = convexTest(schema, modules);
+    await seedGroup(t, [GUID]);
     await t.mutation(setChatFavoriteRef, { key: TEST_KEY, chatGuid: GUID, is_favorite: true });
     await t.mutation(setChatFavoriteRef, { key: TEST_KEY, chatGuid: GUID, is_favorite: false });
     const rows = await t.run((ctx) =>
@@ -268,6 +272,7 @@ describe("setChatFavorite", () => {
 
   test("no-op: setting true twice only bumps updated_at once", async () => {
     const t = convexTest(schema, modules);
+    await seedGroup(t, [GUID]);
     await t.mutation(setChatFavoriteRef, { key: TEST_KEY, chatGuid: GUID, is_favorite: true });
     const row = () =>
       t.run((ctx) => ctx.db.query("chat_crm").withIndex("by_chat_guid", (q) => q.eq("chat_guid", GUID)).first());
@@ -283,6 +288,7 @@ describe("setChatPriority", () => {
 
   test("sets a chat's priority, clamped 1-5, lazily creating the row", async () => {
     const t = convexTest(schema, modules);
+    await seedGroup(t, [GUID]);
     await t.mutation(setChatPriorityRef, { key: TEST_KEY, chatGuid: GUID, priority: 12 });
     const row = await t.run((ctx) =>
       ctx.db.query("chat_crm").withIndex("by_chat_guid", (q) => q.eq("chat_guid", GUID)).first(),
@@ -292,6 +298,7 @@ describe("setChatPriority", () => {
 
   test("no-op: clearing an unset priority on a chat with no row doesn't create one", async () => {
     const t = convexTest(schema, modules);
+    await seedGroup(t, [GUID]);
     await t.mutation(setChatPriorityRef, { key: TEST_KEY, chatGuid: GUID, priority: null });
     const rows = await t.run((ctx) =>
       ctx.db.query("chat_crm").withIndex("by_chat_guid", (q) => q.eq("chat_guid", GUID)).collect(),
@@ -301,6 +308,7 @@ describe("setChatPriority", () => {
 
   test("null clears an existing priority back to unset", async () => {
     const t = convexTest(schema, modules);
+    await seedGroup(t, [GUID]);
     await t.mutation(setChatPriorityRef, { key: TEST_KEY, chatGuid: GUID, priority: 1 });
     await t.mutation(setChatPriorityRef, { key: TEST_KEY, chatGuid: GUID, priority: null });
     const row = await t.run((ctx) =>
@@ -315,6 +323,7 @@ describe("addChatTag / removeChatTag", () => {
 
   test("adds a trimmed, lowercased tag to a chat", async () => {
     const t = convexTest(schema, modules);
+    await seedGroup(t, [GUID]);
     await t.mutation(addChatTagRef, { key: TEST_KEY, chatGuid: GUID, tag: "  Planning  " });
     const rows = await t.run((ctx) =>
       ctx.db.query("tags").withIndex("by_chat", (q) => q.eq("chat_guid", GUID)).collect(),
@@ -325,6 +334,7 @@ describe("addChatTag / removeChatTag", () => {
 
   test("removeChatTag deletes the matching row, no-ops when absent", async () => {
     const t = convexTest(schema, modules);
+    await seedGroup(t, [GUID]);
     await t.mutation(addChatTagRef, { key: TEST_KEY, chatGuid: GUID, tag: "planning" });
     await t.mutation(removeChatTagRef, { key: TEST_KEY, chatGuid: GUID, tag: "PLANNING" });
     const rows = await t.run((ctx) =>
@@ -338,6 +348,7 @@ describe("addChatTag / removeChatTag", () => {
 
   test("chat tags and person tags are independent namespaces", async () => {
     const t = convexTest(schema, modules);
+    await seedGroup(t, [GUID]);
     const personId = await seedPerson(t);
     await t.mutation(addTagRef, { key: TEST_KEY, personId, tag: "vip" });
     await t.mutation(addChatTagRef, { key: TEST_KEY, chatGuid: GUID, tag: "vip" });
@@ -349,5 +360,37 @@ describe("addChatTag / removeChatTag", () => {
     );
     expect(personRows).toHaveLength(1);
     expect(chatRows).toHaveLength(1);
+  });
+});
+
+describe("group CRM belongs to the conversation", () => {
+  const PRIMARY = "iMessage;+;chat777";
+  const SIBLING = "SMS;+;chat777";
+
+  test("a write by conversation id, by primary GUID or by a sibling GUID lands on one row", async () => {
+    const t = convexTest(schema, modules);
+    const conversationId = await seedGroup(t, [PRIMARY, SIBLING]);
+    await t.mutation(setChatFavoriteRef, { key: TEST_KEY, conversationId, is_favorite: true });
+    await t.mutation(setChatPriorityRef, { key: TEST_KEY, chatGuid: SIBLING, priority: 2 });
+    await t.mutation(addChatTagRef, { key: TEST_KEY, chatGuid: PRIMARY, tag: "crew" });
+    await t.mutation(addChatTagRef, { key: TEST_KEY, conversationId, tag: "crew" });
+    const [crm, tags] = await t.run(async (ctx) => [await ctx.db.query("chat_crm").collect(), await ctx.db.query("tags").collect()]);
+    expect(crm).toMatchObject([{ conversation_id: conversationId, chat_guid: PRIMARY, is_favorite: true, priority: 2 }]);
+    expect(tags).toMatchObject([{ conversation_id: conversationId, tag: "crew" }]);
+  });
+
+  test("a row keyed only by chat GUID is adopted, not duplicated", async () => {
+    const t = convexTest(schema, modules);
+    const conversationId = await seedGroup(t, [PRIMARY]);
+    await t.run((ctx) => ctx.db.insert("chat_crm", { chat_guid: PRIMARY, priority: 3, created_at: "x", updated_at: "x" }));
+    await t.mutation(setChatFavoriteRef, { key: TEST_KEY, conversationId, is_favorite: true });
+    const rows = await t.run((ctx) => ctx.db.query("chat_crm").collect());
+    expect(rows).toMatchObject([{ conversation_id: conversationId, priority: 3, is_favorite: true }]);
+  });
+
+  test("a GUID no conversation knows is refused", async () => {
+    const t = convexTest(schema, modules);
+    await expect(t.mutation(setChatFavoriteRef, { key: TEST_KEY, chatGuid: "iMessage;+;nowhere", is_favorite: true }))
+      .rejects.toThrow("No conversation");
   });
 });

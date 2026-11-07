@@ -34,18 +34,6 @@ export class MessageWriter {
     }
   }
 
-  async resolveConversation(id: MessageRow["conversationId"]): Promise<string> {
-    const known = () => toConversationInputs([...this.chats.values()])
-      .find((row) => row.chats.some((chat) => this.conversationIds.get(chat.chatGuid) === id))?.chats[0]?.chatGuid;
-    let guid = known();
-    if (!guid) {
-      await this.exclusive(() => this.refreshChats());
-      guid = known();
-    }
-    if (!guid) throw new Error(`Unresolved conversation ${id}`);
-    return guid;
-  }
-
   /** Every service chat mirrored into the same Convex conversation as `chatGuid`, itself included. */
   siblingGuids(chatGuid: string): string[] {
     const id = this.conversationIds.get(chatGuid);

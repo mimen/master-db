@@ -4,6 +4,8 @@ import { internalMutation, query } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 import { commandSuggestions, suggestionDoc } from "../schema/comma/validators";
 
+import { findConversation } from "./conversationLookup";
+
 const suggestionModel = commandSuggestions.fields.selectedModel;
 
 const CLEAR_KEY = "suggestion_learning_cleared";
@@ -51,13 +53,11 @@ export const publish = internalMutation({
 });
 
 export const getSuggestions = query({
-  args: { chatGuid: v.string(), model: suggestionModel },
+  args: { conversationId: v.optional(v.id("comma_conversations")), chatGuid: v.optional(v.string()), model: suggestionModel },
   returns: v.union(suggestionDoc, v.null()),
-  handler: async (ctx, { chatGuid, model }) => {
+  handler: async (ctx, { model, ...ref }) => {
     await assertAllowed(ctx);
-    const alias = await ctx.db.query("comma_chat_aliases")
-      .withIndex("by_chatGuid", (q) => q.eq("chatGuid", chatGuid)).unique();
-    const conversation = alias ? await ctx.db.get(alias.conversationId) : null;
+    const conversation = await findConversation(ctx, ref);
     if (!conversation?.lastMessage || conversation.lastMessage.isFromMe) return null;
     const row = await ctx.db.query("comma_suggestions")
       .withIndex("by_conversation_model", (q) => q.eq("conversationId", conversation._id).eq("model", model)).unique();

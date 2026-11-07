@@ -2,10 +2,10 @@ import { extractLinkPreview, parsePublicPreviewUrl } from "../../shared/link-pre
 import type { Hono } from "hono";
 import type { GenericId, Infer } from "convex/values";
 import { laneOf, type attachmentDoc, type conversationDoc, type draftView, type messageDoc, type scheduledDoc, type CommaOutboxLane, type CommaOutboxPayload, type CommandResult } from "../../../../convex/schema/comma/validators";
-import { conversationKey } from "../../../../convex/comma/conversationKey";
+import { handleKey, imessage, routeFor } from "../../../../convex/comma/conversationIdentity";
 import { resolveConversationNames } from "../../../../convex/comma/names";
 import { formatAddress } from "../../shared/address";
-import { sendService, tempGuid } from "../../../../convex/comma/tempMessage";
+import { tempGuid } from "../../../../convex/comma/tempMessage";
 import type { FixtureRouteControls } from "../../server/app";
 import { buildThread, isGenuineUnreadInbound, mapChat, mapMessage, type UnreadSummary } from "../../server/map";
 import { toConversationInputs } from "../../server/bridge/mapper";
@@ -33,7 +33,7 @@ function id<Table extends string>(value: string): GenericId<Table> {
 export function conversationRow(chat: ChatSummary): Conversation {
   return {
     _id: id(chat.guid), _creationTime: FIXTURE_NOW,
-    conversationKey: conversationKey({ isGroup: chat.isGroup, primaryChatGuid: chat.guid, participants: chat.participants }),
+    platform: imessage.platform, conversationKey: imessage.conversationKey({ isGroup: chat.isGroup, primaryChatGuid: chat.guid, participants: chat.participants }),
     primaryChatGuid: chat.guid, chatGuids: [chat.guid],
     displayName: chat.displayName, isGroup: chat.isGroup, participants: chat.participants,
     ...(chat.lastMessage ? { lastMessage: chat.lastMessage } : {}),
@@ -421,10 +421,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     "identity/mutations:renamePerson": async (args) => names.rename(args as Parameters<FixtureIdentity["rename"]>[0]),
     "identity/queries:searchContacts": async (args) => searchContacts(String(args.q), args.limit === undefined ? 25 : Number(args.limit)),
     "comma/conversationInfo:findChat": async (args) => {
-      const key = conversationKey({ isGroup: false, primaryChatGuid: "", participants: [{ address: String(args.address), name: null }] });
+      const key = handleKey(String(args.address));
       const row = (await conversations()).find((row) => !row.isGroup && row.participants.length === 1 && row.conversationKey === key);
-      const guid = args.service ? row?.chatGuids.find((guid) => args.service === "SMS" ? /^(SMS|RCS);/.test(guid) : guid.startsWith("iMessage;")) : row?.primaryChatGuid;
-      return row && guid ? { chatGuid: guid, service: guid.startsWith("iMessage;") ? "iMessage" : "SMS", isGroup: false, participants: row.participants.map((p) => p.address) } : null;
+      const guid = row && routeFor(row, args.service === "iMessage" || args.service === "SMS" ? args.service : undefined)?.chatGuid;
+      return row && guid ? { conversationId: row._id, chatGuid: guid, service: imessage.sendService(guid), isGroup: false, participants: row.participants.map((p) => p.address) } : null;
     },
     "comma/conversationInfo:chatInfo": async (args) => {
       const row = (await conversations()).find((row) => row.chatGuids.includes(String(args.chatGuid)));
@@ -563,7 +563,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
           temps.set(clientKey, {
             _id: id(tempGuid(clientKey)), _creationTime: now, guid: tempGuid(clientKey),
             conversationId: id(chatGuid), chatGuid: primaryChatGuid, dateCreated: now, isFromMe: true,
-            text: payload.text, service: sendService(primaryChatGuid), error: 0, edited: false, retracted: false,
+            text: payload.text, service: imessage.sendService(primaryChatGuid), error: 0, edited: false, retracted: false,
             isTapback: false, reactions: [], ...(payload.replyToGuid ? { replyToGuid: payload.replyToGuid } : {}),
             isGroupEvent: false, mentions: payload.mentions ?? [], attachmentGuids: [], clientKey, sourceVersion: 0, attachments: [],
           });

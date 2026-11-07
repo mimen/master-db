@@ -2,7 +2,9 @@ import { v } from "convex/values";
 
 import type { Doc, Id } from "../_generated/dataModel";
 import { query, type QueryCtx } from "../_generated/server";
+import { findConversation } from "../comma/conversationLookup";
 
+import { groupCrm } from "./groupCrm";
 import { requireIdentityAccess } from "./key";
 import { nameTerms } from "./names";
 import { normalizeEmail, normalizePhone } from "./normalize";
@@ -31,15 +33,6 @@ async function personTagsFor(ctx: QueryCtx, personId: Id<"people">): Promise<str
   return rows.map((r) => r.tag).sort();
 }
 
-/** A GROUP chat's tags, alphabetized — the chat-side twin of personTagsFor. */
-async function chatTagsFor(ctx: QueryCtx, chatGuid: string): Promise<string[]> {
-  const rows = await ctx.db
-    .query("tags")
-    .withIndex("by_chat", (q) => q.eq("chat_guid", chatGuid))
-    .collect();
-  return rows.map((r) => r.tag).sort();
-}
-
 /** A person's linked events — see schema/identity/event_links.ts. */
 async function personEventsFor(ctx: QueryCtx, personId: Id<"people">): Promise<EventRef[]> {
   const rows = await ctx.db
@@ -47,15 +40,6 @@ async function personEventsFor(ctx: QueryCtx, personId: Id<"people">): Promise<E
     .withIndex("by_person", (q) => q.eq("person_id", personId))
     .collect();
   return rows.map((r) => ({ id: r.airtable_event_id, name: r.event_name, linkId: r._id, start_date: r.start_date }));
-}
-
-/** A GROUP chat's linked events — the chat-side twin of personEventsFor. */
-async function chatEventsFor(ctx: QueryCtx, chatGuid: string): Promise<EventRef[]> {
-  const rows = await ctx.db
-    .query("event_links")
-    .withIndex("by_chat", (q) => q.eq("chat_guid", chatGuid))
-    .collect();
-  return rows.map((r) => ({ id: r.airtable_event_id, name: r.event_name, linkId: r._id }));
 }
 
 /**
@@ -381,18 +365,42 @@ export const topLinkedPeople = query({
  * actually annotated get a row/tag/link at all), so "give me everything" is
  * cheap and is what the mirror's periodic refresh uses, since it has no
  * independent way to know which chat guids currently exist (that's
- * BlueBubbles' domain, not Convex's). Passing an explicit list
- * scopes the result to just those guids, for a future targeted lookup (e.g.
- * a single open chat's info screen).
+ * BlueBubbles' domain, not Convex's). Passing
+ * `conversationIds`, or `chatGuids` from an older client, reads just those
+ * groups through their conversations and keys each result by what was passed.
  */
 export const chatCrm = query({
-  args: { key: v.optional(v.string()), chatGuids: v.optional(v.array(v.string())) },
-  handler: async (ctx, { key, chatGuids }) => {
+  args: {
+    key: v.optional(v.string()),
+    chatGuids: v.optional(v.array(v.string())),
+    conversationIds: v.optional(v.array(v.id("comma_conversations"))),
+  },
+  handler: async (ctx, { key, chatGuids, conversationIds }) => {
     await requireIdentityAccess(ctx, key);
-    const wanted = chatGuids ? new Set(chatGuids) : null;
-
     type ChatCrmProjection = { is_favorite?: boolean; priority?: number; tags: string[]; events: EventRef[] };
     const out: Record<string, ChatCrmProjection> = {};
+    const targets = [
+      ...(conversationIds ?? []).map((conversationId) => ({ key: conversationId as string, ref: { conversationId } })),
+      ...(chatGuids ?? []).map((chatGuid) => ({ key: chatGuid, ref: { chatGuid } })),
+    ];
+    if (conversationIds || chatGuids) {
+      for (const target of targets) {
+        const conversation = await findConversation(ctx, target.ref);
+        if (!conversation) continue;
+        const [crm, tags, events] = await Promise.all([
+          groupCrm.crm(ctx, conversation), groupCrm.tags(ctx, conversation), groupCrm.events(ctx, conversation),
+        ]);
+        if (!crm && !tags.length && !events.length) continue;
+        out[target.key] = {
+          is_favorite: crm?.is_favorite,
+          priority: crm?.priority,
+          tags: tags.map((t) => t.tag).sort(),
+          events: events.map((row) => ({ id: row.airtable_event_id, name: row.event_name, linkId: row._id })),
+        };
+      }
+      return out;
+    }
+
     const ensure = (guid: string): ChatCrmProjection => {
       const existing = out[guid];
       if (existing) return existing;
@@ -403,7 +411,6 @@ export const chatCrm = query({
 
     const crmRows = await ctx.db.query("chat_crm").collect();
     for (const row of crmRows) {
-      if (wanted && !wanted.has(row.chat_guid)) continue;
       const entry = ensure(row.chat_guid);
       entry.is_favorite = row.is_favorite;
       entry.priority = row.priority;
@@ -412,14 +419,12 @@ export const chatCrm = query({
     const tagRows = await ctx.db.query("tags").collect();
     for (const row of tagRows) {
       if (!row.chat_guid) continue;
-      if (wanted && !wanted.has(row.chat_guid)) continue;
       ensure(row.chat_guid).tags.push(row.tag);
     }
 
     const eventRows = await ctx.db.query("event_links").collect();
     for (const row of eventRows) {
       if (!row.chat_guid) continue;
-      if (wanted && !wanted.has(row.chat_guid)) continue;
       ensure(row.chat_guid).events.push({ id: row.airtable_event_id, name: row.event_name, linkId: row._id });
     }
 
@@ -427,7 +432,3 @@ export const chatCrm = query({
     return out;
   },
 });
-
-// Chat-side helpers exported for reuse elsewhere in the module if a future
-// per-chat query needs them individually rather than the batch above.
-export { chatEventsFor, chatTagsFor };

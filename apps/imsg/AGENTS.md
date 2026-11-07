@@ -67,7 +67,8 @@ and Restart banners.
 
 - The [bridge](server/bridge/) mirrors Messages history, BlueBubbles events and media into
   Convex, and executes queued outbox commands in one drain loop per outbox lane (`imessage` and
-  `ai`; see "Outbox lane" in `CONTEXT.md`).
+  `ai`; see "Outbox lane" in `CONTEXT.md`). An iMessage command runs through the route Convex
+  stamped on its row (see "Route" in `CONTEXT.md`).
 - A change to the outbox's Convex functions or arguments deploys to Convex before the merge that
   ships the Mini side, because a merge to `main` deploys only the Mini.
 - Convex owns Comma's triage state (settles, pins, mutes, marked-unread, read times and the

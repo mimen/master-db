@@ -16,5 +16,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["scripts", "server", "shared", "../../convex/schema/comma/validators.ts", "../../convex/comma/conversationKey.ts", "../../convex/identity/normalize.ts"]
+  "include": ["scripts", "server", "shared", "../../convex/schema/comma/validators.ts", "../../convex/comma/conversationIdentity.ts", "../../convex/identity/normalize.ts"]
 }

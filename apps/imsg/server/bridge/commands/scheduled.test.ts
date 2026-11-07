@@ -36,7 +36,7 @@ async function harness() {
 test("schedule returns persisted id/state and publishes before completing the receipt", async () => {
   const h = await harness();
   h.ingest.outboxRows.push({ _id: "outbox", _creationTime: 1, clientKey: "schedule", conversationId: h.ingest.id,
-    payload: { kind: "schedule", text: " later ", sendAt }, status: "claimed", attempts: 1,
+    route: { platform: "imessage", chatGuid: CHAT }, payload: { kind: "schedule", text: " later ", sendAt }, status: "claimed", attempts: 1,
     claimToken: "claim", leaseUntil: Date.now() + 60_000, createdAt: 1, updatedAt: 1 } as OutboxRow);
   const bridge = new OutboxBridge({ config: { convexCloudUrl: "https://convex.test", commaBridgeSecret: "test" }, commands: h.commands, writer: h.ctx.writer, client: { onUpdate: () => () => {}, close: async () => {} } as unknown as ConvexClient });
   try {

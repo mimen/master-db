@@ -1,4 +1,4 @@
-import { conversationKey } from "../../../../convex/comma/conversationKey";
+import { choosePrimary, imessage } from "../../../../convex/comma/conversationIdentity";
 import type { BBChat, BBMessage } from "../bb-types";
 import { mapChat, mapMessage, parseTapback } from "../map";
 import type { NameSource } from "../name-resolver";
@@ -12,13 +12,12 @@ export const unnamed: NameSource = {
   chatCrm: () => undefined,
   personCrm: () => undefined,
 };
-const serviceRank: Record<string, number> = { iMessage: 0, RCS: 1, SMS: 2 };
 
 export function toConversationInputs(bbChats: BBChat[]): ConversationInput[] {
   const groups = new Map<string, BBChat[]>();
   for (const chat of bbChats) {
     const summary = mapChat(chat, unnamed);
-    const key = conversationKey({
+    const key = imessage.conversationKey({
       isGroup: summary.isGroup,
       primaryChatGuid: chat.guid,
       participants: summary.participants,
@@ -28,10 +27,9 @@ export function toConversationInputs(bbChats: BBChat[]): ConversationInput[] {
     groups.set(key, siblings);
   }
   return [...groups].map(([key, siblings]) => {
-    siblings.sort((a, b) =>
-      (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0) ||
-      (serviceRank[a.guid.split(";")[0]] ?? 9) - (serviceRank[b.guid.split(";")[0]] ?? 9) ||
-      a.guid.localeCompare(b.guid));
+    const primaryGuid = choosePrimary(siblings.map((chat) => ({ chatGuid: chat.guid, lastMessageAt: chat.lastMessage?.dateCreated ?? 0 })));
+    // The primary chat comes first; writer.conversation reads it from there.
+    siblings.sort((a, b) => Number(b.guid === primaryGuid) - Number(a.guid === primaryGuid) || a.guid.localeCompare(b.guid));
     const primary = mapChat(siblings[0], unnamed);
     return {
       conversationKey: key,

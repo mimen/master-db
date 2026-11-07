@@ -5,7 +5,8 @@ import { query, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 import { personName } from "../identity/names";
 
-import { conversationKey } from "./conversationKey";
+import { imessage, routeFor } from "./conversationIdentity";
+import { findByHandle, findConversation } from "./conversationLookup";
 import { personForAddress } from "./photos";
 
 const service = v.union(v.literal("iMessage"), v.literal("SMS"));
@@ -13,43 +14,32 @@ const service = v.union(v.literal("iMessage"), v.literal("SMS"));
 export const findChat = query({
   args: { address: v.string(), service: v.optional(service) },
   returns: v.union(v.null(), v.object({
-    chatGuid: v.string(), service, isGroup: v.literal(false), participants: v.array(v.string()),
+    conversationId: v.id("comma_conversations"), chatGuid: v.string(), service, isGroup: v.literal(false), participants: v.array(v.string()),
   })),
   handler: async (ctx, args) => {
     await assertAllowed(ctx);
-    const key = conversationKey({ isGroup: false, primaryChatGuid: "", participants: [{ address: args.address, name: null }] });
-    const conversation = await ctx.db.query("comma_conversations")
-      .withIndex("by_conversationKey", (q) => q.eq("conversationKey", key)).unique();
-    if (!conversation || conversation.isGroup || conversation.participants.length !== 1) return null;
-    const aliases = await ctx.db.query("comma_chat_aliases")
-      .withIndex("by_conversationId", (q) => q.eq("conversationId", conversation._id)).collect();
-    const candidates = aliases.filter((alias) => args.service
-      ? alias.service === args.service || (args.service === "SMS" && alias.service === "RCS")
-      : ["iMessage", "SMS", "RCS"].includes(alias.service));
-    candidates.sort((a, b) => Number(b.chatGuid === conversation.primaryChatGuid) - Number(a.chatGuid === conversation.primaryChatGuid) ||
-      Number(b.service === "iMessage") - Number(a.service === "iMessage") || a.chatGuid.localeCompare(b.chatGuid));
-    const chosen = candidates[0];
-    return chosen ? { chatGuid: chosen.chatGuid, service: chosen.service === "iMessage" ? "iMessage" as const : "SMS" as const,
+    const found = await findByHandle(ctx, imessage.platform, args.address);
+    const conversation = found && !found.isGroup && found.participants.length === 1 ? found : null;
+    const route = conversation && routeFor(conversation, args.service);
+    return route ? { conversationId: conversation._id, chatGuid: route.chatGuid, service: imessage.sendService(route.chatGuid),
       isGroup: false as const, participants: conversation.participants.map((p) => p.address) } : null;
   },
 });
 
 export const chatInfo = query({
-  args: { chatGuid: v.string() },
+  args: { conversationId: v.optional(v.id("comma_conversations")), chatGuid: v.optional(v.string()) },
   returns: v.union(v.null(), v.object({
     guid: v.string(), displayName: v.union(v.string(), v.null()), isGroup: v.boolean(),
     participants: v.array(v.object({ address: v.string(), name: v.string(), is_favorite: v.optional(v.boolean()) })),
   })),
-  handler: async (ctx, { chatGuid }) => {
+  handler: async (ctx, ref) => {
     await assertAllowed(ctx);
-    const alias = await ctx.db.query("comma_chat_aliases")
-      .withIndex("by_chatGuid", (q) => q.eq("chatGuid", chatGuid)).unique();
-    const conversation = alias ? await ctx.db.get(alias.conversationId) : null;
+    const conversation = await findConversation(ctx, ref);
     if (!conversation) return null;
     const participants = (await conversationPeople(ctx, conversation)).map(({ address, name, person }) => ({
       address, name, ...(person?.is_favorite !== undefined ? { is_favorite: person.is_favorite } : {}),
     }));
-    return { guid: chatGuid, displayName: conversation.rawDisplayName || null, isGroup: conversation.isGroup, participants };
+    return { guid: ref.chatGuid ?? conversation.primaryChatGuid, displayName: conversation.rawDisplayName || null, isGroup: conversation.isGroup, participants };
   },
 });
 

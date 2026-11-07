@@ -2,7 +2,8 @@ import { v } from "convex/values";
 
 import { internalMutation } from "../_generated/server";
 
-import { choosePrimary, foldTapbacks } from "./internal";
+import { choosePrimary } from "./conversationIdentity";
+import { foldTapbacks } from "./internal";
 
 const phases = ["messages", "attachments", "scheduled", "suggestions", "events", "state", "drafts", "presence", "finalize"] as const;
 const phase = v.union(...phases.map((name) => v.literal(name)));

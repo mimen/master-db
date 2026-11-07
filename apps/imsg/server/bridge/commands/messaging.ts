@@ -44,7 +44,8 @@ export const messagingHandlers = {
       await ctx.writer.ensureChat(chat.guid);
       await ctx.writer.postMessages([{ ...chat.lastMessage!, chats: [{ guid: chat.guid }] }]);
     }));
-    return { kind: "createChat", chatGuid: chat.guid, service: "iMessage", isGroup: payload.addresses.length > 1,
+    const conversationId = ctx.writer.conversationIds.get(chat.guid);
+    return { kind: "createChat", ...(conversationId ? { conversationId } : {}), chatGuid: chat.guid, service: "iMessage", isGroup: payload.addresses.length > 1,
       participants: (chat.participants ?? []).map((p) => p.address), message };
   } },
   sendContact: { longRunning: true, execute: async (ctx, payload) => {

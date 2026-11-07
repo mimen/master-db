@@ -466,7 +466,7 @@ export declare const api: {
       chatInfo: FunctionReference<
         "query",
         "public",
-        { chatGuid: string },
+        { chatGuid?: string; conversationId?: Id<"comma_conversations"> },
         null | {
           displayName: string | null;
           guid: string;
@@ -484,6 +484,7 @@ export declare const api: {
         { address: string; service?: "iMessage" | "SMS" },
         null | {
           chatGuid: string;
+          conversationId: Id<"comma_conversations">;
           isGroup: false;
           participants: Array<string>;
           service: "iMessage" | "SMS";
@@ -1017,6 +1018,7 @@ export declare const api: {
               }
             | {
                 chatGuid: string;
+                conversationId?: Id<"comma_conversations">;
                 isGroup: boolean;
                 kind: "createChat";
                 message: {
@@ -1563,6 +1565,7 @@ export declare const api: {
               }
             | {
                 chatGuid: string;
+                conversationId?: Id<"comma_conversations">;
                 isGroup: boolean;
                 kind: "createChat";
                 message: {
@@ -1746,6 +1749,7 @@ export declare const api: {
             | { kind: "suggestionFeedback"; ok: true }
             | { kind: "clearSuggestionLearning"; ok: true };
           resultGuid?: string;
+          route?: { chatGuid: string; platform: "imessage" };
           status: "pending" | "claimed" | "sent" | "failed" | "unknown";
           updatedAt: number;
         }>
@@ -1804,6 +1808,7 @@ export declare const api: {
             name: string | null;
             photoUrl?: string | null;
           }>;
+          platform?: "imessage";
           primaryChatGuid: string;
           rawDisplayName?: string;
           searchNames: Array<string>;
@@ -1928,6 +1933,7 @@ export declare const api: {
               name: string | null;
               photoUrl?: string | null;
             }>;
+            platform?: "imessage";
             primaryChatGuid: string;
             rawDisplayName?: string;
             searchNames: Array<string>;
@@ -2123,6 +2129,7 @@ export declare const api: {
             name: string | null;
             photoUrl?: string | null;
           }>;
+          platform?: "imessage";
           primaryChatGuid: string;
           rawDisplayName?: string;
           searchNames: Array<string>;
@@ -2220,7 +2227,11 @@ export declare const api: {
       getSuggestions: FunctionReference<
         "query",
         "public",
-        { chatGuid: string; model: "opus" | "terra" },
+        {
+          chatGuid?: string;
+          conversationId?: Id<"comma_conversations">;
+          model: "opus" | "terra";
+        },
         {
           _creationTime: number;
           _id: Id<"comma_suggestions">;
@@ -2440,7 +2451,12 @@ export declare const api: {
       addChatTag: FunctionReference<
         "mutation",
         "public",
-        { chatGuid: string; key?: string; tag: string },
+        {
+          chatGuid?: string;
+          conversationId?: Id<"comma_conversations">;
+          key?: string;
+          tag: string;
+        },
         any
       >;
       addTag: FunctionReference<
@@ -2452,7 +2468,12 @@ export declare const api: {
       removeChatTag: FunctionReference<
         "mutation",
         "public",
-        { chatGuid: string; key?: string; tag: string },
+        {
+          chatGuid?: string;
+          conversationId?: Id<"comma_conversations">;
+          key?: string;
+          tag: string;
+        },
         any
       >;
       removeTag: FunctionReference<
@@ -2464,13 +2485,23 @@ export declare const api: {
       setChatFavorite: FunctionReference<
         "mutation",
         "public",
-        { chatGuid: string; is_favorite: boolean; key?: string },
+        {
+          chatGuid?: string;
+          conversationId?: Id<"comma_conversations">;
+          is_favorite: boolean;
+          key?: string;
+        },
         any
       >;
       setChatPriority: FunctionReference<
         "mutation",
         "public",
-        { chatGuid: string; key?: string; priority?: number | null },
+        {
+          chatGuid?: string;
+          conversationId?: Id<"comma_conversations">;
+          key?: string;
+          priority?: number | null;
+        },
         any
       >;
       setFavorite: FunctionReference<
@@ -2499,6 +2530,7 @@ export declare const api: {
         {
           airtable_event_id: string;
           chatGuid?: string;
+          conversationId?: Id<"comma_conversations">;
           event_name: string;
           key?: string;
           personId?: Id<"people">;
@@ -2613,7 +2645,11 @@ export declare const api: {
       chatCrm: FunctionReference<
         "query",
         "public",
-        { chatGuids?: Array<string>; key?: string },
+        {
+          chatGuids?: Array<string>;
+          conversationIds?: Array<Id<"comma_conversations">>;
+          key?: string;
+        },
         any
       >;
       listPeople: FunctionReference<"query", "public", { key?: string }, any>;
@@ -4567,6 +4603,24 @@ export declare const internal: {
         string | boolean
       >;
     };
+    migrations: {
+      backfillConversationPlatform: FunctionReference<
+        "mutation",
+        "internal",
+        { cursor: string | null; dryRun: boolean },
+        { cursor: string; isDone: boolean; patched: number }
+      >;
+      rekeyGroupCrm: FunctionReference<
+        "mutation",
+        "internal",
+        { dryRun: boolean },
+        {
+          deleted: { chat_crm: number; event_links: number; tags: number };
+          moved: { chat_crm: number; event_links: number; tags: number };
+          unresolved: Array<string>;
+        }
+      >;
+    };
     outbox: {
       claimOutbox: FunctionReference<
         "mutation",
@@ -4923,6 +4977,7 @@ export declare const internal: {
               }
             | {
                 chatGuid: string;
+                conversationId?: Id<"comma_conversations">;
                 isGroup: boolean;
                 kind: "createChat";
                 message: {
@@ -5106,6 +5161,7 @@ export declare const internal: {
             | { kind: "suggestionFeedback"; ok: true }
             | { kind: "clearSuggestionLearning"; ok: true };
           resultGuid?: string;
+          route?: { chatGuid: string; platform: "imessage" };
           status: "pending" | "claimed" | "sent" | "failed" | "unknown";
           updatedAt: number;
         }>
@@ -5344,6 +5400,7 @@ export declare const internal: {
               }
             | {
                 chatGuid: string;
+                conversationId?: Id<"comma_conversations">;
                 isGroup: boolean;
                 kind: "createChat";
                 message: {

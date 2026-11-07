@@ -24,9 +24,12 @@ import { v } from "convex/values";
 export const tags = defineTable({
   person_id: v.optional(v.id("people")),
   chat_guid: v.optional(v.string()),
+  /** Set with chat_guid on a group's rows; see chat_crm.ts. */
+  conversation_id: v.optional(v.id("comma_conversations")),
   tag: v.string(),
   created_at: v.string(),
 })
   .index("by_person", ["person_id"])
   .index("by_chat", ["chat_guid"])
+  .index("by_conversation", ["conversation_id"])
   .index("by_tag", ["tag"]);

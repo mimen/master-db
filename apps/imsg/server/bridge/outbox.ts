@@ -114,7 +114,8 @@ export class OutboxBridge {
     this.lanes = [
       lane("imessage", async (row, base) => {
         if (row.payload.kind !== "createChat" && !row.conversationId) throw new Error("Command requires a conversation");
-        const chatGuid = row.conversationId ? await writer.resolveConversation(row.conversationId) : null;
+        if (row.conversationId && !row.route) throw new Error("Command has no route");
+        const chatGuid = row.route?.chatGuid ?? null;
         if (row.payload.kind === "send") writer.rememberOutboxSend(row.clientKey);
         base.signal.throwIfAborted();
         return dispatchCommand<IMessageContext>(handlers, { ...base, chatGuid, commands, writer }, row.payload);

@@ -25,7 +25,7 @@ import {
 } from "./validators";
 
 export const comma_conversations = defineTable(conversationFields)
-  .index("by_conversationKey", ["conversationKey"])
+  .index("by_platform_conversationKey", ["platform", "conversationKey"])
   .index("by_lastMessageAt", ["lastMessageAt"])
   .index("by_primaryChatGuid", ["primaryChatGuid"])
   .index("by_unreadCount", ["unread.count"]);

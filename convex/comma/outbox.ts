@@ -10,9 +10,10 @@ import {
 
 import { settleDraftChat } from "./agent";
 import { sameSecret } from "./bridgeAuth";
+import { imessage, sendRoute } from "./conversationIdentity";
 import { applyIMessageResult } from "./imessageResults";
 import { refreshLastMessage } from "./internal";
-import { sendService, tempGuid } from "./tempMessage";
+import { tempGuid } from "./tempMessage";
 import { carryTempAnchor, readConversation, setConversationFlag, settleConversation, unsettleConversation } from "./triage";
 
 /**
@@ -125,10 +126,12 @@ export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversation
   if (!conversationId && !GLOBAL_KINDS.has(payload.kind)) throw new Error("conversationId is required for this command");
   const conversation = conversationId ? await ctx.db.get(conversationId) : null;
   if (conversationId && !conversation) throw new Error("Conversation not found");
+  const route = conversation ? sendRoute(conversation) : undefined;
   const now = Date.now();
   const id = await ctx.db.insert("comma_outbox", {
     clientKey,
     conversationId,
+    route,
     payload,
     lane: laneOf(payload.kind),
     status: "pending",
@@ -136,7 +139,7 @@ export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversation
     createdAt: now,
     updatedAt: now,
   });
-  if (payload.kind === "send" && conversation) {
+  if (payload.kind === "send" && conversation && route) {
     // The sidebar moves with the temp bubble rather than a BlueBubbles round trip later.
     // The real row's refreshLastMessage overwrites it, and a failed send stays the preview.
     await ctx.db.patch(conversation._id, {
@@ -146,11 +149,11 @@ export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversation
     await ctx.db.insert("comma_messages", {
       guid: tempGuid(clientKey),
       conversationId: conversation._id,
-      chatGuid: conversation.primaryChatGuid,
+      chatGuid: route.chatGuid,
       dateCreated: now,
       isFromMe: true,
       text: payload.text,
-      service: sendService(conversation.primaryChatGuid),
+      service: imessage.sendService(route.chatGuid),
       error: 0,
       edited: false,
       retracted: false,
@@ -251,7 +254,10 @@ export const claimOutbox = internalMutation({
         continue;
       }
       if (row.conversationId && row.payload.kind === "markRead") await readConversation(ctx, row.conversationId, row.createdAt);
-      const patch = { claimToken: `${row._id}:${row.attempts + 1}`, error: undefined, status: "claimed" as const, leaseUntil: now + leaseMs, attempts: row.attempts + 1, updatedAt: now };
+      // A row inserted without a route (queued before routes existed, or a typing expiry) gets its conversation's route now.
+      const conversation = row.conversationId && !row.route ? await ctx.db.get(row.conversationId) : null;
+      const route = row.route ?? (conversation ? sendRoute(conversation) : undefined);
+      const patch = { claimToken: `${row._id}:${row.attempts + 1}`, error: undefined, status: "claimed" as const, leaseUntil: now + leaseMs, attempts: row.attempts + 1, route, updatedAt: now };
       await ctx.db.patch(row._id, patch);
       claimed.push({ ...row, ...patch });
     }

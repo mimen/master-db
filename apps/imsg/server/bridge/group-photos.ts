@@ -3,6 +3,7 @@ import type { BBChat } from "../bb-types";
 import type { BlueBubbles } from "../bluebubbles";
 import type { OverlayDb } from "../db";
 import type { ConvexIngest } from "./convex-ingest";
+import { choosePrimary } from "../../../../convex/comma/conversationIdentity";
 import { toConversationInputs } from "./mapper";
 import { RetryWork } from "./retry";
 
@@ -49,7 +50,8 @@ export class GroupPhotoMirror {
   observe(chats: BBChat[]): void {
     for (const row of toConversationInputs(chats)) {
       if (!row.isGroup) continue;
-      const chat = chats.find((chat) => chat.guid === row.chats[0].chatGuid);
+      const primary = choosePrimary(row.chats);
+      const chat = chats.find((chat) => chat.guid === primary);
       if (chat) this.chats.set(row.conversationKey, chat);
     }
     this.work.request();

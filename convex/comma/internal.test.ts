@@ -6,15 +6,14 @@ import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
-import { conversationKey } from "./conversationKey";
-import { choosePrimary } from "./internal";
+import { imessage } from "./conversationIdentity";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 
 type T = TestConvex<typeof schema>;
 
 async function seedDm(t: T, address: string, chats: { chatGuid: string; lastMessageAt: number }[]) {
-  const key = conversationKey({
+  const key = imessage.conversationKey({
     isGroup: false,
     primaryChatGuid: chats[0]!.chatGuid,
     participants: [{ address, name: null }],
@@ -73,24 +72,6 @@ function tapbackRow(conversationId: Id<"comma_conversations">, guid: string, tar
     ...rest,
   });
 }
-
-describe("choosePrimary", () => {
-  test("is independent of input order on equal timestamps", () => {
-    const a = { chatGuid: "SMS;-;+15550001111", lastMessageAt: 2000 };
-    const b = { chatGuid: "iMessage;-;+15550001111", lastMessageAt: 2000 };
-    expect(choosePrimary([a, b])).toBe("iMessage;-;+15550001111");
-    expect(choosePrimary([b, a])).toBe("iMessage;-;+15550001111");
-  });
-
-  test("newest activity wins over service preference", () => {
-    expect(
-      choosePrimary([
-        { chatGuid: "iMessage;-;+15550001111", lastMessageAt: 1000 },
-        { chatGuid: "SMS;-;+15550001111", lastMessageAt: 3000 },
-      ]),
-    ).toBe("SMS;-;+15550001111");
-  });
-});
 
 describe("upsertConversations", () => {
   test("corrects a legacy numeric key without duplicating or moving references", async () => {

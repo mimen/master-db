@@ -300,6 +300,40 @@ describe("pendingOutbox", () => {
   });
 });
 
+describe("routes", () => {
+  test("enqueue stamps the conversation's primary chat, and a claim carries it to the bridge", async () => {
+    const { t, as, c } = await setup();
+    await t.run((ctx) => ctx.db.patch(c, { primaryChatGuid: "SMS;-;+15550001111", chatGuids: ["SMS;-;+15550001111", "iMessage;-;+15550001111"] }));
+    const id = await as.mutation(api.comma.outbox.enqueue, { clientKey: "k1", conversationId: c, payload: send });
+    // The primary moving after enqueue does not move a command already queued.
+    await t.run((ctx) => ctx.db.patch(c, { primaryChatGuid: "iMessage;-;+15550001111" }));
+    expect((await t.run((ctx) => ctx.db.get(id)))?.route).toEqual({ platform: "imessage", chatGuid: "SMS;-;+15550001111" });
+    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 1 });
+    expect(claim?.route).toEqual({ platform: "imessage", chatGuid: "SMS;-;+15550001111" });
+    const temp = await t.run((ctx) => ctx.db.query("comma_messages").collect());
+    expect(temp.map((m) => [m.chatGuid, m.service])).toEqual([["SMS;-;+15550001111", "SMS"]]);
+  });
+
+  test("a row queued before routes existed is stamped at claim; a global command gets none", async () => {
+    const { t, c } = await setup();
+    await t.run(async (ctx) => {
+      for (const [clientKey, conversationId, payload] of [
+        ["old", c, { kind: "rename", name: "Crew" }],
+        ["global", undefined, { kind: "clearSuggestionLearning" }],
+      ] as const) {
+        await ctx.db.insert("comma_outbox", { clientKey, conversationId, payload, status: "pending", attempts: 0, createdAt: 1, updatedAt: 1 });
+      }
+    });
+    const claims = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 10 });
+    expect(claims.map((row) => [row.clientKey, row.route ?? null])).toEqual([
+      ["old", { platform: "imessage", chatGuid: "iMessage;-;+15550001111" }],
+      ["global", null],
+    ]);
+    expect((await t.run((ctx) => ctx.db.query("comma_outbox").collect())).map((row) => row.route?.chatGuid ?? null))
+      .toEqual(["iMessage;-;+15550001111", null]);
+  });
+});
+
 test("global/new-chat commands enqueue without a conversation; other kinds require an existing one", async () => {
   const { t, as, c } = await setup();
   for (const payload of [{ kind: "createChat" as const, addresses: ["one"], text: "hi" }, { kind: "clearSuggestionLearning" as const }]) {

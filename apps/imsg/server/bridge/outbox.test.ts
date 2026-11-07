@@ -44,7 +44,7 @@ function harness(now = 1_000) {
 function row(clientKey: string, payload: OutboxRow["payload"], now = 1_000): OutboxRow {
   return {
     _id: `row-${clientKey}`, _creationTime: now, clientKey, conversationId: "conversation-test",
-    payload, claimToken: `claim-${clientKey}`, status: "claimed", attempts: 1, leaseUntil: now + 60_000, createdAt: now, updatedAt: now,
+    route: { platform: "imessage", chatGuid: CHAT }, payload, claimToken: `claim-${clientKey}`, status: "claimed", attempts: 1, leaseUntil: now + 60_000, createdAt: now, updatedAt: now,
   } as OutboxRow;
 }
 
@@ -148,12 +148,37 @@ function leaseClock() {
   return { timers, tick: () => callback?.(), stopped: () => stopped };
 }
 
+test("a send goes through the route Convex stamped, not one the Mini picks", async () => {
+  const h = harness();
+  await h.writer.refreshChats();
+  const sms = "SMS;-;+15550001111";
+  h.ingest.outboxRows.push({ ...row("k1", { kind: "send", text: "by sms" }), route: { platform: "imessage", chatGuid: sms } });
+  const bridge = h.start();
+  try {
+    await bridge.flush();
+    expect(h.bb.sentTexts).toEqual([{ chatGuid: sms, message: "by sms" }]);
+  } finally { bridge.stop(); }
+});
+
+test("a conversation command without a route fails without touching BlueBubbles", async () => {
+  const h = harness();
+  const command = row("k1", { kind: "send", text: "hi" });
+  delete command.route;
+  h.ingest.outboxRows.push(command);
+  const bridge = h.start();
+  try {
+    await bridge.flush();
+    expect(completions(h.ingest)).toEqual([{ clientKey: "k1", claimToken: "claim-k1", status: "failed", error: "Command has no route" }]);
+    expect(h.bb.sentTexts).toEqual([]);
+  } finally { bridge.stop(); }
+});
+
 test("both global kinds skip conversation resolution, and stubs fail cleanly", async () => {
   const h = harness();
-  h.writer.resolveConversation = async () => { throw new Error("must not resolve"); };
   for (const payload of [{ kind: "createChat", addresses: ["one"], text: "hi" }, { kind: "clearSuggestionLearning" }] as const) {
     const command = row(payload.kind, { ...payload, ...(payload.kind === "createChat" ? { addresses: ["one"] } : {}) } as OutboxRow["payload"]);
     delete command.conversationId;
+    delete command.route;
     h.ingest.outboxRows.push(command);
   }
   const bridge = h.start({ handlers: { createChat: { execute: async () => { throw new Error("not implemented"); } } } });
@@ -171,6 +196,7 @@ test("global handler receives a null conversation and returns its typed result",
   const h = harness();
   const command = row("global", { kind: "clearSuggestionLearning" });
   delete command.conversationId;
+  delete command.route;
   h.ingest.outboxRows.push(command);
   const bridge = h.start({ handlers: { clearSuggestionLearning: { execute: async (ctx) => {
     expect(ctx.conversationId).toBeNull();
@@ -186,6 +212,7 @@ test("non-global commands with no conversation fail before dispatch", async () =
   const h = harness();
   const command = row("bad", { kind: "send", text: "hi" });
   delete command.conversationId;
+  delete command.route;
   h.ingest.outboxRows.push(command);
   const bridge = h.start();
   try {

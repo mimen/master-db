@@ -11,8 +11,10 @@
 // `FunctionReference` (same technique apps/imsg/client/src/lib/identity.ts
 // uses for the same reason) resolves correctly regardless of codegen state.
 import { makeFunctionReference } from "convex/server";
+import type { TestConvex } from "convex-test";
 
 import type { Id } from "../_generated/dataModel";
+import type schema from "../schema";
 
 import type { GuestAddResult, GuestListEvent } from "./guestList";
 
@@ -138,25 +140,25 @@ export const removeTagRef = makeFunctionReference<
 
 export const setChatFavoriteRef = makeFunctionReference<
   "mutation",
-  { key: string; chatGuid: string; is_favorite: boolean },
+  { key: string; conversationId?: Id<"comma_conversations">; chatGuid?: string; is_favorite: boolean },
   null
 >("identity/crm:setChatFavorite");
 
 export const setChatPriorityRef = makeFunctionReference<
   "mutation",
-  { key: string; chatGuid: string; priority?: number | null },
+  { key: string; conversationId?: Id<"comma_conversations">; chatGuid?: string; priority?: number | null },
   null
 >("identity/crm:setChatPriority");
 
 export const addChatTagRef = makeFunctionReference<
   "mutation",
-  { key: string; chatGuid: string; tag: string },
+  { key: string; conversationId?: Id<"comma_conversations">; chatGuid?: string; tag: string },
   null
 >("identity/crm:addChatTag");
 
 export const removeChatTagRef = makeFunctionReference<
   "mutation",
-  { key: string; chatGuid: string; tag: string },
+  { key: string; conversationId?: Id<"comma_conversations">; chatGuid?: string; tag: string },
   null
 >("identity/crm:removeChatTag");
 
@@ -169,7 +171,7 @@ export type ChatCrmProjection = {
 
 export const chatCrmRef = makeFunctionReference<
   "query",
-  { key: string; chatGuids?: string[] },
+  { key: string; chatGuids?: string[]; conversationIds?: Id<"comma_conversations">[] },
   Record<string, ChatCrmProjection>
 >("identity/queries:chatCrm");
 
@@ -181,7 +183,7 @@ export const searchEventsRef = makeFunctionReference<
 
 export const linkEventRef = makeFunctionReference<
   "mutation",
-  { key: string; personId?: Id<"people">; chatGuid?: string; airtable_event_id: string; event_name: string },
+  { key: string; personId?: Id<"people">; conversationId?: Id<"comma_conversations">; chatGuid?: string; airtable_event_id: string; event_name: string },
   { linkId: Id<"event_links"> }
 >("identity/events:linkEvent");
 
@@ -265,3 +267,17 @@ export const setNotesRef = makeFunctionReference<
   { key: string; personId: Id<"people">; notes: string },
   null
 >("identity/crm:setNotes");
+
+/** A group conversation whose service chats are these GUIDs, the first one primary. */
+export async function seedGroup(t: TestConvex<typeof schema>, chatGuids: string[]): Promise<Id<"comma_conversations">> {
+  return await t.run(async (ctx) => {
+    const conversationId = await ctx.db.insert("comma_conversations", {
+      platform: "imessage", conversationKey: `g:${chatGuids[0]}`, primaryChatGuid: chatGuids[0] ?? "", chatGuids,
+      displayName: "Group", isGroup: true, participants: [], lastMessageAt: 0, isSpam: false, hasGroupPhoto: false, updatedAt: 0,
+    });
+    for (const chatGuid of chatGuids) {
+      await ctx.db.insert("comma_chat_aliases", { chatGuid, conversationId, service: chatGuid.split(";")[0] ?? "" });
+    }
+    return conversationId;
+  });
+}
