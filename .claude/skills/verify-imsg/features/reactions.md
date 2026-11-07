@@ -1,14 +1,13 @@
 # Reactions
 
-A reaction is generic data: a key (an iMessage tapback name such as `love`, or an emoji tapback's emoji), an optional emoji, and its sender. Convex stores each sender's newest state per message and key in `comma_reactions`; ingest turns an iMessage tapback into that state instead of a message row. A message ingested before that keeps its tapbacks folded on the row, and reads show the fold until a newer reaction event decides the same sender and key. The tray offers the route's reaction set from its platform profile.
+A reaction is generic data: a key (an iMessage tapback name such as `love`, or an emoji tapback's emoji), an optional emoji, and its sender. Convex stores each sender's newest state per message and key in `comma_reactions`; ingest turns an iMessage tapback into that state instead of a message row. The tray offers the route's reaction set from its platform profile.
 
 ## Sub-features
 
-- `reactions-legacy` shows a reaction that exists only in a message row's legacy fold.
 - `reactions-react` lands my Like on the stored row as `key: "like"`.
 - `reactions-change` turns Laugh on and Like off; the tray toggles each tapback, so a change is two picks.
 - `reactions-remove` clears my last reaction.
-- `reactions-peer` shows a peer's reaction from the new form, and a peer's newer removal hides the legacy fold's matching reaction.
+- `reactions-peer` shows a peer's reactions, and a peer's removal hides only that reaction.
 
 ## How to get to it (user POV)
 
@@ -18,9 +17,9 @@ Open Alex Rivera and right-click the inbound bubble to open the tray.
 
 The drive is `drives/reactions.ts`. It records every `react` enqueue and reads reactions back through `comma/queries:listMessages`.
 
-- **Legacy.** Before opening the thread, POST `/__fixture/tapback` with `{ chatGuid, targetGuid: "needs-1", reaction: "love", handle, legacy: true }`. A `legacy-` tapback stands for a row ingested before `comma_reactions`. The `Love` chip shows on my message.
+- **Peer love.** Before opening the thread, POST `/__fixture/tapback` with `{ chatGuid, targetGuid: "needs-1", reaction: "love", handle }`. The `Love` chip shows on my message.
 - **React, change, remove.** Pick `Like`, then `Laugh`, then `Remove Like`, then `Remove Laugh`. Chips follow, and the stored row shows my keys at each step.
-- **Peer.** POST `/__fixture/tapback` with `reaction: "emphasize"`, then `"-love"`, without `legacy`. The `Emphasize` chip shows and the legacy `Love` goes.
+- **Peer.** POST `/__fixture/tapback` with `reaction: "emphasize"`, then `"-love"`. The `Emphasize` chip shows and `Love` goes.
 
 ## Gotchas
 

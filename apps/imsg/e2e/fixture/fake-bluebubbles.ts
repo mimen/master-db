@@ -66,10 +66,10 @@ export class FixtureBlueBubbles implements BlueBubbles {
     return message;
   }
 
-  /** A peer's tapback. A `legacy-` guid marks it as ingested before comma_reactions, so reads show it through the row's legacy fold. */
-  receiveTapback(chatGuid: string, targetGuid: string, reaction: string, handle: string, legacy: boolean): BBMessage {
+  /** A peer's tapback. */
+  receiveTapback(chatGuid: string, targetGuid: string, reaction: string, handle: string): BBMessage {
     const message: BBMessage = {
-      guid: `${legacy ? "legacy-" : ""}tapback-${crypto.randomUUID()}`, chats: [{ guid: chatGuid }],
+      guid: `tapback-${crypto.randomUUID()}`, chats: [{ guid: chatGuid }],
       isFromMe: false, dateCreated: Date.now(), handle: { address: handle },
       associatedMessageGuid: `p:0/${targetGuid}`, associatedMessageType: reaction,
     };

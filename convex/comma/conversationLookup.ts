@@ -8,12 +8,8 @@ type Conversation = Doc<"comma_conversations">;
 
 /** The conversation a platform knows by this key. */
 export async function findByKey(ctx: QueryCtx, platform: CommaPlatform, key: string): Promise<Conversation | null> {
-  const found = await ctx.db.query("comma_conversations")
-    .withIndex("by_platform_conversationKey", (q) => q.eq("platform", platform).eq("conversationKey", key)).unique();
-  if (found) return found;
-  // ponytail: rows from before platforms existed carry none; drop once migrations:backfillConversationPlatform has run.
   return await ctx.db.query("comma_conversations")
-    .withIndex("by_platform_conversationKey", (q) => q.eq("platform", undefined).eq("conversationKey", key)).unique();
+    .withIndex("by_platform_conversationKey", (q) => q.eq("platform", platform).eq("conversationKey", key)).unique();
 }
 
 /** The one-to-one conversation with this handle (a phone number or an email) on a platform. */

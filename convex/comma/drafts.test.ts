@@ -13,6 +13,7 @@ async function setup() {
   const t = convexTest(schema, modules);
   const userId = await t.run((ctx) => ctx.db.insert("users", { email: ALLOWED_EMAIL }));
   const conversationId = await t.run((ctx) => ctx.db.insert("comma_conversations", {
+    platform: "imessage",
     conversationKey: "dm:+15550001111",
     primaryChatGuid: "iMessage;-;+15550001111",
     chatGuids: ["iMessage;-;+15550001111"],
@@ -95,7 +96,7 @@ test("storeAttachment stores the bytes and finalizes the upload the send path ch
 test("prepareDraft resolves a conversation by phone in any format, chatGuid, or id", async () => {
   const { t, as } = await setup();
   const conversationId = await t.run((ctx) => ctx.db.insert("comma_conversations", {
-    conversationKey: "dm:+14155552671", primaryChatGuid: "iMessage;-;+14155552671", chatGuids: ["iMessage;-;+14155552671"],
+    platform: "imessage", conversationKey: "dm:+14155552671", primaryChatGuid: "iMessage;-;+14155552671", chatGuids: ["iMessage;-;+14155552671"],
     displayName: "Kai", isGroup: false, participants: [], lastMessageAt: 1, isSpam: false, hasGroupPhoto: false, updatedAt: 1,
   }));
   await t.run((ctx) => ctx.db.insert("comma_chat_aliases", { chatGuid: "iMessage;-;+14155552671", conversationId, service: "iMessage" }));
@@ -177,7 +178,7 @@ test("sending a drafted attachment clears the draft, another attachment does not
 test("listDrafts lists every draft newest first and the agent list and delete touch only agent drafts", async () => {
   const { t, as, conversationId } = await setup();
   const second = await t.run((ctx) => ctx.db.insert("comma_conversations", {
-    conversationKey: "dm:sam@example.com", primaryChatGuid: "iMessage;-;sam@example.com", chatGuids: ["iMessage;-;sam@example.com"],
+    platform: "imessage", conversationKey: "dm:sam@example.com", primaryChatGuid: "iMessage;-;sam@example.com", chatGuids: ["iMessage;-;sam@example.com"],
     displayName: "Sam", isGroup: false, participants: [], lastMessageAt: 1, isSpam: false, hasGroupPhoto: false, updatedAt: 1,
   }));
   await t.run((ctx) => ctx.db.insert("comma_chat_aliases", { chatGuid: "iMessage;-;sam@example.com", conversationId: second, service: "iMessage" }));

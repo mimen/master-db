@@ -352,10 +352,10 @@ describe("Comma read queries", () => {
       await ctx.db.insert("identities", { kind: "phone", value: address, normalized: address, person_id: personId,
         message_count: 0, chat_count: 0, is_self: false, source: "apple_contact", created_at: "x", updated_at: "x" });
       await ctx.db.insert("tags", { person_id: personId, tag: "showcase", created_at: "x" });
-      await ctx.db.insert("chat_crm", { chat_guid: "iMessage;+;crew", priority: 4, created_at: "x", updated_at: "x" });
-      await ctx.db.insert("tags", { chat_guid: "iMessage;+;crew", tag: "launch", created_at: "x" });
       const dm = await ctx.db.insert("comma_conversations", { ...conversation("dm", 3), participants: [{ address, name: null }] });
       const group = await ctx.db.insert("comma_conversations", { ...conversation("crew", 2), isGroup: true, primaryChatGuid: "iMessage;+;crew" });
+      await ctx.db.insert("chat_crm", { chat_guid: "iMessage;+;crew", conversation_id: group, priority: 4, created_at: "x", updated_at: "x" });
+      await ctx.db.insert("tags", { chat_guid: "iMessage;+;crew", conversation_id: group, tag: "launch", created_at: "x" });
       const plain = await ctx.db.insert("comma_conversations", conversation("plain", 1));
       return [dm, group, plain];
     });
@@ -443,9 +443,9 @@ test("conversation and message names react to identity changes without a bridge 
     await ctx.db.insert("identities", { person_id: personId, kind: "phone", source: "manual", value: "+16195551234", normalized: "+16195551234",
       is_self: false, message_count: 0, chat_count: 0, created_at: "before", updated_at: "before" });
     const conversationId = await ctx.db.insert("comma_conversations", conversation("+16195551234", 1));
-    await ctx.db.insert("comma_messages", { ...message(conversationId, "m", 1), sender: { address: "+16195551234 (smsfp)", name: "Old mirrored name" },
-      reactions: [{ type: "love", isFromMe: false, senderAddress: "+16195551234", senderName: "Old mirrored name" },
-        { type: "like", isFromMe: true, senderAddress: null, senderName: null }] });
+    await ctx.db.insert("comma_messages", { ...message(conversationId, "m", 1), sender: { address: "+16195551234 (smsfp)", name: "Old mirrored name" } });
+    await ctx.db.insert("comma_reactions", { platform: "imessage", conversationId, targetKey: "imessage:m", key: "like", emoji: "👍",
+      isFromMe: true, at: 1, removed: false });
     await ctx.db.insert("comma_reactions", { platform: "imessage", conversationId, targetKey: "imessage:m", key: "😍", emoji: "😍",
       isFromMe: false, senderAddress: "+16195551234", at: 2, removed: false });
     return { personId, conversationId };
@@ -456,7 +456,7 @@ test("conversation and message names react to identity changes without a bridge 
     known: true, searchNames: ["name after", "nick"] });
   const messages = await t.query(api.comma.queries.listMessages, { conversationId, paginationOpts });
   expect(messages.page[0].sender?.name).toBe("Name After");
-  expect(messages.page[0].reactions.map((r) => [r.key, r.senderName])).toEqual([["love", "Name After"], ["like", null], ["😍", "Name After"]]);
+  expect(messages.page[0].reactions.map((r) => [r.key, r.senderName])).toEqual([["like", null], ["😍", "Name After"]]);
   const hits = await t.query(api.comma.queries.searchMessages, { query: "comet", conversationId });
   expect(hits.map((hit) => hit.sender?.name)).toEqual(["Name After"]);
 });

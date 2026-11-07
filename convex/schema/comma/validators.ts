@@ -30,7 +30,7 @@ export const reaction = v.object({
   type: v.optional(v.string()),
 });
 
-/** The folded tapbacks stored on a message row before comma_reactions existed. Read only as a fallback. */
+/** The folded tapbacks stored on a message row before comma_reactions existed. Nothing reads them. */
 export const legacyReaction = v.object({
   type: v.string(),
   emoji: v.optional(v.string()),
@@ -62,7 +62,7 @@ export const lastMessageSummary = v.object({
   hasAttachments: v.boolean(),
 });
 
-/** A legacy tapback row's target. Ingest now writes tapbacks to comma_reactions instead. */
+/** What a tapback the bridge posts does. Ingest writes it to comma_reactions and stores no message row. */
 export const tapback = v.object({
   targetGuid: v.string(),
   reaction: v.string(),
@@ -71,7 +71,7 @@ export const tapback = v.object({
 });
 
 export const conversationFields = {
-  /** Absent on rows written before platforms existed, which are all iMessage. */
+  /** Every stored row has one. Optional because test fixtures across convex/comma still omit it. */
   platform: v.optional(platform),
   /** Unique within a platform. `dm:+E164`, `dm:email`, `g:identifier`, or `chat:guid`; see convex/comma/conversationIdentity.ts. */
   conversationKey: v.string(),
@@ -138,13 +138,13 @@ export const imessageMessageFields = {
   isSpam: v.optional(v.boolean()),
   special: v.optional(specialContent),
   sendEffect: v.optional(v.string()),
-  /** Legacy: true on tapback rows ingested before comma_reactions, and on other associated messages. */
+  /** True on an associated message such as a tapback. Ingest stores only the ones it cannot turn into a reaction. */
   isTapback: v.boolean(),
-  /** Top-level copy of tapback.targetGuid so it can be indexed. */
+  /** The bridge still sends tapback.targetGuid here; nothing reads it. */
   tapbackTargetGuid: v.optional(v.string()),
   tapback: v.optional(tapback),
-  /** Legacy fold of those tapback rows. Readers merge it under comma_reactions; see convex/comma/reactions.ts. */
-  reactions: v.array(legacyReaction),
+  /** Rows ingested before comma_reactions keep their folded tapbacks; nothing reads them. Reactions are in comma_reactions. */
+  reactions: v.optional(v.array(legacyReaction)),
 };
 
 export const messageFields = { ...messageCoreFields, ...imessageMessageFields };

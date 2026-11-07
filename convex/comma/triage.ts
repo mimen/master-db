@@ -1,13 +1,12 @@
 import { ConvexError, v } from "convex/values";
 
-import { isPendingGuid } from "../../apps/imsg/shared/pending-send";
+import { isPendingGuid, pendingClientKey } from "../../apps/imsg/shared/pending-send";
 import type { Doc, Id } from "../_generated/dataModel";
 import { mutation, type MutationCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 
 import { reopenConversationChats, settleConversationChats } from "./agent";
-import { enqueueCommand } from "./outbox";
-import { sameSend } from "./pendingSends";
+import { enqueueCommand } from "./enqueue";
 
 /**
  * Comma's own per-conversation triage state: settle anchors, pins, mutes, marked-unread, read times and the
@@ -47,6 +46,16 @@ async function conversationOf(ctx: MutationCtx, conversationId: ConversationId):
   const conversation = await ctx.db.get(conversationId);
   if (!conversation) throw new ConvexError("Conversation not found");
   return conversation;
+}
+
+/** A settle taken on a pending row still names the last message once its send lands as that message. */
+async function sameSend(ctx: MutationCtx, anchor: string, lastGuid: string): Promise<boolean> {
+  const clientKey = pendingClientKey(anchor);
+  if (clientKey === null) return false;
+  const send = await ctx.db.query("comma_outbox").withIndex("by_clientKey", (q) => q.eq("clientKey", clientKey)).unique();
+  if (send?.payload.kind === "send" && send.resultGuid === lastGuid) return true;
+  const real = await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", lastGuid)).unique();
+  return real?.clientKey === clientKey;
 }
 
 /**

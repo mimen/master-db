@@ -1,11 +1,9 @@
 import { TAPBACK_GLYPHS } from "../../apps/imsg/shared/platform-profile";
-import type { CommaLegacyReaction, CommaPlatform, CommaReaction, CommaReactionState, CommaTapback } from "../schema/comma/validators";
+import type { CommaPlatform, CommaReaction, CommaReactionState, CommaTapback } from "../schema/comma/validators";
 
 /**
  * Reactions as platform-neutral data. A comma_reactions row is one sender's newest state for one key on
- * one message. iMessage tapbacks become reactions at ingest. Messages ingested before that carry their
- * tapbacks folded on the row (`reactions`), and readers show that fold under the new rows until
- * migrations:deleteLegacyTapbacks has run. Pure, so the bridge's fixture serves reads by the same rules;
+ * one message. iMessage tapbacks become reactions at ingest. Pure, so the bridge's fixture serves reads by the same rules;
  * the Convex reads and writes live in reactionStore.ts.
  */
 
@@ -80,11 +78,7 @@ function view(reaction: { key: string; emoji?: string; isFromMe: boolean; sender
   };
 }
 
-/** What a message shows: its legacy fold minus anything a newer row has decided, then live rows oldest first. Names are the reader's to fill. */
-export function mergeReactions(legacy: readonly CommaLegacyReaction[], rows: readonly CommaReactionState[]): CommaReaction[] {
-  const old = legacy
-    .map((r) => ({ key: tapbackKey(r.type, r.emoji), emoji: tapbackEmoji(r.type, r.emoji), isFromMe: r.isFromMe, senderAddress: r.senderAddress }))
-    .filter((r) => !rows.some((row) => sameReaction(row, r)));
-  const live = rows.filter((row) => !row.removed).sort((a, b) => a.at - b.at);
-  return [...old, ...live].map(view);
+/** What a message shows: its live rows, oldest first. Names are the reader's to fill. */
+export function shownReactions(rows: readonly CommaReactionState[]): CommaReaction[] {
+  return rows.filter((row) => !row.removed).sort((a, b) => a.at - b.at).map(view);
 }

@@ -10,12 +10,11 @@ import {
   participant,
   scheduledStatus,
   suggestionFields,
-  type CommaLegacyReaction,
 } from "../schema/comma/validators";
 
 import { choosePrimary, imessage } from "./conversationIdentity";
 import { findByChatGuid, findByKey } from "./conversationLookup";
-import { landEcho, newestInFlight } from "./pendingSends";
+import { landEcho, refreshLastMessage } from "./pendingSends";
 import { fromTapback } from "./reactions";
 import { applyReaction } from "./reactionStore";
 import { logReplies } from "./triage";
@@ -27,10 +26,10 @@ import { logReplies } from "./triage";
  *
  * Batch limits: keep calls at or under 200 messages or attachments. A Convex
  * mutation may write 8,192 documents and read 16,384, and each message write
- * can also touch its target, its conversation, and earlier tapbacks.
+ * can also touch its conversation and its reactions.
  *
  * A tapback the bridge posts as a message row is a reaction: it lands in comma_reactions and
- * leaves no message row. Tapback rows ingested before that stay until migrations:deleteLegacyTapbacks.
+ * leaves no message row.
  */
 
 /** Structural equality over Convex values, ignoring object key order. */
@@ -118,74 +117,6 @@ export const upsertConversations = internalMutation({
   },
 });
 
-/** Replays a target's legacy tapback rows in date order into its folded reactions. */
-export function foldTapbacks(tapbacks: Pick<Doc<"comma_messages">, "dateCreated" | "isFromMe" | "sender" | "tapback">[]): CommaLegacyReaction[] {
-  let reactions: CommaLegacyReaction[] = [];
-  for (const row of [...tapbacks].sort((a, b) => a.dateCreated - b.dateCreated)) {
-    if (!row.tapback) continue;
-    const senderAddress = row.sender?.address ?? null;
-    // My own reactions share one sender regardless of address; others match by address.
-    const sameSender = (r: CommaLegacyReaction) =>
-      row.isFromMe ? r.isFromMe : !r.isFromMe && r.senderAddress === senderAddress;
-    const same = (r: CommaLegacyReaction) =>
-      sameSender(r) && r.type === row.tapback?.reaction && (r.emoji ?? null) === (row.tapback?.emoji ?? null);
-    reactions = reactions.filter((r) => !same(r));
-    if (!row.tapback.remove) {
-      reactions.push({
-        type: row.tapback.reaction,
-        ...(row.tapback.emoji ? { emoji: row.tapback.emoji } : {}),
-        isFromMe: row.isFromMe,
-        senderName: row.sender?.name ?? null,
-        senderAddress,
-      });
-    }
-  }
-  return reactions;
-}
-
-export async function refoldTarget(ctx: MutationCtx, targetGuid: string): Promise<void> {
-  const target = await ctx.db
-    .query("comma_messages")
-    .withIndex("by_guid", (q) => q.eq("guid", targetGuid))
-    .unique();
-  if (!target || target.isTapback) return;
-  const tapbacks = await ctx.db
-    .query("comma_messages")
-    .withIndex("by_tapbackTargetGuid", (q) => q.eq("tapbackTargetGuid", targetGuid))
-    .collect();
-  await ctx.db.patch(target._id, { reactions: foldTapbacks(tapbacks) });
-}
-
-export async function refreshLastMessage(ctx: MutationCtx, conversationId: Id<"comma_conversations">): Promise<void> {
-  const conversation = await ctx.db.get(conversationId);
-  if (!conversation) return;
-  // A send lands with the time the Mac sent it, later than the sends still queued behind it.
-  let newest = await newestInFlight(ctx, conversationId);
-  if (!newest) {
-    for await (const message of ctx.db
-      .query("comma_messages")
-      .withIndex("by_conversation_date", (q) => q.eq("conversationId", conversationId))
-      .order("desc")) {
-      if (!message.isTapback && !message.retracted) {
-        newest = message;
-        break;
-      }
-    }
-  }
-  if (!newest) return;
-  await ctx.db.patch(conversationId, {
-    lastMessage: {
-      guid: newest.guid,
-      text: newest.text,
-      dateCreated: newest.dateCreated,
-      isFromMe: newest.isFromMe,
-      senderName: newest.sender?.name ?? null,
-      hasAttachments: newest.attachmentGuids.length > 0,
-    },
-    lastMessageAt: Math.max(conversation.lastMessageAt, newest.dateCreated),
-  });
-}
-
 export const upsertMessages = internalMutation({
   args: { messages: v.array(v.object(messageFields)) },
   returns: v.object({ written: v.number(), skipped: v.number() }),
@@ -193,7 +124,6 @@ export const upsertMessages = internalMutation({
     let written = 0;
     let skipped = 0;
     const touchedConversations = new Set<Id<"comma_conversations">>();
-    const touchedTargets = new Set<string>();
     const real: typeof messages = [];
     for (const message of messages) {
       const existing = await ctx.db
@@ -210,18 +140,14 @@ export const upsertMessages = internalMutation({
         else skipped++;
         continue;
       }
-      // Folded reactions are derived; never let an incoming row clobber them.
-      const row = { ...message, platform: imessage.platform, reactions: existing?.reactions ?? [] };
+      const row = { ...message, platform: imessage.platform };
       if (existing) await ctx.db.patch(existing._id, row);
       else await ctx.db.insert("comma_messages", row);
       await landEcho(ctx, message);
       written++;
       if (!isPendingGuid(message.guid) && !message.isTapback && !message.retracted) real.push(message);
       touchedConversations.add(message.conversationId);
-      // A message folds legacy tapbacks that were ingested before it.
-      touchedTargets.add(message.guid);
     }
-    for (const targetGuid of touchedTargets) await refoldTarget(ctx, targetGuid);
     for (const conversationId of touchedConversations) await refreshLastMessage(ctx, conversationId);
     await logReplies(ctx, real);
     return { written, skipped };

@@ -335,19 +335,6 @@ describe("lanes", () => {
     expect((await claim(t, 1000)).map((r) => r.clientKey).sort()).toEqual(["a", "s"]);
   });
 
-  test("a row queued before lanes joins the lane its kind maps to", async () => {
-    const { t, c } = await setup();
-    const legacy = (clientKey: string, payload: CommaOutboxPayload, createdAt: number, status: "pending" | "claimed" = "pending") =>
-      t.run((ctx) => ctx.db.insert("comma_outbox", { clientKey, conversationId: c, payload, status, attempts: status === "claimed" ? 1 : 0,
-        ...(status === "claimed" ? { leaseUntil: 10, claimToken: "old" } : {}), createdAt, updatedAt: createdAt }));
-    await legacy("old-send", send, 1);
-    await legacy("old-ai", suggestions, 2);
-    await legacy("old-claimed-ai", { kind: "identify" }, 3, "claimed");
-    await t.run((ctx) => ctx.db.insert("comma_outbox", { clientKey: "new-send", conversationId: c, payload: send, lane: "imessage", status: "pending", attempts: 0, createdAt: 4, updatedAt: 4 }));
-    expect((await t.query(api.comma.outbox.pendingOutbox, { bridgeKey: SECRET, lane: "ai" })).map((r) => r.clientKey)).toEqual(["old-ai"]);
-    expect((await claim(t, 20, "imessage")).map((r) => r.clientKey)).toEqual(["old-send", "new-send"]);
-    expect((await claim(t, 20, "ai")).map((r) => r.clientKey)).toEqual(["old-ai", "old-claimed-ai"]);
-  });
 });
 
 describe("pendingOutbox", () => {
@@ -374,24 +361,6 @@ describe("routes", () => {
     expect(temp.map((m) => [m.chatGuid, m.service])).toEqual([["SMS;-;+15550001111", "SMS"]]);
   });
 
-  test("a row queued before routes existed is stamped at claim; a global command gets none", async () => {
-    const { t, c } = await setup();
-    await t.run(async (ctx) => {
-      for (const [clientKey, conversationId, payload] of [
-        ["old", c, { kind: "rename", name: "Crew" }],
-        ["global", undefined, { kind: "clearSuggestionLearning" }],
-      ] as const) {
-        await ctx.db.insert("comma_outbox", { clientKey, conversationId, payload, status: "pending", attempts: 0, createdAt: 1, updatedAt: 1 });
-      }
-    });
-    const claims = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 10 });
-    expect(claims.map((row) => [row.clientKey, row.route ?? null])).toEqual([
-      ["old", { platform: "imessage", chatGuid: "iMessage;-;+15550001111" }],
-      ["global", null],
-    ]);
-    expect((await t.run((ctx) => ctx.db.query("comma_outbox").collect())).map((row) => row.route?.chatGuid ?? null))
-      .toEqual(["iMessage;-;+15550001111", null]);
-  });
 });
 
 test("global/new-chat commands enqueue without a conversation; other kinds require an existing one", async () => {
@@ -636,19 +605,4 @@ describe("react remove", () => {
     expect((await reactions()).map((r) => r.isFromMe)).toEqual([false]);
   });
 
-  test("a confirmed removal hides my tapback from a message ingested before comma_reactions, and keeps its rows", async () => {
-    const { t, as, c } = await setup();
-    await t.run(async (ctx) => {
-      await ctx.db.insert("comma_messages", { conversationId: c, chatGuid: "iMessage;-;+15550001111", service: "iMessage", error: 0,
-        edited: false, retracted: false, isGroupEvent: false, mentions: [], attachmentGuids: [], guid: "target", dateCreated: 1,
-        isFromMe: false, isTapback: false, text: "hi", sourceVersion: 1000,
-        reactions: [{ type: "like", isFromMe: true, senderName: null, senderAddress: null }] });
-    });
-    await as.mutation(api.comma.outbox.enqueue, { clientKey: "r", conversationId: c, payload: { kind: "react", messageGuid: "target", reaction: "like", remove: true } });
-    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 10 });
-    await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "r", claimToken: claim.claimToken!, status: "sent" });
-    const target = await t.run((ctx) => ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "target")).unique());
-    expect(target?.reactions).toHaveLength(1);
-    expect(await t.run((ctx) => reactionsOf(ctx, target!))).toEqual([]);
-  });
 });

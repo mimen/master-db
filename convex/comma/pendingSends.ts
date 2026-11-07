@@ -1,29 +1,22 @@
-import { makeFunctionReference } from "convex/server";
 import { ConvexError, v } from "convex/values";
 
-import { NOT_SENT_AFTER_MS, NOT_SENT_ERROR, isPendingGuid, pendingClientKey, pendingGuid } from "../../apps/imsg/shared/pending-send";
-import { messageService } from "../../apps/imsg/shared/platform-profile";
+import { NOT_SENT_AFTER_MS, NOT_SENT_ERROR, isPendingGuid, pendingGuid } from "../../apps/imsg/shared/pending-send";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, mutation, type MutationCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
-import type { CommaOutboxPayload, CommaPendingSendState, CommaRoute } from "../schema/comma/validators";
+import type { CommaPendingSendState } from "../schema/comma/validators";
 
-import { refreshLastMessage } from "./internal";
-import { enqueueCommand } from "./outbox";
-import { profileRoute } from "./routeSupport";
+import { enqueueCommand } from "./enqueue";
 import { carryTempAnchor } from "./triage";
 
 /**
  * The lifecycle of a message the user sent that has not landed yet, for any platform. Its pending row in
- * comma_messages is the bubble every client draws; the outbox row is the work. Each transition below keeps the
- * two in step: create, claim, land (by receipt or by the platform's echo), strand, cancel and retry.
- * See apps/imsg/shared/pending-send.ts for the states.
+ * comma_messages is the bubble every client draws; the outbox row is the work. Enqueue creates both (enqueue.ts);
+ * each transition below keeps the two in step: claim, land (by receipt or by the platform's echo), strand, cancel
+ * and retry. See apps/imsg/shared/pending-send.ts for the states.
  */
 
 type ConversationId = Id<"comma_conversations">;
-type SendPayload = Extract<CommaOutboxPayload, { kind: "send" }>;
-
-const expireRef = makeFunctionReference<"mutation", { clientKey: string }, null>("comma/pendingSends:expire");
 
 async function pendingRow(ctx: MutationCtx, clientKey: string): Promise<Doc<"comma_messages"> | null> {
   return await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", pendingGuid(clientKey))).unique();
@@ -32,40 +25,6 @@ async function pendingRow(ctx: MutationCtx, clientKey: string): Promise<Doc<"com
 async function sendRow(ctx: MutationCtx, clientKey: string): Promise<Doc<"comma_outbox"> | null> {
   const row = await ctx.db.query("comma_outbox").withIndex("by_clientKey", (q) => q.eq("clientKey", clientKey)).unique();
   return row?.payload.kind === "send" ? row : null;
-}
-
-/** The bubble shows at once, and the sidebar moves with it rather than a platform round trip later. */
-export async function createPendingSend(ctx: MutationCtx, { conversation, route, clientKey, payload, now }: {
-  conversation: Doc<"comma_conversations">; route: CommaRoute; clientKey: string; payload: SendPayload; now: number;
-}): Promise<void> {
-  // The real row's refreshLastMessage overwrites this preview, and a stranded send stays the preview.
-  await ctx.db.patch(conversation._id, {
-    lastMessage: { guid: pendingGuid(clientKey), text: payload.text, dateCreated: now, isFromMe: true, senderName: null, hasAttachments: false },
-    lastMessageAt: Math.max(conversation.lastMessageAt, now),
-  });
-  await ctx.db.insert("comma_messages", {
-    platform: route.platform,
-    guid: pendingGuid(clientKey),
-    conversationId: conversation._id,
-    chatGuid: route.chatGuid,
-    dateCreated: now,
-    isFromMe: true,
-    text: payload.text,
-    service: messageService(profileRoute(route, conversation.isGroup).service),
-    error: 0,
-    edited: false,
-    retracted: false,
-    isTapback: false,
-    reactions: [],
-    replyToGuid: payload.replyToGuid,
-    isGroupEvent: false,
-    mentions: payload.mentions ?? [],
-    attachmentGuids: [],
-    clientKey,
-    sourceVersion: 0,
-    sendState: "queued",
-  });
-  await ctx.scheduler.runAfter(NOT_SENT_AFTER_MS, expireRef, { clientKey });
 }
 
 /** The executor took the send, so it is on its way and can no longer be cancelled. */
@@ -124,6 +83,37 @@ export async function completePendingSend(ctx: MutationCtx, clientKey: string, s
   await refreshLastMessage(ctx, pending.conversationId);
 }
 
+/** A conversation's preview: its newest in-flight send, else its newest real message. */
+export async function refreshLastMessage(ctx: MutationCtx, conversationId: Id<"comma_conversations">): Promise<void> {
+  const conversation = await ctx.db.get(conversationId);
+  if (!conversation) return;
+  // A send lands with the time the Mac sent it, later than the sends still queued behind it.
+  let newest = await newestInFlight(ctx, conversationId);
+  if (!newest) {
+    for await (const message of ctx.db
+      .query("comma_messages")
+      .withIndex("by_conversation_date", (q) => q.eq("conversationId", conversationId))
+      .order("desc")) {
+      if (!message.isTapback && !message.retracted) {
+        newest = message;
+        break;
+      }
+    }
+  }
+  if (!newest) return;
+  await ctx.db.patch(conversationId, {
+    lastMessage: {
+      guid: newest.guid,
+      text: newest.text,
+      dateCreated: newest.dateCreated,
+      isFromMe: newest.isFromMe,
+      senderName: newest.sender?.name ?? null,
+      hasAttachments: newest.attachmentGuids.length > 0,
+    },
+    lastMessageAt: Math.max(conversation.lastMessageAt, newest.dateCreated),
+  });
+}
+
 /** An ingested message that is a queued send's platform copy, by the clientKey it carries or the send the outbox confirmed. */
 export async function landEcho(ctx: MutationCtx, message: Pick<Doc<"comma_messages">, "guid" | "clientKey">): Promise<void> {
   if (isPendingGuid(message.guid)) return;
@@ -143,15 +133,6 @@ export async function newestInFlight(ctx: MutationCtx, conversationId: Conversat
     if (send && (!newest || send._creationTime > newest._creationTime)) newest = send;
   }
   return newest ? await pendingRow(ctx, newest.clientKey) : null;
-}
-
-/** A settle taken on a pending row still names the last message once its send lands as that message. */
-export async function sameSend(ctx: MutationCtx, anchor: string, lastGuid: string): Promise<boolean> {
-  const clientKey = pendingClientKey(anchor);
-  if (clientKey === null) return false;
-  if ((await sendRow(ctx, clientKey))?.resultGuid === lastGuid) return true;
-  const real = await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", lastGuid)).unique();
-  return real?.clientKey === clientKey;
 }
 
 /** Removes a send nothing has taken yet, so it never goes out. False once the executor has it. */

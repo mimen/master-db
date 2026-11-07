@@ -4590,7 +4590,7 @@ export declare const internal: {
             isTapback: boolean;
             mentions: Array<{ address: string; length: number; start: number }>;
             platform?: "imessage";
-            reactions: Array<{
+            reactions?: Array<{
               emoji?: string;
               isFromMe: boolean;
               senderAddress: string | null;
@@ -4648,48 +4648,6 @@ export declare const internal: {
               };
         },
         string | boolean
-      >;
-    };
-    migrations: {
-      backfillConversationPlatform: FunctionReference<
-        "mutation",
-        "internal",
-        { cursor: string | null; dryRun: boolean },
-        { cursor: string; isDone: boolean; patched: number }
-      >;
-      backfillReactions: FunctionReference<
-        "mutation",
-        "internal",
-        { cursor: string | null; dryRun: boolean },
-        {
-          applied: number;
-          cursor: string;
-          deleted: number;
-          isDone: boolean;
-          scanned: number;
-        }
-      >;
-      deleteLegacyTapbacks: FunctionReference<
-        "mutation",
-        "internal",
-        { cursor: string | null; dryRun: boolean },
-        {
-          applied: number;
-          cursor: string;
-          deleted: number;
-          isDone: boolean;
-          scanned: number;
-        }
-      >;
-      rekeyGroupCrm: FunctionReference<
-        "mutation",
-        "internal",
-        { dryRun: boolean },
-        {
-          deleted: { chat_crm: number; event_links: number; tags: number };
-          moved: { chat_crm: number; event_links: number; tags: number };
-          unresolved: Array<string>;
-        }
       >;
     };
     outbox: {

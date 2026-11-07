@@ -166,12 +166,12 @@ const { app, dispose } = await createApp({
     });
 
     fixtureApp.post("/__fixture/tapback", async (c) => {
-      const body = (await c.req.json()) as { chatGuid?: string; targetGuid?: string; reaction?: string; handle?: string; legacy?: boolean };
+      const body = (await c.req.json()) as { chatGuid?: string; targetGuid?: string; reaction?: string; handle?: string };
       if (!body.chatGuid || !body.targetGuid || !body.reaction) {
         return c.json({ error: "chatGuid, targetGuid and reaction are required" }, 400);
       }
       const handle = body.handle ?? body.chatGuid.split(";").at(-1) ?? "";
-      const message = bb.receiveTapback(body.chatGuid, body.targetGuid, body.reaction, handle, body.legacy === true);
+      const message = bb.receiveTapback(body.chatGuid, body.targetGuid, body.reaction, handle);
       return c.json({ ok: true, message });
     });
 

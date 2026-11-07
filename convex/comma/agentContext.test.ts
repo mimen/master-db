@@ -116,12 +116,10 @@ test("agentAttachment returns a storage URL with the file's name and type", asyn
 });
 
 describe("aiThread", () => {
-  test("reads the thread as wire messages, newest last, with contact names, folded reactions and attachment kinds", async () => {
+  test("reads the thread as wire messages, newest last, with contact names, reactions and attachment kinds", async () => {
     const { t, conversationId } = await setup();
-    await t.run(async (ctx) => {
-      const m4 = await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "m4")).unique();
-      await ctx.db.patch(m4!._id, { reactions: [{ type: "love", isFromMe: true, senderName: null, senderAddress: null }] });
-    });
+    await t.run((ctx) => ctx.db.insert("comma_reactions", { platform: "imessage", conversationId, targetKey: "imessage:m4", key: "love", emoji: "❤️",
+      isFromMe: true, at: 1, removed: false }));
     const thread = await t.mutation(internal.comma.agentContext.aiThread, { conversationId });
     expect(thread).toMatchObject({ title: "Door crew", isGroup: true,
       participants: [{ address: ALEX, name: "Alex Rivera" }, { address: SAM, name: null }] });

@@ -379,15 +379,6 @@ describe("group CRM belongs to the conversation", () => {
     expect(tags).toMatchObject([{ conversation_id: conversationId, tag: "crew" }]);
   });
 
-  test("a row keyed only by chat GUID is adopted, not duplicated", async () => {
-    const t = convexTest(schema, modules);
-    const conversationId = await seedGroup(t, [PRIMARY]);
-    await t.run((ctx) => ctx.db.insert("chat_crm", { chat_guid: PRIMARY, priority: 3, created_at: "x", updated_at: "x" }));
-    await t.mutation(setChatFavoriteRef, { key: TEST_KEY, conversationId, is_favorite: true });
-    const rows = await t.run((ctx) => ctx.db.query("chat_crm").collect());
-    expect(rows).toMatchObject([{ conversation_id: conversationId, priority: 3, is_favorite: true }]);
-  });
-
   test("a GUID no conversation knows is refused", async () => {
     const t = convexTest(schema, modules);
     await expect(t.mutation(setChatFavoriteRef, { key: TEST_KEY, chatGuid: "iMessage;+;nowhere", is_favorite: true }))
