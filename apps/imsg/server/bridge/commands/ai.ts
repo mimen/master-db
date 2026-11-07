@@ -5,6 +5,7 @@ import { requireChat, type HandlerMap } from "./types";
 export interface AiCommandDeps {
   ai: Pick<AiService, "replySuggestions" | "identify" | "recordSuggestionFeedback" | "recordReactionFeedback" | "clearSuggestionLearning">;
   refreshContacts?: () => Promise<unknown>;
+  lookupName?: (address: string) => string | null;
   now?: () => number;
 }
 
@@ -46,7 +47,7 @@ export function createAiHandlers(deps?: AiCommandDeps) {
         if (!address) throw new Error("no participant address");
         if (deps?.refreshContacts) await deps.refreshContacts();
         else await context.commands.directory.summaries();
-        const result = await service().identify(chatGuid, address, context.writer.deps.names?.lookup(address) ?? null);
+        const result = await service().identify(chatGuid, address, deps?.lookupName?.(address) ?? null);
         if (!result.ok) throw new Error(result.error);
         context.signal.throwIfAborted();
         return { kind: "identify", contact: result.value };

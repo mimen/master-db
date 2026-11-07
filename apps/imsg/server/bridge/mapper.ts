@@ -4,7 +4,8 @@ import { mapChat, mapMessage, parseTapback } from "../map";
 import type { NameSource } from "../name-resolver";
 import type { AttachmentRow, ConversationInput, MessageRow } from "./convex-ingest";
 
-const unnamed: NameSource = {
+/** Convex names participants from the identity graph when it reads them, so the bridge sends raw addresses. */
+export const unnamed: NameSource = {
   available: false,
   lookup: () => null,
   searchTerms: () => [],
@@ -13,10 +14,10 @@ const unnamed: NameSource = {
 };
 const serviceRank: Record<string, number> = { iMessage: 0, RCS: 1, SMS: 2 };
 
-export function toConversationInputs(bbChats: BBChat[], names: NameSource = unnamed): ConversationInput[] {
+export function toConversationInputs(bbChats: BBChat[]): ConversationInput[] {
   const groups = new Map<string, BBChat[]>();
   for (const chat of bbChats) {
-    const summary = mapChat(chat, names);
+    const summary = mapChat(chat, unnamed);
     const key = conversationKey({
       isGroup: summary.isGroup,
       primaryChatGuid: chat.guid,
@@ -31,7 +32,7 @@ export function toConversationInputs(bbChats: BBChat[], names: NameSource = unna
       (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0) ||
       (serviceRank[a.guid.split(";")[0]] ?? 9) - (serviceRank[b.guid.split(";")[0]] ?? 9) ||
       a.guid.localeCompare(b.guid));
-    const primary = mapChat(siblings[0], names);
+    const primary = mapChat(siblings[0], unnamed);
     return {
       conversationKey: key,
       chats: siblings.map((chat) => ({ chatGuid: chat.guid, lastMessageAt: chat.lastMessage?.dateCreated ?? 0 })),
@@ -61,11 +62,10 @@ export function toMessageRow(
   bbMessage: BBMessage,
   conversationId: MessageRow["conversationId"],
   sourceVersion: number,
-  names: NameSource = unnamed,
 ): MessageRow {
   const chatGuid = bbMessage.chats?.[0]?.guid;
   if (!chatGuid) throw new Error(`Message ${bbMessage.guid} has no chat`);
-  const mapped = mapMessage(bbMessage, chatGuid, names, bbMessage.chats?.[0]?.participants);
+  const mapped = mapMessage(bbMessage, chatGuid, unnamed, bbMessage.chats?.[0]?.participants);
   const reaction = parseTapback(bbMessage);
   const targetGuid = bbMessage.associatedMessageGuid?.replace(/^b?p:\d+\//, "");
   return {

@@ -5,7 +5,6 @@ import { ConvexClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
 import type { Config } from "../config";
 import type { OverlayDb } from "../db";
-import type { NameSource } from "../name-resolver";
 import { typingHandler } from "./commands/presence";
 import { ConvexIngest } from "./convex-ingest";
 import { GroupPhotoMirror } from "./group-photos";
@@ -31,7 +30,6 @@ export function startBridge(deps: {
   db: OverlayDb;
   commands: ChatCommands;
   outboxClient?: ConvexClient;
-  names?: NameSource;
   backgroundServices?: boolean;
   ingest?: Pick<ConvexIngest, "post" | "upload">;
   chatDbPath?: string;
@@ -68,7 +66,7 @@ export function startBridge(deps: {
   const startup = new RetryWork("startup", async () => {
     if (!deps.config.convexSiteUrl) throw new Error("CONVEX_SITE_URL is unset");
     const ingest = deps.ingest ?? new ConvexIngest(deps.config);
-    const writer = new MessageWriter({ bb: deps.bb, db: deps.db, ingest, names: deps.names });
+    const writer = new MessageWriter({ bb: deps.bb, db: deps.db, ingest });
     try {
       groupPhotos = new GroupPhotoMirror(deps.bb, deps.db, ingest);
       writer.onChats = (chats) => groupPhotos?.observe(chats);

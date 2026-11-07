@@ -29,7 +29,7 @@ function harness(chatGuid = CHAT, privateApi = true) {
   const names = new ContactBook(bb);
   const commands = new ChatCommands(bb, new ChatDirectory(bb, names), names);
   const ingest = new FakeIngest();
-  const writer = new MessageWriter({ bb, db, ingest, names });
+  const writer = new MessageWriter({ bb, db, ingest });
   const context: CommandContext = { chatGuid, commands, writer, signal: new AbortController().signal,
     row: { clientKey: "key" } as CommandContext["row"], withLeaseRenewal: (work) => work() };
   return { bb, db, commands, ingest, writer, context, raw };

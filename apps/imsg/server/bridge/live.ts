@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import type { BBChat, BBMessage } from "../bb-types";
 import type { BlueBubbles, Result } from "../bluebubbles";
 import type { OverlayDb } from "../db";
-import type { NameSource } from "../name-resolver";
 import type { AttachmentRow, ConvexIngest, MessageRow } from "./convex-ingest";
 import { sourceVersion, toAttachmentRows, toConversationInputs, toMessageRow } from "./mapper";
 import { PresenceBridge } from "./presence";
@@ -34,7 +33,7 @@ export class MessageWriter {
   }
 
   async resolveConversation(id: MessageRow["conversationId"]): Promise<string> {
-    const known = () => toConversationInputs([...this.chats.values()], this.deps.names)
+    const known = () => toConversationInputs([...this.chats.values()])
       .find((row) => row.chats.some((chat) => this.conversationIds.get(chat.chatGuid) === id))?.chats[0]?.chatGuid;
     let guid = known();
     if (!guid) {
@@ -50,7 +49,6 @@ export class MessageWriter {
     bb: BlueBubbles;
     db: OverlayDb;
     ingest: Pick<ConvexIngest, "post">;
-    names?: NameSource;
   }) {}
 
   /** Set by the bridge so every mirrored attachment reaches the media upload queue. */
@@ -87,7 +85,7 @@ export class MessageWriter {
       this.posted.clear();
       this.postedSince = Date.now();
     }
-    const changed = toConversationInputs([...this.chats.values()], this.deps.names)
+    const changed = toConversationInputs([...this.chats.values()])
       .map((row) => ({ row, json: JSON.stringify(row) }))
       .filter(({ row, json }) => this.posted.get(row.conversationKey) !== json ||
         row.chats.some((chat) => !this.conversationIds.has(chat.chatGuid)));
@@ -118,7 +116,7 @@ export class MessageWriter {
       await this.ensureChat(chatGuid);
       const id = this.conversationIds.get(chatGuid);
       if (!id) throw new Error(`Unresolved conversation ${chatGuid}`);
-      const row = toMessageRow(message, id, 0, this.deps.names);
+      const row = toMessageRow(message, id, 0);
       if (message.tempGuid && this.outboxClientKeys.has(message.tempGuid)) row.clientKey = message.tempGuid;
       const files = toAttachmentRows(message, id, 0);
       const fingerprint = createHash("sha256").update(JSON.stringify({ row, files })).digest("hex");

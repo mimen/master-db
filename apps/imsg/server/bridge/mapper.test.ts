@@ -109,10 +109,12 @@ test("sourceVersion uses ROWID and sequence, never dates", () => {
   expect(() => sourceVersion(message(), 1000)).toThrow("sequence");
 });
 
-test("raw group name stays empty for unnamed groups instead of using participant names", () => {
-  const group: BBChat = { guid: "iMessage;+;group", displayName: "", participants: [{ address: "person@example.com" }] };
-  const names = { available: true, lookup: () => "Contact Name", searchTerms: () => [], chatCrm: () => undefined, personCrm: () => undefined };
-  expect(toConversationInputs([group], names)[0]).toMatchObject({ rawDisplayName: "", displayName: "Contact Name" });
-  expect(toConversationInputs([{ ...group, displayName: " Raw group name " }], names)[0])
+test("the bridge posts raw addresses and the chat's own name, never a contact name", () => {
+  const group: BBChat = { guid: "iMessage;+;group", displayName: "", participants: [{ address: "person@example.com", originalROWID: 7 }],
+    lastMessage: message({ handleId: 7 }) };
+  expect(toConversationInputs([group])[0]).toMatchObject({ rawDisplayName: "", displayName: "person@example.com",
+    participants: [{ address: "person@example.com", name: null }], lastMessage: { senderName: "person@example.com" } });
+  expect(toConversationInputs([{ ...group, displayName: " Raw group name " }])[0])
     .toMatchObject({ rawDisplayName: " Raw group name ", displayName: "Raw group name" });
+  expect(toMessageRow(message({ handle: { address: "person@example.com" } }), id, 42000).sender).toEqual({ address: "person@example.com", name: null });
 });

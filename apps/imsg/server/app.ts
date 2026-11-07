@@ -143,7 +143,7 @@ if (deps.backgroundServices !== false) {
 
 const stopLiveEvents = wireLiveEvents(bb, directory, names);
 const commands = new ChatCommands(bb, directory, names, () => commaBridge.scheduledChanged());
-const commaBridge = startBridge({ config, bb, db, names, now, commands,
+const commaBridge = startBridge({ config, bb, db, now, commands,
   backgroundServices: deps.backgroundServices, ingest: deps.bridgeIngest, chatDbPath: deps.bridgeChatDbPath,
   avatarDirectory: deps.bridgeAvatarDirectory,
   capabilities: () => {
@@ -155,7 +155,7 @@ const commaBridge = startBridge({ config, bb, db, names, now, commands,
     const result = await directory.summaries();
     return result.ok ? result.chats.find((chat) => chat.guid === directory.canonicalGuid(chatGuid)) ?? null : null;
   } },
-  handlers: createAiHandlers({ ai, refreshContacts: () => identity.refresh(), now }),
+  handlers: createAiHandlers({ ai, refreshContacts: () => identity.refresh(), lookupName: (address) => names.lookup(address), now }),
   today: { gateway, profile: () => loadProfile(config.ai.vaultPath) } });
 
 // ------------------------------------------------------------------- routes
