@@ -51,6 +51,8 @@ export type Screening = "known" | "stranger" | "spam";
 export interface PlatformRules {
   attention(conversation: { kind: ConversationKind }, last: { isFromMe: boolean } | null): Attention;
   screening(conversation: { isSpam: boolean; known: boolean }): Screening;
+  /** A sender keeps one live reaction per message, and a new one replaces theirs. Otherwise each key stands alone. */
+  oneReactionPerSender: boolean;
 }
 
 const EVERY: readonly RouteService[] = ["iMessage", "SMS", "RCS"];
@@ -81,6 +83,7 @@ export const IMESSAGE_PROFILE = {
   /** Apple's junk flag screens; otherwise a participant who resolves to a named person makes the conversation known. */
   screening: (conversation: { isSpam: boolean; known: boolean }): Screening =>
     conversation.isSpam ? "spam" : conversation.known ? "known" : "stranger",
+  oneReactionPerSender: true,
   /** The tapbacks a react command may send where "react" is supported. */
   reactions: ["love", "like", "dislike", "laugh", "emphasize", "question"] as const satisfies readonly TapbackType[],
   features: {
@@ -115,7 +118,7 @@ export const TAPBACK_GLYPHS: Readonly<Record<TapbackType, string>> = {
 
 /**
  * A reaction's key: a named tapback's name, or `emoji:` and the emoji for an emoji tapback ("emoji" alone when
- * the emoji could not be read). A sender keeps one reaction per message, whatever its key.
+ * the emoji could not be read).
  */
 export function tapbackKey(type: string, emoji?: string): string {
   return type === "emoji" ? (emoji ? `emoji:${emoji}` : "emoji") : type;

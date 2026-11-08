@@ -88,6 +88,24 @@ describe("reactionWrites", () => {
   });
 });
 
+describe("a platform where a sender keeps several reactions", () => {
+  const fire = state({ key: "emoji:🔥", emoji: "🔥", at: 20 });
+
+  test("an add leaves the sender's other reactions live, and each key's removal touches only that key", () => {
+    expect(reactionWrites([state()], fire, false)).toEqual([{ row: undefined, state: fire }]);
+    expect(reactionWrites([state()], state({ key: "like", at: 5 }), false)).toEqual([{ row: undefined, state: state({ key: "like", at: 5 }) }]);
+  });
+
+  test("every live reaction shows, oldest first", () => {
+    expect(shownReactions([fire, state(), state({ key: "like", removed: true })], false).map((r) => r.key)).toEqual(["love", "emoji:🔥"]);
+  });
+
+  test("iMessage keeps one per sender by its profile", () => {
+    expect(reactionWrites([state()], fire)).toEqual(reactionWrites([state()], fire, true));
+    expect(shownReactions([state(), fire]).map((r) => r.key)).toEqual(["emoji:🔥"]);
+  });
+});
+
 test("currentKey namespaces an emoji key written bare and leaves every other key", () => {
   expect(["😍", "emoji:😍", "emoji", "love"].map(currentKey)).toEqual(["emoji:😍", "emoji:😍", "emoji", "love"]);
 });

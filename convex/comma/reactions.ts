@@ -1,4 +1,4 @@
-import { TAPBACK_GLYPHS, tapbackKey } from "../../apps/imsg/shared/platform-profile";
+import { PROFILES, TAPBACK_GLYPHS, tapbackKey } from "../../apps/imsg/shared/platform-profile";
 import type { CommaPlatform, CommaReaction, CommaReactionState, CommaTapback } from "../schema/comma/validators";
 
 /**
@@ -64,13 +64,17 @@ export function supersedes(event: CommaReactionState, current: CommaReactionStat
   return event.at !== current.at || event.removed !== current.removed || event.emoji !== current.emoji;
 }
 
+const keepsOne = (platform: CommaPlatform) => PROFILES[platform].oneReactionPerSender;
+
 /**
- * The rows one event writes, given the target's rows. A sender keeps one live reaction per message, so an add
+ * The rows one event writes, given the target's rows. Where a sender keeps one live reaction per message, an add
  * leaves the sender's other live reactions as tombstones, and an add older than one of them lands as a tombstone.
  * `row` is the existing row each state replaces.
  */
-export function reactionWrites<R extends CommaReactionState>(rows: readonly R[], event: CommaReactionState): { row?: R; state: CommaReactionState }[] {
-  const others = rows.filter((row) => sameSender(row, event) && row.key !== event.key && !row.removed);
+export function reactionWrites<R extends CommaReactionState>(
+  rows: readonly R[], event: CommaReactionState, onePerSender = keepsOne(event.platform),
+): { row?: R; state: CommaReactionState }[] {
+  const others = onePerSender ? rows.filter((row) => sameSender(row, event) && row.key !== event.key && !row.removed) : [];
   const stale = !event.removed && others.some((row) => row.at > event.at);
   const next = stale ? { ...event, removed: true } : event;
   const own = rows.find((row) => sameReaction(row, event));
@@ -106,10 +110,13 @@ function view(reaction: { key: string; emoji?: string; isFromMe: boolean; sender
 }
 
 /**
- * What a message shows: each sender's newest live row, oldest first. Rows written before one reaction per sender
- * can hold two for a sender. Names are the reader's to fill.
+ * What a message shows: its live rows oldest first, and where a sender keeps one, only each sender's newest. Rows
+ * written before one reaction per sender can hold two for a sender. Names are the reader's to fill.
  */
-export function shownReactions(rows: readonly CommaReactionState[]): CommaReaction[] {
+export function shownReactions(
+  rows: readonly CommaReactionState[], onePerSender = rows.every((row) => keepsOne(row.platform)),
+): CommaReaction[] {
   const live = rows.filter((row) => !row.removed).sort((a, b) => a.at - b.at);
-  return live.filter((row, i) => !live.slice(i + 1).some((later) => sameSender(later, row))).map(view);
+  const shown = onePerSender ? live.filter((row, i) => !live.slice(i + 1).some((later) => sameSender(later, row))) : live;
+  return shown.map(view);
 }
