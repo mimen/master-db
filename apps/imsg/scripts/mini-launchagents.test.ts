@@ -39,6 +39,12 @@ describe("Mini LaunchAgent installation", () => {
     expect(expo).toContain('EXPO_PUBLIC_IMSG_WEB_SHA="$(git rev-parse HEAD)"');
     expect(server).not.toContain("__REPO_DIR__");
     expect(expo).not.toContain("__HOME__");
+    const ai = readFileSync(join(install, "com.milad.imsg-ai.plist"), "utf8");
+    expect(ai).toContain("exec -a comma:ai");
+    expect(ai).toContain("server/ai/main.ts");
+    expect(ai).toContain(`<string>${repo}/apps/imsg</string>`);
+    expect(ai).toContain(`${home}/Library/Logs/comma-ai.log`);
+    expect(ai).not.toMatch(/__(HOME|REPO_DIR)__/);
     const agent = readFileSync(join(install, "com.milad.imsg-agent.plist"), "utf8");
     expect(agent).toContain("exec -a comma:agent");
     expect(agent).toContain("server/agent/main.ts");

@@ -753,7 +753,7 @@ export function ThreadView({
           suggestions={{
             enabled: aiStatus?.suggestions === true && !editing,
             awaitingReply,
-            reactionSuggestions: aiStatus?.reactionSuggestions === true,
+            reactionSuggestions: can("react")?.ok === true,
             reactionUnavailable: reasonOf(can("react")),
             reactionPreview,
           }}

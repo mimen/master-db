@@ -154,16 +154,21 @@ IMSG_TAILNET_URL="${IMSG_TAILNET_URL:-https://milads-mac-mini.taild31e9a.ts.net:
 printf '== Restarting production services ==\n'
 launchctl kickstart -k "gui/$(id -u)/com.milad.imsg"
 launchctl kickstart -k "gui/$(id -u)/com.milad.imsg-expo" 2>/dev/null || true
+launchctl kickstart -k "gui/$(id -u)/com.milad.imsg-ai"
 launchctl kickstart -k "gui/$(id -u)/com.milad.imsg-agent"
 sleep 3
 
 printf '== Health checks ==\n'
 launchctl print "gui/$(id -u)/com.milad.imsg" | /usr/bin/grep -E "state|pid"
-# The agent runner serves no HTTP; it is healthy when its argv identity is running.
-AGENT_PID="$(launchctl print "gui/$(id -u)/com.milad.imsg-agent" | /usr/bin/grep -m1 'pid =' | cut -d '=' -f 2 | tr -d ' ;' || true)"
-{ [[ "$AGENT_PID" =~ ^[0-9]+$ ]] && ps -p "$AGENT_PID" -o args= | /usr/bin/grep -F comma:agent >/dev/null; } \
-  || { printf 'production health check failed: comma:agent is not running\n' >&2; exit 1; }
-printf 'comma:agent running: pid %s\n' "$AGENT_PID"
+# The AI process and the agent runner serve no HTTP; each is healthy when its argv identity is running.
+for resident in imsg-ai:comma:ai imsg-agent:comma:agent; do
+  RESIDENT_LABEL="com.milad.${resident%%:*}"
+  RESIDENT_IDENTITY="${resident#*:}"
+  RESIDENT_PID="$(launchctl print "gui/$(id -u)/$RESIDENT_LABEL" | /usr/bin/grep -m1 'pid =' | cut -d '=' -f 2 | tr -d ' ;' || true)"
+  { [[ "$RESIDENT_PID" =~ ^[0-9]+$ ]] && ps -p "$RESIDENT_PID" -o args= | /usr/bin/grep -F "$RESIDENT_IDENTITY" >/dev/null; } \
+    || { printf 'production health check failed: %s is not running\n' "$RESIDENT_IDENTITY" >&2; exit 1; }
+  printf '%s running: pid %s\n' "$RESIDENT_IDENTITY" "$RESIDENT_PID"
+done
 PORT="${IMSG_PORT:-8377}"
 for target in "http://127.0.0.1:${PORT}" "$IMSG_TAILNET_URL"; do
   HEALTH_STATUS=""

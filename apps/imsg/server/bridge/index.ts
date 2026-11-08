@@ -1,30 +1,27 @@
-import type { HandlerMap } from "./commands/types";
+import type { IMessageHandlers } from "./commands/types";
 import type { BlueBubbles } from "../bluebubbles";
 import type { ChatCommands } from "../commands";
 import { ConvexClient } from "convex/browser";
-import { makeFunctionReference } from "convex/server";
 import type { Config } from "../config";
 import type { OverlayDb } from "../db";
+import { accountStatusKey } from "../../shared/executors";
+import { imessageHandlers } from "./commands";
 import { typingHandler } from "./commands/presence";
 import { IMESSAGE_ACCOUNT } from "../../../../convex/comma/conversationIdentity";
 import { ConvexIngest, withAccount } from "./convex-ingest";
 import { GroupPhotoMirror } from "./group-photos";
 import { LiveBridge, MessageWriter } from "./live";
 import { MediaWorker } from "./media";
-import { OutboxBridge } from "./outbox";
+import { imessageLane, OutboxBridge } from "./outbox";
 import { PhotoMirror } from "./photos";
 import { OutboundTyping } from "./presence";
 import { ReconcileBridge } from "./reconcile";
 import { RetryWork } from "./retry";
 import { ScheduledMirror } from "./scheduled-mirror";
-import { BridgeStatePublisher, type BridgeCapabilities } from "./state";
+import { StatusPublisher } from "./state";
 import { UnreadMirror } from "./unread";
-import { SuggestionsBridge, SUGGESTION_PRECOMPUTE, type SuggestionDeps } from "./suggestions";
-import { buildToday, todayPort, type TodayBuildDeps } from "../today/build";
-import { startTodayWorker, type PendingBuild } from "../today/worker";
 
-const pendingBuild = makeFunctionReference<"query", { bridgeKey: string }, PendingBuild | null>("comma/today:pendingBuild");
-
+/** The Mini's iMessage executor: mirrors BlueBubbles into Convex and drains the imessage lane. Model work runs in server/ai/main.ts. */
 export function startBridge(deps: {
   config: Config;
   bb: BlueBubbles;
@@ -36,14 +33,11 @@ export function startBridge(deps: {
   chatDbPath?: string;
   avatarDirectory?: string;
   now?: () => number;
-  capabilities?: () => BridgeCapabilities;
-  suggestions?: Pick<SuggestionDeps, "ai">;
-  handlers?: Partial<HandlerMap>;
-  today?: Pick<TodayBuildDeps, "gateway" | "profile">;
+  handlers?: Partial<IMessageHandlers>;
 }) {
   const enabled = Boolean(deps.config.commaBridgeSecret) && deps.backgroundServices !== false;
   let typing: OutboundTyping | null = null;
-  let state: BridgeStatePublisher | null = null;
+  let state: StatusPublisher | null = null;
   let live: LiveBridge | null = null;
   let reconcile: ReconcileBridge | null = null;
   let unread: UnreadMirror | null = null;
@@ -52,14 +46,10 @@ export function startBridge(deps: {
   let media: MediaWorker | null = null;
   let photos: PhotoMirror | null = null;
   let groupPhotos: GroupPhotoMirror | null = null;
-  let suggestions: SuggestionsBridge | null = null;
-  let today: ReturnType<typeof startTodayWorker> | null = null;
   function stopModules() {
-    today?.stop(); today = null;
     groupPhotos?.stop(); groupPhotos = null;
     typing?.stop(); typing = null;
     state?.stop(); state = null;
-    suggestions?.stop(); suggestions = null;
     unread?.stop(); unread = null;
     live?.stop(); reconcile?.stop(); scheduled?.stop(); outbox?.stop(); media?.stop(); photos?.stop();
     live = null; reconcile = null; scheduled = null; outbox = null; media = null; photos = null;
@@ -68,40 +58,31 @@ export function startBridge(deps: {
     if (!deps.config.convexSiteUrl) throw new Error("CONVEX_SITE_URL is unset");
     const base = deps.ingest ?? new ConvexIngest(deps.config);
     // Every batch names the account it writes for; Convex seeds iMessage's on first use.
-    const ingest = withAccount(base, { platform: IMESSAGE_ACCOUNT.platform, accountId: await base.post("account", IMESSAGE_ACCOUNT) });
+    const accountId = await base.post("account", IMESSAGE_ACCOUNT);
+    const ingest = withAccount(base, { platform: IMESSAGE_ACCOUNT.platform, accountId });
     const writer = new MessageWriter({ bb: deps.bb, db: deps.db, ingest });
     try {
       groupPhotos = new GroupPhotoMirror(deps.bb, deps.db, ingest);
       writer.onChats = (chats) => groupPhotos?.observe(chats);
       typing = new OutboundTyping(deps.bb, deps.now);
-      state = new BridgeStatePublisher({ bb: deps.bb, ingest, now: deps.now,
-        capabilities: deps.capabilities ?? (() => ({ privateApi: deps.bb.hasPrivateApi, emojiReactions: deps.bb.hasEmojiReactions, suggestions: deps.suggestions?.ai.available ?? false,
-          reactionSuggestions: deps.bb.hasPrivateApi, whisperAvailable: false, whisperDetail: "Whisper capabilities were not supplied" })) });
+      // BlueBubbles capabilities can change during its periodic REST reconnect, and a socket reconnect re-reads them.
+      state = new StatusPublisher({ key: accountStatusKey("imessage", accountId), ingest, now: deps.now,
+        report: () => ({ connected: true, capabilities: { executor: "imessage", privateApi: deps.bb.hasPrivateApi, emojiReactions: deps.bb.hasEmojiReactions } }),
+        reconnects: (listener) => deps.bb.onEvent((event) => { if (event.kind === "stream-connected") listener(); }) });
       reconcile = new ReconcileBridge(writer, deps.config, { chatDbPath: deps.chatDbPath, now: deps.now });
-      if (deps.suggestions) suggestions = new SuggestionsBridge({ ...deps.suggestions, db: deps.db, ingest, now: deps.now,
-        conversation: (chatGuid) => writer.conversation(chatGuid, deps.commands.names) });
       scheduled = new ScheduledMirror(deps.bb, ingest);
       live = new LiveBridge(writer, deps.now, (rows) => {
-        suggestions?.observe(rows);
         // A scheduled message firing arrives as an ordinary outgoing message; refresh the
         // mirror then instead of leaving Scheduled stale until its five-minute poll.
         if (rows.some((row) => row.isFromMe)) scheduled?.request();
       });
       unread = new UnreadMirror(writer, { chatDbPath: deps.chatDbPath });
       photos = new PhotoMirror(deps.db, ingest, deps.avatarDirectory);
-      const { convexCloudUrl, commaBridgeSecret } = deps.config;
-      // One subscription client for the outbox and the Today worker; the outbox closes it on stop.
+      const { convexCloudUrl } = deps.config;
       const client = deps.outboxClient ?? (convexCloudUrl ? new ConvexClient(convexCloudUrl) : undefined);
-      outbox = new OutboxBridge({ config: deps.config, writer, commands: deps.commands, client, now: deps.now, handlers: { ...deps.handlers, typing: typingHandler(typing, deps.now) } });
-      if (deps.today && client && commaBridgeSecret) {
-        const buildDeps = { ...deps.today, store: deps.db, port: todayPort(new ConvexIngest(deps.config)), now: deps.now ?? Date.now, log: console.log };
-        today = startTodayWorker({
-          subscribe: (receive) => client.onUpdate(pendingBuild, { bridgeKey: commaBridgeSecret }, receive,
-            (error) => console.error(`comma bridge today subscription: ${String(error)}`)),
-          port: buildDeps.port,
-          build: (claim, signal) => buildToday(buildDeps, claim, signal),
-        });
-      }
+      const handlers = { ...imessageHandlers, ...deps.handlers, typing: typingHandler(typing, deps.now) };
+      outbox = new OutboxBridge({ config: deps.config, ingest, client, now: deps.now,
+        lanes: [imessageLane({ writer, commands: deps.commands, handlers })] });
       const worker = new MediaWorker({ bb: deps.bb, db: deps.db, ingest, isBusy: () => (live?.pending ?? 0) > 0 });
       media = worker;
       writer.onAttachments = (rows, createdAt) => worker.enqueue(rows, createdAt);
@@ -121,7 +102,6 @@ export function startBridge(deps: {
   return {
     health: () => ({ enabled, lastEventAt: live?.lastEventAt ?? null,
       lastReconcileAt: reconcile?.lastReconcileAt ?? null, cursor: reconcile?.cursor ?? 0,
-      suggestions: suggestions?.health() ?? { generatedToday: 0, cap: SUGGESTION_PRECOMPUTE.dailyCap, lastAt: null },
       outbox: { inFlight: outbox?.inFlight ?? 0, lastExecutedAt: outbox?.lastExecutedAt ?? null },
       photos: { matched: photos?.matched ?? 0, pending: photos?.pending ?? 0, uploadedThisRun: photos?.uploaded ?? 0 },
       media: media ? { ...media.counts(), uploadedToday: media.uploadedToday, lastError: media.lastError } : null,
@@ -139,7 +119,6 @@ export function startBridge(deps: {
       await media?.flush();
       await photos?.flush();
       await groupPhotos?.flush();
-      await suggestions?.flush();
     },
     stop: () => { startup.stop(); stopModules(); },
   };

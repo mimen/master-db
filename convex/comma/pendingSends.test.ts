@@ -44,7 +44,7 @@ describe("a pending send", () => {
     const { t, as, c } = await setup();
     await send(as, c);
     expect(await state(t)).toEqual({ bubbles: [["temp-k", "queued"]], outbox: [["k", "pending"]], last: "temp-k" });
-    await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10 });
+    await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10, lane: "imessage" });
     expect((await state(t)).bubbles).toEqual([["temp-k", "sending"]]);
   });
 
@@ -62,7 +62,7 @@ describe("a pending send", () => {
   test("a failed or unknown outcome strands it as failed", async () => {
     const { t, as, c } = await setup();
     await send(as, c);
-    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10 });
+    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10, lane: "imessage" });
     await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "k", claimToken: claim!.claimToken!, status: "unknown" });
     const [bubble] = await t.run((ctx) => ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "temp-k")).collect());
     expect(bubble).toMatchObject({ sendState: "failed", imessage: { error: 1 } });
@@ -77,7 +77,7 @@ describe("Not sent", () => {
     vi.advanceTimersByTime(NOT_SENT_AFTER_MS);
     await t.finishInProgressScheduledFunctions();
     expect(await state(t)).toEqual({ bubbles: [["temp-k", "notSent"]], outbox: [["k", "failed"]], last: "temp-k" });
-    expect(await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10 })).toEqual([]);
+    expect(await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10, lane: "imessage" })).toEqual([]);
     const row = await t.run((ctx) => ctx.db.query("comma_outbox").first());
     expect(row?.error).toBe(NOT_SENT_ERROR);
   });
@@ -85,7 +85,7 @@ describe("Not sent", () => {
   test("a claim after the window expires the send instead of sending it, even before the scheduled expiry runs", async () => {
     const { t, as, c } = await setup();
     await send(as, c);
-    const claimed = await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now() + NOT_SENT_AFTER_MS, leaseMs: 1000, limit: 10 });
+    const claimed = await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now() + NOT_SENT_AFTER_MS, leaseMs: 1000, limit: 10, lane: "imessage" });
     expect(claimed).toEqual([]);
     expect((await state(t)).bubbles).toEqual([["temp-k", "notSent"]]);
   });
@@ -94,7 +94,7 @@ describe("Not sent", () => {
     vi.useFakeTimers();
     const { t, as, c } = await setup();
     await send(as, c);
-    await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: NOT_SENT_AFTER_MS * 2, limit: 10 });
+    await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: NOT_SENT_AFTER_MS * 2, limit: 10, lane: "imessage" });
     vi.advanceTimersByTime(NOT_SENT_AFTER_MS);
     await t.finishInProgressScheduledFunctions();
     expect(await state(t)).toEqual({ bubbles: [["temp-k", "sending"]], outbox: [["k", "claimed"]], last: "temp-k" });
@@ -107,13 +107,13 @@ describe("cancelSend", () => {
     await send(as, c);
     expect(await as.mutation(api.comma.pendingSends.cancelSend, { clientKey: "k" })).toBe(true);
     expect(await state(t)).toEqual({ bubbles: [], outbox: [], last: "earlier" });
-    expect(await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10 })).toEqual([]);
+    expect(await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10, lane: "imessage" })).toEqual([]);
   });
 
   test("refuses once the bridge has the send", async () => {
     const { t, as, c } = await setup();
     await send(as, c);
-    await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10 });
+    await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10, lane: "imessage" });
     expect(await as.mutation(api.comma.pendingSends.cancelSend, { clientKey: "k" })).toBe(false);
     expect((await state(t)).outbox).toEqual([["k", "claimed"]]);
   });
@@ -133,7 +133,7 @@ describe("retrySend", () => {
   test("replaces a Not sent bubble with a new queued send of the same message", async () => {
     const { t, as, c } = await setup();
     await send(as, c);
-    await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now() + NOT_SENT_AFTER_MS, leaseMs: 1000, limit: 10 });
+    await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now() + NOT_SENT_AFTER_MS, leaseMs: 1000, limit: 10, lane: "imessage" });
     const first = await as.mutation(api.comma.pendingSends.retrySend, { clientKey: "k", retryKey: "k2" });
     const again = await as.mutation(api.comma.pendingSends.retrySend, { clientKey: "k", retryKey: "k2" });
     expect(again).toBe(first);
@@ -146,7 +146,7 @@ describe("retrySend", () => {
     const { t, as, c } = await setup();
     await send(as, c);
     await expect(as.mutation(api.comma.pendingSends.retrySend, { clientKey: "k", retryKey: "k2" })).rejects.toThrow("can be retried");
-    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10 });
+    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10, lane: "imessage" });
     await expect(as.mutation(api.comma.pendingSends.retrySend, { clientKey: "k", retryKey: "k2" })).rejects.toThrow("can be retried");
     await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "k", claimToken: claim!.claimToken!, status: "sent" });
     await expect(as.mutation(api.comma.pendingSends.retrySend, { clientKey: "k", retryKey: "k2" })).rejects.toThrow("can be retried");
@@ -158,7 +158,7 @@ describe("settle anchoring", () => {
   test("a settle taken on a queued send holds once that send lands under its real guid", async () => {
     const { t, as, c } = await setup();
     await send(as, c);
-    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10 });
+    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10, lane: "imessage" });
     await as.mutation(api.comma.triage.settle, { conversationId: c, anchor: "temp-k" });
     await t.mutation(internal.comma.internal.upsertMessages, { messages: [{
       guid: "REAL", conversationId: c, chatGuid: "iMessage;-;+15550001111", dateCreated: Date.now(), isFromMe: true, text: "hello",

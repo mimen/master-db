@@ -86,7 +86,6 @@ function makeService(options: {
   structured?: object;
   db?: OverlayDb;
   fetchError?: string;
-  contactEmails?: (address: string) => string[];
   onGenerate?: () => void;
   participants?: AiThread["participants"];
   route?: AiThread["route"];
@@ -104,15 +103,14 @@ function makeService(options: {
     fetchThread: async () => options.fetchError
       ? { ok: false, error: options.fetchError }
       : { ok: true, value: {
-        title: "Sarah", isGroup: false, participants: options.participants ?? [{ address: "+15551234567", name: "Sarah" }],
+        title: "Sarah", isGroup: false, participants: options.participants ?? [{ address: "+15551234567", name: "Sarah", emails: [] }],
         route: options.route ?? { platform: "imessage", chatGuid: "iMessage;-;+15551234567" }, messages: options.messages ?? [],
+        bridge: { privateApi: options.privateApi ?? true },
       } },
     sentText: async (route) => {
       sentFor.push(route);
       return options.sent ?? [];
     },
-    bridgeSupport: () => ({ privateApi: options.privateApi ?? true }),
-    contactEmails: options.contactEmails ?? (() => []),
     searchVault: async () => [],
   });
   return { service, db, prompts, calls, sentFor };
@@ -282,7 +280,7 @@ describe("replySuggestions", () => {
         suggestions: [],
         event: { found: true, title: "Call with Sarah", start, durationMinutes: 60, location: "" },
       },
-      contactEmails: (address) => (address === "+15551234567" ? ["sarah@example.com"] : []),
+      participants: [{ address: "+15551234567", name: "Sarah", emails: ["Sarah@example.com", "sarah.work@example.com"] }],
     });
     const result = await service.replySuggestions(CHAT_1, true, "opus");
     expect(result.ok).toBe(true);
@@ -364,7 +362,7 @@ describe("identify", () => {
   test("asks about the conversation's first participant under the name Convex knows", async () => {
     const { service, prompts } = makeService({
       messages: [makeMessage()],
-      participants: [{ address: "+15559876543", name: "Sam Ortiz" }, { address: "+15551234567", name: null }],
+      participants: [{ address: "+15559876543", name: "Sam Ortiz", emails: [] }, { address: "+15551234567", name: null, emails: [] }],
       reply: '{"name":"Sam Ortiz","confidence":"high","reasoning":"contact"}',
     });
     expect((await service.identify(CHAT_1)).ok).toBe(true);

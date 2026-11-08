@@ -143,7 +143,8 @@ describe("aiThread", () => {
       isFromMe: true, at: 1, removed: false }));
     const thread = await t.mutation(internal.comma.agentContext.aiThread, { conversationId });
     expect(thread).toMatchObject({ title: "Door crew", isGroup: true,
-      participants: [{ address: ALEX, name: "Alex Rivera" }, { address: SAM, name: null }] });
+      participants: [{ address: ALEX, name: "Alex Rivera", emails: ["alex@example.com"] }, { address: SAM, name: null, emails: [] }],
+      bridge: { privateApi: false, emojiReactions: false } });
     expect(thread.messages.map((m) => m.guid)).toEqual(["m1", "m2", "m3", "m4"]);
     expect(thread.messages[0]).toMatchObject({ sender: { address: ALEX, name: "Alex Rivera" }, text: "the door code is 4411", reactions: [] });
     expect(thread.messages[1]?.attachments).toEqual([{ guid: "att1", mimeType: "image/png", filename: "door.png", width: null, height: null, totalBytes: null }]);
@@ -164,6 +165,13 @@ describe("aiThread", () => {
     expect(thread.route).toEqual({ platform: "imessage", chatGuid: "chat" });
     expect(thread.messages[3]).toMatchObject({ text: "m4", modelText: "doors at 9 works", subject: "Friday", threadRef: "lineup" });
     expect(Object.keys(thread.messages[0]!)).not.toContain("modelText");
+  });
+
+  test("carries what the route's Mac reports it can send, so the AI process never asks BlueBubbles", async () => {
+    const { t, conversationId } = await setup();
+    await t.run((ctx) => ctx.db.insert("comma_bridge_state", { key: "imessage:acct", connected: true, lastSeenAt: 1,
+      capabilities: { executor: "imessage", privateApi: true, emojiReactions: false } }));
+    expect((await t.mutation(internal.comma.agentContext.aiThread, { conversationId })).bridge).toEqual({ privateApi: true, emojiReactions: false });
   });
 });
 

@@ -1,13 +1,16 @@
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
-import { beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 import { ALLOWED_EMAIL } from "../_lib/authed";
 import schema from "../schema";
 import type { commandSuggestions, suggestionDoc } from "../schema/comma/validators";
 import { normalizeModules } from "../test-utils.vitest";
 
 import type { ShelfUpdate } from "./suggestions";
+import { namePerson } from "./testModules.vitest";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 const publishRef = makeFunctionReference<"mutation", { update: ShelfUpdate }, boolean>("comma/suggestions:publish");
@@ -103,13 +106,70 @@ test("global clear invalidates all shelves, fences old generations, and deduplic
   expect(await h.authed.query(getRef, { chatGuid: CHAT, model: "opus" })).not.toBeNull();
 });
 
-test("capabilities come from the singleton and are unavailable until it exists", async () => {
+test("capabilities come from the AI process's status and are unavailable until it exists", async () => {
   const h = await fixture();
   expect(await h.authed.query(statusRef, {})).toEqual({ suggestions: false, reactionSuggestions: false, agentHeartbeatAt: null });
-  await h.t.run((ctx) => ctx.db.insert("comma_bridge_state", {
-    key: "mini", privateApi: true, suggestions: true, reactionSuggestions: false, whisperAvailable: false, lastSeenAt: 1,
-  }));
+  await h.t.run((ctx) => ctx.db.insert("comma_bridge_state", { key: "ai", connected: true, lastSeenAt: 1, capabilities: { executor: "ai" as const, suggestions: true, whisperAvailable: false } }));
   expect(await h.authed.query(statusRef, {})).toEqual({ suggestions: true, reactionSuggestions: false, agentHeartbeatAt: null });
   await expect(h.t.query(statusRef, {})).rejects.toThrow("Unauthorized");
   await expect(h.t.query(getRef, { chatGuid: CHAT, model: "opus" })).rejects.toThrow("Unauthorized");
+});
+
+describe("precompute", () => {
+  const ALEX = "+15550001111";
+  const inbound = (conversationId: Id<"comma_conversations">, guid: string, overrides: Record<string, unknown> = {}) => ({
+    guid, conversationId, chatGuid: CHAT, dateCreated: Date.now(), isFromMe: false, text: guid, service: "iMessage" as const,
+    sender: { address: ALEX, name: null }, error: 0, edited: false, retracted: false, isTapback: false, reactions: [],
+    isGroupEvent: false, mentions: [], attachmentGuids: [], sourceVersion: 1, ...overrides,
+  });
+  async function world(options: { known?: boolean; group?: boolean; ai?: boolean; aiSeenAt?: number } = {}) {
+    const t = convexTest(schema, modules);
+    const map = await t.mutation(internal.comma.internal.upsertConversations, { conversations: [{
+      conversationKey: options.group ? "group:x" : `dm:${ALEX}`, chats: [{ chatGuid: CHAT, lastMessageAt: 1 }], displayName: "Alex",
+      isGroup: options.group ?? false, participants: options.group ? [{ address: ALEX, name: null }, { address: "+15550002222", name: null }] : [{ address: ALEX, name: null }],
+      isSpam: false, hasGroupPhoto: false, lastMessageAt: 1,
+    }] });
+    const conversationId = map[CHAT]!;
+    await t.run(async (ctx) => {
+      if (options.known ?? true) await namePerson(ctx, ALEX, "Alex Rivera");
+      if (options.ai ?? true) await ctx.db.insert("comma_bridge_state", { key: "ai", connected: true, lastSeenAt: options.aiSeenAt ?? Date.now(), capabilities: { executor: "ai", suggestions: true, whisperAvailable: false } });
+    });
+    const post = (...messages: ReturnType<typeof inbound>[]) => t.mutation(internal.comma.internal.upsertMessages, { messages });
+    const queued = async () => {
+      await t.finishAllScheduledFunctions(vi.runAllTimers);
+      return (await t.run((ctx) => ctx.db.query("comma_outbox").collect())).map((row) => [row.clientKey, row.lane, row.payload]);
+    };
+    return { conversationId, post, queued };
+  }
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  test("a fresh inbound message in a known DM queues one suggestions command for the AI lane, for the newest message only", async () => {
+    const w = await world();
+    await w.post(inbound(w.conversationId, "m1", { dateCreated: Date.now() - 1 }), inbound(w.conversationId, "m2"));
+    await w.post(inbound(w.conversationId, "m2"));
+    expect(await w.queued()).toEqual([
+      [`precompute:${w.conversationId}:m2`, "aiBackground", { kind: "suggestions", model: "opus", refresh: false, precompute: true }],
+    ]);
+  });
+
+  test.each([
+    ["history a backfill posts", {}, { dateCreated: Date.now() - 11 * 60_000 }],
+    ["a group", { group: true }, {}],
+    ["an unknown sender", { known: false }, {}],
+    ["no AI process", { ai: false }, {}],
+    ["an AI process that stopped beating", { aiSeenAt: Date.now() - 4 * 60_000 }, {}],
+    ["my own message", {}, { isFromMe: true }],
+  ])("%s queues nothing", async (_label, options, overrides) => {
+    const w = await world(options);
+    await w.post(inbound(w.conversationId, "m1", overrides));
+    expect(await w.queued()).toEqual([]);
+  });
+
+  test("a reply before the debounce ends cancels it", async () => {
+    const w = await world();
+    await w.post(inbound(w.conversationId, "m1"));
+    await w.post(inbound(w.conversationId, "mine", { isFromMe: true, dateCreated: Date.now() + 1 }));
+    expect(await w.queued()).toEqual([]);
+  });
 });

@@ -77,8 +77,8 @@ one; a sender's replaced reactions stay as removals. Rows written before keys we
 reads show only a sender's newest. Ingest turns an iMessage tapback into a reaction and stores no message row for it.
 The tray offers the route's reaction set from its platform profile, and an emoji picker where the route has
 `emojiReact`. Sending an emoji also needs the Mac's BlueBubbles to say it can (`custom_emoji_reactions` in its server
-info, proposed upstream and absent through 1.9.12); the bridge state carries it as `emojiReactions`, and the picker
-greys with the reason until then.
+info, proposed upstream and absent through 1.9.12); the iMessage executor status carries it as `emojiReactions`, and
+the picker greys with the reason until then.
 _Avoid_: tapback (outside iMessage-specific code), tapback row
 
 **Triage state**:
@@ -93,7 +93,7 @@ reads or writes it.
 _Avoid_: overlay (for this state), local state
 
 **Overlay**:
-The Mini's SQLite file (`OverlayDb`): bridge cursors and versions, AI caches, transcripts.
+The Mini's SQLite file (`OverlayDb`), shared by `comma:server` and `comma:ai`: bridge cursors and versions, AI caches, transcripts.
 Its `chat_state`, `triage_clear_event` and `triage_open_item` tables held triage state before
 Convex took it over; nothing writes them, and they stay as a rollback copy.
 _Avoid_: overlay DB rows (when meaning the concept)
@@ -107,18 +107,34 @@ outbox row, and it never goes out), then sending once the executor claims it, th
 Nothing retries a stranded send but the user's tap. A send made while Convex is unreachable waits on the device and
 goes out on reconnect, under the same deadline counted from the gesture. Until Convex has it, the device also keeps it
 in storage, so a reload or a closed tab restores it under its clientKey; one tab at a time owns each kept send through a
-Web Lock. The bubble says "Waiting to send" at once when Convex or the Mini is out of reach, and after a second when the
-Mini is up but has not taken it. Attachments and voice memos are not pending sends yet. See `shared/pending-send.ts`.
+Web Lock. The bubble says "Waiting to send" at once when Convex or the route's executor is out of reach (its status row
+missed three heartbeats), and after a second when the executor is up but has not taken it. Attachments and voice memos are not pending sends yet. See `shared/pending-send.ts`.
 _Avoid_: temp message, optimistic send, local send
 
 **Outbox lane**:
-The executor a queued command waits for, stamped on its `comma_outbox` row at enqueue: one lane per
-messaging platform (only `imessage` today) and an `ai` lane for suggestions, identify, suggestion
-feedback, clearing learning and transcription. The Mini drains each lane in its own loop, one command
-at a time, so a slow model call never holds back a send. AI work reads the conversation from Convex
-by conversation id, never from BlueBubbles. The lease, claim token, retry policy and receipts are
+The executor a queued command waits for, stamped on its `comma_outbox` row at enqueue from the route's
+platform and the command's kind: one lane per messaging platform (only `imessage` today), an `ai` lane
+for suggestions, identify, suggestion feedback, clearing learning and transcription, and an `aiBackground`
+lane for suggestion precompute, which nobody waits on. The lane registry
+(`convex/comma/laneRegistry.ts`) says who runs each: a **pull** lane waits for an outside executor to
+claim it (the Mini's `comma:server` for `imessage`, its `comma:ai` for both model lanes); a **convex** lane runs in a
+Convex action that enqueue schedules, which claims under the same lease and whose lease expiry schedules
+the next drive. Every lane runs one command at a time, so a slow model call never holds back a send.
+What a confirmed command changes in Convex beyond its receipt is the lane's `onResult`. AI work reads the
+conversation from Convex by conversation id, never from BlueBubbles. Convex queues a reply-suggestion
+precompute on a fresh inbound message in a known DM while the AI process's heartbeat is fresh; the AI process
+drops one that waited more than two minutes and caps them at 150 a day. The lease, claim token, retry policy and receipts are
 shared by every lane.
 _Avoid_: queue (when meaning one lane), worker
+
+**Executor status**:
+Each executor's connection in `comma_bridge_state`, keyed `<platform>:<accountId>` (the Mini's bridge
+for the iMessage account) or `ai` (the AI process): `connected`, `lastSeenAt`, an optional `detail`, and
+its own capabilities (BlueBubbles' Private API and emoji reactions; suggestions and Whisper). A client
+reads the row for the conversation's route (`shared/executors.ts`), so a conversation greys controls and
+waits on the heartbeat of the executor that runs its commands, and names it ("Check the Mac mini
+connection"). The single `mini` row from before is retired: a publish in that shape lands in both rows.
+_Avoid_: bridge state (for the per-executor row), Mini status
 
 **Unresponded**:
 A chat whose last message is inbound — you owe a reply. Dismissable until the next

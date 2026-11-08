@@ -53,7 +53,7 @@ const events = (t: T) => t.run(async (ctx) => (await ctx.db.query("comma_triage_
   .map(({ messageGuid, reason, clearedAt }) => ({ messageGuid, reason, clearedAt })));
 
 /** The Mini's claim queue as the bridge sees it. */
-const claimable = (t: T) => t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 60_000, limit: 50 });
+const claimable = (t: T) => t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 60_000, limit: 50, lane: "imessage" });
 
 describe("settle", () => {
   test("clears Needs you on an inbound last message and logs the dismissal", async () => {
@@ -243,7 +243,7 @@ describe("a settle on a send still in flight", () => {
 
 describe("a triage command queued before Convex owned it", () => {
   const queue = (t: T, c: ConversationId, clientKey: string, payload: CommaOutboxPayload) => t.run((ctx) => ctx.db.insert("comma_outbox", {
-    clientKey, conversationId: c, payload, status: "pending", attempts: 0, createdAt: 50, updatedAt: 50,
+    clientKey, conversationId: c, payload, lane: "imessage", status: "pending", attempts: 0, createdAt: 50, updatedAt: 50,
   }));
 
   test("applies in Convex at claim time and never reaches the Mini", async () => {

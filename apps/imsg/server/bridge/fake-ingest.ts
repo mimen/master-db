@@ -1,4 +1,4 @@
-import { laneOf } from "../../../../convex/schema/comma/validators";
+import { isAiKind } from "../../../../convex/schema/comma/validators";
 import { ConvexIngest, type Bodies, type Results, type MessageRow } from "./convex-ingest";
 
 type Call = { [K in keyof Bodies]: { kind: K; body: Bodies[K] } }[keyof Bodies];
@@ -12,8 +12,10 @@ export class FakeIngest extends ConvexIngest {
   constructor() { super({ convexSiteUrl: "http://test.invalid", commaBridgeSecret: "test" }); }
 
   readonly backlog: Results["mediaBacklog"]["items"] = [];
-  thread: Results["aiThread"] = { title: "", isGroup: false, participants: [], route: { platform: "imessage", chatGuid: "iMessage;-;+15550000000" }, messages: [] };
+  thread: Results["aiThread"] = { title: "", isGroup: false, participants: [], route: { platform: "imessage", chatGuid: "iMessage;-;+15550000000" }, messages: [],
+    bridge: { privateApi: false, emojiReactions: false } };
   sent: Results["aiSentText"] = [];
+  attachment: Results["agentAttachment"] = null;
   readonly uploads: Array<{ bytes: number; contentType: string }> = [];
 
   override async upload(bytes: Uint8Array, contentType: string): Promise<string> {
@@ -45,13 +47,14 @@ export class FakeIngest extends ConvexIngest {
       mediaBacklog: { items: this.backlog.splice(0), cursor: "done", isDone: true },
       aiThread: this.thread,
       aiSentText: this.sent,
+      agentAttachment: this.attachment,
     };
     return results[kind];
   }
 
-  /** Convex's lane filter: a lane takes the oldest of its own rows, and no lane takes any. */
+  /** Convex's lane filter: a lane takes the oldest of its own rows. */
   private claim({ lane, limit }: Bodies["claim"]): Results["claim"] {
-    const taken = this.outboxRows.filter((row) => !lane || laneOf(row.payload.kind) === lane).slice(0, limit);
+    const taken = this.outboxRows.filter((row) => (row.lane ?? (isAiKind(row.payload.kind) ? "ai" : "imessage")) === lane).slice(0, limit);
     for (const row of taken) this.outboxRows.splice(this.outboxRows.indexOf(row), 1);
     return taken;
   }

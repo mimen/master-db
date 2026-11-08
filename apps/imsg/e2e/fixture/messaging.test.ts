@@ -12,8 +12,7 @@ let fixture: Awaited<ReturnType<typeof createApp>>;
 beforeEach(async () => {
   const config: Config = { bbUrl: "fixture://bluebubbles", bbPassword: "fixture", hostname: "127.0.0.1", port: 0,
     dbPath: ":memory:", convexSiteUrl: null, convexCloudUrl: null, appleContactsIngestSecret: null,
-    identityKey: null, commaBridgeSecret: null, whisper: { binaryPath: null, modelPath: null, workDir: "/tmp/imsg-fixture-test" },
-    ai: { gatewayUrl: "http://127.0.0.1:9", gatewayKey: "", fastModel: "fixture", vaultPath: "/tmp" } };
+    identityKey: null, commaBridgeSecret: null };
   const bb = new FixtureBlueBubbles(fixtureSeed());
   const db = new OverlayDb(":memory:");
   const names = new FixtureIdentity();

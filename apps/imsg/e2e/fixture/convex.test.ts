@@ -14,8 +14,6 @@ const config: Config = {
   bbUrl: "fixture://bluebubbles", bbPassword: "fixture", hostname: "127.0.0.1", port: 0,
   dbPath: ":memory:", convexSiteUrl: null, appleContactsIngestSecret: null,
   convexCloudUrl: null, identityKey: null, commaBridgeSecret: null,
-  whisper: { binaryPath: null, modelPath: null, workDir: "/tmp/imsg-fixture-test" },
-  ai: { gatewayUrl: "http://127.0.0.1:9", gatewayKey: "", fastModel: "fixture", vaultPath: "/tmp" },
 };
 let fixture: Awaited<ReturnType<typeof createApp>>;
 let bb: FixtureBlueBubbles;
@@ -297,9 +295,9 @@ test("fixture contact search, normalized DM lookup and raw chat info use the fix
 });
 
 test("presence and bridge capabilities queries support the typing command fixture", async () => {
-  const state = await call<{ privateApi: boolean; suggestions: boolean; whisperAvailable: boolean; lastSeenAt: number }>("comma/bridgeState:bridgeState");
-  expect(state).toMatchObject({ privateApi: true, suggestions: false, whisperAvailable: false });
-  expect(state.lastSeenAt).toBeGreaterThan(0);
+  const imessage = await call<{ key: string; lastSeenAt: number }>("comma/bridgeState:routeExecutorStatus", { platform: "imessage", accountId: null });
+  expect(imessage).toMatchObject({ key: "imessage:fixture", capabilities: { executor: "imessage", privateApi: true } });
+  expect(imessage.lastSeenAt).toBeGreaterThan(0);
   expect(await call("comma/presence:presence", { conversationId: fixtureConversationId(CHAT_GUIDS.needs) })).toBeNull();
   const receipt = await command({ kind: "typing", active: true, expiresAt: Date.now() + 1000 });
   expect(await call("comma/outbox:getCommand", { commandId: receipt })).toMatchObject({ status: "sent", result: { kind: "typing", ok: true } });

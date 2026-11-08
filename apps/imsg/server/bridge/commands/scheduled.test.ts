@@ -8,7 +8,8 @@ import { OverlayDb } from "../../db";
 import { ScheduledSendNow } from "../../scheduled-send-now";
 import { FakeIngest } from "../fake-ingest";
 import { MessageWriter } from "../live";
-import { OutboxBridge, type OutboxRow } from "../outbox";
+import { imessageHandlers } from ".";
+import { imessageLane, OutboxBridge, type OutboxRow } from "../outbox";
 import { scheduledHandlers } from "./scheduled";
 import type { IMessageContext } from "./types";
 
@@ -38,7 +39,8 @@ test("schedule returns persisted id/state and publishes before completing the re
   h.ingest.outboxRows.push({ _id: "outbox", _creationTime: 1, clientKey: "schedule", conversationId: h.ingest.id,
     route: { platform: "imessage", chatGuid: CHAT }, payload: { kind: "schedule", text: " later ", sendAt }, status: "claimed", attempts: 1,
     claimToken: "claim", leaseUntil: Date.now() + 60_000, createdAt: 1, updatedAt: 1 } as OutboxRow);
-  const bridge = new OutboxBridge({ config: { convexCloudUrl: "https://convex.test", commaBridgeSecret: "test" }, commands: h.commands, writer: h.ctx.writer, client: { onUpdate: () => () => {}, close: async () => {} } as unknown as ConvexClient });
+  const bridge = new OutboxBridge({ config: { convexCloudUrl: "https://convex.test", commaBridgeSecret: "test" }, ingest: h.ingest,
+    lanes: [imessageLane({ commands: h.commands, writer: h.ctx.writer, handlers: imessageHandlers })], client: { onUpdate: () => () => {}, close: async () => {} } as unknown as ConvexClient });
   try {
     await bridge.flush();
     const snapshot = h.ingest.calls.findIndex((call) => call.kind === "scheduled");

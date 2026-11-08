@@ -9,7 +9,8 @@ import {
   agentItemFields,
   attachmentFields,
   presenceFields,
-  bridgeStateFields,
+  executorStatusFields,
+  legacyBridgeStateFields,
   uploadFields,
   chatAliasFields,
   conversationFields,
@@ -94,7 +95,7 @@ export const comma_suggestions = defineTable(suggestionFields)
 export const comma_sync_state = defineTable(syncStateFields).index("by_key", ["key"]).index("by_account_key", ["accountId", "key"]);
 
 export const comma_presence = defineTable(presenceFields).index("by_conversationId", ["conversationId"]);
-export const comma_bridge_state = defineTable(v.union(v.object(bridgeStateFields), v.object(agentBridgeStateFields)))
+export const comma_bridge_state = defineTable(v.union(v.object(executorStatusFields), v.object(legacyBridgeStateFields), v.object(agentBridgeStateFields)))
   .index("by_key", ["key"]);
 export const comma_uploads = defineTable(uploadFields).index("by_storageId", ["storageId"]).index("by_commandId", ["commandId"]);
 

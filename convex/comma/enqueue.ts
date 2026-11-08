@@ -5,9 +5,10 @@ import { NOT_SENT_AFTER_MS, pendingGuid } from "../../apps/imsg/shared/pending-s
 import { messageService } from "../../apps/imsg/shared/platform-profile";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import { laneOf, type CommaOutboxPayload, type CommaRoute } from "../schema/comma/validators";
+import type { CommaOutboxPayload, CommaRoute } from "../schema/comma/validators";
 
 import { sendRoute } from "./conversationIdentity";
+import { laneOf, wakeLane } from "./lanes";
 import { profileRoute, unsupportedReason } from "./routeSupport";
 
 /**
@@ -36,19 +37,21 @@ export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversation
   const unsupported = conversation && route && unsupportedReason(route, conversation.isGroup, payload);
   if (unsupported) throw new ConvexError(unsupported);
   const now = Date.now();
-  const id = await ctx.db.insert("comma_outbox", {
-    clientKey,
-    conversationId,
-    route,
-    payload,
-    lane: laneOf(payload.kind),
-    status: "pending",
-    attempts: 0,
-    createdAt: now,
-    updatedAt: now,
-  });
+  // ponytail: a global command (createChat) names no platform, so it is iMessage's until another platform creates chats.
+  const id = await insertCommand(ctx, { clientKey, conversationId, route, payload, platform: route?.platform ?? "imessage", now });
   if (payload.kind === "send" && conversation && route) await createPendingSend(ctx, { conversation, route, clientKey, payload, now });
   return { id, created: true };
+}
+
+/** Inserts a pending command into its lane, and starts the lane's executor when Convex runs it. */
+export async function insertCommand(ctx: MutationCtx, { platform, now, ...fields }: {
+  clientKey: string; conversationId?: Id<"comma_conversations">; route?: CommaRoute; payload: CommaOutboxPayload;
+  platform: CommaRoute["platform"]; now: number;
+}): Promise<Id<"comma_outbox">> {
+  const { lane } = laneOf(platform, fields.payload);
+  const id = await ctx.db.insert("comma_outbox", { ...fields, lane, status: "pending", attempts: 0, createdAt: now, updatedAt: now });
+  await wakeLane(ctx, lane);
+  return id;
 }
 
 /** The bubble shows at once, and the sidebar moves with it rather than a platform round trip later. */

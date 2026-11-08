@@ -5,9 +5,10 @@ import { api, internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { ALLOWED_EMAIL } from "../_lib/authed";
 import schema from "../schema";
-import { aiPayload, coreMessagingPayload, imessagePayload, laneOf, legacyTriagePayload, outboxPayload, type CommaOutboxPayload } from "../schema/comma/validators";
+import { aiPayload, coreMessagingPayload, imessagePayload, legacyTriagePayload, outboxPayload, type CommaOutboxPayload } from "../schema/comma/validators";
 import { normalizeModules } from "../test-utils.vitest";
 
+import { laneOf } from "./lanes";
 import { AUTO_RETRY } from "./outbox";
 import { reactionsOf } from "./reactionStore";
 
@@ -170,9 +171,9 @@ describe("claim and complete", () => {
     const { t, as, c } = await setup();
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "p", conversationId: c, payload: { kind: "markRead" } });
-    const claimed = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1000, leaseMs: 100, limit: 10 });
+    const claimed = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1000, leaseMs: 100, limit: 10, lane: "imessage" });
     expect(claimed.map((r) => r.clientKey).sort()).toEqual(["p", "s"]);
-    await t.mutation(internal.comma.outbox.claimOutbox, { now: 5000, leaseMs: 100, limit: 0 });
+    await t.mutation(internal.comma.outbox.claimOutbox, { now: 5000, leaseMs: 100, limit: 0, lane: "imessage" });
     const rows = await t.run((ctx) => ctx.db.query("comma_outbox").collect());
     const status = Object.fromEntries(rows.map((r) => [r.clientKey, r.status]));
     expect(status).toEqual({ s: "unknown", p: "pending" });
@@ -200,7 +201,7 @@ describe("claim and complete", () => {
     for (const echoFirst of [false, true]) {
       const { t, as, c } = await setup();
       await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
-      const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 10 });
+      const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 10, lane: "imessage" });
       const complete = () => t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "s", claimToken: claim.claimToken!, status: "sent", resultGuid: "REAL-GUID" });
       const echo = () => t.mutation(internal.comma.internal.upsertMessages, { messages: [real(c, "REAL-GUID")] });
       await (echoFirst ? echo() : complete());
@@ -213,7 +214,7 @@ describe("claim and complete", () => {
   test("complete records the outcome", async () => {
     const { t, as, c } = await setup();
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
-    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 10 });
+    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 10, lane: "imessage" });
     await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "s", claimToken: claim.claimToken!, status: "failed", error: "BB 500" });
     const states = await as.query(api.comma.outbox.outboxStatusFor, { clientKeys: ["s"] });
     expect(states).toEqual([{ clientKey: "s", status: "failed", error: "BB 500" }]);
@@ -226,9 +227,9 @@ describe("claim and complete", () => {
         const { t, as, c } = await setup();
         vi.setSystemTime(1_000);
         await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
-        const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1_000, leaseMs: 1000, limit: 10 });
+        const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1_000, leaseMs: 1000, limit: 10, lane: "imessage" });
         vi.setSystemTime(9_000);
-        if (ending === "lease lost") await t.mutation(internal.comma.outbox.claimOutbox, { now: 9_000, leaseMs: 1000, limit: 10 });
+        if (ending === "lease lost") await t.mutation(internal.comma.outbox.claimOutbox, { now: 9_000, leaseMs: 1000, limit: 10, lane: "imessage" });
         else await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "s", claimToken: claim.claimToken!, status: ending, error: "BB 500" });
         const temp = await t.run((ctx) => ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "temp-s")).unique());
         expect(temp).toMatchObject({ imessage: { error: 1 }, dateCreated: 9_000 });
@@ -240,7 +241,7 @@ describe("claim and complete", () => {
 
   // The bridge sends one command at a time, and each send lands with the time the Mac sent it.
   const bridgeSends = async (t: T, c: Id<"comma_conversations">, key: string, status: "sent" | "failed", at: number) => {
-    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 60_000, limit: 1 });
+    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 60_000, limit: 1, lane: "imessage" });
     expect(claim?.clientKey).toBe(key);
     if (status === "sent") await t.mutation(internal.comma.internal.upsertMessages, { messages: [{ ...real(c, `REAL-${key}`), text: key, dateCreated: at }] });
     await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: key, claimToken: claim!.claimToken!, status, ...(status === "sent" ? { resultGuid: `REAL-${key}` } : { error: "BB 500" }) });
@@ -282,15 +283,15 @@ describe("claim and complete", () => {
 
 describe("lanes", () => {
   const suggestions = { kind: "suggestions" as const, model: "opus" as const, refresh: false };
-  const claim = (t: T, now: number, lane?: "imessage" | "ai", limit = 10) =>
-    t.mutation(internal.comma.outbox.claimOutbox, { now, leaseMs: 100, limit, ...(lane ? { lane } : {}) });
+  const claim = (t: T, now: number, lane: "imessage" | "ai", limit = 10) =>
+    t.mutation(internal.comma.outbox.claimOutbox, { now, leaseMs: 100, limit, lane });
 
   test("the kind groups partition every payload kind, and only model work leaves the iMessage lane", () => {
     const kinds = (union: { members: { fields: { kind: { value: string } } }[] }) => union.members.map((m) => m.fields.kind.value);
     const groups = [coreMessagingPayload, imessagePayload, aiPayload, legacyTriagePayload].flatMap(kinds);
     expect(groups.sort()).toEqual(kinds(outboxPayload).sort());
     expect(new Set(groups).size).toBe(groups.length);
-    expect(kinds(outboxPayload).filter((kind) => laneOf(kind as CommaOutboxPayload["kind"]) === "ai").sort())
+    expect(kinds(outboxPayload).filter((kind) => laneOf("imessage", { kind } as CommaOutboxPayload).lane === "ai").sort())
       .toEqual(["clearSuggestionLearning", "identify", "suggestionFeedback", "suggestions", "transcribe"]);
   });
 
@@ -326,23 +327,14 @@ describe("lanes", () => {
     await claim(t, 5000, "ai", 0);
     expect(await status()).toEqual({ a: "pending", s: "unknown" });
   });
-
-  test("a bridge from before lanes claims every lane in queue order", async () => {
-    const { t, as, c } = await setup();
-    await as.mutation(api.comma.outbox.enqueue, { clientKey: "a", conversationId: c, payload: suggestions });
-    await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
-    expect((await t.query(api.comma.outbox.pendingOutbox, { bridgeKey: SECRET })).map((r) => r.clientKey).sort()).toEqual(["a", "s"]);
-    expect((await claim(t, 1000)).map((r) => r.clientKey).sort()).toEqual(["a", "s"]);
-  });
-
 });
 
 describe("pendingOutbox", () => {
   test("only answers the bridge secret", async () => {
     const { t, as, c } = await setup();
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
-    await expect(t.query(api.comma.outbox.pendingOutbox, { bridgeKey: "wrong" })).rejects.toThrow();
-    const rows = await t.query(api.comma.outbox.pendingOutbox, { bridgeKey: SECRET });
+    await expect(t.query(api.comma.outbox.pendingOutbox, { bridgeKey: "wrong", lane: "imessage" })).rejects.toThrow();
+    const rows = await t.query(api.comma.outbox.pendingOutbox, { bridgeKey: SECRET, lane: "imessage" });
     expect(rows.map((r) => r.clientKey)).toEqual(["s"]);
   });
 });
@@ -355,7 +347,7 @@ describe("routes", () => {
     // The primary moving after enqueue does not move a command already queued.
     await t.run((ctx) => ctx.db.patch(c, { primaryChatGuid: "iMessage;-;+15550001111" }));
     expect((await t.run((ctx) => ctx.db.get(id)))?.route).toEqual({ platform: "imessage", chatGuid: "SMS;-;+15550001111" });
-    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 1 });
+    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 1, lane: "imessage" });
     expect(claim?.route).toEqual({ platform: "imessage", chatGuid: "SMS;-;+15550001111" });
     const temp = await t.run((ctx) => ctx.db.query("comma_messages").collect());
     expect(temp.map((m) => [m.imessage?.chatGuid, m.imessage?.service])).toEqual([["SMS;-;+15550001111", "SMS"]]);
@@ -379,7 +371,7 @@ test("getCommand authenticates and returns only the receipt, including validated
   const { t, as, c } = await setup();
   const commandId = await as.mutation(api.comma.outbox.enqueue, { clientKey: "typed", conversationId: c, payload: { kind: "markRead" } });
   await expect(t.query(api.comma.outbox.getCommand, { commandId })).rejects.toThrow();
-  const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1000, leaseMs: 100, limit: 1 });
+  const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1000, leaseMs: 100, limit: 1, lane: "imessage" });
   const args = { clientKey: "typed", claimToken: claim.claimToken!, status: "sent" as const };
   await expect(t.mutation(internal.comma.outbox.completeOutbox, { ...args, result: { kind: "mute", ok: true } })).rejects.toThrow("Result kind");
   await expect(t.mutation(internal.comma.outbox.completeOutbox, { ...args, result: { kind: "markRead", ok: false } as never })).rejects.toThrow();
@@ -392,13 +384,13 @@ test("getCommand authenticates and returns only the receipt, including validated
 test("renewal is fenced, cannot resurrect an expired lease, and prevents expiry while live", async () => {
   const { t, as, c } = await setup();
   const commandId = await as.mutation(api.comma.outbox.enqueue, { clientKey: "lease", conversationId: c, payload: { kind: "identify" } });
-  const [first] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1000, leaseMs: 100, limit: 1 });
+  const [first] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1000, leaseMs: 100, limit: 1, lane: "ai" });
   const renew = { clientKey: "lease", now: 1050, leaseMs: 100, claimToken: first.claimToken! };
   expect(await t.mutation(internal.comma.outbox.renewOutbox, { ...renew, claimToken: "stale" })).toBe(false);
   expect(await t.mutation(internal.comma.outbox.renewOutbox, renew)).toBe(true);
-  expect(await t.mutation(internal.comma.outbox.claimOutbox, { now: 1120, leaseMs: 100, limit: 1 })).toEqual([]);
+  expect(await t.mutation(internal.comma.outbox.claimOutbox, { now: 1120, leaseMs: 100, limit: 1, lane: "ai" })).toEqual([]);
   expect(await t.mutation(internal.comma.outbox.renewOutbox, { ...renew, now: 1150 })).toBe(false);
-  const [second] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1200, leaseMs: 100, limit: 1 });
+  const [second] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1200, leaseMs: 100, limit: 1, lane: "ai" });
   expect(second.claimToken).not.toBe(first.claimToken);
   const before = await t.run((ctx) => ctx.db.get(commandId));
   expect(await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "lease", claimToken: first.claimToken!, status: "failed", error: "late" })).toBe(false);
@@ -428,10 +420,10 @@ test("every new kind has the specified expiry policy and legacy claims remain va
   for (const payload of payloads) {
     // A legacy claimed row can have no claim token until the next claim.
     await t.run((ctx) => ctx.db.insert("comma_outbox", { clientKey: payload.kind, conversationId: c,
-      payload,
+      payload, lane: laneOf("imessage", payload).lane,
       status: "claimed", attempts: 1, leaseUntil: 10, createdAt: 1, updatedAt: 1 }));
   }
-  await t.mutation(internal.comma.outbox.claimOutbox, { now: 20, leaseMs: 100, limit: 0 });
+  for (const lane of ["imessage", "ai"] as const) await t.mutation(internal.comma.outbox.claimOutbox, { now: 20, leaseMs: 100, limit: 0, lane });
   for (const row of await t.run((ctx) => ctx.db.query("comma_outbox").collect())) {
     expect(row.status).toBe(AUTO_RETRY[row.payload.kind] ? "pending" : "unknown");
     expect(row.claimToken).toBeUndefined();
@@ -441,8 +433,8 @@ test("every new kind has the specified expiry policy and legacy claims remain va
 test("an expired side-effect claim cannot overwrite unknown with a late receipt", async () => {
   const { t, as, c } = await setup();
   const commandId = await as.mutation(api.comma.outbox.enqueue, { clientKey: "late-send", conversationId: c, payload: send });
-  const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 100, leaseMs: 100, limit: 1 });
-  await t.mutation(internal.comma.outbox.claimOutbox, { now: 300, leaseMs: 100, limit: 0 });
+  const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 100, leaseMs: 100, limit: 1, lane: "imessage" });
+  await t.mutation(internal.comma.outbox.claimOutbox, { now: 300, leaseMs: 100, limit: 0, lane: "imessage" });
   expect(await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "late-send", claimToken: claim.claimToken!, status: "sent" })).toBe(false);
   expect((await as.query(api.comma.outbox.getCommand, { commandId }))?.status).toBe("unknown");
   const outsiderId = await t.run((ctx) => ctx.db.insert("users", { email: "outsider@example.com" }));
@@ -600,7 +592,7 @@ describe("react remove", () => {
     });
     expect((await reactions()).map((r) => r.isFromMe)).toEqual([true, false]);
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "r", conversationId: c, payload: { kind: "react", messageGuid: "target", reaction: "like", remove: true } });
-    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 10 });
+    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 10, lane: "imessage" });
     await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "r", claimToken: claim.claimToken!, status: "sent" });
     expect((await reactions()).map((r) => r.isFromMe)).toEqual([false]);
   });

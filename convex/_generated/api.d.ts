@@ -462,6 +462,29 @@ export declare const api: {
           whisperDetail?: string;
         } | null
       >;
+      routeExecutorStatus: FunctionReference<
+        "query",
+        "public",
+        { accountId: Id<"comma_accounts"> | null; platform: "imessage" },
+        {
+          capabilities:
+            | {
+                emojiReactions: boolean;
+                executor: "imessage";
+                privateApi: boolean;
+              }
+            | {
+                executor: "ai";
+                suggestions: boolean;
+                whisperAvailable: boolean;
+                whisperDetail?: string;
+              };
+          connected: boolean;
+          detail?: string;
+          key: string;
+          lastSeenAt: number;
+        } | null
+      >;
     };
     conversationInfo: {
       chatInfo: FunctionReference<
@@ -762,7 +785,12 @@ export declare const api: {
             | { kind: "leaveGroup" }
             | { chatGuid: string; kind: "deleteChat" }
             | { kind: "createFaceTimeLink" }
-            | { kind: "suggestions"; model: "opus" | "terra"; refresh: boolean }
+            | {
+                kind: "suggestions";
+                model: "opus" | "terra";
+                precompute?: boolean;
+                refresh: boolean;
+              }
             | {
                 feedback: {
                   finalText: string;
@@ -1240,7 +1268,7 @@ export declare const api: {
       pendingOutbox: FunctionReference<
         "query",
         "public",
-        { bridgeKey: string; lane?: "imessage" | "ai" },
+        { bridgeKey: string; lane: "imessage" | "ai" | "aiBackground" },
         Array<{
           _creationTime: number;
           _id: Id<"comma_outbox">;
@@ -1250,7 +1278,7 @@ export declare const api: {
           conversationId?: Id<"comma_conversations">;
           createdAt: number;
           error?: string;
-          lane?: "imessage" | "ai";
+          lane?: "imessage" | "ai" | "aiBackground";
           leaseUntil?: number;
           payload:
             | {
@@ -1311,7 +1339,12 @@ export declare const api: {
             | { kind: "leaveGroup" }
             | { chatGuid: string; kind: "deleteChat" }
             | { kind: "createFaceTimeLink" }
-            | { kind: "suggestions"; model: "opus" | "terra"; refresh: boolean }
+            | {
+                kind: "suggestions";
+                model: "opus" | "terra";
+                precompute?: boolean;
+                refresh: boolean;
+              }
             | {
                 feedback: {
                   finalText: string;
@@ -4340,6 +4373,7 @@ export declare const internal: {
         "internal",
         { conversationId: Id<"comma_conversations"> },
         {
+          bridge: { emojiReactions: boolean; privateApi: boolean };
           isGroup: boolean;
           messages: Array<{
             attachments: Array<{
@@ -4398,7 +4432,11 @@ export declare const internal: {
             text: string;
             threadRef?: string;
           }>;
-          participants: Array<{ address: string; name: string | null }>;
+          participants: Array<{
+            address: string;
+            emails: Array<string>;
+            name: string | null;
+          }>;
           route: {
             accountId?: Id<"comma_accounts">;
             chatGuid: string;
@@ -4850,6 +4888,14 @@ export declare const internal: {
         { skipped: number; written: number }
       >;
     };
+    lanes: {
+      drive: FunctionReference<
+        "action",
+        "internal",
+        { lane: "imessage" | "ai" | "aiBackground" },
+        null
+      >;
+    };
     media: {
       bridgeMedia: FunctionReference<
         "mutation",
@@ -4914,7 +4960,7 @@ export declare const internal: {
         "mutation",
         "internal",
         {
-          lane?: "imessage" | "ai";
+          lane: "imessage" | "ai" | "aiBackground";
           leaseMs: number;
           limit: number;
           now: number;
@@ -4928,7 +4974,7 @@ export declare const internal: {
           conversationId?: Id<"comma_conversations">;
           createdAt: number;
           error?: string;
-          lane?: "imessage" | "ai";
+          lane?: "imessage" | "ai" | "aiBackground";
           leaseUntil?: number;
           payload:
             | {
@@ -4989,7 +5035,12 @@ export declare const internal: {
             | { kind: "leaveGroup" }
             | { chatGuid: string; kind: "deleteChat" }
             | { kind: "createFaceTimeLink" }
-            | { kind: "suggestions"; model: "opus" | "terra"; refresh: boolean }
+            | {
+                kind: "suggestions";
+                model: "opus" | "terra";
+                precompute?: boolean;
+                refresh: boolean;
+              }
             | {
                 feedback: {
                   finalText: string;
@@ -5912,6 +5963,25 @@ export declare const internal: {
                 updatedAt: number;
               }
             | {
+                capabilities:
+                  | {
+                      emojiReactions: boolean;
+                      executor: "imessage";
+                      privateApi: boolean;
+                    }
+                  | {
+                      executor: "ai";
+                      suggestions: boolean;
+                      whisperAvailable: boolean;
+                      whisperDetail?: string;
+                    };
+                connected: boolean;
+                detail?: string;
+                key: string;
+                kind: "executorStatus";
+                lastSeenAt: number;
+              }
+            | {
                 emojiReactions?: boolean;
                 key: "mini";
                 kind: "bridgeState";
@@ -5928,6 +5998,12 @@ export declare const internal: {
       >;
     };
     suggestions: {
+      precompute: FunctionReference<
+        "mutation",
+        "internal",
+        { conversationId: Id<"comma_conversations">; messageGuid: string },
+        null
+      >;
       publish: FunctionReference<
         "mutation",
         "internal",

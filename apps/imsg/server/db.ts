@@ -44,6 +44,8 @@ export class OverlayDb {
 
   constructor(path: string) {
     this.db = new Database(path, { create: true });
+    // The bridge and the AI process share this file; a writer waits out the other's write instead of failing.
+    this.db.exec("PRAGMA busy_timeout = 5000;");
     this.db.exec("PRAGMA journal_mode = WAL;");
     // chat_state, triage_clear_event and triage_open_item held Comma's triage state until Convex took it
     // over. Nothing writes them now; they stay as the rollback copy.

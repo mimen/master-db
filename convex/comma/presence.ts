@@ -4,14 +4,16 @@ import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, query, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
-import { laneOf, presenceFields } from "../schema/comma/validators";
+import { presenceFields } from "../schema/comma/validators";
 
-import { bridgeStateValue, publishBridgeState } from "./bridgeState";
+import { executorStatusValue, legacyBridgeStateValue, publishExecutorStatus, publishLegacyBridgeState } from "./bridgeState";
+import { insertCommand } from "./enqueue";
 
 export const presenceValue = v.object(presenceFields);
 export const ephemeralInput = v.union(
   v.object({ kind: v.literal("presence"), ...presenceFields }),
-  v.object({ kind: v.literal("bridgeState"), ...bridgeStateValue.fields }),
+  v.object({ kind: v.literal("executorStatus"), ...executorStatusValue.fields }),
+  v.object({ kind: v.literal("bridgeState"), ...legacyBridgeStateValue.fields }),
   v.object({ kind: v.literal("typingCurrent"), clientKey: v.string(), claimToken: v.string() }),
 );
 
@@ -48,10 +50,9 @@ export const expireTyping = internalMutation({
     const clientKey = `typing-expire:${row._id}`;
     const existing = await ctx.db.query("comma_outbox").withIndex("by_clientKey", (q) => q.eq("clientKey", clientKey)).unique();
     // The clear goes where the typing went, which enqueue already checked supports it.
-    if (!existing) await ctx.db.insert("comma_outbox", {
-      clientKey, conversationId: row.conversationId, route: row.route, lane: laneOf("typing"),
-      payload: { kind: "typing", active: false, expiresAt: row.payload.expiresAt },
-      status: "pending", attempts: 0, createdAt: Date.now(), updatedAt: Date.now(),
+    if (!existing) await insertCommand(ctx, {
+      clientKey, conversationId: row.conversationId, route: row.route, platform: row.route?.platform ?? "imessage",
+      payload: { kind: "typing", active: false, expiresAt: row.payload.expiresAt }, now: Date.now(),
     });
     return null;
   },
@@ -73,12 +74,17 @@ export const publish = internalMutation({
       }
       return true;
     }
-    const { kind, ...value } = state;
-    if (kind === "bridgeState" && "key" in value) {
-      await publishBridgeState(ctx, value);
+    if (state.kind === "executorStatus") {
+      const { kind: _kind, ...status } = state;
+      await publishExecutorStatus(ctx, status);
       return true;
     }
-    if (!("conversationId" in value)) throw new Error("Invalid presence record");
+    if (state.kind === "bridgeState") {
+      const { kind: _kind, ...legacy } = state;
+      await publishLegacyBridgeState(ctx, legacy);
+      return true;
+    }
+    const { kind: _kind, ...value } = state;
     if (!await ctx.db.get(value.conversationId)) throw new Error("Conversation not found");
     const existing = await ctx.db.query("comma_presence").withIndex("by_conversationId", (q) => q.eq("conversationId", value.conversationId)).unique();
     if (existing && existing.updatedAt > value.updatedAt) return false;

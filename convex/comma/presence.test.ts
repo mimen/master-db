@@ -49,7 +49,7 @@ test("typing freshness coalesces per conversation, fences claims and discards ex
   const { t, as, conversationId } = await setup();
   const clock = vi.spyOn(Date, "now").mockReturnValue(1000);
   await as.mutation(api.comma.outbox.enqueue, { conversationId, clientKey: "on", payload: { kind: "typing", active: true, expiresAt: 2000 } });
-  const [on] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1000, leaseMs: 60_000, limit: 1 });
+  const [on] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1000, leaseMs: 60_000, limit: 1, lane: "imessage" });
   const check = () => t.mutation(publish, { state: { kind: "typingCurrent", clientKey: on.clientKey, claimToken: on.claimToken! } });
   expect(await check()).toBe(true);
   expect(await t.mutation(publish, { state: { kind: "typingCurrent", clientKey: on.clientKey, claimToken: "old claim" } })).toBe(false);
@@ -58,7 +58,7 @@ test("typing freshness coalesces per conversation, fences claims and discards ex
   clock.mockReturnValue(1000);
   await as.mutation(api.comma.outbox.enqueue, { conversationId, clientKey: "off", payload: { kind: "typing", active: false, expiresAt: 1000 } });
   expect(await check()).toBe(false);
-  const [off] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1000, leaseMs: 60_000, limit: 1 });
+  const [off] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1000, leaseMs: 60_000, limit: 1, lane: "imessage" });
   clock.mockReturnValue(3000);
   expect(await t.mutation(publish, { state: { kind: "typingCurrent", clientKey: off.clientKey, claimToken: off.claimToken! } })).toBe(true);
 });
@@ -82,7 +82,7 @@ test("durable expiry queues a clear after the bridge dies and never clears a new
   const { t, as, conversationId } = await setup();
   const onArgs = { conversationId, clientKey: "on-before-crash", payload: { kind: "typing" as const, active: true, expiresAt: 2000 } };
   const commandId = await as.mutation(api.comma.outbox.enqueue, onArgs);
-  const [on] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1000, leaseMs: 60_000, limit: 1 });
+  const [on] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1000, leaseMs: 60_000, limit: 1, lane: "imessage" });
   const check = { state: { kind: "typingCurrent" as const, clientKey: on.clientKey, claimToken: on.claimToken! } };
   await t.mutation(publish, check);
   await t.mutation(publish, check);
@@ -98,7 +98,7 @@ test("durable expiry queues a clear after the bridge dies and never clears a new
 
   vi.setSystemTime(3000);
   await as.mutation(api.comma.outbox.enqueue, { ...onArgs, clientKey: "superseded-on", payload: { kind: "typing", active: true, expiresAt: 4000 } });
-  const [old] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 3000, leaseMs: 60_000, limit: 1 });
+  const [old] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 3000, leaseMs: 60_000, limit: 1, lane: "imessage" });
   await t.mutation(publish, { state: { kind: "typingCurrent", clientKey: old.clientKey, claimToken: old.claimToken! } });
   const newerId = await as.mutation(api.comma.outbox.enqueue, { ...onArgs, clientKey: "newer-on", payload: { kind: "typing", active: true, expiresAt: 10_000 } });
   await t.finishAllScheduledFunctions(vi.runAllTimers);

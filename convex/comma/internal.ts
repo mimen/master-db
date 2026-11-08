@@ -22,6 +22,7 @@ import { FLAT_ATTACHMENT_UNSET, FLAT_MESSAGE_UNSET, inScope, MODEL_TEXT_UNSET, p
 import { landEcho, refreshLastMessage } from "./pendingSends";
 import { fromTapback } from "./reactions";
 import { applyReaction } from "./reactionStore";
+import { schedulePrecompute } from "./suggestions";
 import { logReplies } from "./triage";
 
 /**
@@ -171,6 +172,7 @@ export const upsertMessages = internalMutation({
     }
     for (const conversationId of touchedConversations) await refreshLastMessage(ctx, conversationId);
     await logReplies(ctx, real);
+    await schedulePrecompute(ctx, real);
     return { written, skipped };
   },
 });
