@@ -1,5 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
+import { primaryChat } from "../comma/conversationIdentity";
 import { findConversation } from "../comma/conversationLookup";
 
 /** A group chat's CRM (chat_crm, tags, event_links) belongs to its Comma conversation. */
@@ -13,7 +14,7 @@ export async function groupConversation(ctx: QueryCtx, ref: GroupRef): Promise<D
 
 /** Fields a new group CRM row carries. */
 export function groupOwner(conversation: Doc<"comma_conversations">) {
-  return { conversation_id: conversation._id, chat_guid: conversation.primaryChatGuid };
+  return { conversation_id: conversation._id, chat_guid: primaryChat(conversation) };
 }
 
 /** A group conversation's CRM rows, table by table. */

@@ -97,8 +97,9 @@ export const conversationFields = {
   accountId: v.optional(v.id("comma_accounts")),
   /** Unique within an account. `dm:+E164`, `dm:email`, `g:identifier`, or `chat:guid`; see convex/comma/conversationIdentity.ts. */
   conversationKey: v.string(),
-  primaryChatGuid: v.string(),
-  chatGuids: v.array(v.string()),
+  /** iMessage's: the chat a conversation sends through, and every chat merged into it. Other platforms have neither. */
+  primaryChatGuid: v.optional(v.string()),
+  chatGuids: v.optional(v.array(v.string())),
   displayName: v.string(),
   rawDisplayName: v.optional(v.string()),
   groupPhotoGuid: v.optional(v.string()),
@@ -111,7 +112,8 @@ export const conversationFields = {
   lastMessage: v.optional(lastMessageSummary),
   lastMessageAt: v.number(),
   isSpam: v.boolean(),
-  hasGroupPhoto: v.boolean(),
+  /** iMessage's; absent reads as no photo. */
+  hasGroupPhoto: v.optional(v.boolean()),
   /** Mirrored from chat.db: inbound messages newer than the last read or sent one. */
   unread: v.optional(v.object({ count: v.number(), firstAt: v.number() })),
   updatedAt: v.number(),
