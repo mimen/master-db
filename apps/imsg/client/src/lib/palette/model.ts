@@ -4,6 +4,7 @@ import type { SearchHit } from "@/lib/api";
 import type { AgentChatSummary } from "@/lib/agent-api";
 import { ATTENTION_ORDER } from "@/lib/inbox-model";
 import { shortcutFor } from "@/lib/keyboard/registry";
+import { WORKSPACES, type WorkspaceId } from "@/lib/workspaces";
 
 import { inboxFilterSnapshot, type SavedView } from "./saved-views";
 
@@ -17,7 +18,7 @@ import { inboxFilterSnapshot, type SavedView } from "./saved-views";
 export type PaletteCommandId =
   | { kind: "state"; value: StateFilter }
   | { kind: "type"; value: TypeFilter }
-  | { kind: "tab"; value: "messages" | "contacts" }
+  | { kind: "tab"; value: WorkspaceId }
   | { kind: "action"; value: "new-message" | "shortcuts" | "scheduled" | "settings" | "update-today" | "regenerate-today" }
   | { kind: "view"; value: string };
 
@@ -78,8 +79,11 @@ function lensEntries<Value extends string>(
 export const PALETTE_COMMANDS: readonly PaletteCommand[] = [
   ...lensEntries("state", STATE_COMMANDS),
   ...lensEntries("type", TYPE_COMMANDS),
-  { id: { kind: "tab", value: "messages" }, title: "Go to messages", keywords: ["tab", "inbox"] },
-  { id: { kind: "tab", value: "contacts" }, title: "Go to contacts", keywords: ["tab", "people"] },
+  ...WORKSPACES.map((workspace): PaletteCommand => ({
+    id: { kind: "tab", value: workspace.id },
+    title: `Go to ${workspace.label.toLowerCase()}`,
+    keywords: workspace.keywords,
+  })),
   { id: { kind: "action", value: "new-message" }, title: "New message", keywords: ["compose", "start", "chat"], shortcut: shortcutFor("conversation.new") },
   { id: { kind: "action", value: "scheduled" }, title: "Scheduled messages", keywords: ["schedule", "later", "send later", "queue", "pending"] },
   { id: { kind: "action", value: "shortcuts" }, title: "Keyboard shortcuts", keywords: ["help", "keys"], shortcut: shortcutFor("help.open") },

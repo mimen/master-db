@@ -5,8 +5,8 @@ import { createContext, useContext } from "react";
 import type {
   DesktopShellAction,
   DesktopShellState,
-  DesktopWorkspaceId,
 } from "@/lib/desktop-coordinator/types";
+import type { WorkspaceId } from "@/lib/workspaces";
 
 export interface MessagesRailState {
   readonly allChats: readonly ChatSummary[];
@@ -24,7 +24,7 @@ export interface MessagesWorkspaceActions {
 }
 
 export interface DesktopShellContextValue {
-  readonly activeWorkspace: DesktopWorkspaceId;
+  readonly activeWorkspace: WorkspaceId;
   readonly closeTopSurface: () => boolean;
   readonly closeUtility: () => void;
   readonly dispatch: Dispatch<DesktopShellAction>;

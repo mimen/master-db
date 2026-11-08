@@ -5,10 +5,10 @@ import type {
   DesktopRouteError,
   DesktopRouteParams,
   DesktopRouteProjection,
-  DesktopWorkspaceId,
   DesktopWorkspaceProvenance,
   Result,
 } from "./types";
+import { HOME_WORKSPACE, isWorkspaceId, WORKSPACES, workspacePath, type WorkspaceId, type WorkspacePath } from "@/lib/workspaces";
 
 type ProjectionResult = Result<DesktopRouteProjection, DesktopRouteError>;
 
@@ -45,17 +45,17 @@ function invalid(
 function parseWorkspace(
   pathname: string,
   params: DesktopRouteParams,
-  previousWorkspace: DesktopWorkspaceId | undefined,
+  previousWorkspace: WorkspaceId | undefined,
 ): Result<
   {
-    readonly workspace: DesktopWorkspaceId;
+    readonly workspace: WorkspaceId;
     readonly workspaceProvenance: DesktopWorkspaceProvenance;
   },
   DesktopRouteError
 > {
   const raw = first(params.workspace);
   if (raw !== undefined) {
-    if (raw !== "messages" && raw !== "contacts") {
+    if (!isWorkspaceId(raw)) {
       return {
         ok: false,
         error: {
@@ -83,7 +83,7 @@ function parseWorkspace(
   return {
     ok: true,
     value: {
-      workspace: "messages",
+      workspace: HOME_WORKSPACE.id,
       workspaceProvenance: { kind: "default" },
     },
   };
@@ -153,29 +153,18 @@ function parseChatSelection(
 export function projectDesktopRoute(
   pathname: string,
   params: DesktopRouteParams = {},
-  previousWorkspace?: DesktopWorkspaceId,
+  previousWorkspace?: WorkspaceId,
 ): ProjectionResult {
   const normalized = normalizePathname(pathname);
 
-  if (normalized === "/") {
+  const workspaceAtPath = WORKSPACES.find((workspace) => workspace.path === normalized);
+  if (workspaceAtPath) {
     return {
       ok: true,
       value: {
         kind: "workspace",
         pathname: normalized,
-        workspace: "messages",
-        workspaceProvenance: { kind: "path" },
-      },
-    };
-  }
-
-  if (normalized === "/contacts") {
-    return {
-      ok: true,
-      value: {
-        kind: "workspace",
-        pathname: normalized,
-        workspace: "contacts",
+        workspace: workspaceAtPath.id,
         workspaceProvenance: { kind: "path" },
       },
     };
@@ -215,7 +204,7 @@ export function projectDesktopRoute(
     const selection = parsePerson(params);
     if (!selection) return missing(normalized, "address");
     const rawWorkspace = first(params.workspace);
-    if (rawWorkspace !== undefined && rawWorkspace !== "messages" && rawWorkspace !== "contacts") {
+    if (rawWorkspace !== undefined && !isWorkspaceId(rawWorkspace)) {
       return invalid(normalized, "workspace", rawWorkspace);
     }
     const workspace = rawWorkspace ?? "contacts";
@@ -354,12 +343,8 @@ export function projectDesktopRoute(
   };
 }
 
-export function workspacePath(workspace: DesktopWorkspaceId): "/" | "/contacts" {
-  return workspace === "messages" ? "/" : "/contacts";
-}
-
 export function desktopSurfaceCloseTarget(
   projection: DesktopRouteProjection,
-): "/" | "/contacts" {
+): WorkspacePath {
   return workspacePath(projection.workspace);
 }

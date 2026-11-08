@@ -52,6 +52,7 @@ import {
   paletteStyles,
   usePaletteCursor,
 } from "./palette/palette-list";
+import { workspacePath } from "@/lib/workspaces";
 
 const NO_AGENT_CHATS: readonly AgentChatSummary[] = [];
 
@@ -201,7 +202,7 @@ function PaletteRoot({
         router.navigate("/");
         return;
       case "tab":
-        router.navigate(id.value === "contacts" ? "/contacts" : "/");
+        router.navigate(workspacePath(id.value));
         return;
       case "action":
         if (id.value === "new-message") return onCompose();

@@ -1,6 +1,5 @@
 import Clock01Icon from "@hugeicons/core-free-icons/Clock01Icon";
 import Settings02Icon from "@hugeicons/core-free-icons/Settings02Icon";
-import UserMultipleIcon from "@hugeicons/core-free-icons/UserMultipleIcon";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react-native";
 import { useQuery } from "convex/react";
 import { router } from "expo-router";
@@ -13,6 +12,7 @@ import { usePendingScheduled } from "@/lib/pending-scheduled";
 import { openScheduledPane } from "@/lib/scheduled-pane";
 import { pendingScheduledCount } from "@/lib/scheduled";
 import { openSettingsPane } from "@/lib/settings-pane";
+import { HOME_WORKSPACE, WORKSPACES, type WorkspaceId } from "@/lib/workspaces";
 
 function FooterButton({ icon, label, on, onPress }: { icon: IconSvgElement; label: string; on?: boolean; onPress: () => void }): React.JSX.Element {
   const theme = useTheme();
@@ -24,22 +24,27 @@ function FooterButton({ icon, label, on, onPress }: { icon: IconSvgElement; labe
 }
 
 /**
- * The wide sidebar's footer: Contacts, Scheduled with its pending count, and
- * Settings. It is the desktop's workspace navigation; Contacts toggles back
- * to Messages when it is already open.
+ * The wide sidebar's footer: a button per workspace beyond home, Scheduled
+ * with its pending count, and Settings. It is the desktop's workspace
+ * navigation; an open workspace's button toggles back home.
  */
-export function SidebarFooter({ workspace }: { readonly workspace: "messages" | "contacts" }): React.JSX.Element {
+export function SidebarFooter({ workspace }: { readonly workspace: WorkspaceId }): React.JSX.Element {
   const theme = useTheme();
   const pending = pendingScheduledCount(usePendingScheduled(useQuery(commaApi.listScheduled, {})));
-  const onContacts = workspace === "contacts";
   return (
     <View role="navigation" aria-label="Workspaces" style={[styles.footer, { borderTopColor: theme.divider }]}>
-      <FooterButton
-        icon={UserMultipleIcon}
-        label={onContacts ? "Messages" : "Contacts"}
-        on={onContacts}
-        onPress={() => router.replace(onContacts ? "/" : "/contacts")}
-      />
+      {WORKSPACES.filter((entry) => entry.id !== HOME_WORKSPACE.id).map((entry) => {
+        const on = entry.id === workspace;
+        return (
+          <FooterButton
+            key={entry.id}
+            icon={entry.icon}
+            label={on ? HOME_WORKSPACE.label : entry.label}
+            on={on}
+            onPress={() => router.replace(on ? HOME_WORKSPACE.path : entry.path)}
+          />
+        );
+      })}
       <FooterButton
         icon={Clock01Icon}
         label={pending > 0 ? `Scheduled, ${pending} pending` : "Scheduled"}
