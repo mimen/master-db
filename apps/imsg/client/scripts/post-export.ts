@@ -11,10 +11,15 @@ import { bootScript, convexSocketUrl } from "../src/lib/boot-handoff";
 export const LOADING_SHELL_CSS =
   "body{margin:0}" +
   `#root:empty{background:${Palette.light.background}}` +
-  `#root:empty::before{content:'';margin:auto;width:8px;height:8px;border-radius:50%;background:${Palette.light.textTertiary};` +
-  "animation:comma-boot 1.2s ease-in-out .4s infinite alternate backwards}" +
-  "@keyframes comma-boot{from{opacity:0}to{opacity:.6}}" +
-  `@media (prefers-color-scheme:dark){#root:empty{background:${Palette.dark.background}}#root:empty::before{background:${Palette.dark.textTertiary}}}` +
+  // Three dots like the typing indicator: one dot, two box-shadow copies, a bright step walking left to right.
+  `#root:empty::before{content:'';margin:auto;width:7px;height:7px;border-radius:50%;color:${Palette.light.textTertiary};` +
+  "background:currentColor;box-shadow:11px 0 color-mix(in srgb,currentColor 25%,transparent),22px 0 color-mix(in srgb,currentColor 25%,transparent);transform:translateX(-11px);opacity:.7;" +
+  "animation:comma-boot 1.2s ease-in-out .4s infinite backwards}" +
+  "@keyframes comma-boot{" +
+  "0%,100%{background:currentColor;box-shadow:11px 0 color-mix(in srgb,currentColor 25%,transparent),22px 0 color-mix(in srgb,currentColor 25%,transparent)}" +
+  "33%{background:color-mix(in srgb,currentColor 25%,transparent);box-shadow:11px 0 currentColor,22px 0 color-mix(in srgb,currentColor 25%,transparent)}" +
+  "66%{background:color-mix(in srgb,currentColor 25%,transparent);box-shadow:11px 0 color-mix(in srgb,currentColor 25%,transparent),22px 0 currentColor}}" +
+  `@media (prefers-color-scheme:dark){#root:empty{background:${Palette.dark.background}}#root:empty::before{color:${Palette.dark.textTertiary}}}` +
   "@media (prefers-reduced-motion:reduce){#root:empty::before{animation:none;opacity:.4}}";
 
 /** Injects PWA head tags + a zoom-lock viewport into the exported SPA shell. */
