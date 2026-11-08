@@ -12,7 +12,8 @@ One thread in Comma, whatever carries it, named everywhere by its Convex id (`co
 Its identity is a platform and account plus a key unique within that account; iMessage is the only platform, and
 its service siblings (the iMessage, SMS and RCS chats with one person or group) share one key. Convex
 owns the identity in `convex/comma/conversationIdentity.ts`: the key, the primary chat (newest
-activity, ties to iMessage, then RCS, then SMS), and lookups by chat GUID or handle. Group CRM
+activity, ties to iMessage, then RCS, then SMS), and lookups by chat GUID or handle. The chat fields
+(`primaryChatGuid`, `chatGuids`, `hasGroupPhoto`) are iMessage's and absent on another platform's row. Group CRM
 (`chat_crm`, chat `tags`, chat `event_links`) belongs to the conversation.
 Its **kind** is `dm`, `group`, `channel` or `emailThread` (`comma_conversations.kind`); iMessage ingest derives `dm` or
 `group`, and `isGroup` (every kind but `dm`) is derived from it for older readers. Rows from before kinds read theirs
@@ -88,8 +89,9 @@ _Avoid_: cleaned text, prompt text
 
 **Reaction**:
 One sender's reaction to one message: a key (an iMessage tapback name like `love`, or `emoji:` and an emoji
-tapback's emoji, as `emoji:😍`; what a react command sends), an optional emoji, and the sender. As in Messages, a
-sender has one reaction per message: a new one replaces theirs, whatever its kind. `comma_reactions` holds each
+tapback's emoji, as `emoji:😍`; what a react command sends), an optional emoji, and the sender. Where the platform
+profile says `oneReactionPerSender` (iMessage, as in Messages), a sender has one reaction per message: a new one
+replaces theirs, whatever its kind; elsewhere each key stands alone. `comma_reactions` holds each
 sender's newest state per message and key, removals included, so an older event arriving late never undoes a newer
 one; a sender's replaced reactions stay as removals. Rows written before keys were namespaced read as `emoji:`, and
 reads show only a sender's newest. Ingest turns an iMessage tapback into a reaction and stores no message row for it.
@@ -137,7 +139,9 @@ lane for suggestion precompute, which nobody waits on. The lane registry
 (`convex/comma/laneRegistry.ts`) says who runs each: a **pull** lane waits for an outside executor to
 claim it (the Mini's `comma:server` for `imessage`, its `comma:ai` for both model lanes); a **convex** lane runs in a
 Convex action that enqueue schedules, which claims under the same lease and whose lease expiry schedules
-the next drive. Every lane runs one command at a time, so a slow model call never holds back a send.
+the next drive. A convex lane's thrown error leaves its command `unknown`, because the platform may have acted;
+only a `NotSentError` (refused, or never sent) fails it. Every lane runs one command at a time, so a slow model
+call never holds back a send.
 What a confirmed command changes in Convex beyond its receipt is the lane's `onResult`. AI work reads the
 conversation from Convex by conversation id, never from BlueBubbles. Convex queues a reply-suggestion
 precompute on a fresh inbound message in a known DM while the AI process's heartbeat is fresh; the AI process

@@ -16,7 +16,7 @@ import {
 } from "../schema/comma/validators";
 
 import { ingestAccount, isSelf } from "./accounts";
-import { isGroupKind, PLATFORM_IDENTITY } from "./conversationIdentity";
+import { imessage, isGroupKind, PLATFORM_IDENTITY } from "./conversationIdentity";
 import { findAlias, findAttachment, findByChatGuid, findByKey, findMessage } from "./conversationLookup";
 import { FLAT_ATTACHMENT_UNSET, FLAT_MESSAGE_UNSET, inScope, MODEL_TEXT_UNSET, postedAttachment, postedMessage, type AccountScope } from "./messageShape";
 import { landEcho, refreshLastMessage } from "./pendingSends";
@@ -81,23 +81,23 @@ export const upsertConversations = internalMutation({
   handler: async (ctx, { conversations, ...named }) => {
     const account = await ingestAccount(ctx, named);
     const scope = scopeFor(account);
-    const identity = PLATFORM_IDENTITY[account.platform];
+    // Chats and their aliases are iMessage's; another platform writes its conversations from its own ingest.
     const resolved: Record<string, Id<"comma_conversations">> = {};
     const now = Date.now();
     for (const input of conversations) {
-      const primaryChatGuid = identity.choosePrimary(input.chats);
+      const primaryChatGuid = imessage.choosePrimary(input.chats);
       const chatGuids = input.chats.map((chat) => chat.chatGuid).sort();
       let existing = await findByKey(ctx, scope, input.conversationKey);
       if (!existing) {
         for (const chatGuid of chatGuids) {
           const candidate = await findByChatGuid(ctx, scope, chatGuid);
-          if (candidate && identity.conversationKey(candidate) === input.conversationKey) {
+          if (candidate && imessage.conversationKey(candidate) === input.conversationKey) {
             existing = candidate;
             break;
           }
         }
       }
-      const kind = identity.kind(input);
+      const kind = imessage.kind(input);
       const fields = {
         platform: account.platform,
         accountId: account._id,
@@ -126,7 +126,7 @@ export const upsertConversations = internalMutation({
         const alias = await findAlias(ctx, scope, chatGuid);
         if (!alias) {
           await ctx.db.insert("comma_chat_aliases", {
-            platform: account.platform, accountId: account._id, chatGuid, conversationId, service: identity.service(chatGuid),
+            platform: account.platform, accountId: account._id, chatGuid, conversationId, service: imessage.service(chatGuid),
           });
         } else if (alias.conversationId !== conversationId || alias.accountId !== account._id) {
           await ctx.db.patch(alias._id, { conversationId, platform: account.platform, accountId: account._id });
@@ -361,7 +361,7 @@ export const mergeDuplicateConversations = internalMutation({
   handler: async (ctx, { dryRun }) => {
     const byGuid = new Map<string, Doc<"comma_conversations">[]>();
     for (const conversation of await ctx.db.query("comma_conversations").collect()) {
-      for (const chatGuid of conversation.chatGuids) {
+      for (const chatGuid of conversation.chatGuids ?? []) {
         byGuid.set(chatGuid, [...(byGuid.get(chatGuid) ?? []), conversation]);
       }
     }

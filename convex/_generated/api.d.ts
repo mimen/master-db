@@ -1837,7 +1837,7 @@ export declare const api: {
           _creationTime: number;
           _id: Id<"comma_conversations">;
           accountId?: Id<"comma_accounts">;
-          chatGuids: Array<string>;
+          chatGuids?: Array<string>;
           contactsAvailable: boolean;
           conversationKey: string;
           crm?: {
@@ -1856,7 +1856,7 @@ export declare const api: {
           groupPhotoGuid?: string;
           groupPhotoStorageId?: Id<"_storage">;
           groupPhotoUrl: string | null;
-          hasGroupPhoto: boolean;
+          hasGroupPhoto?: boolean;
           isGroup: boolean;
           isSpam: boolean;
           kind: "dm" | "group" | "channel" | "emailThread";
@@ -1876,7 +1876,7 @@ export declare const api: {
             photoUrl?: string | null;
           }>;
           platform?: "imessage";
-          primaryChatGuid: string;
+          primaryChatGuid?: string;
           rawDisplayName?: string;
           searchNames: Array<string>;
           unread?: { count: number; firstAt: number };
@@ -1964,7 +1964,7 @@ export declare const api: {
             _creationTime: number;
             _id: Id<"comma_conversations">;
             accountId?: Id<"comma_accounts">;
-            chatGuids: Array<string>;
+            chatGuids?: Array<string>;
             contactsAvailable: boolean;
             conversationKey: string;
             crm?: {
@@ -1983,7 +1983,7 @@ export declare const api: {
             groupPhotoGuid?: string;
             groupPhotoStorageId?: Id<"_storage">;
             groupPhotoUrl: string | null;
-            hasGroupPhoto: boolean;
+            hasGroupPhoto?: boolean;
             isGroup: boolean;
             isSpam: boolean;
             kind: "dm" | "group" | "channel" | "emailThread";
@@ -2003,7 +2003,7 @@ export declare const api: {
               photoUrl?: string | null;
             }>;
             platform?: "imessage";
-            primaryChatGuid: string;
+            primaryChatGuid?: string;
             rawDisplayName?: string;
             searchNames: Array<string>;
             unread?: { count: number; firstAt: number };
@@ -2195,7 +2195,7 @@ export declare const api: {
           _creationTime: number;
           _id: Id<"comma_conversations">;
           accountId?: Id<"comma_accounts">;
-          chatGuids: Array<string>;
+          chatGuids?: Array<string>;
           contactsAvailable: boolean;
           conversationKey: string;
           crm?: {
@@ -2214,7 +2214,7 @@ export declare const api: {
           groupPhotoGuid?: string;
           groupPhotoStorageId?: Id<"_storage">;
           groupPhotoUrl: string | null;
-          hasGroupPhoto: boolean;
+          hasGroupPhoto?: boolean;
           isGroup: boolean;
           isSpam: boolean;
           kind: "dm" | "group" | "channel" | "emailThread";
@@ -2234,7 +2234,7 @@ export declare const api: {
             photoUrl?: string | null;
           }>;
           platform?: "imessage";
-          primaryChatGuid: string;
+          primaryChatGuid?: string;
           rawDisplayName?: string;
           searchNames: Array<string>;
           unread?: { count: number; firstAt: number };

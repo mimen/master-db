@@ -73,6 +73,18 @@ describe("Comma read queries", () => {
     expect(result.page.map((row) => row.displayName)).toEqual(["visible"]);
     expect(result.isDone).toBe(true);
   });
+  test("a conversation with no iMessage chats lists beside iMessage's unchanged", async () => {
+    const t = authed();
+    await t.run(async (ctx) => {
+      const { primaryChatGuid: _p, chatGuids: _c, hasGroupPhoto: _h, ...chatless } = conversation("chatless", 20);
+      await ctx.db.insert("comma_conversations", chatless);
+      await ctx.db.insert("comma_conversations", conversation("imessage", 10));
+    });
+    const result = await t.query(api.comma.queries.listConversations, { paginationOpts });
+    expect(result.page.map((row) => [row.displayName, row.primaryChatGuid, row.chatGuids, row.hasGroupPhoto])).toEqual([
+      ["chatless", undefined, undefined, undefined], ["imessage", "iMessage;-;imessage", ["iMessage;-;imessage"], false],
+    ]);
+  });
   test("conversation queries reject unauthenticated callers", async () => {
     const t = convexTest(schema, commaModules);
     const id = await t.run((ctx) => ctx.db.insert("comma_conversations", conversation("one", 1)));

@@ -82,3 +82,8 @@ describe("routes", () => {
     expect(imessage.sendService("iMessage;+;chat1")).toBe("iMessage");
   });
 });
+
+test("a conversation with no iMessage chat has no route rather than a made-up one", () => {
+  expect(() => sendRoute({})).toThrow("Conversation has no iMessage chat");
+  expect(() => routeFor({}, "SMS")).toThrow("Conversation has no iMessage chat");
+});

@@ -17,7 +17,8 @@ export function conversationToChat(
 ): ChatSummary {
   return {
     conversationId: row._id,
-    route: { platform: row.platform ?? "imessage", accountId: row.accountId ?? null, imessage: { chatGuid: row.primaryChatGuid } },
+    // ponytail: every row has a chat until Slack's rows land; ChatRoute becomes a union by platform then.
+    route: { platform: row.platform ?? "imessage", accountId: row.accountId ?? null, imessage: { chatGuid: row.primaryChatGuid ?? "" } },
     displayName: row.displayName,
     kind: row.kind,
     isGroup: row.isGroup,
