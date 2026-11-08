@@ -3,6 +3,7 @@ import type { ActionCtx, MutationCtx } from "../_generated/server";
 import type { CommandResult, CommaOutboxLane, CommaPlatform } from "../schema/comma/validators";
 
 import { applyIMessageResult } from "./imessageResults";
+import { applySlackResult, executeSlack } from "./slackLane";
 
 type OutboxRow = Doc<"comma_outbox">;
 
@@ -25,15 +26,7 @@ export type LaneSpec = {
 
 export const PLATFORM_LANES: Record<CommaPlatform, LaneSpec> = {
   imessage: { lane: "imessage", executor: "pull", onResult: applyIMessageResult },
-  slack: {
-    lane: "slack",
-    executor: "convex",
-    // Slack is read-only until sending lands: a read stays in Comma, and the profile greys everything that writes.
-    execute: async (_ctx, row) => {
-      if (row.payload.kind === "markRead") return { kind: "markRead", ok: true };
-      throw new NotSentError("Sending from Slack is coming");
-    },
-  },
+  slack: { lane: "slack", executor: "convex", execute: executeSlack, onResult: applySlackResult },
 };
 
 /** Model work, whatever the conversation's platform. The Mini's AI process claims it. */

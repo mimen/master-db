@@ -29,11 +29,16 @@ describe("unsupportedReason", () => {
 describe("a Slack route", () => {
   const slack = { platform: "slack" as const, accountId: "a" as never, channel: "D1" };
 
-  test("refuses every write with the coming-soon reason, and lets a read through", () => {
-    expect(unsupportedReason(slack, false, { kind: "send", text: "hi" })).toBe("Sending from Slack is coming");
-    expect(unsupportedReason(slack, false, { kind: "react", messageGuid: "D1:1.0", reaction: "emoji:🔥", remove: false })).toBe("Sending from Slack is coming");
+  test("runs what Comma sends to Slack, refuses what it does not yet, and lets a read through", () => {
+    expect(unsupportedReason(slack, false, { kind: "send", text: "hi", replyToGuid: "D1:1.0" })).toBeNull();
+    expect(unsupportedReason(slack, false, { kind: "react", messageGuid: "D1:1.0", reaction: "emoji:🔥", remove: false })).toBeNull();
+    expect(unsupportedReason(slack, false, { kind: "edit", messageGuid: "D1:1.0", text: "x" })).toBeNull();
+    expect(unsupportedReason(slack, false, { kind: "unsend", messageGuid: "D1:1.0" })).toBeNull();
+    expect(unsupportedReason(slack, false, { kind: "react", messageGuid: "D1:1.0", reaction: "love", remove: false })).toBe("Slack can't send that reaction");
+    expect(unsupportedReason(slack, false, { kind: "delete", messageGuid: "D1:1.0" })).toBe("Slack can't delete a message just for you");
+    expect(unsupportedReason(slack, false, { kind: "schedule", text: "hi", sendAt: 1 })).toBe("Not in Comma's Slack yet");
     expect(unsupportedReason(slack, false, { kind: "markRead" })).toBeNull();
-    expect(unsupportedReason(slack, false, { kind: "suggestions", model: "opus", refresh: false })).toBe("Sending from Slack is coming");
+    expect(unsupportedReason(slack, false, { kind: "suggestions", model: "opus", refresh: false })).toBeNull();
     expect(unsupportedReason(imessage, false, { kind: "suggestions", model: "opus", refresh: false })).toBeNull();
   });
 });

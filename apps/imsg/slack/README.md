@@ -1,10 +1,12 @@
 # Comma's Slack app
 
-Comma reads the AUF workspace (`umbrellafriends`, team `T066U9Q8F99`) as Milad, through a user token on a custom app named Comma that lives inside the workspace. `manifest.json` is the app's whole configuration. It has user scopes only: Comma has no bot user and asks for no bot scopes. Token rotation stays off, so the user token never expires and nothing refreshes it.
+Comma reads and writes the AUF workspace (`umbrellafriends`, team `T066U9Q8F99`) as Milad, through a user token on a custom app named Comma that lives inside the workspace. `manifest.json` is the app's whole configuration. It has user scopes only: Comma has no bot user and asks for no bot scopes. Token rotation stays off, so the user token never expires and nothing refreshes it.
 
-The write scopes (`chat:write`, `reactions:write`, `*:write`, `files:write`) are for sending, which lands after S1. They are in the manifest now so one install covers both milestones.
+The write scopes carry Comma's Slack lane (`convex/comma/slackLane.ts`): `chat:write` sends, replies, edits and deletes, `reactions:write` reacts, and the `*:write` conversation scopes mark a conversation read. `files:write` waits for attachments.
 
-The app subscribes, on Milad's behalf, to messages in DMs, group DMs, public and private channels, and to profile changes. Slack posts them to `POST /comma/slack/events`, signed with the app's signing secret. Comma keeps every DM and group DM message, the threads Milad started, replied in or is mentioned in, and top-level messages in channels listed on the account's `slackChannels`; everything else is dropped before any write. Reaction and read-marker events are not subscribed: Comma shows Slack reactions with sending, and Slack sends read markers only over RTM.
+A send carries its clientKey in Slack message metadata (event type `comma_send`). When a send's answer is lost, Comma reads the conversation's recent history at 20 seconds and 2 minutes and matches that clientKey, or Milad's user id and the exact text, so the send lands without being posted twice.
+
+The app subscribes, on Milad's behalf, to messages in DMs, group DMs, public and private channels, and to profile changes. Slack posts them to `POST /comma/slack/events`, signed with the app's signing secret. Comma keeps every DM and group DM message, the threads Milad started, replied in or is mentioned in, and top-level messages in channels listed on the account's `slackChannels`; everything else is dropped before any write. Reaction and read-marker events are not subscribed: Comma writes its own reactions when Slack confirms them, other people's reactions do not show yet, and Slack sends read markers only over RTM.
 
 ## Setup
 

@@ -7,6 +7,7 @@ import type { MentionAnnotation } from "@shared/mentions";
 import { messageService } from "@shared/platform-profile";
 import { NOT_SENT_AFTER_MS, NOT_SENT_ERROR, pendingClientKey, pendingGuid, type PendingSendState } from "@shared/pending-send";
 import type { BridgeMessage, ChatSummary, ConversationId, Message, Platform } from "@shared/types";
+import type { ResultFor } from "./command-results";
 import { pendingSendsApi } from "./convex-api";
 import { runCommandVia, watchCommandVia, type ResultCommandClient } from "./convex-commands";
 import { settleTemp, upsertMessage } from "./message-window";
@@ -245,9 +246,16 @@ function landedAs(bubble: Message, sent: BridgeMessage): Message {
   };
 }
 
+/** What the send landed as: iMessage answers with its message, Slack with its id and ts. The mirrored row replaces it. */
+function landedFrom(bubble: Message, result: ResultFor<"send">): Message {
+  if ("message" in result) return landedAs(bubble, result.message);
+  const { sendState: _sendState, ...sent } = bubble;
+  return { ...sent, guid: result.guid, dateCreated: Math.round(Number(result.slack.ts) * 1000) };
+}
+
 /** Waits for Convex, runs `queue`, and settles the bubble with what the platform made of it. */
 async function deliver(conversationId: ConversationId, bubble: Message, client: SendClient,
-  queue: () => Promise<{ message: BridgeMessage }>): Promise<Message> {
+  queue: () => Promise<ResultFor<"send">>): Promise<Message> {
   const clientKey = bubble.clientKey!;
   const ok = await reachable(client, clientKey, bubble.dateCreated + NOT_SENT_AFTER_MS);
   if (cancelled.has(clientKey)) throw new SendCancelledError();
@@ -259,7 +267,7 @@ async function deliver(conversationId: ConversationId, bubble: Message, client: 
     throw new Error(NOT_SENT_ERROR);
   }
   try {
-    const landed = landedAs(bubble, (await queue()).message);
+    const landed = landedFrom(bubble, await queue());
     pendingSends.settle(conversationId, bubble.guid, landed);
     return landed;
   } catch (error) {

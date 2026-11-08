@@ -5,6 +5,7 @@ import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { httpAction, internalMutation, type MutationCtx } from "../_generated/server";
 import { jsonResponse } from "../beeper/sync/auth";
+import { slackMessage, slackUser } from "../schema/comma/validators";
 
 import { publishExecutorStatus } from "./bridgeState";
 import { slack, type SlackConversationRef } from "./conversationIdentity";
@@ -20,27 +21,16 @@ import { upsertSlackUsers } from "./slackPeople";
  * retries anything slower than three seconds, so nothing here calls Slack.
  */
 
-export const slackRefValue = v.union(
-  v.object({ type: v.union(v.literal("im"), v.literal("mpim"), v.literal("channel")), channel: v.string() }),
-  v.object({ type: v.literal("thread"), channel: v.string(), threadTs: v.string() }),
-);
-
-/** One Slack message as Comma keeps it. Bot messages and joins never get this far. */
-export const slackMessageValue = v.object({
-  ts: v.string(), threadTs: v.optional(v.string()), user: v.string(), text: v.string(), editedTs: v.optional(v.string()),
-});
-export type SlackMessage = Infer<typeof slackMessageValue>;
-
-export const slackUserValue = v.object({ id: v.string(), name: v.string(), email: v.optional(v.string()) });
-export type SlackUser = Infer<typeof slackUserValue>;
+export type SlackMessage = Infer<typeof slackMessage>;
+export type SlackUser = Infer<typeof slackUser>;
 
 const channelType = v.union(v.literal("im"), v.literal("mpim"), v.literal("channel"), v.literal("group"));
 export type SlackChannelType = Infer<typeof channelType>;
 
 const slackEventValue = v.union(
-  v.object({ kind: v.literal("message"), channel: v.string(), channelType, message: slackMessageValue }),
+  v.object({ kind: v.literal("message"), channel: v.string(), channelType, message: slackMessage }),
   v.object({ kind: v.literal("deleted"), channel: v.string(), ts: v.string() }),
-  v.object({ kind: v.literal("user"), user: slackUserValue }),
+  v.object({ kind: v.literal("user"), user: slackUser }),
 );
 type SlackEvent = Infer<typeof slackEventValue>;
 
@@ -68,6 +58,9 @@ type Json = Record<string, unknown>;
 const isObject = (value: unknown): value is Json => typeof value === "object" && value !== null;
 const text = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
 
+/** The metadata event type a Comma send carries, with its clientKey as the payload, so an unknown send can be found. */
+export const COMMA_SEND_EVENT = "comma_send";
+
 /** A message object from an event or a Web API read, or null when it is not a person's message Comma keeps. */
 export function parseSlackMessage(raw: unknown): SlackMessage | null {
   if (!isObject(raw)) return null;
@@ -77,7 +70,9 @@ export function parseSlackMessage(raw: unknown): SlackMessage | null {
   if (!user || !ts || (subtype && !["thread_broadcast", "file_share", "me_message"].includes(subtype))) return null;
   const threadTs = text(raw.thread_ts);
   const editedTs = isObject(raw.edited) ? text(raw.edited.ts) : undefined;
-  return { ts, user, text: text(raw.text) ?? "", ...(threadTs ? { threadTs } : {}), ...(editedTs ? { editedTs } : {}) };
+  const sent = isObject(raw.metadata) && raw.metadata.event_type === COMMA_SEND_EVENT && isObject(raw.metadata.event_payload)
+    ? text(raw.metadata.event_payload.clientKey) : undefined;
+  return { ts, user, text: text(raw.text) ?? "", ...(threadTs ? { threadTs } : {}), ...(editedTs ? { editedTs } : {}), ...(sent ? { clientKey: sent } : {}) };
 }
 
 /** A user object from `user_change` or `users.info`. The display name wins over the real name, as Slack shows it. */
@@ -188,6 +183,14 @@ export const handleSlackEvents = httpAction(async (ctx, request) => {
   return new Response(null, { status: 200 });
 });
 
+/** A message deleted in Slack, by anyone, or by Milad from Comma. */
+export async function retractSlackMessage(ctx: MutationCtx, accountId: Doc<"comma_accounts">["_id"], guid: string): Promise<void> {
+  const message = await findMessage(ctx, { platform: "slack", accountId }, guid);
+  if (!message || message.retracted) return;
+  await ctx.db.patch(message._id, { ...MODEL_TEXT_UNSET, retracted: true, text: "", mentions: [], dateRetracted: Date.now(), sourceVersion: Date.now() });
+  await refreshLastMessage(ctx, message.conversationId);
+}
+
 const HEARTBEAT_MS = 60_000;
 
 /** The webhook is Slack's heartbeat. It writes at most once a minute, so channel traffic does not re-run status readers. */
@@ -214,10 +217,7 @@ export const receive = internalMutation({
       return null;
     }
     if (event.kind === "deleted") {
-      const message = await findMessage(ctx, { platform: "slack", accountId: account._id }, slack.messageGuid(event.channel, event.ts));
-      if (!message || message.retracted) return null;
-      await ctx.db.patch(message._id, { ...MODEL_TEXT_UNSET, retracted: true, text: "", mentions: [], dateRetracted: Date.now(), sourceVersion: Date.now() });
-      await refreshLastMessage(ctx, message.conversationId);
+      await retractSlackMessage(ctx, account._id, slack.messageGuid(event.channel, event.ts));
       return null;
     }
     const kept = await qualify(ctx, account, event.channel, event.channelType, event.message);

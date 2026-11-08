@@ -13,7 +13,10 @@ type Params = Record<string, string>;
 type Handler = (params: Params, token: string | null) => Record<string, unknown>;
 
 export type FakeUser = { id: string; name: string; email?: string; is_bot?: boolean };
-export type FakeMessage = { ts: string; user: string; text: string; thread_ts?: string; reply_count?: number; edited?: { ts: string }; subtype?: string };
+export type FakeMessage = {
+  ts: string; user: string; text: string; thread_ts?: string; reply_count?: number; edited?: { ts: string }; subtype?: string;
+  metadata?: { event_type: string; event_payload: Record<string, unknown> }; reactions?: { name: string; users: string[] }[];
+};
 export type FakeChannel = { id: string; type: "im" | "mpim" | "channel"; name?: string; user?: string; members?: string[]; messages: FakeMessage[] };
 
 export class FakeSlack {
@@ -27,6 +30,25 @@ export class FakeSlack {
   /** Codes oauth.v2.access accepts, and the team each one installs into. */
   readonly codes = new Map<string, { team: typeof TEAM; user: string }>([["good-code", { team: TEAM, user: MILAD }]]);
   revoked = false;
+  /** Each conversation's read marker, as conversations.mark last set it. */
+  readonly marks = new Map<string, string>();
+  /** Keeps message metadata on posts. Slack's handling of it on user-token posts is unconfirmed, so tests try both. */
+  keepsMetadata = true;
+  private clock = 1_800_000_000;
+
+  /** A ts after every other this fake has made, as Slack's are. */
+  nextTs(): string {
+    this.clock += 1;
+    return `${this.clock}.000100`;
+  }
+
+  /** The message at `ts` in `channel`, or an error answer. */
+  private find(params: Params): { channel: FakeChannel; message: FakeMessage } | { error: string } {
+    const channel = this.channels.get(params.channel ?? "");
+    if (!channel) return { error: "channel_not_found" };
+    const message = channel.messages.find((candidate) => candidate.ts === (params.ts ?? params.timestamp));
+    return message ? { channel, message } : { error: "message_not_found" };
+  }
 
   private readonly methods: Record<string, Handler> = {
     "oauth.v2.access": (params) => {
@@ -64,6 +86,51 @@ export class FakeSlack {
       if (!channel) return { ok: false, error: "channel_not_found" };
       const thread = channel.messages.filter((message) => message.ts === params.ts || message.thread_ts === params.ts);
       return this.paged("messages", after(thread, params.oldest).sort((a, b) => Number(a.ts) - Number(b.ts)), params);
+    },
+    "chat.postMessage": (params) => {
+      const channel = this.channels.get(params.channel ?? "");
+      if (!channel) return { ok: false, error: "channel_not_found" };
+      const metadata = params.metadata && this.keepsMetadata ? JSON.parse(params.metadata) as FakeMessage["metadata"] : undefined;
+      const message: FakeMessage = { ts: this.nextTs(), user: MILAD, text: params.text ?? "", ...(params.thread_ts ? { thread_ts: params.thread_ts } : {}), ...(metadata ? { metadata } : {}) };
+      channel.messages.push(message);
+      return { ok: true, channel: channel.id, ts: message.ts, message: { type: "message", ...message } };
+    },
+    "chat.update": (params) => {
+      const found = this.find(params);
+      if ("error" in found) return { ok: false, error: found.error };
+      if (found.message.user !== MILAD) return { ok: false, error: "cant_update_message" };
+      Object.assign(found.message, { text: params.text ?? "", edited: { ts: this.nextTs() } });
+      return { ok: true, channel: found.channel.id, ts: found.message.ts, text: found.message.text };
+    },
+    "chat.delete": (params) => {
+      const found = this.find(params);
+      if ("error" in found) return { ok: false, error: found.error };
+      if (found.message.user !== MILAD) return { ok: false, error: "cant_delete_message" };
+      found.channel.messages.splice(found.channel.messages.indexOf(found.message), 1);
+      return { ok: true, channel: found.channel.id, ts: found.message.ts };
+    },
+    "reactions.add": (params) => {
+      const found = this.find(params);
+      if ("error" in found) return { ok: false, error: found.error };
+      const reactions = (found.message.reactions ??= []);
+      const reaction = reactions.find((candidate) => candidate.name === params.name);
+      if (reaction?.users.includes(MILAD)) return { ok: false, error: "already_reacted" };
+      if (reaction) reaction.users.push(MILAD);
+      else reactions.push({ name: params.name ?? "", users: [MILAD] });
+      return { ok: true };
+    },
+    "reactions.remove": (params) => {
+      const found = this.find(params);
+      if ("error" in found) return { ok: false, error: found.error };
+      const reaction = found.message.reactions?.find((candidate) => candidate.name === params.name && candidate.users.includes(MILAD));
+      if (!reaction) return { ok: false, error: "no_reaction" };
+      reaction.users = reaction.users.filter((user) => user !== MILAD);
+      return { ok: true };
+    },
+    "conversations.mark": (params) => {
+      if (!this.channels.has(params.channel ?? "")) return { ok: false, error: "channel_not_found" };
+      this.marks.set(params.channel!, params.ts ?? "");
+      return { ok: true };
     },
     "search.messages": (params) => {
       const from = /^from:<@(\w+)>/.exec(params.query ?? "")?.[1];

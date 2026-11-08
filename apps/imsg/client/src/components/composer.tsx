@@ -73,7 +73,7 @@ import { SuggestionAlternates, type SuggestionSource, useReplySuggestions } from
 import { useSpring } from "@/constants/springs";
 
 interface ComposerProps {
-  chat: Pick<ChatSummary, "conversationId" | "route">;
+  chat: Pick<ChatSummary, "conversationId" | "route" | "displayName">;
   isGroup: boolean;
   participants: Participant[];
   replyTo: Message | null;
@@ -330,10 +330,10 @@ export function Composer({
   const [customScheduleAt, setCustomScheduleAt] = useState(Date.now() + 3_600_000);
   const [scheduleAnchor, setScheduleAnchor] = useState<{ right: number; bottom: number } | null>(null);
   const containerRef = useRef<View>(null);
-  const config = composerConfig(conversationRoute({ route: chat.route, isGroup }));
+  const config = composerConfig(conversationRoute({ route: chat.route, isGroup }), chat.displayName);
   const enterSends = config.enterSends;
   const can = useRouteSupport({ route: chat.route, isGroup });
-  // A platform Comma only reads (Slack, for now) greys the whole composer with its reason.
+  // A route that can't send greys the whole composer with its reason.
   const sendBlocked = reasonOf(can("send"));
   const checkExecutor = `Check ${EXECUTOR_NAME[chat.route.platform]} connection.`;
   const loadRemoteDraft = useCallback((draft: string) => {
@@ -619,7 +619,7 @@ export function Composer({
       setSendStatus("idle");
       if (error instanceof SendCancelledError) return;
       hapticFailure();
-      if (sendFailureToast()) showToast(`Couldn't send. ${checkExecutor}`);
+      if (sendFailureToast()) showToast(messagingCommandError(error, `Couldn't send. ${checkExecutor}`));
     }
   };
 
@@ -972,6 +972,7 @@ ${url}` : url;
   const canSchedule = text.trim().length > 0 && pending.length === 0 && !editing;
   const sendColor = theme[config.badge.color];
   const serviceLabel = config.badge.label;
+  const switchable = config.serviceOptions.length > 1;
   const ghostShown = ghost !== null && text.length === 0 && !editing && pending.length === 0 && !recording;
   const ghostPadV = card ? CARD_PAD_TOP + CARD_PAD_BOTTOM : IOS_INPUT_CHROME_V;
   const ghostHeight = Math.min(ghostTextHeight + ghostPadV, card ? CARD_MAX_HEIGHT : IOS_INPUT_MAX_HEIGHT);
@@ -1305,12 +1306,14 @@ ${url}` : url;
               testID="composer-service"
               accessibilityRole="button"
               accessibilityLabel={`Service: ${serviceLabel}`}
+              // A platform with one service, like Slack, has nothing to switch to.
+              disabled={!switchable}
               onPress={openServiceMenu}
-              style={({ hovered, pressed }) => [styles.toolChip, (hovered || pressed) && { backgroundColor: theme.rowHover }]}
+              style={({ hovered, pressed }) => [styles.toolChip, switchable && (hovered || pressed) && { backgroundColor: theme.rowHover }]}
             >
               <View style={[styles.serviceDot, { backgroundColor: sendColor }]} />
               <Text style={[styles.toolText, { color: theme.textSecondary }]}>{serviceLabel}</Text>
-              <Ionicons name="chevron-down" size={13} color={theme.icon} />
+              {switchable && <Ionicons name="chevron-down" size={13} color={theme.icon} />}
             </Pressable>
             <View style={[styles.toolSep, { backgroundColor: theme.divider }]} />
             <Pressable

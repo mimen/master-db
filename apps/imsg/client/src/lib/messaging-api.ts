@@ -11,7 +11,12 @@ export function messagingCommandError(error: unknown, fallback: string): string 
 
 export function createMessagingApi(run: typeof runCommand) {
   return {
-    sendText: async (conversationId: ConversationId, body: SendTextRequest, options?: RunCommandOptions) => fromBridgeMessage((await run(conversationId, { kind: "send", ...body }, options)).message),
+    // Mentions send through here, and only iMessage sends mentions.
+    sendText: async (conversationId: ConversationId, body: SendTextRequest, options?: RunCommandOptions) => {
+      const result = await run(conversationId, { kind: "send", ...body }, options);
+      if (!("message" in result)) throw new Error("This send answered without a message");
+      return fromBridgeMessage(result.message);
+    },
     sendContactCard: async (conversationId: ConversationId, contact: Contact, caption?: string) =>
       fromBridgeMessage((await run(conversationId, { kind: "sendContact", name: contact.name, address: contact.address, ...(caption !== undefined ? { caption } : {}) })).message),
     newChat: async (body: { addresses: string[]; text: string }) => run(null, { kind: "createChat", ...body }),

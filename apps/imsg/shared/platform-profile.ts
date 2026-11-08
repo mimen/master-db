@@ -75,8 +75,12 @@ export interface PlatformProfile extends PlatformRules {
   /** How long after sending a message the platform still edits or unsends it. */
   editWindowMs: number;
   unsendWindowMs: number;
+  /** What the message menu calls unsending. */
+  unsendLabel: string;
   composer: {
     placeholder: Partial<Record<RouteService, string>>;
+    /** The placeholder names the conversation: "Message #bookings". */
+    namesConversation?: true;
     /** On desktop, Enter sends and Shift+Enter starts a new line. */
     enterSends: boolean;
     /** What the "Send with" menu lists. Only the conversation's own service can be picked: the outbox has no per-message service. */
@@ -96,6 +100,7 @@ export const IMESSAGE_PROFILE = {
   badges: { iMessage: IMESSAGE_BADGE, SMS: SMS_BADGE, RCS: SMS_BADGE },
   editWindowMs: 15 * 60_000,
   unsendWindowMs: 2 * 60_000,
+  unsendLabel: "Undo send",
   composer: {
     placeholder: { iMessage: "iMessage", SMS: "Text Message", RCS: "Text Message" },
     enterSends: true,
@@ -136,17 +141,21 @@ export const IMESSAGE_PROFILE = {
   } satisfies Record<Feature, FeatureRule>,
 } satisfies PlatformProfile;
 
-/** What Slack has that Comma does not run yet: everything that writes. The rest Slack lacks. */
-const SLACK_SOON: readonly Feature[] = ["send", "react", "emojiReact", "reply", "edit", "unsend", "deleteMessage", "mentions", "schedule", "attachments"];
+/** What Comma runs on Slack. */
+const SLACK_LIVE: readonly Feature[] = ["send", "react", "emojiReact", "reply", "edit", "unsend"];
+/** What Slack has that Comma does not run yet. The rest Slack lacks. */
+const SLACK_SOON: readonly Feature[] = ["mentions", "schedule", "attachments"];
 
-/** Milad's Slack workspace, read as Milad through a user token. Sending lands in a later milestone, so it greys. */
+/** Milad's Slack workspace, as Milad through a user token. */
 export const SLACK_PROFILE: PlatformProfile = {
   name: "Slack",
   badges: { Slack: { label: "Slack", color: "icon" } },
   // Slack's default lets a member edit or delete their own message at any time.
   editWindowMs: Infinity,
   unsendWindowMs: Infinity,
-  composer: { placeholder: { Slack: "Message" }, enterSends: true, services: ["Slack"] },
+  // Slack's delete removes the message for everyone, which is Comma's unsend.
+  unsendLabel: "Delete",
+  composer: { placeholder: { Slack: "Message" }, namesConversation: true, enterSends: true, services: ["Slack"] },
   /**
    * A dm, group dm or thread follows iMessage's rule. A channel needs the user only when its last message is
    * someone else's and mentions them, and it never waits on anyone.
@@ -157,11 +166,15 @@ export const SLACK_PROFILE: PlatformProfile = {
   /** Everyone in the workspace reached the user through a workspace the user administers, so no Slack conversation is screened. */
   screening: () => "known",
   oneReactionPerSender: false,
-  reactions: [],
-  // iMessage's rules name each feature and whether it is group-only; on Slack no service carries any of them yet.
+  /** The tray's quick emoji. The picker offers more; the Slack lane refuses one it has no Slack name for. */
+  reactions: ["emoji:👍", "emoji:❤️", "emoji:😂", "emoji:🙏", "emoji:🔥", "emoji:👀"],
+  // iMessage's rules name each feature and whether it is group-only; Slack runs its live ones on its one service.
   features: Object.fromEntries((Object.entries(IMESSAGE_PROFILE.features) as [Feature, FeatureRule][]).map(
-    ([feature, { privateApi: _privateApi, needs: _needs, ...rule }]): [Feature, FeatureRule] =>
-      [feature, { ...rule, services: [], ...(SLACK_SOON.includes(feature) ? { soon: "Sending from Slack is coming" } : {}) }],
+    ([feature, { privateApi: _privateApi, needs: _needs, ...rule }]): [Feature, FeatureRule] => [feature, {
+      ...rule, services: SLACK_LIVE.includes(feature) ? ["Slack"] : [],
+      ...(SLACK_SOON.includes(feature) ? { soon: "Not in Comma's Slack yet" } : {}),
+      ...(feature === "deleteMessage" ? { cant: "delete a message just for you" } : {}),
+    }],
   )) as Record<Feature, FeatureRule>,
 };
 
@@ -231,12 +244,14 @@ export interface ComposerConfig {
   readonly editWindowMs: number;
 }
 
-export function composerConfig(route: Pick<ProfileRoute, "platform" | "service">): ComposerConfig {
+/** `name` is the conversation's, for a platform whose placeholder names it. */
+export function composerConfig(route: Pick<ProfileRoute, "platform" | "service">, name?: string): ComposerConfig {
   const profile = PROFILES[route.platform];
   const badge = platformBadge(route);
   const others = profile.composer.services.flatMap((service) => profile.badges[service] ?? []).filter((option) => option !== badge);
+  const placeholder = profile.composer.placeholder[route.service] ?? "";
   return {
-    placeholder: profile.composer.placeholder[route.service] ?? "",
+    placeholder: profile.composer.namesConversation && name ? `${placeholder} ${name}` : placeholder,
     badge,
     enterSends: profile.composer.enterSends,
     serviceOptions: [badge, ...others],

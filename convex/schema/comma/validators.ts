@@ -564,10 +564,23 @@ export const commandSuggestions = v.object({
   suggestions: v.array(commandReplySuggestion),
   basedOnMessageGuid: v.union(v.string(), v.null()), stale: v.boolean(), generatedAt: v.number(),
 });
+/** A Slack conversation: a channel, DM or group DM, or one thread in a channel. */
+export const slackRef = v.union(
+  v.object({ type: v.union(v.literal("im"), v.literal("mpim"), v.literal("channel")), channel: v.string() }),
+  v.object({ type: v.literal("thread"), channel: v.string(), threadTs: v.string() }),
+);
+
+export const slackUser = v.object({ id: v.string(), name: v.string(), email: v.optional(v.string()) });
+
+/** One Slack message as Comma keeps it. `clientKey` is a Comma send's own, read back from the message's metadata. */
+export const slackMessage = v.object({
+  ts: v.string(), threadTs: v.optional(v.string()), user: v.string(), text: v.string(), editedTs: v.optional(v.string()), clientKey: v.optional(v.string()),
+});
+
 const okResult = <K extends string>(kind: K) => v.object({ kind: v.literal(kind), ok: v.literal(true) });
 const messageResult = <K extends string>(kind: K) => v.object({ kind: v.literal(kind), message: commandMessage });
 export const commandResult = v.union(
-  messageResult("send"), messageResult("sendContact"), messageResult("sendAttachment"), messageResult("createFaceTimeLink"),
+  messageResult("send"), v.object({ kind: v.literal("send"), guid: v.string(), slack: slackMessage }), messageResult("sendContact"), messageResult("sendAttachment"), messageResult("createFaceTimeLink"),
   v.object({ kind: v.literal("createChat"), conversationId: v.optional(v.id("comma_conversations")), chatGuid: v.string(), service: v.literal("iMessage"), isGroup: v.boolean(), participants: v.array(v.string()), message: commandMessage }),
   v.object({ kind: v.literal("schedule"), scheduled: commandScheduled }),
   v.object({ kind: v.literal("editScheduled"), scheduled: commandScheduled }),
