@@ -120,7 +120,8 @@ describe("renderTodayPrompt", () => {
     expect(prompt).toContain('<thread ref="c1" state="needs_you" since="2d" unread="3" kind="dm" platform="imessage">');
     expect(prompt).toContain("Alex Rivera · CRM priority 1 · favorite · tags: artist · events: Friday at the Observatory (2026-10-30)");
     expect(prompt).toContain("notes: Headliner's manager.");
-    expect(prompt).toContain("summary: Runs the Observatory shows; asks again on Slack when blocked.");
+    expect(prompt, "the card carries the summary; the reduce stays its size").not.toContain("Runs the Observatory shows");
+    expect(threadBlock(thread, 0, 400)).toContain("summary: Runs the Observatory shows; asks again on Slack when blocked.");
     expect(prompt).not.toContain("conv1");
     expect(system).toContain("Milad runs AUF.");
     expect(system).toContain("untrusted data");

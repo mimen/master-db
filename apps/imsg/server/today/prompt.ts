@@ -113,14 +113,17 @@ function threadHead(thread: TodayThread, now: number): string[] {
   const attrs = `ref="${thread.ref}" state="${candidate.state === "needsYou" ? "needs_you" : "waiting"}" since="${age(now - candidate.lastMessageAt)}" unread="${candidate.unreadCount}" kind="${candidate.kind}" platform="${candidate.platform}"`;
   const notes = thread.people.filter((person) => person.notes?.trim())
     .map((person) => `notes${thread.people.length > 1 ? ` on ${clean(person.name, 60)}` : ""}: ${clean(person.notes ?? "", NOTE_CHARS)}`);
-  const summaries = thread.people.filter((person) => person.summary?.trim())
-    .map((person) => `summary${thread.people.length > 1 ? ` of ${clean(person.name, 60)}` : ""}: ${clean(person.summary ?? "", SUMMARY_CHARS)}`);
-  return [`<thread ${attrs}>`, crmLine(thread), ...notes, ...summaries];
+  return [`<thread ${attrs}>`, crmLine(thread), ...notes];
 }
 
-/** One whole thread, each message clipped to `messageChars`: what the card model reads. */
+/**
+ * One whole thread, each message clipped to `messageChars`: what the card model reads. Each person's summary rides
+ * here, not in the reduce, so the card carries it and the Opus prompt stays its size.
+ */
 export function threadBlock(thread: TodayThread, now: number, messageChars: number): string {
-  return [...threadHead(thread, now), messageLines(thread.messages, messageChars), "</thread>"].join("\n");
+  const summaries = thread.people.filter((person) => person.summary?.trim())
+    .map((person) => `summary${thread.people.length > 1 ? ` of ${clean(person.name, 60)}` : ""}: ${clean(person.summary ?? "", SUMMARY_CHARS)}`);
+  return [...threadHead(thread, now), ...summaries, messageLines(thread.messages, messageChars), "</thread>"].join("\n");
 }
 
 /** Card fields are a model's reading of untrusted text, so they are cleaned like it. */
@@ -157,7 +160,6 @@ export function renderTodayPrompt(input: {
     "You plan Milad's messaging day so that every day makes a dent toward inbox zero. You read his open conversations, on every messaging platform he uses, and write a ranked queue for today.",
     "Each <thread> has a card, a smaller model's summary of the thread, followed by its last few raw messages. A card can be wrong; the raw messages are ground truth.",
     "A one-to-one thread may carry elsewhere lines: that person's latest messages in Milad's other conversations, such as a group. Use them to judge the person's urgency, and to see when they were already answered elsewhere.",
-    "A person may carry a summary line: a smaller model's running read of them across every platform. Weigh it like a card; the raw messages are ground truth.",
     "Return JSON with:",
     "- brief: one or two sentences on what matters most today and how far today's queue gets toward inbox zero.",
     `- groups: up to ${TODAY_LIMITS.groups} groups in display order, counting the settle group, each with a short id, a title of a few words, and one line of context.`,

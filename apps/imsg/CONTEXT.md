@@ -183,8 +183,8 @@ does not follow, bulk mail and history a backfill posts never do. The rebuild is
 `aiBackground` lane: `comma:ai` reads the person's recent messages (`personSummaryContext`, channels left out), makes one
 `claude-haiku-5-5` call at low effort (`server/ai/person-summary.ts`), and writes the answer (`personSummaryPublish`),
 at most 100 a day. The agent pane heads a one-to-one conversation with the person, their platforms, the summary and
-their open threads on every platform (`personSummaries.get`); the agent's session and Today's thread blocks read the
-summary beside the raw messages.
+their open threads on every platform (`personSummaries.get`); the agent's session and Today's cards read the summary
+beside the raw messages.
 
 **Today's platforms**:
 Today ranks every platform through the profile's attention and screening hooks (`todayCandidateState`): iMessage as
