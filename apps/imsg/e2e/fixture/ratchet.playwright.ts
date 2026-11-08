@@ -518,6 +518,42 @@ test("ratchet: an arriving message renders only its row and its neighbour, not t
   expect(renders.rows).toBeLessThanOrEqual(ROW_RENDERS_PER_ARRIVAL);
 });
 
+/**
+ * Opening a conversation from the list, then switching to another, from the click to 600 ms after the server's
+ * messages painted. Before this hill (f3857b7b) an open cost 26 commits and 8,144 component renders and a
+ * switch 7,109: every shell state change and route change re-rendered both workspaces.
+ */
+const OPEN_COMMITS = 26;
+const OPEN_COMPONENTS = 8_200;
+const SWITCH_COMPONENTS = 7_200;
+
+async function openFromList(page: Page, name: string): Promise<Renders> {
+  const before = await page.evaluate(() => (window as unknown as { __commaTimings: unknown[] }).__commaTimings.length);
+  await takeRenders(page);
+  await page.getByTestId("conversation-row").filter({ hasText: name }).first().click();
+  await page.waitForFunction((count) => {
+    const timings = (window as unknown as { __commaTimings: Array<{ freshMs: number | null }> }).__commaTimings;
+    return timings.length > count && timings.at(-1)?.freshMs != null;
+  }, before);
+  await page.waitForTimeout(600);
+  return takeRenders(page);
+}
+
+test("ratchet: opening a conversation, then switching to another, renders the shell only where it changed", async ({ desk }) => {
+  const page = desk.page;
+  await page.addInitScript(renderCounter);
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await expect(page.getByTestId("conversation-row").filter({ hasText: "Jordan Lee" })).toBeVisible();
+  await page.waitForTimeout(600);
+  const open = await openFromList(page, "Alex Rivera");
+  const switched = await openFromList(page, "Jordan Lee");
+  console.log(`navigation renders: open ${JSON.stringify(open)} switch ${JSON.stringify(switched)}`);
+  expect(open.commits, "commits after opening a thread").toBeLessThanOrEqual(OPEN_COMMITS);
+  expect(open.components, "components rendered opening a thread").toBeLessThanOrEqual(OPEN_COMPONENTS);
+  expect(switched.components, "components rendered switching threads").toBeLessThanOrEqual(SWITCH_COMPONENTS);
+});
+
 const TYPED = "See you at the venue around eight thirty";
 
 test("ratchet: each keystroke renders the composer once", async ({ desk }) => {

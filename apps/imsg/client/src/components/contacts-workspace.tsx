@@ -7,7 +7,7 @@ import { ContactsListPane } from "@/components/contacts-list-pane";
 import { ContactsMerge } from "@/components/contacts-merge";
 import { useTheme } from "@/hooks/use-theme";
 import { ContactsTopBar } from "@/components/contacts-ui";
-import { useDesktopShellContext } from "@/components/desktop-shell-context";
+import { useDesktopShellContext, useDesktopShellState } from "@/components/desktop-shell-context";
 import { DesktopSplit } from "@/components/desktop-split";
 import { PersonContent } from "@/components/lazy-surfaces";
 import { type ContactListRow, primaryHandle } from "@/lib/identity";
@@ -17,7 +17,7 @@ type Mode = "person" | "merge" | "add";
 export function ContactsWorkspace({ wide }: { readonly wide: boolean }): JSX.Element {
   const colors = useTheme();
   const shell = useDesktopShellContext();
-  const selection = shell.state.contacts.selection;
+  const selection = useDesktopShellState((state) => state.contacts.selection);
   const [mode, setMode] = useState<Mode>("person");
 
   const select = useCallback((person: ContactListRow) => {

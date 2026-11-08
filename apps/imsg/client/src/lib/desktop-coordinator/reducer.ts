@@ -1,6 +1,7 @@
 import { DEFAULT_INBOX_FILTERS } from "@/lib/inbox-model";
 
 import type {
+  DesktopChatSelection,
   DesktopRouteProjection,
   DesktopShellAction,
   DesktopShellState,
@@ -92,6 +93,32 @@ function commitRoute(
   }
 }
 
+function sameChatSelection(left: DesktopChatSelection | null, right: DesktopChatSelection | null): boolean {
+  return left === right || (left !== null && right !== null &&
+    left.conversationId === right.conversationId &&
+    left.jumpTarget?.guid === right.jumpTarget?.guid &&
+    left.jumpTarget?.dateCreated === right.jumpTarget?.dateCreated);
+}
+
+const sameValue = (left: unknown, right: unknown): boolean => left === right || JSON.stringify(left) === JSON.stringify(right);
+
+/**
+ * A route commit that changes nothing keeps the state, slice by slice, so its readers do not
+ * re-render. A conversation opened by a click is selected first and its route commits after; the
+ * clicked selection, which also carries the name and intent, stays.
+ */
+function keepUnchanged(state: DesktopShellState, next: DesktopShellState): DesktopShellState {
+  const messages = sameChatSelection(state.messages.selection, next.messages.selection) &&
+    sameValue(state.messages.filters, next.messages.filters) ? state.messages : next.messages;
+  const contacts = sameValue(state.contacts, next.contacts) ? state.contacts : next.contacts;
+  const utility = sameValue(state.utility, next.utility) ? state.utility : next.utility;
+  const routeOverlay = sameValue(state.routeOverlay, next.routeOverlay) ? state.routeOverlay : next.routeOverlay;
+  if (messages === state.messages && contacts === state.contacts && utility === state.utility &&
+    routeOverlay === state.routeOverlay && next.transientOverlay === state.transientOverlay &&
+    next.activeWorkspace === state.activeWorkspace) return state;
+  return { ...next, messages, contacts, utility, routeOverlay };
+}
+
 export const INITIAL_DESKTOP_SHELL_STATE: DesktopShellState = BASE_DESKTOP_SHELL_STATE;
 
 export function createInitialDesktopShellState(
@@ -106,7 +133,7 @@ export function reduceDesktopShell(
 ): DesktopShellState {
   switch (action.type) {
     case "route/committed":
-      return commitRoute(state, action.route);
+      return keepUnchanged(state, commitRoute(state, action.route));
     case "messages/filters-changed":
       return {
         ...state,

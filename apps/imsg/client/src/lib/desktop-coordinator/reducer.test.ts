@@ -42,6 +42,26 @@ function dispatchRoute(
 }
 
 describe("desktop shell reducer", () => {
+  test("a route that commits what a click already selected keeps the state, so no reader re-renders", () => {
+    const clicked = reduceDesktopShell(INITIAL_DESKTOP_SHELL_STATE, {
+      type: "messages/chat-selected",
+      selection: { conversationId: cid("chat-1"), name: "Ada", isGroup: false, intent: "reply" },
+    });
+    const routed = dispatchRoute(clicked, "/c/chat-1", { conversationId: "chat-1" });
+    expect(routed).toBe(clicked);
+    expect(dispatchRoute(routed, "/c/chat-1", { conversationId: "chat-1" })).toBe(clicked);
+  });
+
+  test("a route to another conversation, or to a message in this one, replaces only the messages slice", () => {
+    const first = dispatchRoute(INITIAL_DESKTOP_SHELL_STATE, "/c/chat-1", { conversationId: "chat-1" });
+    const second = dispatchRoute(first, "/c/chat-2", { conversationId: "chat-2" });
+    expect(second.messages.selection?.conversationId).toBe(cid("chat-2"));
+    expect(second.contacts).toBe(first.contacts);
+    const jumped = dispatchRoute(second, "/c/chat-2", { conversationId: "chat-2", targetGuid: "m1", targetDate: "5" });
+    expect(jumped).not.toBe(second);
+    expect(jumped.messages.selection?.jumpTarget).toEqual({ guid: "m1", dateCreated: 5 });
+  });
+
   test("initializes cold direct routes atomically", () => {
     const state = createInitialDesktopShellState(
       route("/chat-info", { conversation: "chat-1", name: "Ada" }),

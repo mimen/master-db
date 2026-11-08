@@ -1,9 +1,10 @@
 import { router, useGlobalSearchParams, usePathname } from "expo-router";
 import type { JSX, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import {
+  createDesktopShellStore,
   DesktopShellContext,
   type MessagesRailState,
   type MessagesWorkspaceActions,
@@ -37,7 +38,6 @@ import type { ConversationId } from "@shared/types";
 import {
   createInitialDesktopShellState,
   INITIAL_DESKTOP_SHELL_STATE,
-  reduceDesktopShell,
 } from "@/lib/desktop-coordinator/reducer";
 import { projectDesktopRoute } from "@/lib/desktop-coordinator/route";
 import { workspacePath, type WorkspaceId } from "@/lib/workspaces";
@@ -97,16 +97,18 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteCompose, setPaletteCompose] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const initialProjection = desktopProjection(pathname, params);
-  const [state, dispatch] = useReducer(
-    reduceDesktopShell,
-    initialProjection ?? INITIAL_DESKTOP_SHELL_STATE,
-    (initial) => ("kind" in initial ? createInitialDesktopShellState(initial) : initial),
-  );
-  const routeKey = `${pathname}:${JSON.stringify(params)}`;
+  const [store] = useState(() => {
+    const initialProjection = desktopProjection(pathname, params);
+    return createDesktopShellStore(initialProjection ? createInitialDesktopShellState(initialProjection) : INITIAL_DESKTOP_SHELL_STATE);
+  });
+  const state = useSyncExternalStore(store.subscribe, store.getState);
+  const dispatch = store.dispatch;
+  // Keyed by content, so the projection changes only when the route does.
+  const paramsKey = JSON.stringify(params);
+  const routeParams = useMemo(() => JSON.parse(paramsKey) as DesktopRouteParams, [paramsKey]);
   const projection = useMemo(
-    () => desktopProjection(pathname, params, state.activeWorkspace),
-    [routeKey, state.activeWorkspace],
+    () => desktopProjection(pathname, routeParams, state.activeWorkspace),
+    [pathname, routeParams, state.activeWorkspace],
   );
   const [messagesRail, setMessagesRail] = useState<MessagesRailState>({
     allChats: [],
@@ -123,9 +125,8 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   const shellOwnsRoute = wide && projection !== null;
   const agentEnabled = useAgentEnabled();
   const agentOpen = useRef(false);
-  agentOpen.current = state.utility?.kind === "agent";
   // A pane hidden by a stale runner or the setting closes for real, so Esc and ⌘W are not spent on it.
-  const agentHidden = agentOpen.current && !agentEnabled;
+  const agentHidden = state.utility?.kind === "agent" && !agentEnabled;
   useEffect(() => {
     if (agentHidden) dispatch({ type: "utility/closed" });
   }, [agentHidden]);
@@ -135,7 +136,12 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   // included, stays put.
   const selectedId = state.messages.selection?.conversationId;
   const autoOpen = useRef({ wide: false, agentEnabled, rail: messagesRail, utilityOpen: false });
-  autoOpen.current = { wide: wide && projection !== null, agentEnabled, rail: messagesRail, utilityOpen: state.utility !== null };
+  // Synced in an effect, not during render: a render-phase ref write makes the React Compiler skip this
+  // provider, and then every shell render re-renders both workspaces. Declared first, so it runs first.
+  useEffect(() => {
+    agentOpen.current = state.utility?.kind === "agent";
+    autoOpen.current = { wide: wide && projection !== null, agentEnabled, rail: messagesRail, utilityOpen: state.utility !== null };
+  });
   useEffect(() => {
     const { wide: shellWide, agentEnabled: enabled, rail, utilityOpen } = autoOpen.current;
     if (!shellWide || !enabled || !selectedId || utilityOpen) return;
@@ -226,30 +232,34 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
     setPaletteOpen(true);
   }, []);
   const openHelp = useCallback((): void => setHelpOpen(true), []);
+  // The callbacks below read this, so they stay stable and the context never changes.
+  const latest = useRef({ activeWorkspace, helpOpen, paletteOpen, projectionKind: projection?.kind });
+  useEffect(() => {
+    latest.current = { activeWorkspace, helpOpen, paletteOpen, projectionKind: projection?.kind };
+  });
+  const closeProjectedRoute = useCallback((): void => {
+    if (router.canGoBack()) router.back();
+    else router.replace(workspacePath(latest.current.activeWorkspace));
+  }, []);
   const closeTopSurface = useCallback((): boolean => {
-    if (helpOpen) {
+    if (latest.current.helpOpen) {
       setHelpOpen(false);
       return true;
     }
-    if (paletteOpen) {
+    if (latest.current.paletteOpen) {
       setPaletteOpen(false);
       return true;
     }
-    if (state.routeOverlay) {
-      if (router.canGoBack()) router.back();
-      else router.replace(workspacePath(activeWorkspace));
+    if (store.getState().routeOverlay) {
+      closeProjectedRoute();
       return true;
     }
     return false;
-  }, [activeWorkspace, helpOpen, paletteOpen, state.routeOverlay]);
-  const closeProjectedRoute = useCallback((): void => {
-    if (router.canGoBack()) router.back();
-    else router.replace(workspacePath(activeWorkspace));
-  }, [activeWorkspace]);
+  }, [closeProjectedRoute, store]);
   const closeUtility = useCallback((): void => {
     dispatch({ type: "utility/closed" });
-    if (projection?.kind === "utility") closeProjectedRoute();
-  }, [closeProjectedRoute, projection?.kind]);
+    if (latest.current.projectionKind === "utility") closeProjectedRoute();
+  }, [closeProjectedRoute, dispatch]);
 
   useEffect(() => {
     if (!shellOwnsRoute || activeWorkspace !== "contacts") return;
@@ -281,7 +291,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
 
   const context = useMemo(
     () => ({
-      activeWorkspace,
+      store,
       closeTopSurface,
       closeUtility,
       dispatch,
@@ -289,9 +299,8 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
       openPalette,
       registerMessagesActions,
       reportMessagesRail,
-      state,
     }),
-    [activeWorkspace, closeTopSurface, closeUtility, openHelp, openPalette, registerMessagesActions, reportMessagesRail, state],
+    [store, closeTopSurface, closeUtility, dispatch, openHelp, openPalette, registerMessagesActions, reportMessagesRail],
   );
   const utilityIsGlobal = state.utility?.kind === "scheduled" || state.utility?.kind === "settings";
   const agentConversation = agentEnabled ? state.messages.selection?.conversationId : undefined;
