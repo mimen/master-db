@@ -25,6 +25,7 @@ import {
   suggestionFields,
   syncStateFields,
   todayQueueFields,
+  personSummaryFields,
   triageEventFields,
   triageOpenFields,
 } from "./validators";
@@ -115,3 +116,5 @@ export const comma_agent_items = defineTable(agentItemFields)
 export const comma_agent_commands = defineTable(agentCommandFields).index("by_status_createdAt", ["status", "createdAt"]);
 
 export const comma_today_queue = defineTable(todayQueueFields).index("by_day", ["day"]);
+
+export const comma_person_summaries = defineTable(personSummaryFields).index("by_personId", ["personId"]);

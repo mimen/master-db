@@ -35,7 +35,7 @@ settled in Comma; a backfill or resync settles quietly, without a clear in the l
 queues an archive on the Gmail lane (unsettling, an unarchive); a confirmed one records the thread's inbox state, so
 Gmail's echo changes nothing, and a refused one takes the move back and keeps Gmail's error on the thread
 (`gmail.archiveError`) until the thread's next sync or settle. Email threads list in the Mail
-workspace (`client/src/components/mail-workspace.tsx`, its own chunk), not in Messages or Today: People holds threads
+workspace (`client/src/components/mail-workspace.tsx`, its own chunk), not in Messages: People holds threads
 from someone who resolves to a person and is owed a reply, All inbox everything in the inbox, and the reader shows each
 message as a card with the cleaned HTML in an iframe that runs no scripts and loads no remote content until Load images.
 The reader's Reply and Reply all open the email composer (`client/src/components/email-composer.tsx`, in Mail's chunk)
@@ -175,13 +175,32 @@ Web Lock. The bubble says "Waiting to send" at once when Convex or the route's e
 missed three heartbeats), and after a second when the executor is up but has not taken it. Attachments and voice memos are not pending sends yet. See `shared/pending-send.ts`.
 _Avoid_: temp message, optimistic send, local send
 
+**Person summary**:
+A short written read of one person across iMessage, Slack and email (`convex/comma/personSummaries.ts`,
+`comma_person_summaries`). A fresh real message from someone who resolves to a person schedules a rebuild 30 minutes
+later; a later message moves that time instead of adding one, so a burst rebuilds once. Channel chatter, a thread Milad
+does not follow, bulk mail and history a backfill posts never do. The rebuild is a `personSummary` command on the
+`aiBackground` lane: `comma:ai` reads the person's recent messages (`personSummaryContext`, channels left out), makes one
+`claude-haiku-5-5` call at low effort (`server/ai/person-summary.ts`), and writes the answer (`personSummaryPublish`),
+at most 100 a day. The agent pane heads a one-to-one conversation with the person, their platforms, the summary and
+their open threads on every platform (`personSummaries.get`); the agent's session and Today's thread blocks read the
+summary beside the raw messages.
+
+**Today's platforms**:
+Today ranks every platform through the profile's attention and screening hooks (`todayCandidateState`): iMessage as
+before, Needs you and Waiting; Slack when it needs Milad (a DM, group DM or followed thread owed a reply, a channel
+mention), never Waiting, since a thread he answered last would take most of the Waiting reads; email only as Mail's People
+lens, a known sender owed a reply, never bulk. `todayCandidates` drops a row on its flags before projecting it. The
+client ranks the People threads among the newest 50 inbox threads beside the Messages directory, and an email row opens
+the Mail reader in the thread pane (on a phone, the Mail tab).
+
 **Outbox lane**:
 The executor a queued command waits for, stamped on its `comma_outbox` row at enqueue from the route's
 platform and the command's kind: one lane per messaging platform (`imessage`; `slack`, a convex lane that
 calls Slack's Web API as Milad, `convex/comma/slackLane.ts`; `gmail`, a convex lane that sends, archives and unarchives
 through the Gmail API, `convex/comma/gmailLane.ts`), an `ai` lane
 for suggestions, identify, suggestion feedback, clearing learning and transcription, and an `aiBackground`
-lane for suggestion precompute, which nobody waits on. The lane registry
+lane for suggestion precompute and person summaries, which nobody waits on. The lane registry
 (`convex/comma/laneRegistry.ts`) says who runs each: a **pull** lane waits for an outside executor to
 claim it (the Mini's `comma:server` for `imessage`, its `comma:ai` for both model lanes); a **convex** lane runs in a
 Convex action that enqueue schedules, which claims under the same lease and whose lease expiry schedules

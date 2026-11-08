@@ -9,7 +9,7 @@ import schema from "../schema";
 import type { commandSuggestions, suggestionDoc } from "../schema/comma/validators";
 import { normalizeModules } from "../test-utils.vitest";
 
-import type { ShelfUpdate } from "./suggestions";
+import { SUGGESTION_PRECOMPUTE, type ShelfUpdate } from "./suggestions";
 import { namePerson } from "./testModules.vitest";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
@@ -135,8 +135,10 @@ describe("precompute", () => {
       if (options.ai ?? true) await ctx.db.insert("comma_bridge_state", { key: "ai", connected: true, lastSeenAt: options.aiSeenAt ?? Date.now(), capabilities: { executor: "ai", suggestions: true, whisperAvailable: false } });
     });
     const post = (...messages: ReturnType<typeof inbound>[]) => t.mutation(internal.comma.internal.upsertMessages, { messages });
+    // Only the debounce: running every timer would also jump past the AI process's heartbeat to the person-summary rebuild.
     const queued = async () => {
-      await t.finishAllScheduledFunctions(vi.runAllTimers);
+      vi.advanceTimersByTime(SUGGESTION_PRECOMPUTE.debounceMs);
+      await t.finishInProgressScheduledFunctions();
       return (await t.run((ctx) => ctx.db.query("comma_outbox").collect())).map((row) => [row.clientKey, row.lane, row.payload]);
     };
     return { conversationId, post, queued };

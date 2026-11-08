@@ -12,9 +12,9 @@ export { NotSentError };
 /** A Convex action runs at most ten minutes, so a live action's claim never expires under it. */
 export const CONVEX_LEASE_MS = 11 * 60_000;
 
-/** A conversation command waits in its route's platform lane; model work waits in the ai lane, a precompute in aiBackground. */
+/** A conversation command waits in its route's platform lane; model work waits in the ai lane, a precompute or a person summary in aiBackground. */
 export function laneOf(platform: CommaPlatform, payload: CommaOutboxPayload): LaneSpec {
-  if (payload.kind === "suggestions" && payload.precompute) return AI_BACKGROUND_LANE;
+  if ((payload.kind === "suggestions" && payload.precompute) || payload.kind === "personSummary") return AI_BACKGROUND_LANE;
   return isAiKind(payload.kind) ? AI_LANE : PLATFORM_LANES[platform];
 }
 

@@ -130,3 +130,17 @@ test("transcribe publishes unavailable and thrown terminal failures", async () =
   await failed.handlers.transcribe.execute(failed.context, { kind: "transcribe", attachmentGuid: "memo" });
   expect(states.at(-1)).toEqual({ state: "failed", error: "lost worker" });
 });
+
+test("a person summary spends its own daily cap, and stops once it is gone", async () => {
+  let left = 1;
+  const summarized: unknown[] = [];
+  const h = fixture({
+    summaryBudget: { take: () => left-- > 0 },
+    summarize: async (_ingest, personId) => { summarized.push(personId); return { ok: true, written: true }; },
+  });
+  const payload = { kind: "personSummary" as const, personId: "person-1" as never };
+  expect(await h.handlers.personSummary.execute(h.context, payload)).toEqual({ kind: "personSummary", ok: true });
+  await expect(h.handlers.personSummary.execute(h.context, payload)).rejects.toThrow("Daily person summary cap reached");
+  expect(summarized).toEqual(["person-1"]);
+  await expect(fixture().handlers.personSummary.execute(h.context, payload)).rejects.toThrow("Person summaries are not available");
+});

@@ -15,6 +15,7 @@ import { GMAIL_API, googleApi, GoogleApiError } from "./gmailApi";
 import { METADATA_HEADERS, parseGmailMessage, type EmailAddress, type RawGmailMessage } from "./gmailMessage";
 import { gmailToken } from "./googleAuth";
 import { refreshLastMessage } from "./pendingSends";
+import { schedulePersonSummaries } from "./personSummaries";
 import { personForNormalized } from "./photos";
 import { logReplies, settleConversation, unsettleConversation } from "./triage";
 
@@ -114,7 +115,7 @@ export async function writeGmailThread(ctx: MutationCtx, accountId: Id<"comma_ac
 export async function insertGmailMessages(ctx: MutationCtx, account: Doc<"comma_accounts">, conversationId: Id<"comma_conversations">,
   messages: readonly GmailMessageValue[], clientKey?: string): Promise<number> {
   const scope = { platform: "gmail" as const, accountId: account._id };
-  const real: Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe">[] = [];
+  const real: Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe" | "sender">[] = [];
   for (const message of messages) {
     if (await findMessage(ctx, scope, message.id)) continue;
     const row = {
@@ -133,6 +134,7 @@ export async function insertGmailMessages(ctx: MutationCtx, account: Doc<"comma_
   }
   if (real.length) await refreshLastMessage(ctx, conversationId);
   await logReplies(ctx, real);
+  await schedulePersonSummaries(ctx, real);
   return real.length;
 }
 
