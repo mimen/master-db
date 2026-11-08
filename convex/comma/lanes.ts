@@ -56,7 +56,8 @@ export const drive = internalAction({
       let completion: Completion;
       try {
         const result = await spec.execute(ctx, row);
-        completion = { status: "sent", result, ...("message" in result ? { resultGuid: result.message.guid } : {}) };
+        const resultGuid = "message" in result ? result.message.guid : "guid" in result ? result.guid : undefined;
+        completion = { status: "sent", result, ...(resultGuid ? { resultGuid } : {}) };
       } catch (error) {
         completion = { status: error instanceof NotSentError ? "failed" : "unknown", error: error instanceof Error ? error.message : String(error) };
       }

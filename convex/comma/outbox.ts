@@ -13,6 +13,7 @@ import { sameSecret } from "./bridgeAuth";
 import { enqueueCommand } from "./enqueue";
 import { laneOf, laneOfRow, laneSpec, wakeLane } from "./lanes";
 import { claimPendingSend, completePendingSend, expireIfStale, strandPendingSend } from "./pendingSends";
+import { checkUnknownSend } from "./slackLane";
 import { readConversation, setConversationFlag, settleConversation, unsettleConversation } from "./triage";
 
 /**
@@ -175,7 +176,10 @@ export const claimOutbox = internalMutation({
         claimToken: undefined,
         updatedAt: now,
       });
-      if (!retry && row.payload.kind === "send") await strandPendingSend(ctx, row.clientKey, "failed");
+      if (!retry && row.payload.kind === "send") {
+        await strandPendingSend(ctx, row.clientKey, "failed");
+        await checkUnknownSend(ctx, row);
+      }
     }
     // A convex lane runs one row at a time, like a pull lane's executor; the running drive claims the next.
     if (convexLane && busy) return [];
@@ -217,16 +221,13 @@ export const completeOutbox = internalMutation({
     // A retried receipt after an acknowledged completion cannot change the outcome.
     if (row.status !== "claimed") return row.status === status;
     if (result && result.kind !== row.payload.kind) throw new Error("Result kind does not match command kind");
-    await ctx.db.patch(row._id, {
-      status,
-      leaseUntil: undefined,
-      updatedAt: Date.now(),
-      error,
-      resultGuid,
-      result,
-    });
+    const patch = { status, leaseUntil: undefined, updatedAt: Date.now(), error, resultGuid, result };
+    await ctx.db.patch(row._id, patch);
+    const completed = { ...row, ...patch };
+    // A convex lane's sent message lands here first, so the pending send retires onto it in this same write.
+    if (status === "sent") await laneOfRow(row).onResult?.(ctx, completed);
     if (row.payload.kind === "send") await completePendingSend(ctx, clientKey, status, resultGuid);
-    if (status === "sent") await laneOfRow(row).onResult?.(ctx, row);
+    if (status === "unknown") await checkUnknownSend(ctx, completed);
     return true;
   },
 });

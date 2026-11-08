@@ -3,14 +3,15 @@ import { v, type Infer } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type ActionCtx, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { slackMessage, slackRef, slackUser } from "../schema/comma/validators";
 
 import { isGroupKind, slack, type SlackConversationRef } from "./conversationIdentity";
 import { findByKey, findMessage } from "./conversationLookup";
 import { MODEL_TEXT_UNSET } from "./messageShape";
-import { refreshLastMessage } from "./pendingSends";
+import { landEcho, refreshLastMessage } from "./pendingSends";
 import { slackApi, SlackApiError, type SlackParams } from "./slackApi";
 import { slackToken } from "./slackAuth";
-import { mentions, parseSlackMessage, parseSlackUser, selfUserId, slackMessageValue, slackRefValue, slackUserValue, type SlackMessage } from "./slackEvents";
+import { mentions, parseSlackMessage, parseSlackUser, selfUserId, type SlackMessage, type SlackUser } from "./slackEvents";
 import { slackNames, unknownSlackUsers, upsertSlackUsers } from "./slackPeople";
 import { slackDisplayText, slackModelText } from "./slackText";
 import { logReplies } from "./triage";
@@ -21,12 +22,12 @@ import { logReplies } from "./triage";
  */
 
 const conversationBatch = v.object({
-  ref: slackRefValue,
+  ref: slackRef,
   /** A channel's name, for a channel or a thread in one. */
   name: v.optional(v.string()),
   /** Everyone in a DM or group DM, Milad included or not. Absent elsewhere: a thread's people are its authors. */
   members: v.optional(v.array(v.string())),
-  messages: v.array(slackMessageValue),
+  messages: v.array(slackMessage),
 });
 type ConversationBatch = Infer<typeof conversationBatch>;
 
@@ -61,49 +62,67 @@ async function upsertConversation(ctx: MutationCtx, account: Doc<"comma_accounts
 
 /** Writes users, conversations and messages. Idempotent: a message at or below its stored version is skipped. */
 export const ingestBatch = internalMutation({
-  args: { accountId: v.id("comma_accounts"), users: v.array(slackUserValue), conversations: v.array(conversationBatch) },
+  args: { accountId: v.id("comma_accounts"), users: v.array(slackUser), conversations: v.array(conversationBatch) },
   returns: v.object({ written: v.number(), skipped: v.number() }),
-  handler: async (ctx, { accountId, users, conversations }) => {
-    const account = await ctx.db.get(accountId);
-    if (account?.platform !== "slack") throw new Error("Not a Slack account");
-    await upsertSlackUsers(ctx, users);
-    const self = selfUserId(account);
-    const scope = { platform: "slack" as const, accountId };
-    const names = await slackNames(ctx, conversations.flatMap((batch) => batch.messages.flatMap((message) => mentionedIds(message.text))));
-    const toModelText = slackModelText((id) => names.get(id));
-    let written = 0;
-    let skipped = 0;
-    const touched = new Set<Id<"comma_conversations">>();
-    const real: Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe">[] = [];
-    for (const batch of conversations) {
-      const conversationId = await upsertConversation(ctx, account, self, batch);
-      for (const message of batch.messages) {
-        const display = slackDisplayText(message.text, (id) => names.get(id));
-        const row = {
-          platform: "slack" as const, accountId, conversationId, guid: slack.messageGuid(batch.ref.channel, message.ts),
-          dateCreated: tsMs(message.ts), isFromMe: message.user === self, sender: { address: `slack:${message.user}`, name: null },
-          text: display.text, mentions: display.mentions, mentionsMe: mentions(message.text, self),
-          ...toModelText({ text: message.text, ts: message.ts, ...(message.threadTs ? { thread_ts: message.threadTs } : {}) }),
-          edited: message.editedTs !== undefined, ...(message.editedTs ? { dateEdited: tsMs(message.editedTs) } : {}),
-          retracted: false, isGroupEvent: false, attachmentGuids: [], sourceVersion: message.editedTs ? tsMs(message.editedTs) : 0,
-        };
-        const existing = await findMessage(ctx, scope, row.guid);
-        if (existing && existing.sourceVersion >= row.sourceVersion) {
-          skipped++;
-          continue;
-        }
-        if (existing) await ctx.db.patch(existing._id, { ...MODEL_TEXT_UNSET, ...row });
-        else await ctx.db.insert("comma_messages", row);
-        written++;
-        touched.add(conversationId);
-        real.push(row);
-      }
-    }
-    for (const conversationId of touched) await refreshLastMessage(ctx, conversationId);
-    await logReplies(ctx, real);
-    return { written, skipped };
-  },
+  handler: async (ctx, { accountId, users, conversations }) => await writeSlackBatch(ctx, accountId, users, conversations),
 });
+
+/**
+ * ingestBatch's write, which a confirmed send also lands through. Milad's own new message retires the pending send it
+ * is the copy of, in the same write, so no frame shows both.
+ */
+export async function writeSlackBatch(ctx: MutationCtx, accountId: Id<"comma_accounts">, users: SlackUser[], conversations: ConversationBatch[]) {
+  const account = await ctx.db.get(accountId);
+  if (account?.platform !== "slack") throw new Error("Not a Slack account");
+  await upsertSlackUsers(ctx, users);
+  const self = selfUserId(account);
+  const scope = { platform: "slack" as const, accountId };
+  const names = await slackNames(ctx, conversations.flatMap((batch) => batch.messages.flatMap((message) => mentionedIds(message.text))));
+  const toModelText = slackModelText((id) => names.get(id));
+  let written = 0;
+  let skipped = 0;
+  const touched = new Set<Id<"comma_conversations">>();
+  const real: Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe">[] = [];
+  for (const batch of conversations) {
+    const conversationId = await upsertConversation(ctx, account, self, batch);
+    for (const message of batch.messages) {
+      const display = slackDisplayText(message.text, (id) => names.get(id));
+      const row = {
+        platform: "slack" as const, accountId, conversationId, guid: slack.messageGuid(batch.ref.channel, message.ts),
+        dateCreated: tsMs(message.ts), isFromMe: message.user === self, sender: { address: `slack:${message.user}`, name: null },
+        text: display.text, mentions: display.mentions, mentionsMe: mentions(message.text, self),
+        ...toModelText({ text: message.text, ts: message.ts, ...(message.threadTs ? { thread_ts: message.threadTs } : {}) }),
+        edited: message.editedTs !== undefined, ...(message.editedTs ? { dateEdited: tsMs(message.editedTs) } : {}),
+        retracted: false, isGroupEvent: false, attachmentGuids: [], sourceVersion: message.editedTs ? tsMs(message.editedTs) : 0,
+        ...(message.clientKey ? { clientKey: message.clientKey } : {}),
+      };
+      const existing = await findMessage(ctx, scope, row.guid);
+      if (existing && existing.sourceVersion >= row.sourceVersion) {
+        skipped++;
+        continue;
+      }
+      if (existing) await ctx.db.patch(existing._id, { ...MODEL_TEXT_UNSET, ...row });
+      else {
+        await ctx.db.insert("comma_messages", row);
+        if (row.isFromMe) await landEcho(ctx, row);
+      }
+      written++;
+      touched.add(conversationId);
+      real.push(row);
+    }
+  }
+  for (const conversationId of touched) await refreshLastMessage(ctx, conversationId);
+  await logReplies(ctx, real);
+  return { written, skipped };
+}
+
+/** The Slack conversation a Comma conversation reads from. */
+export function slackRefOf(conversation: Pick<Doc<"comma_conversations">, "kind" | "slack">): SlackConversationRef {
+  if (!conversation.slack) throw new Error("Not a Slack conversation");
+  const { channel, threadTs } = conversation.slack;
+  if (threadTs) return { type: "thread", channel, threadTs };
+  return { type: conversation.kind === "dm" ? "im" : conversation.kind === "channel" ? "channel" : "mpim", channel };
+}
 
 export const unknownUsers = internalQuery({
   args: { userIds: v.array(v.string()) },
@@ -140,7 +159,7 @@ async function ingest(ctx: ActionCtx, token: string, accountId: Id<"comma_accoun
 
 /** One qualified event. A conversation Comma has not seen gets its name and members, and a new thread arrives whole. */
 export const ingestEvent = internalAction({
-  args: { accountId: v.id("comma_accounts"), ref: slackRefValue, isNew: v.boolean(), message: slackMessageValue },
+  args: { accountId: v.id("comma_accounts"), ref: slackRef, isNew: v.boolean(), message: slackMessage },
   returns: v.null(),
   handler: async (ctx, { accountId, ref, isNew, message }) => {
     const token = await slackToken(ctx, accountId);
@@ -363,7 +382,7 @@ const EVENT_ID_TTL_MS = 60 * 60_000;
 
 export const backstopTargets = internalQuery({
   args: {},
-  returns: v.array(v.object({ accountId: v.id("comma_accounts"), since: v.number(), refs: v.array(slackRefValue) })),
+  returns: v.array(v.object({ accountId: v.id("comma_accounts"), since: v.number(), refs: v.array(slackRef) })),
   handler: async (ctx) => {
     const now = Date.now();
     const accounts = (await ctx.db.query("comma_accounts").withIndex("by_platform_externalId", (q) => q.eq("platform", "slack")).collect())
@@ -374,11 +393,7 @@ export const backstopTargets = internalQuery({
     return await Promise.all(accounts.map(async (account) => {
       const last = (await syncRow(ctx, account._id, BACKSTOP_KEY))?.lastReconcileAt ?? now - 60 * 60_000;
       const refs = recent.filter((conversation) => conversation.platform === "slack" && conversation.accountId === account._id && conversation.slack)
-        .slice(0, BACKSTOP_LIMIT).map((conversation): SlackConversationRef => {
-          const { channel, threadTs } = conversation.slack!;
-          if (threadTs) return { type: "thread", channel, threadTs };
-          return { type: conversation.kind === "dm" ? "im" : conversation.kind === "channel" ? "channel" : "mpim", channel };
-        });
+        .slice(0, BACKSTOP_LIMIT).map(slackRefOf);
       return { accountId: account._id, since: last - BACKSTOP_OVERLAP_MS, refs };
     }));
   },

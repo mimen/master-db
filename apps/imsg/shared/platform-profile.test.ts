@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { attentionOf, composerConfig, IMESSAGE_PROFILE, platformServiceBadges, reactionSupport, screeningOf, support, type Feature, type ProfileRoute } from "./platform-profile";
+import { attentionOf, composerConfig, IMESSAGE_PROFILE, platformServiceBadges, PROFILES, reactionSupport, screeningOf, support, type Feature, type ProfileRoute } from "./platform-profile";
 
 const dm = (service: ProfileRoute["service"]): ProfileRoute => ({ platform: "imessage", service, isGroup: false });
 const group = (service: ProfileRoute["service"]): ProfileRoute => ({ platform: "imessage", service, isGroup: true });
@@ -128,19 +128,29 @@ describe("Slack", () => {
     expect(screeningOf({ platform: "slack", isSpam: false, known: false })).toBe("known");
   });
 
-  test("everything that writes greys with the coming-soon reason; what Slack lacks says so; group controls are absent", () => {
-    for (const feature of ["send", "react", "emojiReact", "reply", "edit", "deleteMessage", "attachments", "schedule"] as const) {
-      expect(support(route(true), feature)).toEqual({ ok: false, reason: "Sending from Slack is coming" });
+  test("send, reply, react, edit and delete run; what Comma does not run yet greys; what Slack lacks says so; group controls are absent", () => {
+    for (const feature of ["send", "reply", "react", "emojiReact", "edit", "unsend"] as const) expect(support(route(true), feature)).toEqual({ ok: true });
+    for (const feature of ["attachments", "schedule"] as const) {
+      expect(support(route(true), feature)).toEqual({ ok: false, reason: "Not in Comma's Slack yet" });
     }
+    expect(support(route(true), "deleteMessage")).toEqual({ ok: false, reason: "Slack can't delete a message just for you" });
     expect(support(route(false), "call")).toEqual({ ok: false, reason: "Slack can't call" });
     expect(support(route(false), "rename")).toBeNull();
-    expect(reactionSupport(route(false), "emoji:🔥")).toEqual({ ok: false, reason: "Sending from Slack is coming" });
+    expect(reactionSupport(route(false), "emoji:🔥")).toEqual({ ok: true });
+    expect(reactionSupport(route(false), "love")).toEqual({ ok: false, reason: "Slack can't send that reaction" });
   });
 
-  test("the composer draws Slack's badge and placeholder, and Enter sends", () => {
-    expect(composerConfig({ platform: "slack", service: "Slack" })).toMatchObject({
-      placeholder: "Message", enterSends: true, badge: { label: "Slack" }, serviceOptions: [{ label: "Slack" }],
+  test("a sender keeps many reactions, and the tray offers emoji only", () => {
+    expect(PROFILES.slack.oneReactionPerSender).toBe(false);
+    expect(PROFILES.slack.reactions.every((key) => key.startsWith("emoji:"))).toBe(true);
+    expect(PROFILES.slack.unsendLabel).toBe("Delete");
+  });
+
+  test("the composer names the conversation, draws Slack's badge with nothing to switch to, and Enter sends", () => {
+    expect(composerConfig({ platform: "slack", service: "Slack" }, "#bookings")).toMatchObject({
+      placeholder: "Message #bookings", enterSends: true, badge: { label: "Slack" }, serviceOptions: [{ label: "Slack" }],
     });
+    expect(composerConfig({ platform: "imessage", service: "iMessage" }, "Alex").placeholder).toBe("iMessage");
   });
 
   test("iMessage still sends text on every service", () => {

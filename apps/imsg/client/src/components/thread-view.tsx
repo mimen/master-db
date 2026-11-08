@@ -66,7 +66,8 @@ const GROUP_GAP_MS = 10 * 60 * 1000;
 const COLUMN_PAD = 32;
 const PHONE_PAD = 12;
 
-function formatWindowRemaining(windowMs: number, ageMs: number): string {
+function formatWindowRemaining(windowMs: number, ageMs: number): string | undefined {
+  if (!Number.isFinite(windowMs)) return undefined;
   const minutes = Math.max(1, Math.ceil((windowMs - ageMs) / 60_000));
   return `${minutes} min left`;
 }
@@ -436,12 +437,12 @@ export function ThreadView({
         });
       };
       const isMine = (key: string) => message.reactions.some((r) => r.isFromMe && r.key === key);
-      // The tray offers the route's reaction set from its platform profile, then my emoji reaction so it can be removed.
+      // The tray offers the route's reaction set from its platform profile, then my other emoji reactions so they can be removed.
       const opened = conversationRef.current;
       const named = react && opened ? PROFILES[conversationRoute(opened).platform].reactions : undefined;
-      const myEmoji = message.reactions.find((r) => r.isFromMe && keyEmoji(r.key));
+      const myEmoji = named ? message.reactions.filter((r) => r.isFromMe && keyEmoji(r.key) && !named.includes(r.key)).map((r) => r.key) : [];
       const tapbacks = named
-        ? [...named, ...(myEmoji ? [myEmoji.key] : [])].map((key) => {
+        ? [...named, ...myEmoji].map((key) => {
             const active = isMine(key);
             return { key, label: TAPBACK_LABEL[key] ?? keyEmoji(key) ?? key, active, onPress: () => sendReaction(key, active) };
           })
@@ -452,7 +453,7 @@ export function ThreadView({
         : undefined;
       const edit = can("edit");
       const unsend = can("unsend");
-      const { editWindowMs, unsendWindowMs } = PROFILES[message.platform];
+      const { editWindowMs, unsendWindowMs, unsendLabel } = PROFILES[message.platform];
       const actions = [
         ...gated(can("reply"), { label: "Reply", onPress: () => setReplyTo(message) }),
         ...(message.text
@@ -495,14 +496,14 @@ export function ThreadView({
         // While a send is confirming, show Edit and Undo send inert rather than hiding them.
         ...(mine && message.text && message.sendState
           ? [...gated(edit, { label: "Edit", disabled: true, separatorBefore: true, onPress: () => undefined }),
-            ...gated(unsend, { label: "Undo send", disabled: true, note: "Available once it's sent", onPress: () => undefined })]
+            ...gated(unsend, { label: unsendLabel, disabled: true, note: "Available once it's sent", onPress: () => undefined })]
           : []),
         ...(mine && message.text && age < editWindowMs && !message.sendState
           ? gated(edit, { label: "Edit", note: formatWindowRemaining(editWindowMs, age), separatorBefore: true, onPress: () => setEditing(message) })
           : []),
         ...(mine && age < unsendWindowMs && !message.sendState
           ? gated(unsend, {
-                label: "Undo send",
+                label: unsendLabel,
                 note: formatWindowRemaining(unsendWindowMs, age),
                 // Edit is hidden past its window or on a text-less message, so this opens the block.
                 separatorBefore: !(message.text && age < editWindowMs),
@@ -511,7 +512,7 @@ export function ThreadView({
                   const rollback = pend(message.guid, { kind: "retract" });
                   runCommand(conversationId, { kind: "unsend", messageGuid: message.guid }).catch(() => {
                     rollback();
-                    showToast("Couldn't unsend. Messages can only be unsent for about 2 minutes.");
+                    showToast(Number.isFinite(unsendWindowMs) ? "Couldn't unsend. Messages can only be unsent for about 2 minutes." : "Couldn't delete the message. Try again.");
                   });
                 },
               })
