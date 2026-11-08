@@ -62,6 +62,7 @@ export const RowPan = deferred(
  */
 export const TapbackTray = deferred(() => import("@/components/tapback-tray").then((m) => m.TapbackTray), () => <></>);
 TapbackTray.preload().catch(() => undefined);
+export const KeyboardHelp = deferred(() => import("@/components/keyboard-help").then((m) => m.KeyboardHelp), () => <></>);
 export const ReleaseUpdateBanners = deferred(
   () => import("@/components/release-update-banners").then((m) => m.ReleaseUpdateBanners),
   () => <></>,
@@ -69,7 +70,7 @@ export const ReleaseUpdateBanners = deferred(
 /** Dev and fixture only, so it is not preloaded. */
 export const UiGallery = deferred(() => import("@/components/ui-gallery").then((m) => m.UiGallery));
 
-const surfaces = [AgentPane, ChatInfoContent, CommandPalette, ContactsWorkspace, ForwardContent, NewChatContent, PersonContent, ScheduledContent, SearchContent, SettingsContent, RowPan, ReleaseUpdateBanners];
+const surfaces = [AgentPane, ChatInfoContent, CommandPalette, ContactsWorkspace, ForwardContent, NewChatContent, PersonContent, ScheduledContent, SearchContent, SettingsContent, RowPan, ReleaseUpdateBanners, KeyboardHelp];
 
 /** Fetches every surface chunk off the critical path, so a first open renders without the empty frame. */
 export function preloadSurfaces(): void {

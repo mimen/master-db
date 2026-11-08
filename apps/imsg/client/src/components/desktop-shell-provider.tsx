@@ -16,6 +16,7 @@ import {
   CommandPalette,
   ContactsWorkspace,
   ForwardContent,
+  KeyboardHelp,
   NewChatContent,
   PersonContent,
   preloadSurfaces,
@@ -25,7 +26,6 @@ import {
 } from "@/components/lazy-surfaces";
 import { MessagesWorkspace } from "@/components/messages-workspace";
 import { OverlayShell } from "@/components/overlay-shell";
-import { Type } from "@/constants/theme";
 import { useAgentEnabled } from "@/hooks/use-agent";
 import { useAgentToasts } from "@/hooks/use-agent-toasts";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
@@ -53,7 +53,6 @@ import { onOpenSettingsPane } from "@/lib/settings-pane";
 import { installNativeMenuBridge } from "@/lib/desktop-shell";
 import { setKeyboardRuntime } from "@/lib/keyboard/controller";
 import { installKeyboardDispatcher } from "@/lib/keyboard/dispatcher";
-import { helpEntries } from "@/lib/keyboard/registry";
 
 function desktopProjection(
   pathname: string,
@@ -64,7 +63,6 @@ function desktopProjection(
   return result.ok ? result.value : null;
 }
 
-const HELP_ENTRIES = helpEntries();
 /** Room for round4 desk-settings: label and dropdown on one line in a 576px column. */
 const SETTINGS_PANE_WIDTH = 640;
 /** A transcript with question cards reads poorly at the 312 minimum. */
@@ -474,22 +472,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
               backdropStyle={[styles.paletteBackdrop, styles.helpBackdrop]}
               cardStyle={[styles.helpCard, { borderColor: theme.cardBorder }]}
             >
-              <Text style={[styles.helpTitle, { color: theme.text }]}>Keyboard Shortcuts</Text>
-              {HELP_ENTRIES.map(({ title, keys }) => (
-                <View key={title} style={styles.helpRow}>
-                  <Text style={[styles.helpLabel, { color: theme.textSecondary }]}>{title}</Text>
-                  <View style={styles.helpKeys}>
-                    {keys.map((key) => (
-                      <View
-                        key={key}
-                        style={[styles.kbd, { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder }]}
-                      >
-                        <Text style={[styles.kbdText, { color: theme.text }]}>{key}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              ))}
+              <KeyboardHelp />
             </OverlayShell>
           </View>
         ) : null}
@@ -521,36 +504,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingVertical: 20,
     width: 360,
-  },
-  helpKeys: {
-    flexDirection: "row",
-    gap: 5,
-  },
-  helpLabel: {
-    flex: 1,
-    fontSize: Type.secondary,
-  },
-  helpRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    marginBottom: 10,
-  },
-  helpTitle: {
-    fontSize: Type.title,
-    fontWeight: "700",
-    marginBottom: 14,
-  },
-  kbd: {
-    borderRadius: 5,
-    borderWidth: StyleSheet.hairlineWidth,
-    minWidth: 24,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-  },
-  kbdText: {
-    fontSize: 11,
-    fontWeight: "600",
-    textAlign: "center",
   },
   // No color here: OverlayShell's default is the scheme's scrim (tokens `backdrop`).
   paletteBackdrop: {
