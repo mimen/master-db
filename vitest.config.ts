@@ -20,6 +20,9 @@ export default defineConfig({
       '**/.worktrees/**',
       '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*',
       'convex/testModules.test.ts', // Exclude testModules file - uses Vite-specific import.meta.glob
+      // The contract tests drive the imsg bridge and agent runner, which need Bun; CI runs them with `bun test`.
+      'convex/comma/bridgeContract.test.ts',
+      'convex/comma/agentContract.test.ts',
     ],
   },
   resolve: {

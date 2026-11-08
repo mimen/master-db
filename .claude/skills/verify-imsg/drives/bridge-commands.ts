@@ -2,6 +2,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "../fixtures/desk";
+import { fixtureConversationId } from "../../shared/fixture-ids";
 
 const evidence = process.env.VERIFY_IMSG_EVIDENCE!;
 const INBOUND = "Can you send the final arrival time?";
@@ -26,7 +27,7 @@ async function convex<T>(desk: Desk, name: string, args: Record<string, unknown>
 
 type Row = { guid: string; text: string; reactions: Array<{ type: string; isFromMe: boolean }> };
 const thread = async (desk: Desk) => (await convex<{ page: Row[] }>(desk, "comma/queries:listMessages",
-  { conversationId: desk.chats.needs, paginationOpts: { numItems: 50, cursor: null } })).page;
+  { conversationId: fixtureConversationId(desk.chats.needs), paginationOpts: { numItems: 50, cursor: null } })).page;
 
 async function openAlex(page: Page, path = "/") {
   await page.goto(path, { waitUntil: "domcontentloaded" });
@@ -88,7 +89,7 @@ test("mark read: the row menu clears the unread group and sends the receipt", as
   const sent = enqueued(page);
   const row = await markLaunchCrewRead(page);
   await expect(row).toHaveAttribute("aria-label", /^Launch Crew, (?!unread)/);
-  const conversation = () => convex<{ unreadCount: number; flags: { unread: boolean } }>(desk, "comma/queries:getConversation", { conversationId: desk.chats.unreadGroup });
+  const conversation = () => convex<{ unreadCount: number; flags: { unread: boolean } }>(desk, "comma/queries:getConversation", { conversationId: fixtureConversationId(desk.chats.unreadGroup) });
   await expect.poll(async () => (await conversation()).unreadCount).toBe(0);
   await expect.poll(() => sent.map((payload) => payload.kind)).toEqual(["triage:markRead"]);
   // A failed receipt rolls the row back with a toast; give it time to show if it were coming.

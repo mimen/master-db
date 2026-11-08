@@ -1,9 +1,12 @@
-import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "../fixtures/desk";
+import { fixtureConversationId } from "../../shared/fixture-ids";
+import { pendingGuid } from "../../shared/pending-send";
 
-const evidence = process.env.VERIFY_IMSG_EVIDENCE!;
+const evidence = process.env.VERIFY_IMSG_EVIDENCE ?? mkdtempSync(join(tmpdir(), "imsg-golden-"));
 
 function captureCommands(page: Page): string[] {
   const kinds: string[] = [];
@@ -81,6 +84,37 @@ test("settle-loop: strip, ⌘E settle with toast and undo, auto-advance, positio
   await page.waitForTimeout(2000);
   await expect(heading(page)).toHaveText(sender);
   await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute("placeholder"))).toBe("iMessage");
+});
+
+test("settle-loop: ⌘E right after a send anchors on that send, and the conversation stays settled once it lands", async ({ desk }) => {
+  const page = desk.page;
+  const anchors: Array<string | undefined> = [];
+  const sends: string[] = [];
+  page.on("request", (request) => {
+    if (!request.url().includes("/__fixture/convex")) return;
+    const body = request.postDataJSON() as { name?: string; args?: { anchor?: string; clientKey?: string; payload?: { kind?: string } } } | null;
+    if (body?.name === "comma/triage:settle") anchors.push(body.args?.anchor);
+    if (body?.name === "comma/outbox:enqueue" && body.args?.payload?.kind === "send") sends.push(String(body.args.clientKey));
+  });
+  await desk.request.post("/__fixture/send-timing", { data: { delayMs: 1500, echo: false } });
+  await open(page, 1440, 900, "light");
+  await page.getByRole("tab", { name: /^Needs you, \d+/ }).click();
+  await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
+  const composer = page.getByPlaceholder("iMessage");
+  await composer.fill("Settling right after this");
+  await composer.press("Enter");
+  await page.keyboard.press("Meta+e");
+  await expect(page.getByText("Settled Alex Rivera", { exact: true })).toBeVisible();
+  expect(sends).toHaveLength(1);
+  expect(anchors).toEqual([pendingGuid(sends[0]!)]);
+
+  const conversationId = fixtureConversationId(desk.chats.needs);
+  const read = async (name: string, args: Record<string, unknown>) => (await (await desk.request.post("/__fixture/convex", { data: { name, args } })).json()) as { page: Array<Record<string, unknown>> };
+  await expect.poll(async () => (await read("comma/queries:listMessages", { conversationId, paginationOpts: { numItems: 20, cursor: null } }))
+    .page.find((row) => row.text === "Settling right after this")?.guid).toMatch(/^out-/);
+  const alex = async () => (await read("comma/queries:listConversations", { paginationOpts: { numItems: 50, cursor: null } })).page.find((row) => row._id === conversationId);
+  await expect.poll(async () => (await alex())?.flags).toMatchObject({ waiting: false, unresponded: false });
+  await page.screenshot({ path: join(evidence, "anchor-after-send.png") });
 });
 
 test("settle-loop: settled strip offers un-settle (dark)", async ({ desk }) => {

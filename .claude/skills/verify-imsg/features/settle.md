@@ -25,7 +25,7 @@ Preconditions:
 
 - **Settle by keyboard.** Read the count off the `Needs you, N conversations` radio (rows are virtualized, so counting rows undercounts), click the first row, then `page.keyboard.press("Meta+e")`. `getByText("Settled <Name>", { exact: true })` and `getByRole("button", { name: "Undo", exact: true })` appear in the lower half of the viewport.
 - **Settle from the strip.** Open a thread and click `getByTestId("thread-settle")` (accessible name `Settle (⌘E)`). The result is the same toast. A settled thread's strip reads `Settled · Back in Needs you if <first name> texts again` with `Un-settle (⌘E)`.
-- **Auto-advance and position.** The thread top bar shows `N of M` with `Previous conversation (K)` and `Next conversation (J)`. `drives/settle-loop.ts` proves the whole loop.
+- **Auto-advance and position.** The thread top bar shows `N of M` with `Previous conversation (K)` and `Next conversation (J)`. `apps/imsg/e2e/fixture/golden-settle-loop.playwright.ts` proves the whole loop.
 - **Settle from a row.** Hover a row and click `row.getByRole("button", { name: "Settle <Name>" })`. The row leaves the Needs you list.
 - **Undo.** Click `Undo`. The toast disappears and the row count returns to its value before settling.
 - **Un-settle.** In the All view, a settled row's button reads `Un-settle <Name>`. Clicking it shows `Un-settled — back in Needs you`.

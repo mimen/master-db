@@ -31,8 +31,11 @@ test("a phone row swiped right marks the conversation unread, with gesture-handl
   const entrySource = await (await page.request.get(entry!)).text();
   expect(entrySource.includes("GestureDetector got more than one view as a child"), "gesture-handler is in the entry chunk").toBe(false);
 
-  await expect(page.getByTestId("conversation-row").filter({ hasText: /^Alex Rivera, unread,/ })).toHaveCount(0);
+  // Jordan Lee starts read in the fixture world, so the swipe's effect is the unread label appearing.
+  const jordan = page.locator('[data-testid="conversation-row"][aria-label^="Jordan Lee, "]');
+  await expect(jordan).toHaveCount(1);
+  await expect(page.locator('[data-testid="conversation-row"][aria-label^="Jordan Lee, unread,"]')).toHaveCount(0);
   await expect.poll(() => scripts.some((url) => /\/row-pan-[0-9a-f]+\.js$/.test(url))).toBe(true);
-  await swipe(page, "Alex Rivera", 200);
-  await expect(page.locator('[data-testid="conversation-row"][aria-label^="Alex Rivera, unread,"]')).toHaveCount(1);
+  await swipe(page, "Jordan Lee", 200);
+  await expect(page.locator('[data-testid="conversation-row"][aria-label^="Jordan Lee, unread,"]')).toHaveCount(1);
 });

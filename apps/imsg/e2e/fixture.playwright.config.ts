@@ -18,7 +18,8 @@ export default defineConfig({
   reporter: "line",
   outputDir: join(tmpdir(), "imsg-fixture-playwright-results"),
   webServer: {
-    command: "bun run fixture:start",
+    // CI builds the bundle in its own step; IMSG_FIXTURE_PREBUILT=1 serves that build instead of building again.
+    command: process.env.IMSG_FIXTURE_PREBUILT === "1" ? "bun run fixture:serve" : "bun run fixture:start",
     cwd: join(configDirectory, ".."),
     url: `${BASE_URL}/api/health`,
     reuseExistingServer: true,

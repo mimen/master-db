@@ -46,6 +46,9 @@ next-env.d.ts
 .convex/
 convex/_generated/*
 !convex/_generated/api.d.ts
+# The runtime stubs convex-test loads in CI; they are the same for every function set.
+!convex/_generated/api.js
+!convex/_generated/server.js
 
 # IDE
 .vscode/

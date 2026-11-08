@@ -21,6 +21,6 @@
     "noEmit": true
   },
   "include": ["./**/*"],
-  /* The agent contract test runs the imsg runner, which needs Bun's types; the imsg server project checks the runner. */
-  "exclude": ["./_generated", "./comma/agentContract.test.ts"]
+  /* The contract tests run the imsg runner and bridge, which need Bun's types; the imsg server project checks those. */
+  "exclude": ["./_generated", "./comma/agentContract.test.ts", "./comma/bridgeContract.test.ts"]
 }

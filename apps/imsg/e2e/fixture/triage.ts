@@ -14,6 +14,8 @@ interface Clear { chatGuid: string; messageGuid: string; reason: "reply" | "dism
  */
 export function createTriageFixture(deps: {
   lastMessage: (chatGuid: string) => Promise<LastMessage | undefined>;
+  /** convex/comma/triage.ts sameSend: whether `anchor`, a send's temp guid, landed as the message `lastGuid`. */
+  sameSend: (anchor: string, lastGuid: string) => boolean;
   settled: (chatGuid: string) => void;
   unsettled: (chatGuid: string) => void;
 }) {
@@ -43,7 +45,7 @@ export function createTriageFixture(deps: {
 
   async function settle(chatGuid: string, anchor?: string): Promise<void> {
     const last = await lastOf(chatGuid);
-    if (anchor !== undefined && anchor !== last.guid) throw new Error("latest message changed");
+    if (anchor !== undefined && anchor !== last.guid && !deps.sameSend(anchor, last.guid)) throw new Error("latest message changed");
     write(chatGuid, last.isFromMe ? { dismissedWaitingGuid: last.guid } : { dismissedUnrespondedGuid: last.guid });
     log({ chatGuid, messageGuid: last.guid, reason: "dismiss", clearedAt: FIXTURE_NOW });
     deps.settled(chatGuid);
@@ -65,6 +67,12 @@ export function createTriageFixture(deps: {
 
   function read(chatGuid: string, at: number): void {
     write(chatGuid, { readAt: Math.max(states.get(chatGuid)?.readAt ?? 0, Math.min(at, FIXTURE_NOW)), markedUnread: false });
+  }
+
+  /** convex/comma/triage.ts carryTempAnchor: a settle taken on a send in flight moves to the message it became. */
+  function carry(chatGuid: string, tempGuid: string, realGuid: string): void {
+    if (states.get(chatGuid)?.dismissedWaitingGuid === tempGuid) write(chatGuid, { dismissedWaitingGuid: realGuid });
+    clears = clears.map((row) => row.chatGuid === chatGuid && row.messageGuid === tempGuid ? { ...row, messageGuid: realGuid } : row);
   }
 
   /** Message ingest's reply clear: a send that follows an unsettled inbound last message answers it. */
@@ -90,5 +98,5 @@ export function createTriageFixture(deps: {
     "comma/triage:markUnread": async (args) => { await flag(id(args), { markedUnread: true }); return null; },
   };
 
-  return { handlers, reset, settle, unsettle, flag, read, replied, flagged, clears: () => clears };
+  return { handlers, reset, settle, unsettle, flag, read, replied, carry, flagged, clears: () => clears };
 }

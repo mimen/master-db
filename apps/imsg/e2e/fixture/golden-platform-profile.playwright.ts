@@ -1,11 +1,12 @@
-import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "../fixtures/desk";
 import { fixtureConversationId } from "../../shared/fixture-ids";
 import { FIXTURE_NOW } from "./world";
 
-const evidence = process.env.VERIFY_IMSG_EVIDENCE!;
+const evidence = process.env.VERIFY_IMSG_EVIDENCE ?? mkdtempSync(join(tmpdir(), "imsg-golden-"));
 
 type Desk = Parameters<Parameters<typeof test>[1]>[0]["desk"];
 

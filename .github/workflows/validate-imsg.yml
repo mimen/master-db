@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "apps/imsg/**"
+      # The bridge and client run against these functions; a route or validator change must run the suite.
+      - "convex/**"
+      - "vitest.config.ts"
       - "bun.lock"
       - ".github/workflows/deploy-imsg.yml"
       - ".github/workflows/validate-imsg.yml"
@@ -11,6 +14,9 @@ on:
     branches-ignore: [main]
     paths:
       - "apps/imsg/**"
+      # The bridge and client run against these functions; a route or validator change must run the suite.
+      - "convex/**"
+      - "vitest.config.ts"
       - "bun.lock"
       - ".github/workflows/deploy-imsg.yml"
       - ".github/workflows/validate-imsg.yml"
@@ -42,17 +48,23 @@ jobs:
       - name: Test
         working-directory: apps/imsg
         run: bun test
+      - name: Convex comma functions and the bridge and agent contracts
+        run: |
+          bunx vitest run convex/comma
+          bun test --timeout 60000 convex/comma/bridgeContract.test.ts convex/comma/agentContract.test.ts
       - name: Build fixture web export
         working-directory: apps/imsg
         run: bun run fixture:build
       - name: First-visit JS size ratchet
         working-directory: apps/imsg
         run: bun test ./scripts/bundle-size.ratchet.ts
-      - name: Hill-climb ratchets (fixture browser)
+      - name: Fixture browser suite (ratchets, iMessage golden paths, every fixture spec)
         working-directory: apps/imsg
+        env:
+          IMSG_FIXTURE_PREBUILT: "1"
         run: |
           bunx playwright install chromium-headless-shell
-          bunx playwright test --config e2e/fixture.playwright.config.ts ratchet.playwright.ts
+          bunx playwright test --config e2e/fixture.playwright.config.ts
       - name: Test desktop production guard
         env:
           COMMA_DEV_GUARDED: "1"

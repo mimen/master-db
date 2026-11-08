@@ -610,7 +610,7 @@ test("every visible control remains stable and usable on hover", async ({ desk }
 
 test("typing indicator renders from peer presence", async ({ desk }) => {
   await resetAndOpen(desk, 1300, "light", "no-preference");
-  await desk.page.getByTestId("conversation-row").first().click();
+  await desk.page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
   await desk.setTyping(desk.chats.needs, true);
   const indicator = desk.page.getByRole("status", { name: "Someone is typing" });
   const firstDot = indicator.locator("div").first();
@@ -638,7 +638,7 @@ test("typing indicator renders from peer presence", async ({ desk }) => {
   // Reduce Motion is read once at app start, so the reduced case needs a fresh page.
   await desk.page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await desk.page.reload();
-  await desk.page.getByTestId("conversation-row").first().click();
+  await desk.page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
   await desk.setTyping(desk.chats.needs, true);
   await expect(indicator).toBeVisible();
   const reducedPositions = await firstDot.evaluate(async (dot) => {

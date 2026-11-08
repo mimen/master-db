@@ -1,10 +1,11 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { FIXTURE_NOW } from "./world";
 import { expect, test } from "../fixtures/desk";
 import { fixtureConversationId } from "../../shared/fixture-ids";
 
-const evidence = process.env.VERIFY_IMSG_EVIDENCE!;
+const evidence = process.env.VERIFY_IMSG_EVIDENCE ?? mkdtempSync(join(tmpdir(), "imsg-golden-"));
 const sends = ["burst one", "burst two", "burst three"];
 const inbound = "inbound mid-burst";
 const probes = [...sends, inbound];

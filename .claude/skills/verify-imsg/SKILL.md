@@ -46,8 +46,10 @@ It also warns if the instance was built from a different commit than HEAD. It ex
 ```bash
 .claude/skills/verify-imsg/scripts/drive.sh <drive.ts> <feature-id>
 # e.g.
-.claude/skills/verify-imsg/scripts/drive.sh .claude/skills/verify-imsg/drives/send-text.ts send-text
+.claude/skills/verify-imsg/scripts/drive.sh apps/imsg/e2e/fixture/golden-send-text.playwright.ts send-text
 ```
+
+The iMessage golden-path drives live in `apps/imsg/e2e/fixture/golden-*.playwright.ts`, where CI runs them on every pull request; the rest live in `drives/`. `apps/imsg/docs/regression-coverage.md` maps each behavior to its test.
 
 A drive is one Playwright test file that imports the repo's own `desk` fixture:
 
@@ -109,7 +111,7 @@ Everything goes to `<state dir>/evidence/<feature-id>/`; `drive.sh` prints the f
 - **Your own captures:** whatever the drive writes, using the `VERIFY_IMSG_EVIDENCE` env var.
 
 A drive's proof must include:
-- **The action and its end state.** Take a screenshot before acting and one after the UI settles. Some bubbles fade in, so poll for opacity 1 before the final screenshot (see `drives/send-text.ts`).
+- **The action and its end state.** Take a screenshot before acting and one after the UI settles. Some bubbles fade in, so poll for opacity 1 before the final screenshot (see `apps/imsg/e2e/fixture/golden-send-text.playwright.ts`).
 - **An ARIA snapshot** of the region that changed: `await region.ariaSnapshot()` written to `aria.txt`.
 - **The side effect,** read back through a second view. That is the Convex command the client enqueued, captured from `/__fixture/convex` request bodies, plus the stored row re-read via a Convex query. A visible bubble alone is not proof the send went out.
 - **The real user path.** Click and type the way a user does. Enqueueing a command directly through `/__fixture/convex` proves only the backend, never the feature.

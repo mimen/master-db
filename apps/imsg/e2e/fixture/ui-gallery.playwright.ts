@@ -17,7 +17,8 @@ for (const scheme of ["light", "dark"] as const) {
 
     const search = page.getByRole("button", { name: "Search conversation" });
     await expect(search).toHaveCSS("width", "28px");
-    await expect(page.getByTestId("pane-header")).toHaveCSS("height", "52px");
+    // TriageGeometry.threadHeaderHeight: every pane header lines up with the thread header.
+    await expect(page.getByTestId("pane-header")).toHaveCSS("height", "48px");
     await expect(page.getByRole("button", { name: "Send" })).toHaveCSS("height", "32px");
     await expect(page.getByRole("button", { name: "Regular row, Secondary line" })).toHaveCSS("min-height", "62px");
     await expect(page.getByRole("button", { name: "Compact row" })).toHaveCSS("min-height", "44px");

@@ -1,10 +1,11 @@
-import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "../fixtures/desk";
 import { fixtureConversationId } from "../../shared/fixture-ids";
 
-const evidence = process.env.VERIFY_IMSG_EVIDENCE!;
+const evidence = process.env.VERIFY_IMSG_EVIDENCE ?? mkdtempSync(join(tmpdir(), "imsg-golden-"));
 const text = "verify-imsg conversation identity probe";
 
 type Call = { name: string; args: Record<string, unknown> };

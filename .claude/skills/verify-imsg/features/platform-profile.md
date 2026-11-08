@@ -16,7 +16,7 @@ What a conversation can do comes from its route's platform profile (`apps/imsg/s
 
 ## Driving it with Playwright (desk fixture)
 
-The drive is `drives/platform-profile.ts`. It records every `comma/outbox:enqueue` body.
+The drive is `apps/imsg/e2e/fixture/golden-platform-profile.playwright.ts`. It records every `comma/outbox:enqueue` body.
 
 - **SMS menu.** Search Sam Chen, send `SMS profile probe` with the `Text Message` composer, and right-click the bubble (`getByTestId("message-bubble")`). The `Tapbacks` toolbar has `aria-disabled="true"`, and the Reply, Edit and Undo send menu items are disabled with their reason text under each.
 - **Keyboard.** Press Enter with the tray focused. A toast reads `SMS can't send reactions` and no `react` command is enqueued. No `typing` command was sent while typing either.

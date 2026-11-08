@@ -17,7 +17,7 @@ A conversation opens at `/c/<conversationId>`, and the client names it by that C
 
 ## Driving it with Playwright (desk fixture)
 
-The drive is `drives/conversation-identity.ts`. It records every `/__fixture/convex` request body.
+The drive is `apps/imsg/e2e/fixture/golden-conversation-identity.playwright.ts`. It records every `/__fixture/convex` request body.
 
 - **URL.** Choose the Alex Rivera row. The URL ends with `/c/${fixtureConversationId(desk.chats.needs)}`.
 - **Commands.** Send with Enter, then press ⌘E. The `comma/outbox:enqueue` send and `comma/triage:settle` both carry that id. No recorded `conversationId` contains `;`, and the client makes no `comma/queries:resolveChat` call. `comma/queries:listMessages` for that id returns the sent row.
