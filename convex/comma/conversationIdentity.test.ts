@@ -95,7 +95,7 @@ describe("slack", () => {
       { type: "thread", channel: "C1", threadTs: "1700000000.000100" },
     ] as const;
     expect(refs.map((ref) => [slack.conversationKey(ref), slack.kind(ref)])).toEqual([
-      ["im:D1", "dm"], ["mpim:G1", "group"], ["ch:C1", "channel"], ["th:C1:1700000000.000100", "group"],
+      ["im:D1", "dm"], ["mpim:G1", "group"], ["ch:C1", "channel"], ["th:C1:1700000000.000100", "thread"],
     ]);
   });
 

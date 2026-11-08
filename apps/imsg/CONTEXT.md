@@ -14,11 +14,17 @@ its service siblings (the iMessage, SMS and RCS chats with one person or group) 
 owns the identity in `convex/comma/conversationIdentity.ts`: the key, the primary chat (newest
 activity, ties to iMessage, then RCS, then SMS), and lookups by chat GUID or handle. The chat fields
 (`primaryChatGuid`, `chatGuids`, `hasGroupPhoto`) are iMessage's and absent on another platform's row. A Slack
-conversation is a DM (`im:D…`), a group DM (`mpim:G…`), a channel (`ch:C…`) or one thread inside a channel
-(`th:C…:<root ts>`), and keeps its channel and thread root under `slack`. Convex reads Slack itself
-(`convex/comma/slackEvents.ts`, `slackSync.ts`): the Events webhook keeps every DM and group DM message, a thread Milad
-started, replied in or is mentioned in, and top-level messages in the channels on the account's `slackChannels`, and drops
-the rest before any write; a 90-day backfill and a 15-minute backstop cron write through the same idempotent ingest.
+conversation is a DM (`im:D…`), a group DM (`mpim:G…`), a channel (`ch:C…`) or one **thread** inside any of them
+(`th:<channel>:<root ts>`, kind `thread`), and keeps its channel and thread root under `slack`. A reply lives in its
+thread's conversation and the thread's root in the DM, group DM or channel Comma holds it in (in the thread when Comma
+holds none), whichever read brought it; a message stored elsewhere moves there. The root carries the thread's
+`replyCount`. A thread is part of its channel or DM: the list shows it only while it wants Milad (owed a reply, marked
+unread, pinned), and on desk it opens in a panel beside its channel or DM (`ThreadBeside`), on phone as its own screen.
+Milad **follows** a thread in a DM or group DM, and one he started, replied in or is mentioned in (`slack.following`).
+Convex reads Slack itself (`convex/comma/slackEvents.ts`, `slackSync.ts`): the Events webhook keeps every DM and group
+DM message, a thread Milad follows, and everything in the channels on the account's `slackChannels`, which Settings
+follows and unfollows (`convex/comma/slackChannels.ts`), and drops the rest before any write; a 90-day backfill (one
+per channel followed later) and a 15-minute backstop cron write through the same idempotent ingest.
 Each Slack user is a `slack` identity that joins the person with exactly its email, or else a person of its own. Group CRM
 (`chat_crm`, chat `tags`, chat `event_links`) belongs to the conversation.
 Its **kind** is `dm`, `group`, `channel` or `emailThread` (`comma_conversations.kind`); iMessage ingest derives `dm` or
@@ -54,7 +60,8 @@ conversation's last message as needs you, waiting or none, and Unresponded and W
 message is dismissed. Its **screening** says known, stranger or spam, which the type lens and Today's candidates use;
 for iMessage, junk is spam and a participant who resolves to a named person makes the conversation known. Slack's
 attention follows iMessage's in a DM, group DM or thread; a channel needs you only when its last message is someone
-else's and mentions you (`mentionsMe` on the last message), and never waits. Slack screens nothing: everyone in the
+else's and mentions you (`mentionsMe` on the last message), and never waits; a thread Milad doesn't follow wants
+nothing, and costs the list no read. Slack screens nothing: everyone in the
 workspace is known. On Slack, Comma sends, replies in a thread, reacts (any number per sender), edits and deletes;
 mentions, scheduling and attachments grey with "Not in Comma's Slack yet". For routes,
 each feature (reactions and which
@@ -111,7 +118,9 @@ reads show only a sender's newest. Ingest turns an iMessage tapback into a react
 The tray offers the route's reaction set from its platform profile, and an emoji picker where the route has
 `emojiReact`. Sending an emoji also needs the Mac's BlueBubbles to say it can (`custom_emoji_reactions` in its server
 info, proposed upstream and absent through 1.9.12); the iMessage executor status carries it as `emojiReactions`, and
-the picker greys with the reason until then.
+the picker greys with the reason until then. Others' Slack reactions arrive as `reaction_added` and `reaction_removed`
+events, keyed by the emoji Comma offers under that Slack name (`slackNameEmoji`), so Milad's own echo matches the key
+he sent; a name Comma has no emoji for shows as `:name:`.
 _Avoid_: tapback (outside iMessage-specific code), tapback row
 
 **Triage state**:

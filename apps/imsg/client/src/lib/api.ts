@@ -14,6 +14,7 @@ import type {
   ContactSuggestion,
   ConversationId,
   Message,
+  Platform,
   ScheduledMessage,
   TranscriptState,
 } from "@shared/types";
@@ -44,11 +45,12 @@ export const api = {
     return result;
   },
   newChat: messagingApi.newChat,
-  async search(q: string, opts: { conversationId?: ConversationId; from?: "me" | "them" } = {}): Promise<SearchHit[]> {
+  async search(q: string, opts: { conversationId?: ConversationId; from?: "me" | "them"; platform?: Platform } = {}): Promise<SearchHit[]> {
     const rows = await convexClient.query(searchMessages, {
       query: q,
       ...(opts.conversationId ? { conversationId: opts.conversationId } : {}),
       ...(opts.from ? { from: opts.from } : {}),
+      ...(opts.platform ? { platform: opts.platform } : {}),
     });
     return rows.map((row) => ({ ...messageToMessage(row), conversationId: row.conversationId }));
   },

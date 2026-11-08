@@ -35,6 +35,7 @@ export function conversationToChat(
     flags: row.flags,
     searchNames: row.searchNames,
     ...(row.crm ? { crm: row.crm } : {}),
+    ...(row.thread ? { thread: row.thread } : {}),
   };
 }
 
@@ -140,6 +141,7 @@ export function messageToMessage(row: ConvexMessage | ConvexSearchMessage): Mess
     edited: row.edited,
     retracted: row.retracted,
     clientKey: row.clientKey,
+    ...("thread" in row && row.thread ? { thread: row.thread } : {}),
     // A pending send's row; one written before rows carried sendState is in flight until it errors.
     ...(isPendingGuid(row.guid) ? { sendState: row.sendState ?? (imessage?.error ? "failed" : "queued") } : {}),
     ...(imessage ? {

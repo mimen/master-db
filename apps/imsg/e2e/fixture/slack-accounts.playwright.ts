@@ -16,7 +16,7 @@ test("Settings connects Slack in a new tab and disconnects it after a confirm", 
   await expect(consent.getByText("Slack is connected. You can close this tab.")).toBeVisible();
   await consent.close();
 
-  await expect(page.getByText("AUF. Comma reads your DMs, group DMs and threads. Sending is coming.")).toBeVisible();
+  await expect(page.getByText("AUF. Comma reads your DMs, group DMs, threads and the channels you follow.")).toBeVisible();
   await page.screenshot({ path: "/tmp/comma-settings-slack-connected.png", animations: "disabled" });
 
   await page.getByRole("button", { name: "Disconnect", exact: true }).click();

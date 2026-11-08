@@ -6,8 +6,11 @@ import { internalAction, internalMutation, type MutationCtx } from "../_generate
 import type { CommaPlatform } from "../schema/comma/validators";
 
 import { ensureAccount } from "./accounts";
-import { conversationKind, IMESSAGE_ACCOUNT } from "./conversationIdentity";
+import { conversationKind, IMESSAGE_ACCOUNT, slack } from "./conversationIdentity";
+import { findByKey } from "./conversationLookup";
 import { attachmentBackfill, messageBackfill } from "./messageShape";
+import { refreshLastMessage } from "./pendingSends";
+import { countReplies } from "./slackSync";
 
 /**
  * The accounts backfill: stamps every iMessage row from before accounts with the iMessage account and nests
@@ -116,6 +119,95 @@ export const runKindsBackfill = internalAction({
     for (;;) {
       const page: { scanned: number; changed: number; cursor: string; isDone: boolean } =
         await ctx.runMutation(kindsPageRef, { cursor, limit, dryRun });
+      totals.scanned += page.scanned;
+      totals.changed += page.changed;
+      if (page.isDone) return totals;
+      cursor = page.cursor;
+    }
+  },
+});
+
+/**
+ * The Slack threads backfill, for rows from before S3. It stamps each `th:` conversation stored as a group with
+ * `kind: "thread"` and `following: true` (S1 kept only threads Milad was in), and moves each reply kept inline in a
+ * DM or group DM into its thread's own conversation, then counts every thread's replies onto its root. Readers serve
+ * both forms meanwhile: `conversationKind` reads a thread off `slack.threadTs`, and a DM shows its inline replies as
+ * it did. Idempotent and paged; a DM page reads every message of its conversations, so pages stay small. Run the dry
+ * run first:
+ *
+ *   bunx convex run comma/migrations:runSlackThreadsBackfill '{"dryRun":true}'
+ *   bunx convex run comma/migrations:runSlackThreadsBackfill '{"dryRun":false}'
+ */
+export const backfillSlackThreadsPage = internalMutation({
+  args: { cursor: v.union(v.string(), v.null()), limit: v.optional(v.number()), dryRun: v.boolean() },
+  returns: pageResult,
+  handler: async (ctx, { cursor, limit, dryRun }) => {
+    const page = await ctx.db.query("comma_conversations").paginate({ cursor, numItems: Math.min(limit ?? 25, 100) });
+    let changed = 0;
+    for (const row of page.page) {
+      if (row.platform !== "slack" || !row.slack || !row.accountId) continue;
+      if (row.slack.threadTs) {
+        if (row.kind === "thread" && row.slack.following !== undefined) continue;
+        changed++;
+        if (dryRun) continue;
+        await ctx.db.patch(row._id, { kind: "thread", slack: { ...row.slack, following: row.slack.following ?? true } });
+        await countReplies(ctx, row.accountId, row._id);
+        continue;
+      }
+      if (row.kind === "channel") continue;
+      const replies = (await ctx.db.query("comma_messages").withIndex("by_conversation_date", (q) => q.eq("conversationId", row._id)).collect())
+        .filter((message) => message.threadRef !== undefined);
+      changed += replies.length;
+      if (dryRun || replies.length === 0) continue;
+      const self = (await ctx.db.get(row.accountId))?.selfHandles.find((handle) => handle.startsWith("slack:"));
+      const threads = new Set<Id<"comma_conversations">>();
+      for (const message of replies) {
+        const threadId = await threadConversation(ctx, row, message.threadRef!, replies, self);
+        await ctx.db.patch(message._id, { conversationId: threadId });
+        threads.add(threadId);
+      }
+      await refreshLastMessage(ctx, row._id);
+      for (const threadId of threads) {
+        await refreshLastMessage(ctx, threadId);
+        await countReplies(ctx, row.accountId, threadId);
+      }
+    }
+    return { scanned: page.page.length, changed, cursor: page.continueCursor, isDone: page.isDone };
+  },
+});
+
+/** The thread a DM reply moves into, made as ingest would make it: a followed thread listing its authors. */
+async function threadConversation(
+  ctx: MutationCtx, dm: Doc<"comma_conversations">, threadTs: string, replies: Doc<"comma_messages">[], self: string | undefined,
+): Promise<Id<"comma_conversations">> {
+  const { channel } = dm.slack!;
+  const ref = { type: "thread" as const, channel, threadTs };
+  const scope = { platform: "slack" as const, accountId: dm.accountId! };
+  const existing = await findByKey(ctx, scope, slack.conversationKey(ref));
+  if (existing) return existing._id;
+  const authors = [...new Set(replies.filter((reply) => reply.threadRef === threadTs).map((reply) => reply.sender?.address))]
+    .filter((address): address is string => address !== undefined && address !== self);
+  return await ctx.db.insert("comma_conversations", {
+    platform: "slack", accountId: dm.accountId, conversationKey: slack.conversationKey(ref), kind: "thread", isGroup: true,
+    slack: { channel, threadTs, following: true }, displayName: "Slack", rawDisplayName: "",
+    participants: authors.map((address) => ({ address, name: null })), isSpam: false, lastMessageAt: 0, updatedAt: Date.now(),
+  });
+}
+
+const slackThreadsPageRef = makeFunctionReference<"mutation", { cursor: string | null; limit?: number; dryRun: boolean }, {
+  scanned: number; changed: number; cursor: string; isDone: boolean;
+}>("comma/migrations:backfillSlackThreadsPage");
+
+/** Runs every page and reports what changed (threads restamped plus replies moved), or with dryRun what would. */
+export const runSlackThreadsBackfill = internalAction({
+  args: { dryRun: v.boolean(), limit: v.optional(v.number()) },
+  returns: v.object({ scanned: v.number(), changed: v.number() }),
+  handler: async (ctx, { dryRun, limit }) => {
+    const totals = { scanned: 0, changed: 0 };
+    let cursor: string | null = null;
+    for (;;) {
+      const page: { scanned: number; changed: number; cursor: string; isDone: boolean } =
+        await ctx.runMutation(slackThreadsPageRef, { cursor, limit, dryRun });
       totals.scanned += page.scanned;
       totals.changed += page.changed;
       if (page.isDone) return totals;

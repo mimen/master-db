@@ -27,7 +27,7 @@ import type { BBMessage } from "../../server/bb-types";
 import { createAgentFixture } from "./agent";
 import { FixtureAi } from "./ai";
 import { createTodayFixture, type TodayMode } from "./today";
-import { createSlackFixture, SLACK_DM } from "./slack";
+import { createSlackFixture, SLACK_CHANNEL, SLACK_DM } from "./slack";
 import { createTriageFixture } from "./triage";
 import type { FixtureBlueBubbles } from "./fake-bluebubbles";
 import { AGENT_SEED, fixtureSeed, FIXTURE_NOW, type FixtureIdentity } from "./world";
@@ -564,6 +564,11 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
       slackAccount.connected = false;
       return null;
     },
+    "comma/slackChannels:listSlackChannels": async () => slackWorld.channels(),
+    "comma/slackChannels:setSlackChannel": async (args) => {
+      slackWorld.follow(String(args.channel), args.following === true);
+      return null;
+    },
     "comma/uploads:generateAttachmentUploadUrl": async () => "/__fixture/upload",
     "comma/uploads:finalizeUpload": async (args) => {
       const upload = uploads.get(String(args.storageId));
@@ -592,11 +597,11 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
         return [{ guid: a.guid, mimeType: a.mimeType ?? null, filename: a.filename ?? null, isImage, isVideo, dateCreated: message.dateCreated, thumbUrl: a.thumbUrl, originalUrl: a.originalUrl }];
       })).slice(0, cap);
     },
-    "comma/queries:listConversations": async (args) => paginate([...[slackWorld.conversation()].filter((row) => row !== null), ...await conversations()], args.paginationOpts as Pagination),
+    "comma/queries:listConversations": async (args) => paginate([...slackWorld.listed(), ...await conversations()], args.paginationOpts as Pagination),
     "comma/queries:resolveChat": async (args) => (await conversations()).find((row) => row.primaryChatGuid === args.chatGuid) ?? null,
-    "comma/queries:getConversation": async (args) => slackWorld.owns(String(args.conversationId)) ? slackWorld.conversation()
+    "comma/queries:getConversation": async (args) => slackWorld.owns(String(args.conversationId)) ? slackWorld.conversation(String(args.conversationId))
       : (await conversations()).find((row) => row._id === args.conversationId) ?? null,
-    "comma/queries:listMessages": async (args) => paginate(slackWorld.owns(String(args.conversationId)) ? slackWorld.messages()
+    "comma/queries:listMessages": async (args) => paginate(slackWorld.owns(String(args.conversationId)) ? slackWorld.messages(String(args.conversationId))
       : await messages(String(args.conversationId)), args.paginationOpts as Pagination),
     "comma/queries:searchMessages": async (args) => {
       const text = String(args.query).trim();
@@ -682,7 +687,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
       const execution = (async () => {
         const payload = args.payload as CommaOutboxPayload;
         const chatGuid = typeof args.conversationId === "string" ? args.conversationId : "";
-        if (slackWorld.owns(chatGuid)) return slackWorld.enqueue(clientKey, payload);
+        if (slackWorld.owns(chatGuid)) return slackWorld.enqueue(chatGuid, clientKey, payload);
         const conversation = (await conversations()).find((row) => row._id === chatGuid);
         if (payload.kind === "createChat" || payload.kind === "clearSuggestionLearning") {
           if (chatGuid) throw new FixtureError(`${payload.kind} must be global`, 400);
@@ -785,12 +790,17 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     if (mini.online) releaseHeld();
     return c.json({ ok: true });
   });
-  // Seeds the Slack DM, and makes the next Slack send's answer get lost, so it ends unknown until the check finds it.
+  // Seeds the Slack DM or the #bookings channel and its threads (connecting Slack), and makes the next Slack send's
+  // answer get lost, so it ends unknown until the check finds it.
   app.post("/__fixture/slack", async (c) => {
-    const body = await c.req.json<{ seed?: boolean; loseNextAnswerMs?: number }>();
+    const body = await c.req.json<{ seed?: boolean; seedChannel?: boolean; loseNextAnswerMs?: number }>();
     if (body.seed) slackWorld.seed();
+    if (body.seedChannel) {
+      slackWorld.seedChannel();
+      Object.assign(slackAccount, { connected: true, ever: true });
+    }
     if (body.loseNextAnswerMs !== undefined) slackWorld.loseNextAnswer(body.loseNextAnswerMs);
-    return c.json({ ok: true, conversationId: fixtureConversationId(SLACK_DM) });
+    return c.json({ ok: true, conversationId: fixtureConversationId(body.seedChannel ? SLACK_CHANNEL : SLACK_DM) });
   });
   app.post("/__fixture/latency", async (c) => {
     const { name, delayMs } = await c.req.json<{ name: string; delayMs: number | null }>();

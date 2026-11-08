@@ -107,7 +107,7 @@ describe("iMessage's attention and screening", () => {
 });
 
 describe("Slack", () => {
-  const slack = (kind: "dm" | "group" | "channel") => ({ platform: "slack" as const, kind });
+  const slack = (kind: "dm" | "group" | "channel" | "thread", following?: boolean) => ({ platform: "slack" as const, kind, following });
   const route = (isGroup: boolean): ProfileRoute => ({ platform: "slack", service: "Slack", isGroup });
 
   test("a channel needs the user only when someone else's last message mentions them, and never waits", () => {
@@ -117,11 +117,16 @@ describe("Slack", () => {
     expect(attentionOf(slack("channel"), null)).toBe("none");
   });
 
-  test("a dm, group dm or thread follows iMessage's rule", () => {
-    for (const kind of ["dm", "group"] as const) {
-      expect(attentionOf(slack(kind), { isFromMe: false })).toBe("needsYou");
-      expect(attentionOf(slack(kind), { isFromMe: true })).toBe("waiting");
+  test("a dm, group dm or a thread the user follows follows iMessage's rule", () => {
+    for (const conversation of [slack("dm"), slack("group"), slack("thread"), slack("thread", true)]) {
+      expect(attentionOf(conversation, { isFromMe: false })).toBe("needsYou");
+      expect(attentionOf(conversation, { isFromMe: true })).toBe("waiting");
     }
+  });
+
+  test("a thread the user doesn't follow wants nothing", () => {
+    expect(attentionOf(slack("thread", false), { isFromMe: false })).toBe("none");
+    expect(attentionOf(slack("thread", false), { isFromMe: false, mentionsMe: true })).toBe("none");
   });
 
   test("no Slack conversation is screened", () => {

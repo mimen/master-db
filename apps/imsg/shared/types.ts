@@ -56,7 +56,7 @@ export type SpecialContent =
 export type Platform = "imessage" | "slack";
 
 /** A conversation's shape: one person, a group, a workspace channel, or an email thread. */
-export type ConversationKind = "dm" | "group" | "channel" | "emailThread";
+export type ConversationKind = "dm" | "group" | "channel" | "thread" | "emailThread";
 
 /** An account's Convex id: one signed-in identity on a platform. */
 export type AccountId = GenericId<"comma_accounts">;
@@ -83,6 +83,8 @@ export interface Message {
   guid: string;
   platform: Platform;
   text: string;
+  /** A Slack message that starts a thread Comma holds: that thread's conversation and its replies. */
+  thread?: { conversationId: ConversationId; replyCount: number };
   /** Epoch ms. */
   dateCreated: number;
   dateRead: number | null;
@@ -186,6 +188,8 @@ export interface ChatSummary {
   route: ChatRoute;
   displayName: string;
   kind: ConversationKind;
+  /** A Slack thread's: the DM, group DM or channel Comma holds it in, and how many replies it has. */
+  thread?: { parentId?: ConversationId; replyCount: number };
   /** Derived from `kind`: every kind but a dm. */
   isGroup: boolean;
   /** Whether BlueBubbles reports an uploaded group photo for this chat. */

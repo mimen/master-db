@@ -45,6 +45,8 @@
         "message.groups",
         "message.im",
         "message.mpim",
+        "reaction_added",
+        "reaction_removed",
         "user_change"
       ]
     },

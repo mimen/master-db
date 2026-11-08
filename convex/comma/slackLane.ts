@@ -58,13 +58,14 @@ function sendThread(route: SlackRoute, replyToGuid: string | undefined): string 
 }
 
 /** The emoji Comma offers, by the name Slack reacts with. Comma refuses any other before calling Slack. */
-const SLACK_EMOJI: Readonly<Record<string, string>> = Object.fromEntries(Object.entries({
+const OFFERED: Readonly<Record<string, string>> = {
   "👍": "+1", "👎": "-1", "❤️": "heart", "♥️": "hearts", "😂": "joy", "‼️": "bangbang", "❓": "question", "🙏": "pray",
   "🔥": "fire", "🥹": "face_holding_back_tears", "😍": "heart_eyes", "🤣": "rolling_on_the_floor_laughing", "💙": "blue_heart",
   "🫶": "heart_hands", "👌": "ok_hand", "😮": "open_mouth", "😭": "sob", "🎉": "tada", "💯": "100", "👀": "eyes", "✨": "sparkles",
   "🙌": "raised_hands", "😅": "sweat_smile", "🥲": "smiling_face_with_tear", "💀": "skull", "🤝": "handshake", "😘": "kissing_heart",
   "🤔": "thinking_face", "✅": "white_check_mark", "😊": "blush", "👏": "clap", "😢": "cry",
-}).map(([emoji, name]) => [bare(emoji), name]));
+};
+const SLACK_EMOJI: Readonly<Record<string, string>> = Object.fromEntries(Object.entries(OFFERED).map(([emoji, name]) => [bare(emoji), name]));
 
 function bare(emoji: string): string {
   return emoji.replace(/️/g, "");
@@ -72,6 +73,17 @@ function bare(emoji: string): string {
 
 export function slackEmojiName(emoji: string): string | undefined {
   return SLACK_EMOJI[bare(emoji)];
+}
+
+const SLACK_NAME_EMOJI: Readonly<Record<string, string>> = Object.fromEntries(Object.entries(OFFERED).map(([emoji, name]) => [name, emoji]));
+
+/**
+ * What a reaction Slack names shows as: the emoji Comma offers under that name, so Milad's own echo matches the key he
+ * sent, skin tone aside; else `:name:`.
+ */
+export function slackNameEmoji(name: string): string {
+  const base = name.split("::")[0]!;
+  return SLACK_NAME_EMOJI[base === "thumbsup" ? "+1" : base === "thumbsdown" ? "-1" : base] ?? `:${base}:`;
 }
 
 export async function executeSlack(ctx: ActionCtx, row: OutboxRow): Promise<CommandResult> {
@@ -133,17 +145,14 @@ export const newestTs = internalQuery({
   },
 });
 
-/** A sent message, written as an event would write it. A reply in a channel lands in its thread's conversation, as its echo would. */
+/** A sent message, written as an event would write it, so a reply lands in its thread's conversation as its echo would. */
 async function landSlackSend(ctx: MutationCtx, accountId: Id<"comma_accounts">, conversationId: Id<"comma_conversations">, message: SlackMessage) {
   const conversation = await ctx.db.get(conversationId);
   if (!conversation) return;
-  const own = slackRefOf(conversation);
-  const ref = own.type === "channel" && message.threadTs && message.threadTs !== message.ts ? { type: "thread" as const, channel: own.channel, threadTs: message.threadTs } : own;
-  const name = ref !== own ? conversation.rawDisplayName?.replace(/^#/, "") : undefined;
-  await writeSlackBatch(ctx, accountId, [], [{ ref, ...(name ? { name } : {}), messages: [message] }]);
+  await writeSlackBatch(ctx, accountId, [], [{ ref: slackRefOf(conversation), messages: [message] }]);
 }
 
-/** What a confirmed Slack command changes in Convex, before Slack's event says so (and Slack sends no reaction events). */
+/** What a confirmed Slack command changes in Convex, before Slack's event says so. */
 export async function applySlackResult(ctx: MutationCtx, row: OutboxRow): Promise<void> {
   const { route, payload, conversationId, result } = row;
   if (route?.platform !== "slack" || !conversationId) return;

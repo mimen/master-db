@@ -1,6 +1,7 @@
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import manifest from "../../apps/imsg/slack/manifest.json";
 import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { ALLOWED_EMAIL } from "../_lib/authed";
@@ -10,7 +11,7 @@ import { normalizeModules } from "../test-utils.vitest";
 
 import { sealCredentials } from "./credentials";
 import { eventCallback, FakeSlack, MILAD, signedEvent, stubSlackEnv, TEAM, TOKEN } from "./fakeSlack.vitest";
-import { slackRef } from "./slackEvents";
+import { parseSlackPayload, slackRef } from "./slackEvents";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 const paginationOpts = { numItems: 50, cursor: null };
@@ -123,7 +124,7 @@ describe("the Events webhook", () => {
     await post(t, eventCallback("Ev1", messageEvent("C1", "channel", slack.channels.get("C1")!.messages[2]!)));
     await settle(t);
     const [thread] = await conversations(t);
-    expect(thread).toMatchObject({ conversationKey: `th:C1:${root}`, kind: "group", rawDisplayName: "#bookings", slack: { channel: "C1", threadTs: root } });
+    expect(thread).toMatchObject({ conversationKey: `th:C1:${root}`, kind: "thread", rawDisplayName: "#bookings", slack: { channel: "C1", threadTs: root, following: true } });
     expect((await messages(t)).map((message) => [message.text, message.mentionsMe])).toEqual([
       ["load-in time?", false], ["6pm I think", false], ["@Milad can you confirm?", true],
     ]);
@@ -172,6 +173,106 @@ describe("the Events webhook", () => {
     await post(t, eventCallback("Ev2", messageEvent("D1", "im", { subtype: "channel_join", user: SAM, text: "joined", ts: ago(1) })));
     await settle(t);
     expect(await messages(t)).toEqual([]);
+  });
+});
+
+describe("threads", () => {
+  /** Slack holds the message, then delivers its event. */
+  let event = 0;
+  async function say(t: T, channel: string, type: string, message: { ts: string; user: string; text: string; thread_ts?: string }) {
+    slack.channels.get(channel)!.messages.push(message);
+    await post(t, eventCallback(`EvSay${event++}`, messageEvent(channel, type, message)));
+    await settle(t);
+  }
+  const byKey = async (t: T, key: string) => (await conversations(t)).find((conversation) => conversation.conversationKey === key);
+  const list = async (as: Awaited<ReturnType<typeof connected>>["as"]) =>
+    (await as.query(api.comma.queries.listConversations, { paginationOpts })).page;
+  const thread = async (as: Awaited<ReturnType<typeof connected>>["as"], conversationId: Id<"comma_conversations">) =>
+    (await as.query(api.comma.queries.listMessages, { conversationId, paginationOpts })).page;
+
+  test("in an opted-in channel a thread Milad isn't in is kept beside it, wanting nothing, until he is mentioned in it", async () => {
+    const { t, as } = await connected(["C2"]);
+    slack.channel({ id: "C2", type: "channel", name: "ops" });
+    const root = ago(10);
+    await say(t, "C2", "channel", { ts: root, user: SAM, text: "van's here" });
+    await say(t, "C2", "channel", { ts: ago(9), user: DANA, text: "unloading", thread_ts: root });
+    const channel = (await byKey(t, "ch:C2"))!;
+    const reply = (await byKey(t, `th:C2:${root}`))!;
+    expect(reply).toMatchObject({ kind: "thread", rawDisplayName: "#ops", slack: { channel: "C2", threadTs: root, following: false } });
+    expect((await messages(t)).map((message) => [message.text, message.conversationId === channel._id, message.replyCount])).toEqual([
+      ["van's here", true, 1], ["unloading", false, undefined],
+    ]);
+    expect((await list(as)).map((row) => row.conversationKey)).toEqual(["ch:C2"]);
+    expect((await thread(as, channel._id)).map((message) => [message.text, message.thread])).toEqual([
+      ["van's here", { conversationId: reply._id, replyCount: 1 }],
+    ]);
+    expect((await thread(as, reply._id)).map((message) => [message.text, message.thread])).toEqual([["unloading", undefined], ["van's here", undefined]]);
+
+    await say(t, "C2", "channel", { ts: ago(8), user: SAM, text: `<@${MILAD}> can you sign?`, thread_ts: root });
+    expect(await list(as)).toEqual([
+      expect.objectContaining({ conversationKey: `th:C2:${root}`, kind: "thread", flags: expect.objectContaining({ unresponded: true }), thread: { parentId: channel._id, replyCount: 2 } }),
+      expect.objectContaining({ conversationKey: "ch:C2" }),
+    ]);
+    await say(t, "C2", "channel", { ts: ago(7), user: MILAD, text: "signed", thread_ts: root });
+    expect((await list(as)).map((row) => row.conversationKey)).toEqual(["ch:C2"]);
+    expect((await messages(t)).find((message) => message.text === "van's here")!.replyCount).toBe(3);
+  });
+
+  test("a reply in a DM is its own followed thread beside the DM, listed while it needs Milad", async () => {
+    const { t, as } = await connected();
+    slack.channel({ id: "D1", type: "im", user: SAM });
+    const root = ago(10);
+    await say(t, "D1", "im", { ts: root, user: MILAD, text: "set times?" });
+    await say(t, "D1", "im", { ts: ago(9), user: SAM, text: "9 to 11", thread_ts: root });
+    const dm = (await byKey(t, "im:D1"))!;
+    const reply = (await byKey(t, `th:D1:${root}`))!;
+    expect(reply).toMatchObject({ kind: "thread", slack: { following: true }, participants: [{ address: `slack:${SAM}` }] });
+    expect((await messages(t)).map((message) => [message.text, message.conversationId === dm._id])).toEqual([["set times?", true], ["9 to 11", false]]);
+    const [first, second] = await list(as);
+    expect(first).toMatchObject({ _id: reply._id, displayName: "Sam Lee", flags: { unresponded: true }, thread: { parentId: dm._id, replyCount: 1 } });
+    expect(second).toMatchObject({ _id: dm._id, flags: { waiting: true } });
+  });
+
+  test("someone's reaction shows on the message and leaves with its removal; Milad's own is the one he sent", async () => {
+    const { t, as } = await connected();
+    slack.channel({ id: "D1", type: "im", user: SAM });
+    const ts = ago(5);
+    await say(t, "D1", "im", { ts, user: SAM, text: "done" });
+    const react = (id: string, type: "reaction_added" | "reaction_removed", user: string, reaction: string, minutes: number) => post(t, eventCallback(id, {
+      type, user, reaction, item: { type: "message", channel: "D1", ts }, item_user: SAM, event_ts: ago(minutes),
+    }));
+    await react("EvR1", "reaction_added", SAM, "tada", 4);
+    await react("EvR2", "reaction_added", DANA, "partyparrot", 4);
+    await react("EvR3", "reaction_added", MILAD, "heart", 3);
+    await react("EvR4", "reaction_added", SAM, "+1::skin-tone-3", 3);
+    await react("EvR5", "reaction_removed", SAM, "tada", 2);
+    await react("EvR6", "reaction_added", SAM, "eyes", 1).then(() => post(t, eventCallback("EvR7", {
+      type: "reaction_added", user: SAM, reaction: "eyes", item: { type: "message", channel: "D1", ts: "1.000000" }, event_ts: ago(1),
+    })));
+    const [dm] = await conversations(t);
+    const [message] = await thread(as, dm!._id);
+    expect(message!.reactions.map((reaction) => [reaction.key, reaction.isFromMe, reaction.senderAddress]).sort()).toEqual([
+      ["emoji::partyparrot:", false, `slack:${DANA}`], ["emoji:❤️", true, null], ["emoji:👀", false, `slack:${SAM}`], ["emoji:👍", false, `slack:${SAM}`],
+    ]);
+    expect(await t.run((ctx) => ctx.db.query("comma_reactions").collect())).toHaveLength(5);
+  });
+});
+
+describe("the Slack app manifest", () => {
+  test("every event it subscribes to is one the webhook reads", () => {
+    const samples: Record<string, object> = {
+      "message.channels": messageEvent("C1", "channel", { user: SAM, text: "hi", ts: "1.0" }),
+      "message.groups": messageEvent("G1", "group", { user: SAM, text: "hi", ts: "1.0" }),
+      "message.im": messageEvent("D1", "im", { user: SAM, text: "hi", ts: "1.0" }),
+      "message.mpim": messageEvent("G2", "mpim", { user: SAM, text: "hi", ts: "1.0" }),
+      reaction_added: { type: "reaction_added", user: SAM, reaction: "tada", item: { type: "message", channel: "D1", ts: "1.0" }, event_ts: "2.0" },
+      reaction_removed: { type: "reaction_removed", user: SAM, reaction: "tada", item: { type: "message", channel: "D1", ts: "1.0" }, event_ts: "2.0" },
+      user_change: { type: "user_change", user: { id: SAM, profile: { display_name: "Sam" } } },
+    };
+    expect([...manifest.settings.event_subscriptions.user_events].sort()).toEqual(Object.keys(samples).sort());
+    for (const [name, sample] of Object.entries(samples)) {
+      expect(parseSlackPayload(eventCallback(name, sample)), name).toMatchObject({ type: "event", event: expect.objectContaining({ kind: expect.any(String) }) });
+    }
   });
 });
 
@@ -301,7 +402,7 @@ describe("the backstop cron", () => {
 describe("slackRef", () => {
   const self = MILAD;
   const at = (ts: string, extra: object = {}) => ({ ts, user: SAM, text: "hi", ...extra });
-  test("keeps every DM and group DM message, and a channel's only where Milad is in it or opted in", () => {
+  test("keeps every DM and group DM message, and a channel's only where Milad is in it or opted in; a reply is its thread's", () => {
     const rules = { self, optedIn: false, threadKnown: false };
     expect(slackRef("D1", "im", at("1.0"), rules)).toEqual({ type: "im", channel: "D1" });
     expect(slackRef("G1", "mpim", at("1.0"), rules)).toEqual({ type: "mpim", channel: "G1" });
@@ -311,6 +412,8 @@ describe("slackRef", () => {
     expect(slackRef("C1", "channel", at("2.0", { threadTs: "1.0", text: `<@${self}|milad> ok?` }), rules)).toEqual({ type: "thread", channel: "C1", threadTs: "1.0" });
     expect(slackRef("C1", "channel", at("2.0", { threadTs: "1.0" }), { ...rules, threadKnown: true })).toEqual({ type: "thread", channel: "C1", threadTs: "1.0" });
     expect(slackRef("C1", "channel", at("1.0"), { ...rules, optedIn: true })).toEqual({ type: "channel", channel: "C1" });
+    expect(slackRef("C1", "channel", at("2.0", { threadTs: "1.0" }), { ...rules, optedIn: true })).toEqual({ type: "thread", channel: "C1", threadTs: "1.0" });
+    expect(slackRef("D1", "im", at("2.0", { threadTs: "1.0" }), rules)).toEqual({ type: "thread", channel: "D1", threadTs: "1.0" });
   });
 });
 

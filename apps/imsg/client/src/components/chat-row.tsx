@@ -144,8 +144,9 @@ function ChatRowInner({
   const settleOffered = settleAction !== "none";
   const settleLabel = settleAction === "unsettle" ? "Un-settle" : "Settle";
   const draft = chat.draft ? draftPreview(chat.draft) : null;
+  const replies = chat.thread ? `Thread, ${chat.thread.replyCount} ${chat.thread.replyCount === 1 ? "reply" : "replies"} · ` : "";
   const snippet = draft ? `${draft.label}: ${draft.body}` : last
-    ? `${last.isFromMe ? "You: " : chat.isGroup && last.senderName ? `${last.senderName.split(" ")[0]}: ` : ""}${
+    ? `${replies}${last.isFromMe ? "You: " : chat.isGroup && last.senderName ? `${last.senderName.split(" ")[0]}: ` : ""}${
         last.text || (last.hasAttachments ? "Attachment" : "")
       }`
     : "";

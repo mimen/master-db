@@ -85,8 +85,8 @@ export const specialContent = v.union(
   v.object({ kind: v.literal("unknown"), label: v.string() }),
 );
 
-/** A conversation's shape. iMessage has dms and groups; Slack channels and email threads are their own kinds. */
-export const conversationKind = v.union(v.literal("dm"), v.literal("group"), v.literal("channel"), v.literal("emailThread"));
+/** A conversation's shape. iMessage has dms and groups; Slack channels, Slack threads and email threads are their own kinds. */
+export const conversationKind = v.union(v.literal("dm"), v.literal("group"), v.literal("channel"), v.literal("thread"), v.literal("emailThread"));
 export type CommaConversationKind = Infer<typeof conversationKind>;
 
 export const lastMessageSummary = v.object({
@@ -118,8 +118,11 @@ export const conversationFields = {
   /** iMessage's: the chat a conversation sends through, and every chat merged into it. Other platforms have neither. */
   primaryChatGuid: v.optional(v.string()),
   chatGuids: v.optional(v.array(v.string())),
-  /** Slack's: the channel, DM or group DM, and the root of the thread when the conversation is one thread. */
-  slack: v.optional(v.object({ channel: v.string(), threadTs: v.optional(v.string()) })),
+  /**
+   * Slack's: the channel, DM or group DM, and the root of the thread when the conversation is one thread. `following`
+   * is false on a thread kept only because its channel is opted in; absent on threads from before S3, which Milad follows.
+   */
+  slack: v.optional(v.object({ channel: v.string(), threadTs: v.optional(v.string()), following: v.optional(v.boolean()) })),
   displayName: v.string(),
   rawDisplayName: v.optional(v.string()),
   groupPhotoGuid: v.optional(v.string()),
@@ -186,6 +189,8 @@ export const messageCoreFields = {
   replyToGuid: v.optional(v.string()),
   replyToPreview: v.optional(v.string()),
   replyToFromMe: v.optional(v.boolean()),
+  /** Slack's: how many replies the thread this message starts holds in Comma. */
+  replyCount: v.optional(v.number()),
   isGroupEvent: v.boolean(),
   mentions: v.array(mention),
   attachmentGuids: v.array(v.string()),

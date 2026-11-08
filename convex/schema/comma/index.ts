@@ -56,7 +56,7 @@ export const comma_messages = defineTable(messageRowFields)
   .index("by_platform_account_fromMe_date", ["platform", "accountId", "isFromMe", "dateCreated"])
   .searchIndex("search_text", {
     searchField: "text",
-    filterFields: ["conversationId", "isTapback", "retracted", "isFromMe"],
+    filterFields: ["conversationId", "isTapback", "retracted", "isFromMe", "platform"],
   });
 
 export const comma_reactions = defineTable(reactionFields)

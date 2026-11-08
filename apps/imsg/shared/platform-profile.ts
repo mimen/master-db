@@ -56,8 +56,8 @@ export interface LastForAttention {
 
 /** The rules core logic asks a platform, beyond what its routes can do. */
 export interface PlatformRules {
-  /** `last.mentionsMe`: the last message names the user, set at ingest. */
-  attention(conversation: { kind: ConversationKind }, last: LastForAttention | null): Attention;
+  /** `last.mentionsMe`: the last message names the user, set at ingest. `following`: false on a thread that isn't the user's. */
+  attention(conversation: { kind: ConversationKind; following?: boolean }, last: LastForAttention | null): Attention;
   screening(conversation: { isSpam: boolean; known: boolean }): Screening;
   /** A sender keeps one live reaction per message, and a new one replaces theirs. Otherwise each key stands alone. */
   oneReactionPerSender: boolean;
@@ -157,12 +157,14 @@ export const SLACK_PROFILE: PlatformProfile = {
   unsendLabel: "Delete",
   composer: { placeholder: { Slack: "Message" }, namesConversation: true, enterSends: true, services: ["Slack"] },
   /**
-   * A dm, group dm or thread follows iMessage's rule. A channel needs the user only when its last message is
-   * someone else's and mentions them, and it never waits on anyone.
+   * A dm, group dm or a thread the user follows (started, replied in, was mentioned in, or one in a DM) follows
+   * iMessage's rule. A thread the user doesn't follow wants nothing: a mention in it makes it followed. A channel needs
+   * the user only when its last message is someone else's and mentions them, and it never waits on anyone.
    */
-  // ponytail: a mention buried by later channel chatter drops out of Needs you; carrying it needs a mention anchor in triage, with channel opt-ins (S3).
-  attention: (conversation, last) => conversation.kind !== "channel" ? IMESSAGE_PROFILE.attention(conversation, last)
-    : last && !last.isFromMe && last.mentionsMe ? "needsYou" : "none",
+  // ponytail: a mention buried by later channel chatter drops out of Needs you; carrying it needs a mention anchor in triage.
+  attention: (conversation, last) => conversation.kind === "channel" ? (last && !last.isFromMe && last.mentionsMe ? "needsYou" : "none")
+    : conversation.kind === "thread" && conversation.following === false ? "none"
+      : IMESSAGE_PROFILE.attention(conversation, last),
   /** Everyone in the workspace reached the user through a workspace the user administers, so no Slack conversation is screened. */
   screening: () => "known",
   oneReactionPerSender: false,
@@ -203,7 +205,7 @@ export function keyEmoji(key: string): string | null {
 export const PROFILES: Readonly<Record<Platform, PlatformProfile>> = { imessage: IMESSAGE_PROFILE, slack: SLACK_PROFILE };
 
 /** What the conversation's platform says it wants from the user. */
-export function attentionOf(conversation: { platform: Platform; kind: ConversationKind }, last: LastForAttention | null): Attention {
+export function attentionOf(conversation: { platform: Platform; kind: ConversationKind; following?: boolean }, last: LastForAttention | null): Attention {
   return PROFILES[conversation.platform].attention(conversation, last);
 }
 

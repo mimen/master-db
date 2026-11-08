@@ -6,7 +6,7 @@ The write scopes carry Comma's Slack lane (`convex/comma/slackLane.ts`): `chat:w
 
 A send carries its clientKey in Slack message metadata (event type `comma_send`). When a send's answer is lost, Comma reads the conversation's recent history at 20 seconds and 2 minutes and matches that clientKey, or Milad's user id and the exact text, so the send lands without being posted twice.
 
-The app subscribes, on Milad's behalf, to messages in DMs, group DMs, public and private channels, and to profile changes. Slack posts them to `POST /comma/slack/events`, signed with the app's signing secret. Comma keeps every DM and group DM message, the threads Milad started, replied in or is mentioned in, and top-level messages in channels listed on the account's `slackChannels`; everything else is dropped before any write. Reaction and read-marker events are not subscribed: Comma writes its own reactions when Slack confirms them, other people's reactions do not show yet, and Slack sends read markers only over RTM.
+The app subscribes, on Milad's behalf, to messages in DMs, group DMs, public and private channels, to reactions added and removed, and to profile changes. Slack posts them to `POST /comma/slack/events`, signed with the app's signing secret. Comma keeps every DM and group DM message, the threads Milad started, replied in or is mentioned in, and everything in the channels listed on the account's `slackChannels`; everything else is dropped before any write. A reaction lands on a message Comma keeps (`reactions:read` covers both reaction events). Read-marker events are not subscribed: Slack sends them only over RTM.
 
 ## Setup
 
@@ -34,7 +34,11 @@ Run these in order from the repo root. Comma's production is the Convex deployme
 6. In Comma, open **Settings**, then **Accounts**, then **Connect** beside Slack, and approve the install as Milad. The tab ends on "Slack is connected", and Settings shows the workspace as connected. Connecting starts the 90-day backfill, which paces itself under Slack's rate limits; its progress is the `slack:backfill` row in `comma_sync_state` (`step` reaches `done`).
 7. Send Milad a Slack DM from another account. It shows in Comma's Messages within seconds.
 
-To keep a channel's top-level messages, add its id to the account's `slackChannels` and reconnect, which reruns the backfill. Settings gains the opt-in in S3.
+To keep a channel, open **Settings**, then **Accounts**, and turn on the channel under Slack's **Channels**. Following it reads its last 90 days and its threads under the sync row `slack:backfill:<channel>`; turning it off stops new messages and keeps what Comma holds.
+
+## Changing the manifest
+
+Edit `manifest.json`, then push it to the live app with `apps.manifest.update` (app id and an app configuration token) or paste it on the app's **App Manifest** page. A change to event subscriptions whose scopes the token already holds needs no reinstall; a new scope does, and Slack then asks Milad to reinstall from the app's settings.
 
 ## Rotating the token key
 

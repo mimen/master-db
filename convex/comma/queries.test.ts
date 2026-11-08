@@ -172,6 +172,21 @@ describe("Comma read queries", () => {
     expect(await t.query(api.comma.queries.searchMessages, { query: "missing" })).toEqual([]);
   });
 
+  test("search filters by platform, a legacy row with none counting as iMessage", async () => {
+    const t = authed();
+    await t.run(async (ctx) => {
+      const id = await ctx.db.insert("comma_conversations", conversation("one", 1));
+      await ctx.db.insert("comma_messages", message(id, "legacy", 1));
+      await ctx.db.insert("comma_messages", { ...message(id, "imessage", 2), platform: "imessage" as const });
+      await ctx.db.insert("comma_messages", { ...message(id, "slack", 3), platform: "slack" as const });
+    });
+    const guids = async (platform?: "imessage" | "slack") =>
+      (await t.query(api.comma.queries.searchMessages, { query: "comet", ...(platform ? { platform } : {}) })).map((row) => row.guid).sort();
+    expect(await guids()).toEqual(["imessage", "legacy", "slack"]);
+    expect(await guids("slack")).toEqual(["slack"]);
+    expect(await guids("imessage")).toEqual(["imessage", "legacy"]);
+  });
+
   test("sender search filters inside the full-text index before the limit", async () => {
     // Depends on isFromMe landing in search_text.filterFields on the sibling schema branch.
     const searchRef = makeFunctionReference("comma/queries:searchMessages") as ApiFromModules<{

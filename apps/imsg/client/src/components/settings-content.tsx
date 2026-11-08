@@ -5,8 +5,8 @@ import type { api as convexApi } from "@convex-api";
 import type { AccountId } from "@shared/types";
 import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { anyApi } from "convex/server";
-import { createContext, useContext, useState, useSyncExternalStore, type JSX, type ReactNode } from "react";
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { createContext, useContext, useEffect, useState, useSyncExternalStore, type JSX, type ReactNode } from "react";
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 
 import { Dropdown, type DropdownOption } from "./ui/dropdown";
 
@@ -17,6 +17,7 @@ import { TriageGeometry } from "@/constants/triage-theme";
 import { useTheme } from "@/hooks/use-theme";
 import { api } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
+import { convexClient } from "@/lib/identity";
 import { runCommand } from "@/lib/keyboard/controller";
 import { shortcutFor } from "@/lib/keyboard/registry";
 import { releaseStatus } from "@/lib/release-status";
@@ -164,6 +165,53 @@ function Group({ title, children }: { title: string; children: ReactNode }): JSX
 
 const accountsApi = anyApi.comma.accounts as unknown as typeof convexApi.comma.accounts;
 const slackAuthApi = anyApi.comma.slackAuth as unknown as typeof convexApi.comma.slackAuth;
+const slackChannelsApi = anyApi.comma.slackChannels as unknown as typeof convexApi.comma.slackChannels;
+type SlackChannel = { id: string; name: string; isPrivate: boolean; following: boolean };
+
+/**
+ * The channels Milad is in, each with whether Comma follows it. Following one reads its last 90 days; a channel
+ * wants Milad only when someone mentions him, and its threads only once he is in them.
+ */
+function SlackChannels({ accountId }: { accountId: AccountId }): JSX.Element {
+  const theme = useTheme();
+  const listSlackChannels = useAction(slackChannelsApi.listSlackChannels);
+  const [channels, setChannels] = useState<SlackChannel[] | "failed" | null>(null);
+  useEffect(() => {
+    let live = true;
+    listSlackChannels({ accountId }).then((list) => {
+      if (live) setChannels([...list].sort((a, b) => Number(b.following) - Number(a.following)));
+    }, () => live && setChannels("failed"));
+    return () => {
+      live = false;
+    };
+  }, [accountId, listSlackChannels]);
+  const follow = (channel: SlackChannel, following: boolean): void => {
+    const set = (value: boolean) => setChannels((list) => Array.isArray(list) ? list.map((row) => row.id === channel.id ? { ...row, following: value } : row) : list);
+    set(following);
+    convexClient.mutation(slackChannelsApi.setSlackChannel, { accountId, channel: channel.id, name: channel.name, following }).catch(() => {
+      set(!following);
+      showToast(`Couldn't ${following ? "follow" : "stop following"} #${channel.name}. Try again.`);
+    });
+  };
+  const caption = channels === "failed" ? "Couldn't read your channels from Slack."
+    : "Comma keeps the channels you follow, and asks for you only when someone mentions you.";
+  return (
+    <>
+      <SettingRow title="Channels" caption={channels === null ? "Reading your channels from Slack…" : caption}>{null}</SettingRow>
+      {Array.isArray(channels) && channels.map((channel) => (
+        <SettingRow key={channel.id} title={`#${channel.name}`} caption={channel.isPrivate ? "Private" : undefined}>
+          <Switch
+            accessibilityLabel={`Follow #${channel.name}`}
+            value={channel.following}
+            onValueChange={(value) => follow(channel, value)}
+            trackColor={{ true: theme.accent, false: theme.divider }}
+            thumbColor="#ffffff"
+          />
+        </SettingRow>
+      ))}
+    </>
+  );
+}
 
 function QuietButton({ label, destructive = false, onPress }: { label: string; destructive?: boolean; onPress: () => void }): JSX.Element {
   const theme = useTheme();
@@ -214,13 +262,14 @@ function AccountsGroup(): JSX.Element | null {
       <SettingRow
         first={!imessage}
         title="Slack"
-        caption={slack?.connected ? `${slack.label}. Comma reads your DMs, group DMs and threads. Sending is coming.`
+        caption={slack?.connected ? `${slack.label}. Comma reads your DMs, group DMs, threads and the channels you follow.`
           : slack ? `${slack.label}. Not connected.` : "Read your AUF DMs, group DMs and threads in Comma."}
       >
         {slack?.connected
           ? <QuietButton label="Disconnect" destructive onPress={() => disconnect(slack._id)} />
           : <QuietButton label={slack ? "Reconnect" : "Connect"} onPress={connect} />}
       </SettingRow>
+      {slack?.connected ? <SlackChannels accountId={slack._id} /> : null}
     </Group>
   );
 }

@@ -35,6 +35,8 @@ interface LastMessageLike {
 export interface RuledConversation {
   platform: Platform;
   kind: ConversationKind;
+  /** False on a Slack thread the user doesn't follow. */
+  following?: boolean;
 }
 
 /** Unresponded and Waiting are the platform's attention for the last message, until that message is dismissed. */
