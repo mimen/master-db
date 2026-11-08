@@ -24,7 +24,8 @@ for (const [layout, viewport] of [["desktop", { width: 1440, height: 900 }], ["p
     await desk.page.goto("/", { waitUntil: "domcontentloaded" });
     const preview = desk.page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).first().getByText(LONG_INBOUND);
     await expect(preview).toBeVisible();
-    expect(await renderedLines(preview)).toBe(2);
+    // The row can remount right after first paint, and a detached node measures NaN; poll the mounted one.
+    await expect.poll(() => renderedLines(preview)).toBe(2);
   });
 }
 

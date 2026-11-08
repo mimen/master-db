@@ -29,8 +29,8 @@ Preconditions:
 - **Confirm the side effect.** Capture `/__fixture/convex` request bodies where `name === "comma/outbox:enqueue"` and `payload.kind === "send"`, and expect one with `text`. Then poll `comma/queries:listMessages` for `{ conversationId: fixtureConversationId(desk.chats.needs) }` until a row with `text` has a guid starting `out-` and `isFromMe: true`.
 - **Settled state.** Poll the bubble's computed opacity until it is 1. The bubble's footer reads `Sent`, and the sidebar Needs you count drops by one while Waiting rises by one.
 - **Failure path.** Before sending, `POST /__fixture/fault {"method":"sendText","error":"offline"}`. The bubble shows Not Delivered and one toast appears. Clear the fault with `{"method":null}`.
-- **Proof.** Run `drives/send-text.ts`. It writes `1-before.png`, `2-after.png`, `aria.txt` and `side-effects.json`.
-- **Burst.** `POST /__fixture/send-timing {"delayMs":1500,"echo":false}`, send three texts back to back, and `desk.receive` a message before the first lands. Run `drives/send-burst.ts`. It writes `frames/`, `samples.json` (every change to the thread order and the preview), `timeline.json` (which sends had landed at each frame) and `stored.json`.
+- **Proof.** Run `apps/imsg/e2e/fixture/golden-send-text.playwright.ts`. It writes `1-before.png`, `2-after.png`, `aria.txt` and `side-effects.json`.
+- **Burst.** `POST /__fixture/send-timing {"delayMs":1500,"echo":false}`, send three texts back to back, and `desk.receive` a message before the first lands. Run `apps/imsg/e2e/fixture/golden-send-burst.playwright.ts`. It writes `frames/`, `samples.json` (every change to the thread order and the preview), `timeline.json` (which sends had landed at each frame) and `stored.json`.
 
 ## Gotchas
 

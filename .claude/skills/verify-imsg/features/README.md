@@ -32,15 +32,15 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 
 ## Features
 
-- [Send a message](./send-text.md) covers typed sends, the Enter and Send entry points, delivery state, a burst of sends, and moving out of Needs you. Its drives are `drives/send-text.ts` and `drives/send-burst.ts`.
+- [Send a message](./send-text.md) covers typed sends, the Enter and Send entry points, delivery state, a burst of sends, and moving out of Needs you. Its drives are `apps/imsg/e2e/fixture/golden-send-text.playwright.ts` and `apps/imsg/e2e/fixture/golden-send-burst.playwright.ts`.
 - [Receive a message](./receive.md) covers live inbound messages, the sidebar preview, the open thread, peer typing, and mark-read.
 - [Settle a conversation](./settle.md) covers settling from the row, the header and the keyboard, and Undo.
 - [Send attachments](./attachments.md) covers file drops with a caption, voice memos, and an unknown outcome.
 - [Schedule a message](./schedule.md) covers Send later, the date editor, and the Scheduled list.
 - [Agent pane](./agent-pane.md) covers ⌘J, asking, the work log, question cards, composer and pane drafts, New chat, and the state strip. Its drive is `drives/agent-pane.ts`.
 - [Agent chats in the conversation list](./agent-list.md) covers the avatar badges, Needs you, the Agents tab, settle, the pane opening itself, toasts and the ⌘K group. Its drive is `drives/agent-list.ts`.
-- [Conversation identity](./conversation-identity.md) covers `/c/<id>` URLs, conversation ids in commands and queries, the `/chat/` redirect, and a group's CRM by id. Its drive is `drives/conversation-identity.ts`.
-- [Reactions](./reactions.md) covers react, change and remove through the tray, and a peer's reactions coming and going. Its drive is `drives/reactions.ts`.
-- [Emoji reactions](./reactions.md#emoji-reactions) covers sending an emoji from the picker, changing it by typing one, removing it from the tray, a peer's emoji reaction, the greyed picker when the Mac can't send emoji, and the phone's touch tray. Its drive is `drives/emoji-reactions.ts`.
-- [Platform profile](./platform-profile.md) covers greyed reactions, Reply, Edit and Undo send on SMS, the tray's keyboard pick, Convex refusing an unsupported command, and an unchanged iMessage thread. Its drive is `drives/platform-profile.ts`.
-- [Pending send](./pending-send.md) covers Waiting to send with the Mini away or the browser offline, Cancel, sending on reconnect, Not sent after the deadline, and Retry. Its drive is `drives/pending-send.ts`.
+- [Conversation identity](./conversation-identity.md) covers `/c/<id>` URLs, conversation ids in commands and queries, the `/chat/` redirect, and a group's CRM by id. Its drive is `apps/imsg/e2e/fixture/golden-conversation-identity.playwright.ts`.
+- [Reactions](./reactions.md) covers react, change and remove through the tray, and a peer's reactions coming and going. Its drive is `apps/imsg/e2e/fixture/golden-reactions.playwright.ts`.
+- [Emoji reactions](./reactions.md#emoji-reactions) covers sending an emoji from the picker, changing it by typing one, removing it from the tray, a peer's emoji reaction, the greyed picker when the Mac can't send emoji, and the phone's touch tray. Its drive is `apps/imsg/e2e/fixture/golden-emoji-reactions.playwright.ts`.
+- [Platform profile](./platform-profile.md) covers greyed reactions, Reply, Edit and Undo send on SMS, the tray's keyboard pick, Convex refusing an unsupported command, and an unchanged iMessage thread. Its drive is `apps/imsg/e2e/fixture/golden-platform-profile.playwright.ts`.
+- [Pending send](./pending-send.md) covers Waiting to send with the Mini away or the browser offline, Cancel, sending on reconnect, Not sent after the deadline, and Retry. Its drive is `apps/imsg/e2e/fixture/golden-pending-send.playwright.ts`.

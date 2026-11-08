@@ -15,7 +15,7 @@ Open Alex Rivera and right-click the inbound bubble to open the tray.
 
 ## Driving it with Playwright (desk fixture)
 
-The drive is `drives/reactions.ts`. It records every `react` enqueue and reads reactions back through `comma/queries:listMessages`.
+The drive is `apps/imsg/e2e/fixture/golden-reactions.playwright.ts`. It records every `react` enqueue and reads reactions back through `comma/queries:listMessages`.
 
 - **Peer love.** Before opening the thread, POST `/__fixture/tapback` with `{ chatGuid, targetGuid: "needs-1", reaction: "love", handle }`. The `Love` chip shows on my message.
 - **React, change, remove.** Pick `Like`, then `Laugh`, then `Remove Laugh`. Chips follow, and the stored row shows my keys at each step.

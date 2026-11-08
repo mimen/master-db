@@ -34,11 +34,11 @@ deskTest("signal-filters: desktop light", async ({ desk }) => {
   await expect(page.getByLabel(`Conversation 2 of ${total}`)).toBeVisible();
   await expect(page.getByTestId("thread-view").getByText(names[1]!, { exact: true }).first()).toBeVisible();
 
-  // ⌘2 switches to Unread, ⌘1 back.
+  // ⌘N selects the Nth lens, Today first: ⌘3 switches to Unread, ⌘2 back to Needs you.
   await page.mouse.move(700, 300);
-  await page.keyboard.press("Meta+2");
+  await page.keyboard.press("Meta+3");
   await expect(page.getByRole("tab", { name: /^Unread/ })).toHaveAttribute("aria-selected", "true");
-  await page.keyboard.press("Meta+1");
+  await page.keyboard.press("Meta+2");
   await expect(page.getByRole("tab", { name: /^Needs you/ })).toHaveAttribute("aria-selected", "true");
   await page.waitForTimeout(700);
   await page.screenshot({ path: join(evidence, "desk-main-light.png") });

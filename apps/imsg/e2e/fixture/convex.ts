@@ -245,6 +245,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
       const row = (await conversations()).find((candidate) => candidate._id === chatGuid);
       return row ? row.lastMessage ?? null : undefined;
     },
+    sameSend: (anchor, lastGuid) => {
+      const clientKey = bb.clientKeyFor(lastGuid);
+      return clientKey !== undefined && pendingGuid(clientKey) === anchor;
+    },
     settled: (chatGuid) => agent.outbox.settle(chatGuid),
     unsettled: (chatGuid) => agent.outbox.unsettle(chatGuid),
   });
@@ -679,6 +683,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
           const result = await run.finally(() => temps.delete(clientKey));
           const resultGuid = result && "message" in result ? result.message.guid : undefined;
           if (result && "message" in result) triage.replied(chatGuid, conversation?.lastMessage ?? null, result.message.dateCreated);
+          if (resultGuid && payload.kind === "send") triage.carry(chatGuid, pendingGuid(clientKey), resultGuid);
           const draft = drafts.get(chatGuid);
           if (draft && (payload.kind === "send" || (payload.kind === "sendAttachment" && draft.attachments?.some((a) => a.storageId === payload.storageId)))) {
             agent.outbox.sentDraft(draft.agentChatId);

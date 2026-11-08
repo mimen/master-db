@@ -20,7 +20,7 @@ A message that has not gone out yet keeps its bubble. When the Mini is away or t
 
 ## Driving it with Playwright (desk fixture)
 
-The drive is `drives/pending-send.ts`. It records every send enqueue and every `comma/pendingSends:*` call.
+The drive is `apps/imsg/e2e/fixture/golden-pending-send.playwright.ts`. It records every send enqueue and every `comma/pendingSends:*` call.
 
 - **Mini away.** POST `/__fixture/mini {"online":false}`. The fixture's outbox then holds sends as queued, and the bridge heartbeat reads ten minutes stale, so the client knows at once. Send, expect `Waiting to send`, click `Cancel sending`, then send again and POST `{"online":true}`.
 - **Not sent.** POST `/__fixture/mini {"online":false,"notSentAfterMs":3000}` to shorten the deadline, send, wait for `Not sent`, bring the Mini back, then click `Retry sending`.

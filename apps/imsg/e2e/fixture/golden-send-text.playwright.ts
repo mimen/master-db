@@ -1,9 +1,10 @@
-import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "../fixtures/desk";
 import { fixtureConversationId } from "../../shared/fixture-ids";
 
-const evidence = process.env.VERIFY_IMSG_EVIDENCE!;
+const evidence = process.env.VERIFY_IMSG_EVIDENCE ?? mkdtempSync(join(tmpdir(), "imsg-golden-"));
 const text = "verify-imsg send-text probe";
 
 test("send-text: a typed message goes out through the Convex outbox and stays in the thread", async ({ desk }) => {
