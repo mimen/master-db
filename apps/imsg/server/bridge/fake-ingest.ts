@@ -1,5 +1,13 @@
+import { readFileSync } from "node:fs";
 import { isAiKind } from "../../../../convex/schema/comma/validators";
 import { ConvexIngest, type Bodies, type Results, type MessageRow } from "./convex-ingest";
+
+/**
+ * The kinds Convex routes, read from the ROUTES table in convex/comma/ingest.ts. The imsg project cannot import that
+ * module (it needs Convex's generated server types), so the fake reads the table's source instead.
+ */
+export const ROUTED_KINDS: ReadonlySet<string> = new Set([...(readFileSync(new URL("../../../../convex/comma/ingest.ts", import.meta.url), "utf8")
+  .match(/\nconst ROUTES = \{\n([\s\S]*?)\n\} as const;/)?.[1] ?? "").matchAll(/^ {2}(\w+):/gm)].map((match) => match[1]!));
 
 type Call = { [K in keyof Bodies]: { kind: K; body: Bodies[K] } }[keyof Bodies];
 
@@ -25,6 +33,8 @@ export class FakeIngest extends ConvexIngest {
 
   override async post<K extends keyof Bodies>(kind: K, body: Bodies[K]): Promise<Results[K]> {
     this.calls.push({ kind, body } as Call);
+    // Production answers a kind missing from ROUTES with a 404, which ConvexIngest throws as this.
+    if (!ROUTED_KINDS.has(kind)) throw new Error(`Comma ingest ${kind} HTTP 404`);
     if (kind === this.fail) throw new Error("ingest offline");
     const conversations = kind === "conversations" ? body as Bodies["conversations"] : null;
     const results: Results = {
