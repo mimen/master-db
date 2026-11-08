@@ -7,6 +7,7 @@ import { createRoot } from "react-dom/client";
 import type { GenericId } from "convex/values";
 import type { commandReceipt, CommaScheduledDoc } from "../../../../../convex/schema/comma/validators";
 import { runCommandVia, type ResultCommandClient } from "../lib/convex-commands";
+import type { ScheduledItem } from "../lib/scheduled";
 import type { useScheduledState as StateHook, UseScheduledResult } from "./use-scheduled";
 
 let useScheduledState: typeof StateHook;
@@ -47,8 +48,8 @@ function commands() {
     } }),
   };
   return { ready, enqueued, actions: {
-    cancelScheduled: (id: number) => runCommandVia(client, rows[0]!.conversationId ?? null, { kind: "cancelScheduled", bbId: id }),
-    sendScheduledNow: (id: number) => runCommandVia(client, rows[0]!.conversationId ?? null, { kind: "sendScheduledNow", bbId: id }),
+    cancelScheduled: async (item: ScheduledItem) => { await runCommandVia(client, item.conversationId ?? null, { kind: "cancelScheduled", bbId: item.bbId! }); },
+    sendScheduledNow: async (item: ScheduledItem) => { await runCommandVia(client, item.conversationId ?? null, { kind: "sendScheduledNow", bbId: item.bbId! }); },
     updateScheduled: async () => { throw new Error("unused"); },
   }, finish: (status: "failed" | "unknown" | "sent", kind: "cancelScheduled" | "sendScheduledNow") => {
     snapshot = { commandId: "command-1" as GenericId<"comma_outbox">, clientKey: "key", status, updatedAt: 1,
@@ -69,7 +70,7 @@ for (const kind of ["cancelScheduled", "sendScheduledNow"] as const) {
       const h = commands();
       // Pending cancels and sends outlive the hook, so each test takes its own scheduled message.
       const id = nextId++;
-      const mine = [{ ...rows[0]!, bbId: id }];
+      const mine = [{ ...rows[0]!, _id: `scheduled-${id}` as GenericId<"comma_scheduled">, bbId: id }];
       let hook!: UseScheduledResult;
       function Scheduled() {
         hook = useScheduledState(mine, [], h.actions);
@@ -82,8 +83,8 @@ for (const kind of ["cancelScheduled", "sendScheduledNow"] as const) {
         expect(container.textContent).toBe("later");
         let result: Promise<unknown> | undefined;
         await act(async () => {
-          if (kind === "cancelScheduled") hook.cancel(id);
-          else result = hook.sendNow(id).catch((error: unknown) => error);
+          const [item] = hook.items;
+          result = (kind === "cancelScheduled" ? hook.cancel(item!) : hook.sendNow(item!)).catch((error: unknown) => error);
           await h.ready;
         });
         expect(container.textContent).toBe("");

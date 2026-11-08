@@ -69,6 +69,7 @@ import { PersonAvatar } from "./avatar";
 import { OverlayShell } from "./overlay-shell";
 import { MorphSendButton, type SendStatus } from "./motion/morph-send-button";
 import { ScheduleEditor } from "./schedule-editor";
+import { scheduleOptions } from "@/lib/scheduled";
 import { SuggestionAlternates, type SuggestionSource, useReplySuggestions } from "./suggestion-shelf";
 import { useSpring } from "@/constants/springs";
 
@@ -182,23 +183,6 @@ function tempVoiceMessage(chat: Pick<ChatSummary, "route" | "isGroup">, filename
     sendState: "sending",
     attachments: [{ guid: `${temp.guid}-audio`, mimeType: "audio/mp4", filename, originalUrl: null, width: null, height: null, totalBytes: null }],
   };
-}
-
-/** Quick relative schedule targets, iMessage "Send Later" style. */
-function scheduleOptions(): Array<{ label: string; at: number }> {
-  const now = new Date();
-  const tonight = new Date(now);
-  tonight.setHours(20, 0, 0, 0);
-  const tomorrowAm = new Date(now);
-  tomorrowAm.setDate(now.getDate() + 1);
-  tomorrowAm.setHours(9, 0, 0, 0);
-  const opts = [
-    { label: "In 1 hour", at: now.getTime() + 3_600_000 },
-    { label: "In 3 hours", at: now.getTime() + 3 * 3_600_000 },
-  ];
-  if (tonight.getTime() > now.getTime()) opts.push({ label: "Tonight, 8 PM", at: tonight.getTime() });
-  opts.push({ label: "Tomorrow, 9 AM", at: tomorrowAm.getTime() });
-  return opts;
 }
 
 function cleanupPendingAttachment(attachment: PendingAttachment): void {
@@ -920,7 +904,7 @@ ${url}` : url;
           clearText();
           setDraft(conversationId, "");
           showToast(`Scheduled ${option.label.toLowerCase()}`);
-          api.schedule(conversationId, trimmed, option.at).catch(() => {
+          api.schedule(chat, trimmed, option.at).catch(() => {
             setText(trimmed);
             setDraft(conversationId, trimmed);
             showToast("Couldn't schedule the message. Try again.");
@@ -1185,7 +1169,7 @@ ${url}` : url;
         anchor={scheduleAnchor}
         onClose={() => setCustomScheduleOpen(false)}
         onSubmit={async (scheduledText, sendAt) => {
-          await api.schedule(conversationId, scheduledText, sendAt);
+          await api.schedule(chat, scheduledText, sendAt);
           clearText();
           setDraft(conversationId, "");
           showToast("Message scheduled");

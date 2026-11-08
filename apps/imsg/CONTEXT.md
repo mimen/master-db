@@ -78,12 +78,12 @@ for iMessage, junk is spam and a participant who resolves to a named person make
 attention follows iMessage's in a DM, group DM or thread; a channel needs you only when its last message is someone
 else's and mentions you (`mentionsMe` on the last message), and never waits; a thread Milad doesn't follow wants
 nothing, and costs the list no read. Slack screens nothing: everyone in the
-workspace is known. On Slack, Comma sends, replies in a thread, reacts (any number per sender), edits and deletes;
-mentions, scheduling and attachments grey with "Not in Comma's Slack yet". Gmail's attention follows iMessage's; its
+workspace is known. On Slack, Comma sends, replies in a thread, reacts (any number per sender), edits, deletes and
+schedules; mentions and attachments grey with "Not in Comma's Slack yet". Gmail's attention follows iMessage's; its
 screening says bulk for mail sent to a list (a List-Unsubscribe or List-Id header, `Precedence: bulk`, `Auto-Submitted`,
 a Promotions, Social, Updates or Forums label, or a no-reply sender), which stays out of People and Today. On Gmail,
-Comma sends and replies; an email send carries its To, Cc and subject (`email` on the send), and Convex refuses one
-with no recipients. Attachments and scheduling grey with "Not in Comma's Gmail yet", and reply suggestions stay off for
+Comma sends, replies and schedules; an email send carries its To, Cc and subject (`email` on the send), and Convex refuses one
+with no recipients. Attachments grey with "Not in Comma's Gmail yet", and reply suggestions stay off for
 email. For routes,
 each feature (reactions and which
 tapbacks, reply, edit, unsend, typing, mentions, scheduling, calls, attachments, FaceTime links, group management,
@@ -193,6 +193,15 @@ In-Reply-To and References and the thread's id, so it threads in Gmail, and with
 clientKey; unknown, it is looked for at the same times by that Message-ID (`rfc822msgid:`), then as a Sent message in
 the thread with the same subject and text, and is never sent again. Every lane runs one command at a time, so a slow model
 call never holds back a send.
+
+**Scheduled message**:
+A message set to send later, listed on the Scheduled screen. iMessage's are BlueBubbles' own queue: the bridge mirrors
+it into `comma_scheduled` by `bbId`, and edit, cancel and send now are outbox commands the Mini runs. Slack's and
+Gmail's are Comma's own (`convex/comma/scheduledSends.ts`): the row holds the send (`payload`) and its time
+(`sendAt`), and a Convex scheduler job queues it at that time as an ordinary send through the conversation's lane,
+with clientKey `scheduled-<row id>`, so it goes out with no client open and then fails, ends unknown or lands like any
+send. Edit and cancel change the row; the job reads the row in the same mutation that queues the send, so a cancel or
+an edit that committed first always wins. A send refused when it comes due leaves the row Not sent with the reason.
 What a confirmed command changes in Convex beyond its receipt is the lane's `onResult`. AI work reads the
 conversation from Convex by conversation id, never from BlueBubbles. Convex queues a reply-suggestion
 precompute on a fresh inbound message in a known DM while the AI process's heartbeat is fresh; the AI process

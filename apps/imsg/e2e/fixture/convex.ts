@@ -164,6 +164,17 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
   const receipts = new Map<string, { id: string; status: "pending" | "sent" | "failed" | "unknown"; clientKey: string; updatedAt: number; error?: string; result?: CommandResult; resultGuid?: string }>();
   const slackWorld = createSlackFixture(receipts);
   const mailWorld = createMailFixture(receipts);
+  /**
+   * The rows Comma schedules itself for Slack and Gmail, as comma/scheduledSends keeps them. Send now queues one through
+   * the conversation's world; the fixture never fires one at its time, which convex/comma/scheduledSends.test.ts proves.
+   */
+  const commaScheduled = new Map<string, { chatGuid: string; platform: "slack" | "gmail"; payload: Extract<CommaOutboxPayload, { kind: "send" }>; sendAt: number }>();
+  let scheduledSeq = 0;
+  const ownScheduled = (scheduledId: unknown) => {
+    const row = commaScheduled.get(String(scheduledId));
+    if (!row) throw new FixtureError("It already went out", 400);
+    return row;
+  };
   /** Each send's conversation and payload, for a retry. */
   const sendPayloads = new Map<string, { chatGuid: string; payload: CommaOutboxPayload }>();
   /**
@@ -635,18 +646,50 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
         return row;
       });
     },
+    "comma/scheduledSends:schedule": async (args) => {
+      const chatGuid = String(args.conversationId);
+      const payload = args.payload as Extract<CommaOutboxPayload, { kind: "send" }>;
+      const platform = slackWorld.owns(chatGuid) ? "slack" : mailWorld.owns(chatGuid) ? "gmail" : null;
+      if (!platform) throw new FixtureError("iMessage schedules through BlueBubbles", 400);
+      const route = platform === "gmail" ? { platform, accountId: id("account-gmail"), threadId: chatGuid } : { platform, accountId: id("account-slack"), channel: chatGuid };
+      const unsupported = unsupportedReason(route, platform === "gmail", payload);
+      if (unsupported) throw new FixtureError(unsupported, 400);
+      const scheduledId = `comma-scheduled-${++scheduledSeq}`;
+      commaScheduled.set(scheduledId, { chatGuid, platform, payload, sendAt: Number(args.sendAt) });
+      return scheduledId;
+    },
+    "comma/scheduledSends:edit": async (args) => {
+      const row = ownScheduled(args.scheduledId);
+      Object.assign(row, { payload: { ...row.payload, text: String(args.text) }, sendAt: Number(args.sendAt) });
+      return null;
+    },
+    "comma/scheduledSends:cancel": async (args) => {
+      ownScheduled(args.scheduledId);
+      commaScheduled.delete(String(args.scheduledId));
+      return null;
+    },
+    "comma/scheduledSends:sendNow": async (args) => {
+      const row = ownScheduled(args.scheduledId);
+      commaScheduled.delete(String(args.scheduledId));
+      await handlers["comma/outbox:enqueue"]!({ clientKey: `scheduled-${String(args.scheduledId)}`, conversationId: row.chatGuid, payload: row.payload });
+      return null;
+    },
     "comma/queries:listScheduled": async () => {
       const [result, chats] = await Promise.all([bb.listScheduledMessages(), chatSummaries()]);
       if (!result.ok) throw new FixtureError(result.error, 502);
       const namesByGuid = new Map(chats.map((chat) => [chat.guid, chat.displayName]));
-      return result.value.map((item) => mapScheduledMessage(item, namesByGuid.get(item.payload.chatGuid) ?? item.payload.chatGuid))
-        .sort((a, b) => a.sendAt - b.sendAt).map((row): Infer<typeof scheduledDoc> => ({
+      const own = [...commaScheduled].map(([scheduledId, row]): Infer<typeof scheduledDoc> => ({
+        _id: id(scheduledId), _creationTime: FIXTURE_NOW, platform: row.platform, conversationId: id(row.chatGuid), payload: row.payload,
+        text: row.payload.text, sendAt: row.sendAt, status: "pending", updatedAt: FIXTURE_NOW,
+      }));
+      return [...result.value.map((item) => mapScheduledMessage(item, namesByGuid.get(item.payload.chatGuid) ?? item.payload.chatGuid))
+        .map((row): Infer<typeof scheduledDoc> => ({
       _id: id(`scheduled-${row.id}`), _creationTime: FIXTURE_NOW, bbId: row.id,
       conversationId: id(row.chatGuid), chatGuid: row.chatGuid, text: row.text,
       sendAt: row.sendAt, status: row.status,
       ...(row.error !== null ? { error: row.error } : {}),
       ...(row.sentAt !== null ? { sentAt: row.sentAt } : {}), updatedAt: FIXTURE_NOW,
-    }));
+    })), ...own].sort((a, b) => a.sendAt - b.sendAt);
     },
     "comma/queries:getDraft": async (args) => drafts.get(String(args.conversationId)) ?? null,
     "comma/queries:getSuggestions": async () => null,
@@ -859,6 +902,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     Object.assign(gmailAccount, { connected: false, ever: false });
     slackWorld.reset();
     mailWorld.reset();
+    commaScheduled.clear();
     mini.held.clear(); mini.online = true; mini.heartbeat = true; mini.beatAt = new Date().getTime(); mini.notSentAfterMs = NOT_SENT_AFTER_MS; sendPayloads.clear();
     turns.clear(); names.reset(); agent.reset(); today.reset(); triage.reset(); latency.clear(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
     for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };

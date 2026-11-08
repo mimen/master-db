@@ -1,7 +1,8 @@
 import type { FunctionReturnType } from "convex/server";
 import { agentAttention, mostUrgent } from "@shared/agent-attention";
 import { isPendingGuid } from "@shared/pending-send";
-import type { AttachmentSummary, ChatSummary, Message, ScheduledMessage } from "@shared/types";
+import type { AttachmentSummary, ChatSummary, Message } from "@shared/types";
+import { recipientName, type ScheduledItem } from "./scheduled";
 import type { AgentChatSummary } from "./agent-api";
 import type { commaApi } from "./convex-api";
 import { sortThread } from "./message-window";
@@ -160,12 +161,17 @@ export function attachmentSource(attachment: AttachmentSummary, fallback: string
   return (thumbnail ? attachment.thumbUrl ?? attachment.originalUrl : attachment.originalUrl) ?? fallback;
 }
 
-export function scheduledToScheduled(row: ConvexScheduled, chats: readonly ChatSummary[]): ScheduledMessage {
+export function scheduledToScheduled(row: ConvexScheduled, chats: readonly ChatSummary[]): ScheduledItem {
+  const email = row.payload?.email;
+  const recipient = email?.to[0] ?? email?.cc[0];
   return {
-    id: row.bbId,
+    id: row._id,
+    ...(row.bbId !== undefined ? { bbId: row.bbId } : {}),
+    platform: row.platform ?? "imessage",
     ...(row.conversationId ? { conversationId: row.conversationId } : {}),
-    chatGuid: row.chatGuid,
-    chatName: chats.find((c) => c.conversationId === row.conversationId)?.displayName ?? row.chatGuid,
+    ...(row.chatGuid ? { chatGuid: row.chatGuid } : {}),
+    chatName: chats.find((c) => c.conversationId === row.conversationId)?.displayName ?? (recipient ? recipientName(recipient) : row.chatGuid ?? "Conversation"),
+    ...(email ? { subject: email.subject } : {}),
     text: row.text,
     sendAt: row.sendAt,
     status: row.status,

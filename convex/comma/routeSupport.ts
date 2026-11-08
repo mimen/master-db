@@ -49,8 +49,11 @@ function routeSupport(route: CommaRoute, isGroup: boolean, payload: CommaOutboxP
   return { ok: true };
 }
 
+const BLUEBUBBLES_SCHEDULE_KINDS = new Set<CommaOutboxPayload["kind"]>(["schedule", "editScheduled", "cancelScheduled", "sendScheduledNow"]);
+
 /** Why the route's profile can't run this command, or null when it can. Enqueue rejects with it. */
 export function unsupportedReason(route: CommaRoute, isGroup: boolean, payload: CommaOutboxPayload): string | null {
+  if (BLUEBUBBLES_SCHEDULE_KINDS.has(payload.kind) && route.platform !== "imessage") return "Only iMessage schedules through BlueBubbles";
   if ((payload.kind === "archive" || payload.kind === "unarchive") && route.platform !== "gmail") return "Only a mailbox archives";
   if (route.platform === "gmail") {
     // ponytail: a mail thread spends no model calls; turn on once suggestions read email well.

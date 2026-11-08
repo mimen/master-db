@@ -2435,10 +2435,22 @@ export declare const api: {
           _creationTime: number;
           _id: Id<"comma_scheduled">;
           accountId?: Id<"comma_accounts">;
-          bbId: number;
-          chatGuid: string;
+          bbId?: number;
+          chatGuid?: string;
           conversationId?: Id<"comma_conversations">;
           error?: string;
+          payload?: {
+            email?: { cc: Array<string>; subject: string; to: Array<string> };
+            kind: "send";
+            mentions?: Array<{
+              address: string;
+              length: number;
+              start: number;
+            }>;
+            replyToGuid?: string;
+            replyToPart?: number;
+            text: string;
+          };
           platform?: "imessage" | "slack" | "gmail";
           sendAt: number;
           sentAt?: number;
@@ -2624,6 +2636,47 @@ export declare const api: {
           lastReconcileAt?: number;
           updatedAt: number;
         }>
+      >;
+    };
+    scheduledSends: {
+      cancel: FunctionReference<
+        "mutation",
+        "public",
+        { scheduledId: Id<"comma_scheduled"> },
+        null
+      >;
+      edit: FunctionReference<
+        "mutation",
+        "public",
+        { scheduledId: Id<"comma_scheduled">; sendAt: number; text: string },
+        null
+      >;
+      schedule: FunctionReference<
+        "mutation",
+        "public",
+        {
+          conversationId: Id<"comma_conversations">;
+          payload: {
+            email?: { cc: Array<string>; subject: string; to: Array<string> };
+            kind: "send";
+            mentions?: Array<{
+              address: string;
+              length: number;
+              start: number;
+            }>;
+            replyToGuid?: string;
+            replyToPart?: number;
+            text: string;
+          };
+          sendAt: number;
+        },
+        Id<"comma_scheduled">
+      >;
+      sendNow: FunctionReference<
+        "mutation",
+        "public",
+        { scheduledId: Id<"comma_scheduled"> },
+        null
       >;
     };
     slackAuth: {
@@ -7255,6 +7308,14 @@ export declare const internal: {
             | { claimToken: string; clientKey: string; kind: "typingCurrent" };
         },
         boolean
+      >;
+    };
+    scheduledSends: {
+      fire: FunctionReference<
+        "mutation",
+        "internal",
+        { scheduledId: Id<"comma_scheduled">; sendAt: number },
+        null
       >;
     };
     slackAuth: {

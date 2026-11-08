@@ -269,7 +269,8 @@ export const replaceScheduled = internalMutation({
     const keep = new Set(items.map((item) => item.bbId));
     let deleted = 0;
     for (const row of await ctx.db.query("comma_scheduled").collect()) {
-      if (inScope(row, scope) && !keep.has(row.bbId)) {
+      // A row Comma schedules itself has no bbId and is not BlueBubbles' to delete.
+      if (inScope(row, scope) && row.bbId !== undefined && !keep.has(row.bbId)) {
         await ctx.db.delete(row._id);
         deleted++;
       }

@@ -234,6 +234,15 @@ describe("replaceScheduled", () => {
     const result = await t.mutation(internal.comma.internal.replaceScheduled, { items: [{ bbId: 2, ...item }] });
     expect(result).toEqual({ upserted: 1, deleted: 1 });
   });
+
+  test("keeps a row Comma scheduled itself, which BlueBubbles never lists", async () => {
+    const t = convexTest(schema, modules);
+    const own = await t.run((ctx) => ctx.db.insert("comma_scheduled", {
+      text: "hi", sendAt: 5, status: "pending", updatedAt: 1, payload: { kind: "send", text: "hi" },
+    }));
+    expect(await t.mutation(internal.comma.internal.replaceScheduled, { items: [] })).toEqual({ upserted: 0, deleted: 0 });
+    expect(await t.run((ctx) => ctx.db.get(own))).not.toBeNull();
+  });
 });
 
 // The committed generated API predates replaceUnread.
