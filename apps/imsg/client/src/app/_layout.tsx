@@ -13,7 +13,7 @@ import { DesktopShellProvider } from "@/components/desktop-shell-provider";
 import { AiStatusProvider } from "@/hooks/use-ai";
 import { ChatDirectoryProvider } from "@/hooks/use-chats";
 import { TodayProvider } from "@/hooks/use-today";
-import { ReleaseUpdateBanners } from "@/components/release-update-banners";
+import { ReleaseUpdateBanners } from "@/components/lazy-surfaces";
 import { ActionSheetProvider } from "@/lib/action-sheet";
 import { AppErrorBoundary } from "@/lib/app-error-boundary";
 import { guardWindowFileDrops } from "@/lib/attachments";

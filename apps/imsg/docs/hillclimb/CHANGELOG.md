@@ -7,6 +7,7 @@ One entry per landed change, newest first. Each entry gives the date, the commit
 - **For the user:** a conversation opens and a forward lands with less work per frame. A right-click or tap on a bubble the moment the thread appears now opens its tray; before, the suggestion row arrived about 500 ms later, pushed every bubble up 30 px and the click hit empty space.
 - **Metric:** opening a thread 8,136 -> 3,908 component renders, 26 -> 25 commits; switching threads 7,109 -> 2,736; the forward ratchet 41 -> 25 ms on a laptop (median of 9), 28.5 ms on the CI runner (was 45 to 107).
 - **Changes:** the shell's state lives in a store read through selectors, so a shell step or route change no longer re-renders both workspaces; the provider, the workspace and the list pane compile under the React Compiler; an unchanged inbox row keeps its object, so only the changed sidebar cell renders; the suggestion row holds its height until the first answer.
+- **Bundle:** the compiled shell, workspace and list pane cost about 5.7 KB brotli on the first visit. The tapback tray (its chunk preloads at boot) and the release banners now load as their own chunks, so first-visit JS stays under its 470,000-byte ceiling (469,793; main 467,720).
 - **Guarded by:** ratchets for the early right-click, the navigation render ceilings and the forward limit (now 100 ms on CI).
 - **Revert:** revert the commits of #80 in reverse order; each stands alone.
 

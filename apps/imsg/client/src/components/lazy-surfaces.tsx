@@ -56,10 +56,20 @@ export const RowPan = deferred(
   () => import("@/components/row-pan").then((m) => m.RowPan),
   ({ children }: ComponentProps<typeof RowPanComponent>) => <>{children}</>,
 );
+/**
+ * Off the first-visit path: the tray shows only on a long-press or right-click and the release banners only
+ * when a new build is out. The tray's chunk loads at boot, like the thread's, so it is in before the first press.
+ */
+export const TapbackTray = deferred(() => import("@/components/tapback-tray").then((m) => m.TapbackTray), () => <></>);
+TapbackTray.preload().catch(() => undefined);
+export const ReleaseUpdateBanners = deferred(
+  () => import("@/components/release-update-banners").then((m) => m.ReleaseUpdateBanners),
+  () => <></>,
+);
 /** Dev and fixture only, so it is not preloaded. */
 export const UiGallery = deferred(() => import("@/components/ui-gallery").then((m) => m.UiGallery));
 
-const surfaces = [AgentPane, ChatInfoContent, CommandPalette, ContactsWorkspace, ForwardContent, NewChatContent, PersonContent, ScheduledContent, SearchContent, SettingsContent, RowPan];
+const surfaces = [AgentPane, ChatInfoContent, CommandPalette, ContactsWorkspace, ForwardContent, NewChatContent, PersonContent, ScheduledContent, SearchContent, SettingsContent, RowPan, ReleaseUpdateBanners];
 
 /** Fetches every surface chunk off the critical path, so a first open renders without the empty frame. */
 export function preloadSurfaces(): void {

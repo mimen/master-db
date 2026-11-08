@@ -17,7 +17,8 @@ import { CardShadow, Radii, Type } from "@/constants/theme";
 import { presentActions, type IconName } from "@/lib/action-presentation";
 import { useTheme } from "@/hooks/use-theme";
 import type { ThemeColors } from "@/components/ui/interaction";
-import { TapbackTray, type TrayEmoji, type TrayTapback } from "@/components/tapback-tray";
+import { TapbackTray } from "@/components/lazy-surfaces";
+import type { TrayEmoji, TrayTapback } from "@/components/tapback-tray";
 
 export interface SheetAction {
   label: string;
