@@ -73,7 +73,12 @@ export const test = base.extend<DeskFixture>({
         expect(response.ok()).toBe(true);
       },
     });
-    await page.unrouteAll({ behavior: "wait" });
+    // Not "wait": when a test ends while a route still holds a request, any other handler finishing
+    // during the wait empties the routes, Playwright continues the held request itself, and the held
+    // handler's own continue() then fails as already handled. Playwright never marks that invocation
+    // done, so "wait" never returned and the test hit its timeout in teardown (PR #78, twice).
+    // "ignoreErrors" lets Playwright release held requests now and drops the late handlers' errors.
+    await page.unrouteAll({ behavior: "ignoreErrors" });
     expect(miniRequests, "the client uses only allowed Mini endpoints").toEqual([]);
   },
 });

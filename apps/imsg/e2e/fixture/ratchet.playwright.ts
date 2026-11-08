@@ -21,6 +21,17 @@ async function continueHeld(route: Route): Promise<void> {
   });
 }
 
+test("the desk tears down while a route still holds a request and another handler finishes", async ({ desk }) => {
+  const page = desk.page;
+  await page.goto("/__fixture/teardown-probe");
+  await page.route("**/__fixture/teardown-probe?*", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, route.request().url().endsWith("held") ? 300 : 50));
+    await continueHeld(route);
+  });
+  await page.evaluate(() => { void fetch("/__fixture/teardown-probe?held"); void fetch("/__fixture/teardown-probe?quick"); });
+  await page.waitForTimeout(20);
+});
+
 test("Contacts and its people list wait for the first visit, then stay mounted", async ({ desk }) => {
   const page = desk.page;
   await page.setViewportSize({ width: 1300, height: 820 });
@@ -602,7 +613,6 @@ test("Details paints the conversation's people from the list before chatInfo ans
   await expect(page.getByText("Details", { exact: true })).toBeVisible();
   await expect(page.getByText("Reach Alex at", { exact: true })).toBeVisible({ timeout: 2_000 });
   release();
-  await page.unrouteAll({ behavior: "wait" });
 });
 
 test("a contact search hit for a listed conversation opens it without waiting on findChat", async ({ desk }) => {
