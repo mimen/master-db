@@ -286,10 +286,11 @@ async function settleDelayedSend(page: Page) {
 /**
  * Forward also closes the picker and opens another thread, the heaviest frame of these ratchets. On GitHub's
  * macos-latest runner, 43c15e78 (before #61) measured 45 to 107 ms, median 67, over 9 runs (run 42419120618), where
- * a laptop measures 24 to 30 ms, so the runner alone breaks 50 ms. 150 ms still fails a forward that waits for
- * the 300 ms held send instead of showing on the click.
+ * a laptop measures 24 to 30 ms, so the runner alone breaks 50 ms. Since opening a thread stopped re-rendering the
+ * shell (#80) the runner measures 28.5 ms (run 42428954629) and a laptop a median of 25 ms over 9 runs, from 41 ms
+ * at f3857b7b. 100 ms keeps room for a slow runner and still fails a forward that waits for the 300 ms held send.
  */
-const FORWARD_LIMIT_MS = process.env.CI ? 150 : 50;
+const FORWARD_LIMIT_MS = process.env.CI ? 100 : 50;
 
 test("ratchet: a forwarded message is in the destination thread within 50 ms of the click", async ({ desk }) => {
   // A real bridge takes longer than a frame; the bare fixture can answer inside 50 ms.
@@ -520,12 +521,15 @@ test("ratchet: an arriving message renders only its row and its neighbour, not t
 
 /**
  * Opening a conversation from the list, then switching to another, from the click to 600 ms after the server's
- * messages painted. Before this hill (f3857b7b) an open cost 26 commits and 8,144 component renders and a
- * switch 7,109: every shell state change and route change re-rendered both workspaces.
+ * messages painted. Before #80 an open cost 26 commits and 8,136 component renders and a switch 7,109: every shell
+ * state change and route change re-rendered both workspaces, and every directory update re-rendered every sidebar
+ * cell. Now an open measures 25 commits and 3,908 renders, and a switch 2,736 to 3,537 as polls land in the window.
+ * The ceilings leave about 10% over the highest reading. A fixture poll can add a commit inside the window, so the
+ * commit ceiling stays at the old count.
  */
 const OPEN_COMMITS = 26;
-const OPEN_COMPONENTS = 8_200;
-const SWITCH_COMPONENTS = 7_200;
+const OPEN_COMPONENTS = 4_300;
+const SWITCH_COMPONENTS = 3_900;
 
 async function openFromList(page: Page, name: string): Promise<Renders> {
   const before = await page.evaluate(() => (window as unknown as { __commaTimings: unknown[] }).__commaTimings.length);
