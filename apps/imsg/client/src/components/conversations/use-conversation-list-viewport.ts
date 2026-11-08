@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Platform, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import type { ViewToken } from "react-native";
 
@@ -18,7 +18,6 @@ export type ConversationListHandle = {
 };
 
 export interface ConversationListViewport {
-  readonly listRef: React.RefObject<ConversationListHandle | null>;
   readonly thumb: SyntheticThumbState;
   /** Wire these straight onto the FlashList. */
   readonly viewabilityConfig: { itemVisiblePercentThreshold: number };
@@ -46,24 +45,26 @@ export function useConversationListViewport(args: {
   readonly footerHeight?: number;
   /** Changes exactly when the view changes (lens/query) — resets to top. */
   readonly viewKey: string;
+  /** The list's handle, owned by the caller so the returned viewport holds no ref (React Compiler). */
+  readonly listRef: React.RefObject<ConversationListHandle | null>;
 }): ConversationListViewport {
-  const { renderedChats, chromeHeight, footerHeight = 0, viewKey } = args;
-  const listRef = useRef<ConversationListHandle>(null);
+  const { renderedChats, chromeHeight, footerHeight = 0, viewKey, listRef } = args;
   const scrollOffset = useRef(0);
   // Nullable: null = "no measurement for the current view yet". Reset when
   // the rendered view changes so a stale range never suppresses a reveal.
   const viewableRange = useRef<{ first: number; last: number } | null>(null);
   // FlatList (web) throws if these identities change after mount. FlashList
   // did not — swapping the inbox to FlatList made that invariant fire on load.
-  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 100 }).current;
-  const onViewableItemsChanged = useRef((info: { viewableItems: ViewToken[] }): void => {
+  // State, not a ref read during render, so the React Compiler can still optimize the list pane.
+  const [viewabilityConfig] = useState(() => ({ itemVisiblePercentThreshold: 100 }));
+  const [onViewableItemsChanged] = useState(() => (info: { viewableItems: ViewToken[] }): void => {
     const indices = info.viewableItems
       .map((v) => v.index)
       .filter((i): i is number => typeof i === "number");
     if (indices.length > 0) {
       viewableRange.current = { first: Math.min(...indices), last: Math.max(...indices) };
     }
-  }).current;
+  });
 
   const metrics = useSyntheticScrollMetrics({
     chromeHeight,
@@ -96,7 +97,6 @@ export function useConversationListViewport(args: {
   }, [renderedChats]);
 
   return {
-    listRef,
     thumb: metrics.thumb,
     viewabilityConfig,
     onViewableItemsChanged,

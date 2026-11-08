@@ -24,7 +24,7 @@ import { SidebarHeader } from "./sidebar/sidebar-header";
 import { SidebarSearchField } from "./sidebar/sidebar-search-field";
 import { SyntheticScrollThumb } from "./sidebar/synthetic-scroll-thumb";
 import { useConversationListKeyboard } from "./conversations/use-conversation-list-keyboard";
-import { useConversationListViewport } from "./conversations/use-conversation-list-viewport";
+import { type ConversationListHandle, useConversationListViewport } from "./conversations/use-conversation-list-viewport";
 import { useConversationSearch } from "./conversations/use-conversation-search";
 import { PHONE_TAB_BAR_CLEARANCE } from "./phone-tab-bar";
 import { TriageGeometry } from "@/constants/triage-theme";
@@ -297,10 +297,12 @@ export function ConversationListPane({
 
   // All imperative list scrolling (glide pinning, view resets, reorder
   // recovery) and the synthetic thumb live in the viewport hook.
+  const listRef = useRef<ConversationListHandle>(null);
   const viewport = useConversationListViewport({
     renderedChats: deskModel.listChats,
     chromeHeight: topBarH,
     viewKey: search.viewKey,
+    listRef,
   });
   useEffect(() => {
     if (!wide || !selectedId) { selectedPositionRef.current = null; return; }
@@ -308,8 +310,8 @@ export function ConversationListPane({
     const prior = selectedPositionRef.current;
     selectedPositionRef.current = { conversationId: selectedId, index: selectedIndex };
     if (prior?.conversationId !== selectedId || prior.index <= 0 || selectedIndex !== 0) return;
-    requestAnimationFrame(() => viewport.listRef.current?.scrollToOffset({ offset: 0, animated: false }));
-  }, [deskModel.listChats, selectedId, viewport.listRef, wide]);
+    requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: false }));
+  }, [deskModel.listChats, selectedId, wide]);
 
   // FlashList's cell memo compares renderItem by identity, so a fresh arrow here
   // re-renders every mounted row on every render of this pane.
@@ -416,7 +418,7 @@ export function ConversationListPane({
           testID="conversation-list-scroll"
           // FlashListRef and FlatList's ref don't overlap; callers only use
           // scrollToOffset / scrollToIndex (ConversationListHandle).
-          ref={viewport.listRef as never}
+          ref={listRef as never}
           data={rows}
           keyExtractor={rowKey}
           {...(Platform.OS === "web" ? {} : { getItemType: (row: InboxRow) => row.kind })}
