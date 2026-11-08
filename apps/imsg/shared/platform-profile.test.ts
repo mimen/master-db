@@ -179,9 +179,11 @@ describe("Gmail", () => {
     expect(screeningOf({ platform: "imessage", isSpam: false, known: true, bulk: true })).toBe("known");
   });
 
-  test("read-only: sending greys with its reason, and what Gmail lacks says so", () => {
-    for (const feature of ["send", "reply", "attachments", "schedule"] as const) {
-      expect(support(route, feature)).toEqual({ ok: false, reason: "Sending from Gmail is coming" });
+  test("sends and replies; attachments and scheduling grey with their reason, and what Gmail lacks says so", () => {
+    expect(support(route, "send")).toEqual({ ok: true });
+    expect(support(route, "reply")).toEqual({ ok: true });
+    for (const feature of ["attachments", "schedule"] as const) {
+      expect(support(route, feature)).toEqual({ ok: false, reason: "Not in Comma's Gmail yet" });
     }
     expect(support(route, "react")).toEqual({ ok: false, reason: "Gmail can't send reactions" });
     expect(support(route, "edit")).toEqual({ ok: false, reason: "Gmail can't edit messages" });

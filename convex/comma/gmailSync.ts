@@ -5,7 +5,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type ActionCtx, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { recomputePersonAggregates } from "../identity/internal";
-import { modelTextFields, participant } from "../schema/comma/validators";
+import { gmailMessageValue } from "../schema/comma/validators";
 
 import { isSelf } from "./accounts";
 import { publishExecutorStatus } from "./bridgeState";
@@ -24,11 +24,6 @@ import { logReplies, settleConversation, unsettleConversation } from "./triage";
  * thread read twice changes nothing. A thread's Inbox label is its settle state: archived in Gmail is settled in Comma.
  */
 
-const gmailMessageValue = v.object({
-  id: v.string(), threadId: v.string(), internalDate: v.number(), labelIds: v.array(v.string()), from: participant,
-  to: v.array(participant), cc: v.array(participant), subject: v.string(), snippet: v.string(), bulk: v.boolean(), text: v.string(),
-  html: v.optional(v.string()), blockedImages: v.optional(v.number()), model: v.object(modelTextFields),
-});
 type GmailMessageValue = Infer<typeof gmailMessageValue>;
 
 /** A thread lists at most this many people; a mailing list's hundred recipients would slow every list read. */
@@ -44,7 +39,7 @@ async function writeSync(ctx: MutationCtx, accountId: Id<"comma_accounts">, key:
   else await ctx.db.insert("comma_sync_state", { accountId, key, ...fields, updatedAt: Date.now() });
 }
 
-async function gmailAccount(ctx: Pick<QueryCtx, "db">, accountId: Id<"comma_accounts">): Promise<Doc<"comma_accounts">> {
+export async function gmailAccount(ctx: Pick<QueryCtx, "db">, accountId: Id<"comma_accounts">): Promise<Doc<"comma_accounts">> {
   const account = await ctx.db.get(accountId);
   if (account?.platform !== "gmail") throw new Error("Not a Gmail account");
   return account;
@@ -83,7 +78,6 @@ export async function writeGmailThread(ctx: MutationCtx, accountId: Id<"comma_ac
   const messages = raw.filter((message) => !message.labelIds.includes("DRAFT")).sort((a, b) => a.internalDate - b.internalDate);
   if (!messages.length) return { written: 0, skipped: 0 };
   const scope = { platform: "gmail" as const, accountId };
-  const fromMe = (message: GmailMessageValue) => message.labelIds.includes("SENT") || isSelf(account, message.from.address);
   const inInbox = messages.some((message) => message.labelIds.includes("INBOX"));
   // A reply is never bulk, so replying to a thread lifts it out.
   const bulk = messages.every((message) => message.bulk);
@@ -104,14 +98,29 @@ export async function writeGmailThread(ctx: MutationCtx, accountId: Id<"comma_ac
       JSON.stringify([fields.gmail, fields.displayName, fields.participants, fields.isSpam]);
     if (!same) await ctx.db.patch(existing._id, { ...fields, updatedAt: Date.now() });
   }
-  let written = 0;
+  const written = await insertGmailMessages(ctx, account, conversationId, messages);
+  // Archived in Gmail is settled in Comma. Only a live archive the user made in Gmail counts as cleared today. A thread
+  // whose inbox state Comma already holds is left alone, so the echo of Comma's own archive or unarchive does nothing.
+  const prior = existing?.gmail?.inInbox;
+  if ((await ctx.db.get(conversationId))?.lastMessage) {
+    if (!inInbox && (prior !== false || written > 0)) await settleConversation(ctx, conversationId, undefined, { by: "mailbox", quiet: quiet || prior !== true });
+    else if (inInbox && prior === false && written === 0) await unsettleConversation(ctx, conversationId, { by: "mailbox", quiet });
+  }
+  return { written, skipped: messages.length - written };
+}
+
+/** Writes the messages the thread does not hold yet, each sender as an identity, and the replies they answer. Returns how many it wrote. */
+export async function insertGmailMessages(ctx: MutationCtx, account: Doc<"comma_accounts">, conversationId: Id<"comma_conversations">,
+  messages: readonly GmailMessageValue[], clientKey?: string): Promise<number> {
+  const scope = { platform: "gmail" as const, accountId: account._id };
   const real: Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe">[] = [];
   for (const message of messages) {
     if (await findMessage(ctx, scope, message.id)) continue;
     const row = {
-      platform: "gmail" as const, accountId, conversationId, guid: message.id, dateCreated: message.internalDate, isFromMe: fromMe(message),
+      platform: "gmail" as const, accountId: account._id, conversationId, guid: message.id, dateCreated: message.internalDate,
+      isFromMe: message.labelIds.includes("SENT") || isSelf(account, message.from.address),
       sender: message.from, text: message.text, ...message.model, mentions: [], mentionsMe: false, edited: false, retracted: false,
-      isGroupEvent: false, attachmentGuids: [], sourceVersion: 0,
+      isGroupEvent: false, attachmentGuids: [], sourceVersion: 0, ...(clientKey ? { clientKey } : {}),
       gmail: {
         from: message.from, to: message.to, cc: message.cc, bulk: message.bulk,
         ...(message.html !== undefined ? { html: message.html, blockedImages: message.blockedImages ?? 0 } : {}),
@@ -120,17 +129,10 @@ export async function writeGmailThread(ctx: MutationCtx, accountId: Id<"comma_ac
     await ctx.db.insert("comma_messages", row);
     if (!row.isFromMe && !message.bulk) await upsertEmailSender(ctx, message.from);
     real.push(row);
-    written++;
   }
-  if (written) await refreshLastMessage(ctx, conversationId);
+  if (real.length) await refreshLastMessage(ctx, conversationId);
   await logReplies(ctx, real);
-  // Archived in Gmail is settled in Comma. Only a live archive the user made in Gmail counts as cleared today.
-  const prior = existing?.gmail?.inInbox;
-  if ((await ctx.db.get(conversationId))?.lastMessage) {
-    if (!inInbox) await settleConversation(ctx, conversationId, undefined, { by: "mailbox", quiet: quiet || prior !== true });
-    else if (prior === false && written === 0) await unsettleConversation(ctx, conversationId, { by: "mailbox", quiet });
-  }
-  return { written, skipped: messages.length - written };
+  return real.length;
 }
 
 export const ingestThread = internalMutation({

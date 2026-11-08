@@ -246,11 +246,11 @@ function landedAs(bubble: Message, sent: BridgeMessage): Message {
   };
 }
 
-/** What the send landed as: iMessage answers with its message, Slack with its id and ts. The mirrored row replaces it. */
+/** What the send landed as: iMessage answers with its message, Slack with its id and ts, Gmail with its message. The mirrored row replaces it. */
 function landedFrom(bubble: Message, result: ResultFor<"send">): Message {
   if ("message" in result) return landedAs(bubble, result.message);
   const { sendState: _sendState, ...sent } = bubble;
-  return { ...sent, guid: result.guid, dateCreated: Math.round(Number(result.slack.ts) * 1000) };
+  return { ...sent, guid: result.guid, dateCreated: "slack" in result ? Math.round(Number(result.slack.ts) * 1000) : result.gmail.internalDate };
 }
 
 /** Waits for Convex, runs `queue`, and settles the bubble with what the platform made of it. */

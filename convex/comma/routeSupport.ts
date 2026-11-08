@@ -51,6 +51,12 @@ function routeSupport(route: CommaRoute, isGroup: boolean, payload: CommaOutboxP
 
 /** Why the route's profile can't run this command, or null when it can. Enqueue rejects with it. */
 export function unsupportedReason(route: CommaRoute, isGroup: boolean, payload: CommaOutboxPayload): string | null {
+  if ((payload.kind === "archive" || payload.kind === "unarchive") && route.platform !== "gmail") return "Only a mailbox archives";
+  if (route.platform === "gmail") {
+    // ponytail: a mail thread spends no model calls; turn on once suggestions read email well.
+    if (payload.kind === "suggestions") return "Reply suggestions aren't on for email";
+    if (payload.kind === "send" && !payload.email?.to.length && !payload.email?.cc.length) return "An email needs someone to send it to";
+  }
   const supported = routeSupport(route, isGroup, payload);
   if (!supported) return "That only works in a group conversation";
   return supported.ok ? null : supported.reason;

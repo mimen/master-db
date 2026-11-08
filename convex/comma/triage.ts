@@ -61,15 +61,18 @@ async function sameSend(ctx: MutationCtx, conversation: Doc<"comma_conversations
 }
 
 /**
- * Who moved a conversation's triage state. A mailbox settles in Gmail, so only Gmail's own archive state moves an
- * email thread (`mailbox`) until G2 writes Comma's settles back as archives. `quiet` leaves no clear in the log, for
+ * Who moved a conversation's triage state. The user's settle of an email thread is written back to Gmail as an archive
+ * (its unsettle as an unarchive); a move Gmail itself reported (`mailbox`) is not. `quiet` leaves no clear in the log, for
  * settles a backfill or resync finds rather than ones the user made, so Today's cleared count does not jump.
  */
 export type TriageSource = { by: "user" } | { by: "mailbox"; quiet: boolean };
 const USER: TriageSource = { by: "user" };
 
-function assertTriageable(conversation: Doc<"comma_conversations">, source: TriageSource): void {
-  if (conversation.platform === "gmail" && source.by === "user") throw new ConvexError("Archiving from Comma is coming");
+/** Queues the user's settle or unsettle of an email thread for Gmail, and clears the last refusal's error. */
+async function writeBack(ctx: MutationCtx, conversation: Doc<"comma_conversations">, source: TriageSource, kind: "archive" | "unarchive"): Promise<void> {
+  if (conversation.platform !== "gmail" || source.by !== "user") return;
+  if (conversation.gmail?.archiveError) await ctx.db.patch(conversation._id, { gmail: { ...conversation.gmail, archiveError: undefined } });
+  await enqueueCommand(ctx, { clientKey: `${kind}-${conversation._id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, conversationId: conversation._id, payload: { kind } });
 }
 
 /**
@@ -78,18 +81,18 @@ function assertTriageable(conversation: Doc<"comma_conversations">, source: Tria
  */
 export async function settleConversation(ctx: MutationCtx, conversationId: ConversationId, anchor?: string, source = USER): Promise<void> {
   const conversation = await conversationOf(ctx, conversationId);
-  assertTriageable(conversation, source);
   const last = conversation.lastMessage;
   if (!last) throw new ConvexError("chat has no last message");
   if (anchor !== undefined && anchor !== last.guid && !(await sameSend(ctx, conversation, anchor, last.guid))) throw new ConvexError("latest message changed");
   await writeState(ctx, conversationId, last.isFromMe ? { dismissedWaitingGuid: last.guid } : { dismissedUnrespondedGuid: last.guid });
   if (source.by === "user" || !source.quiet) await logClear(ctx, conversationId, last.guid, "dismiss", Date.now());
   await settleConversationChats(ctx, conversationId);
+  await writeBack(ctx, conversation, source, "archive");
 }
 
 /** Clears both anchors, since the opposite one can hold a stale dismissal, and takes back the settle's clear. */
 export async function unsettleConversation(ctx: MutationCtx, conversationId: ConversationId, source = USER): Promise<void> {
-  assertTriageable(await conversationOf(ctx, conversationId), source);
+  const conversation = await conversationOf(ctx, conversationId);
   const row = await stateOf(ctx, conversationId);
   for (const anchor of [row?.dismissedUnrespondedGuid, row?.dismissedWaitingGuid]) {
     if (anchor === undefined) continue;
@@ -99,6 +102,7 @@ export async function unsettleConversation(ctx: MutationCtx, conversationId: Con
   }
   if (row) await ctx.db.patch(row._id, { dismissedUnrespondedGuid: undefined, dismissedWaitingGuid: undefined, updatedAt: Date.now() });
   await reopenConversationChats(ctx, conversationId);
+  await writeBack(ctx, conversation, source, "unarchive");
 }
 
 export async function setConversationFlag(ctx: MutationCtx, conversationId: ConversationId,

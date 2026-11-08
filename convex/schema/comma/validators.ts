@@ -115,7 +115,11 @@ export const tapback = v.object({
 });
 
 /** Bulk mail (newsletters, notifications, promotions) stays out of the People lens and Today. Replying lifts a thread out. */
-export const gmailThreadFields = v.object({ threadId: v.string(), subject: v.string(), inInbox: v.boolean(), bulk: v.boolean() });
+export const gmailThreadFields = v.object({
+  threadId: v.string(), subject: v.string(), inInbox: v.boolean(), bulk: v.boolean(),
+  /** Why Gmail refused Comma's last archive or unarchive, which Comma then took back. The thread's next sync clears it. */
+  archiveError: v.optional(v.string()),
+});
 
 export const conversationFields = {
   /** Every stored row has one. Optional because test fixtures across convex/comma still omit it. */
@@ -453,6 +457,8 @@ const sendPayload = v.object({
   replyToGuid: v.optional(v.string()),
   replyToPart: v.optional(v.number()),
   mentions: v.optional(v.array(mention)),
+  /** An email's recipients and subject. A Gmail send needs them; no other platform reads them. */
+  email: v.optional(v.object({ to: v.array(v.string()), cc: v.array(v.string()), subject: v.string() })),
 });
 const reactPayload = v.object({
   kind: v.literal("react"),
@@ -510,6 +516,9 @@ export const imessagePayload = v.union(
   v.object({ kind: v.literal("createFaceTimeLink") }),
 );
 
+/** Gmail's own: a thread leaves the inbox when it is settled in Comma, and returns when it is unsettled. */
+export const gmailPayload = v.union(v.object({ kind: v.literal("archive") }), v.object({ kind: v.literal("unarchive") }));
+
 /** Model work. It reads the conversation from Convex and never touches a messaging platform. */
 export const aiPayload = v.union(
   /** `precompute` is Convex's own, queued on an inbound message; it counts against the AI process's daily cap. */
@@ -532,6 +541,7 @@ export const legacyTriagePayload = v.union(
 export const outboxPayload = v.union(
   ...coreMessagingPayload.members,
   ...imessagePayload.members,
+  ...gmailPayload.members,
   ...aiPayload.members,
   ...legacyTriagePayload.members,
 );
@@ -605,10 +615,18 @@ export const slackMessage = v.object({
   ts: v.string(), threadTs: v.optional(v.string()), user: v.string(), text: v.string(), editedTs: v.optional(v.string()), clientKey: v.optional(v.string()),
 });
 
+/** One Gmail message as ingest writes it: gmailMessage.ts's parse of what Gmail returned or what Comma sent. */
+export const gmailMessageValue = v.object({
+  id: v.string(), threadId: v.string(), internalDate: v.number(), labelIds: v.array(v.string()), from: participant,
+  to: v.array(participant), cc: v.array(participant), subject: v.string(), snippet: v.string(), bulk: v.boolean(), text: v.string(),
+  html: v.optional(v.string()), blockedImages: v.optional(v.number()), model: v.object(modelTextFields),
+});
+
 const okResult = <K extends string>(kind: K) => v.object({ kind: v.literal(kind), ok: v.literal(true) });
 const messageResult = <K extends string>(kind: K) => v.object({ kind: v.literal(kind), message: commandMessage });
 export const commandResult = v.union(
-  messageResult("send"), v.object({ kind: v.literal("send"), guid: v.string(), slack: slackMessage }), messageResult("sendContact"), messageResult("sendAttachment"), messageResult("createFaceTimeLink"),
+  messageResult("send"), v.object({ kind: v.literal("send"), guid: v.string(), slack: slackMessage }),
+  v.object({ kind: v.literal("send"), guid: v.string(), gmail: gmailMessageValue }), messageResult("sendContact"), messageResult("sendAttachment"), messageResult("createFaceTimeLink"),
   v.object({ kind: v.literal("createChat"), conversationId: v.optional(v.id("comma_conversations")), chatGuid: v.string(), service: v.literal("iMessage"), isGroup: v.boolean(), participants: v.array(v.string()), message: commandMessage }),
   v.object({ kind: v.literal("schedule"), scheduled: commandScheduled }),
   v.object({ kind: v.literal("editScheduled"), scheduled: commandScheduled }),
@@ -619,7 +637,7 @@ export const commandResult = v.union(
   okResult("markRead"), okResult("markUnread"), okResult("settle"), okResult("unsettle"),
   okResult("pin"), okResult("mute"), okResult("rename"), okResult("cancelScheduled"),
   okResult("participant"), okResult("leaveGroup"), okResult("deleteChat"), okResult("sendScheduledNow"),
-  okResult("typing"), okResult("suggestionFeedback"), okResult("clearSuggestionLearning"),
+  okResult("typing"), okResult("suggestionFeedback"), okResult("clearSuggestionLearning"), okResult("archive"), okResult("unarchive"),
 );
 export type CommandResult = Infer<typeof commandResult>;
 
@@ -762,6 +780,7 @@ export type CommaOutboxLane = Infer<typeof outboxLane>;
 export type CommaExecutorStatus = Infer<ReturnType<typeof v.object<typeof executorStatusFields>>>;
 export type CoreMessagingKind = Infer<typeof coreMessagingPayload>["kind"];
 export type IMessageOnlyKind = Infer<typeof imessagePayload>["kind"];
+export type GmailOnlyKind = Infer<typeof gmailPayload>["kind"];
 export type AiKind = Infer<typeof aiPayload>["kind"];
 export type LegacyTriageKind = Infer<typeof legacyTriagePayload>["kind"];
 export type CommaAccountDoc = Infer<typeof accountDoc>;

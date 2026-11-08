@@ -1,7 +1,7 @@
 import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "../_generated/dataModel";
-import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 import {
   commandReceipt, commandResult, legacyTriagePayload, outboxDoc, outboxLane, outboxPayload, outboxStatus,
@@ -13,7 +13,6 @@ import { sameSecret } from "./bridgeAuth";
 import { enqueueCommand } from "./enqueue";
 import { laneOf, laneOfRow, laneSpec, wakeLane } from "./lanes";
 import { claimPendingSend, completePendingSend, expireIfStale, strandPendingSend } from "./pendingSends";
-import { checkUnknownSend } from "./slackLane";
 import { readConversation, setConversationFlag, settleConversation, unsettleConversation } from "./triage";
 
 /**
@@ -32,6 +31,7 @@ export const AUTO_RETRY = {
   schedule: false, editScheduled: false, cancelScheduled: false,
   createChat: false, sendContact: false, sendAttachment: false, participant: false,
   leaveGroup: false, deleteChat: false, sendScheduledNow: false, createFaceTimeLink: false,
+  archive: true, unarchive: true,
   suggestionFeedback: false, typing: true, clearSuggestionLearning: true, suggestions: true, identify: true, transcribe: true,
 } satisfies Record<CommaOutboxPayload["kind"], boolean>;
 export const IDEMPOTENT_KINDS = new Set(Object.entries(AUTO_RETRY).filter(([, retry]) => retry).map(([kind]) => kind));
@@ -178,7 +178,7 @@ export const claimOutbox = internalMutation({
       });
       if (!retry && row.payload.kind === "send") {
         await strandPendingSend(ctx, row.clientKey, "failed");
-        await checkUnknownSend(ctx, row);
+        await laneSpec(lane).onUnknown?.(ctx, row);
       }
     }
     // A convex lane runs one row at a time, like a pull lane's executor; the running drive claims the next.
@@ -225,10 +225,22 @@ export const completeOutbox = internalMutation({
     await ctx.db.patch(row._id, patch);
     const completed = { ...row, ...patch };
     // A convex lane's sent message lands here first, so the pending send retires onto it in this same write.
-    if (status === "sent") await laneOfRow(row).onResult?.(ctx, completed);
+    const spec = laneOfRow(row);
+    if (status === "sent") await spec.onResult?.(ctx, completed);
+    if (status === "failed") await spec.onFailed?.(ctx, completed);
     if (row.payload.kind === "send") await completePendingSend(ctx, clientKey, status, resultGuid);
-    if (status === "unknown") await checkUnknownSend(ctx, completed);
+    if (status === "unknown") await spec.onUnknown?.(ctx, completed);
     return true;
+  },
+});
+
+/** A command whose outcome is unknown, for a lane's check to look for. */
+export const unknownSend = internalQuery({
+  args: { clientKey: v.string() },
+  returns: v.union(outboxDoc, v.null()),
+  handler: async (ctx, { clientKey }) => {
+    const row = await ctx.db.query("comma_outbox").withIndex("by_clientKey", (q) => q.eq("clientKey", clientKey)).unique();
+    return row?.status === "unknown" ? row : null;
   },
 });
 
