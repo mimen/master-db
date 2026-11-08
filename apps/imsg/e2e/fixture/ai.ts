@@ -1,6 +1,6 @@
 import { Gateway } from "../../server/ai/gateway";
 import { AiService, type ConversationId } from "../../server/ai/service";
-import type { AiServiceLike } from "../../server/app";
+import type { AiServiceLike } from "../../server/ai/main";
 import type { Result } from "../../server/bluebubbles";
 import type { OverlayDb } from "../../server/db";
 import { buildThread } from "../../server/map";
@@ -27,11 +27,10 @@ export class FixtureAi implements AiServiceLike {
       fetchThread: async (conversationId) => {
         const raw = await model.bb.chatMessages(conversationId, { limit: Number.MAX_SAFE_INTEGER });
         if (!raw.ok) return raw;
-        return { ok: true, value: { title: "Fixture", isGroup: false, participants: [], route: { platform: "imessage", chatGuid: conversationId }, messages: buildThread(raw.value, conversationId, names) } };
+        return { ok: true, value: { title: "Fixture", isGroup: false, participants: [], route: { platform: "imessage", chatGuid: conversationId },
+          messages: buildThread(raw.value, conversationId, names), bridge: { privateApi: model.bb.hasPrivateApi } } };
       },
       sentText: async () => [],
-      bridgeSupport: () => ({ privateApi: model.bb.hasPrivateApi }),
-      contactEmails: () => [],
       searchVault: async () => [],
     }) : null;
   }

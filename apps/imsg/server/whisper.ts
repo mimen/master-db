@@ -1,14 +1,18 @@
 import { accessSync, constants, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { extname, join } from "node:path";
+import type { GenericId } from "convex/values";
 import type { TranscriptState } from "../shared/types";
 import type { WhisperConfig } from "./config";
-import type { BlueBubbles } from "./bluebubbles";
 import { safeAttachmentGuid } from "./attachment-guid";
 
 export interface TranscriptCache {
   getAttachmentTranscript(attachmentGuid: string): string | null;
   setAttachmentTranscript(attachmentGuid: string, text: string): void;
 }
+
+/** A voice memo's original, as the bridge stored it in Convex. */
+export type StoredAudio = { ok: true; bytes: Uint8Array; filename: string | null } | { ok: false; error: string };
+export type AudioSource = (attachmentGuid: string, conversationId: GenericId<"comma_conversations">) => Promise<StoredAudio>;
 
 export interface ProcessResult {
   exitCode: number;
@@ -103,78 +107,38 @@ function processFailure(label: string, result: ProcessResult): TranscriptState {
   return { state: "failed", error: detail ? `${label}: ${detail}` : `${label} exited ${result.exitCode}` };
 }
 
-type TranscriptListener = (cache: TranscriptCache, guid: string, state: TranscriptState) => void;
-const transcriptListeners = new Set<TranscriptListener>();
-const services = new WeakMap<TranscriptCache, WhisperService>();
-export function subscribeTranscripts(listener: TranscriptListener): () => void {
-  transcriptListeners.add(listener);
-  return () => { transcriptListeners.delete(listener); };
-}
-
+/** Transcribes a voice memo's stored original with local whisper.cpp; the ai lane publishes the result to Convex. */
 export class WhisperService {
-  static forCache(cache: TranscriptCache): WhisperService | undefined { return services.get(cache); }
-  private publish(guid: string, state: TranscriptState): void {
-    for (const listener of transcriptListeners) listener(this.cache, guid, state);
-  }
   private readonly availabilityValue: WhisperAvailability;
   private readonly inFlight = new Map<string, Promise<TranscriptState>>();
-  private readonly failures = new Map<string, Extract<TranscriptState, { state: "failed" }>>();
   /** One model process at a time keeps Mini CPU and memory use predictable. */
   private queueTail: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly config: WhisperConfig,
-    private readonly bb: BlueBubbles,
     private readonly cache: TranscriptCache,
+    private readonly audio: AudioSource,
     private readonly runtime: WhisperRuntime = whisperRuntime,
   ) {
     this.availabilityValue = probeWhisper(config, runtime);
-    services.set(cache, this);
   }
 
   availability(): WhisperAvailability {
     return this.availabilityValue;
   }
 
-  state(attachmentGuid: string): TranscriptState {
-    const cached = this.cache.getAttachmentTranscript(attachmentGuid);
-    if (cached !== null) return { state: "ready", text: cached };
-    if (!this.availabilityValue.available) {
-      return { state: "unavailable", detail: this.availabilityValue.detail };
-    }
-    if (this.inFlight.has(attachmentGuid)) return { state: "working" };
-    return this.failures.get(attachmentGuid) ?? { state: "not-requested" };
-  }
-
-  request(attachmentGuid: string): TranscriptState {
-    const current = this.state(attachmentGuid);
-    if (current.state === "not-requested" || current.state === "failed") {
-      void this.transcribe(attachmentGuid);
-      return { state: "working" };
-    }
-    return current;
-  }
-
-  transcribe(attachmentGuid: string): Promise<TranscriptState> {
+  transcribe(attachmentGuid: string, conversationId: GenericId<"comma_conversations">): Promise<TranscriptState> {
     const existing = this.inFlight.get(attachmentGuid);
     if (existing) return existing;
-    this.failures.delete(attachmentGuid);
-    const task = this.enqueue(() => this.performTranscription(attachmentGuid))
+    const task = this.enqueue(() => this.performTranscription(attachmentGuid, conversationId))
       .catch((error) => ({
         state: "failed" as const,
         error: errorMessage(error instanceof Error ? error : "Unexpected transcription failure"),
       }))
-      .then((result) => {
-        if (result.state === "failed") this.failures.set(attachmentGuid, result);
-        else this.failures.delete(attachmentGuid);
-        this.publish(attachmentGuid, result);
-        return result;
-      })
       .finally(() => {
         this.inFlight.delete(attachmentGuid);
       });
     this.inFlight.set(attachmentGuid, task);
-    this.publish(attachmentGuid, { state: "working" });
     return task;
   }
 
@@ -187,7 +151,7 @@ export class WhisperService {
     return task;
   }
 
-  private async performTranscription(attachmentGuid: string): Promise<TranscriptState> {
+  private async performTranscription(attachmentGuid: string, conversationId: GenericId<"comma_conversations">): Promise<TranscriptState> {
     const cached = this.cache.getAttachmentTranscript(attachmentGuid);
     if (cached !== null) return { state: "ready", text: cached };
     if (!this.availabilityValue.available || !this.config.binaryPath || !this.config.modelPath) {
@@ -199,13 +163,11 @@ export class WhisperService {
       };
     }
 
-    const meta = await this.bb.attachmentMeta(attachmentGuid);
-    if (!meta.ok) return { state: "failed", error: `Attachment metadata: ${meta.error}` };
-    const download = await this.bb.downloadAttachment(attachmentGuid);
-    if (!download.ok) return { state: "failed", error: `Audio download failed (${download.status})` };
+    const audio = await this.audio(attachmentGuid, conversationId);
+    if (!audio.ok) return { state: "failed", error: audio.error };
 
     const safeGuid = safeAttachmentGuid(attachmentGuid);
-    const rawExtension = extname(meta.value.transferName ?? "") || ".audio";
+    const rawExtension = extname(audio.filename ?? "") || ".audio";
     const sourceExtension = rawExtension.replace(/[^.A-Za-z0-9]/g, "") || ".audio";
     const sourcePath = join(this.config.workDir, `${safeGuid}.source${sourceExtension}`);
     const wavPath = join(this.config.workDir, `${safeGuid}.wav`);
@@ -214,7 +176,7 @@ export class WhisperService {
     this.runtime.mkdir(this.config.workDir);
 
     try {
-      this.runtime.write(sourcePath, new Uint8Array(await download.arrayBuffer()));
+      this.runtime.write(sourcePath, audio.bytes);
       const converted = await this.runtime.run([
         this.availabilityValue.afconvertPath,
         "-f",

@@ -40,10 +40,6 @@ export interface AiDeps {
   fetchThread: (conversationId: ConversationId) => Promise<Result<AiThread>>;
   /** The route's account's recent sent text, reduced locally into aggregate style. */
   sentText: (route: CommaRoute) => Promise<string[]>;
-  /** What the Mac can send right now. */
-  bridgeSupport: () => BridgeSupport;
-  /** Contact emails for an iMessage address, [] when unknown. */
-  contactEmails: (address: string) => string[];
   /** Vault grep, injected so tests never touch the filesystem. */
   searchVault: (pattern: string) => Promise<Array<{ path: string; line: string }>>;
 }
@@ -57,15 +53,18 @@ const SUGGESTION_TIMEOUT_MS = 30_000;
 export interface AiThread {
   title: string;
   isGroup: boolean;
-  participants: Array<{ address: string; name: string | null }>;
+  /** Each participant's person's emails, [] when unknown. */
+  participants: Array<{ address: string; name: string | null; emails: string[] }>;
   route: CommaRoute;
   messages: AiMessage[];
+  /** What the route's Mac can send now, from its executor status. */
+  bridge: BridgeSupport;
 }
 
 /** The reaction keys a reply in this thread can send now, from its route's platform profile. */
-export function allowedReactions(thread: Pick<AiThread, "route" | "isGroup">, bridge: BridgeSupport): string[] {
+export function allowedReactions(thread: Pick<AiThread, "route" | "isGroup" | "bridge">): string[] {
   const route = profileRoute(thread.route, thread.isGroup);
-  return PROFILES[route.platform].reactions.filter((reaction) => reactionSupport(route, reaction, bridge).ok);
+  return PROFILES[route.platform].reactions.filter((reaction) => reactionSupport(route, reaction, thread.bridge).ok);
 }
 
 /**
@@ -222,7 +221,7 @@ export class AiService {
     learningEpoch: number,
   ): Promise<Result<ReplySuggestions>> {
     const { messages } = thread;
-    const reactions = allowedReactions(thread, this.deps.bridgeSupport());
+    const reactions = allowedReactions(thread);
     const [profile, context] = await Promise.all([
       loadProfile(this.deps.config.vaultPath),
       Promise.resolve(renderSuggestionContext(messages, { limit: 60, peerName })),
@@ -264,7 +263,7 @@ export class AiService {
     // The event rides the same generation but validates independently, so a
     // rejected reply set still surfaces a grounded scheduling agreement.
     const detected = extractEventSuggestion(generated.value.value, messages, new Date());
-    const event = detected ? { ...detected, inviteEmails: this.inviteEmails(messages) } : null;
+    const event = detected ? { ...detected, inviteEmails: inviteEmails(thread) } : null;
     const payload: SuggestionCachePayload = {
       recipeVersion: SUGGESTION_RECIPE_VERSION,
       selectedModel,
@@ -295,23 +294,6 @@ export class AiService {
         generatedAt: Date.now(),
       },
     };
-  }
-
-  /**
-   * Everyone on the other side of the thread with a known contact email —
-   * first listed email per contact, so one human gets one invitation.
-   */
-  private inviteEmails(messages: AiMessage[]): string[] {
-    const addresses = new Set<string>();
-    for (const message of messages) {
-      if (!message.isFromMe && message.sender?.address) addresses.add(message.sender.address);
-    }
-    const emails = new Set<string>();
-    for (const address of addresses) {
-      const first = this.deps.contactEmails(address)[0];
-      if (first) emails.add(first.toLowerCase());
-    }
-    return [...emails].slice(0, 10);
   }
 
   private async completeSuggestionWithFallback(
@@ -501,3 +483,14 @@ function newId(): string {
 }
 
 export { Gateway };
+
+/** Everyone on the other side of the thread with a known contact email, first listed email per person, so one human gets one invitation. */
+function inviteEmails(thread: Pick<AiThread, "messages" | "participants">): string[] {
+  const emails = new Map(thread.participants.map((participant) => [participant.address, participant.emails]));
+  const invited = new Set<string>();
+  for (const message of thread.messages) {
+    const first = !message.isFromMe && message.sender?.address ? emails.get(message.sender.address)?.[0] : undefined;
+    if (first) invited.add(first.toLowerCase());
+  }
+  return [...invited].slice(0, 10);
+}

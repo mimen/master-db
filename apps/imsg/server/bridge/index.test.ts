@@ -13,8 +13,6 @@ const config: Config = {
   bbUrl: "fixture://bb", bbPassword: "fixture", hostname: "127.0.0.1", port: 0, dbPath: ":memory:",
   convexSiteUrl: "http://convex.test", commaBridgeSecret: "test", appleContactsIngestSecret: null,
   convexCloudUrl: null, identityKey: null,
-  whisper: { binaryPath: null, modelPath: null, workDir: "/tmp/comma-whisper-test" },
-  ai: { gatewayUrl: "http://127.0.0.1:9", gatewayKey: "", fastModel: "fixture", vaultPath: "/tmp" },
 };
 function fixture() {
   const bb = new FakeBlueBubbles({ chats: [{ guid: CHAT, participants: [{ address: "+15550001111" }],
@@ -33,7 +31,7 @@ test("bridge is off without a secret or with background services disabled", asyn
     try {
       deps.bb.emit({ kind: "new-message", message: { guid: "m1" } });
       await bridge.flush();
-      expect(bridge.health()).toEqual({ enabled: false, lastEventAt: null, lastReconcileAt: null, cursor: 0, pending: 0, suggestions: { generatedToday: 0, cap: 150, lastAt: null }, outbox: { inFlight: 0, lastExecutedAt: null }, media: null, photos: { matched: 0, pending: 0, uploadedThisRun: 0 } });
+      expect(bridge.health()).toEqual({ enabled: false, lastEventAt: null, lastReconcileAt: null, cursor: 0, pending: 0, outbox: { inFlight: 0, lastExecutedAt: null }, media: null, photos: { matched: 0, pending: 0, uploadedThisRun: 0 } });
       expect(deps.ingest.calls).toEqual([]);
       expect(deps.bb.calls.queryChats).toBe(0);
     } finally { bridge.stop(); }

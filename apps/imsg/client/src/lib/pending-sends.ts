@@ -6,11 +6,11 @@ import { conversationRoute, fromBridgeMessage } from "@shared/imessage";
 import type { MentionAnnotation } from "@shared/mentions";
 import { messageService } from "@shared/platform-profile";
 import { NOT_SENT_AFTER_MS, NOT_SENT_ERROR, pendingClientKey, pendingGuid, type PendingSendState } from "@shared/pending-send";
-import type { BridgeMessage, ChatSummary, ConversationId, Message } from "@shared/types";
+import type { BridgeMessage, ChatSummary, ConversationId, Message, Platform } from "@shared/types";
 import { pendingSendsApi } from "./convex-api";
 import { runCommandVia, watchCommandVia, type ResultCommandClient } from "./convex-commands";
 import { settleTemp, upsertMessage } from "./message-window";
-import { useBridgeState } from "./presence-api";
+import { useRouteStatus } from "./presence-api";
 
 /**
  * Every message this session sent that has not landed yet, per conversation, on any platform. A send draws its
@@ -401,12 +401,13 @@ export function useDirectoryWithPendingSends(chats: ChatSummary[] | null): ChatS
  * milliseconds, so it never shows the caption; one the Mini has not taken after a second is plainly stuck.
  */
 const WAITING_AFTER_MS = 1000;
-/** Three missed bridge heartbeats (one a minute) mean the Mini is down. */
-const MINI_GONE_MS = 3 * 60_000;
+/** Three missed executor heartbeats (one a minute) mean it is down. */
+const EXECUTOR_GONE_MS = 3 * 60_000;
 
-export function useSendWaiting(queued: boolean): boolean {
+/** `route` is the send's platform and account: its executor's heartbeat is the one a queued send waits on. */
+export function useSendWaiting(queued: boolean, route: { platform: Platform }): boolean {
   const { isWebSocketConnected } = useConvexConnectionState();
-  const lastSeenAt = useBridgeState()?.lastSeenAt;
+  const lastSeenAt = useRouteStatus(route)?.lastSeenAt;
   const [slow, setSlow] = useState(false);
   useEffect(() => {
     setSlow(false);
@@ -414,8 +415,8 @@ export function useSendWaiting(queued: boolean): boolean {
     const timer = setTimeout(() => setSlow(true), WAITING_AFTER_MS);
     return () => clearTimeout(timer);
   }, [queued]);
-  const miniGone = lastSeenAt !== undefined && Date.now() - lastSeenAt > MINI_GONE_MS;
-  return queued && (!isWebSocketConnected || miniGone || slow);
+  const executorGone = lastSeenAt !== undefined && Date.now() - lastSeenAt > EXECUTOR_GONE_MS;
+  return queued && (!isWebSocketConnected || executorGone || slow);
 }
 
 export function resetPendingSendsForTests(device: SendStore): void {

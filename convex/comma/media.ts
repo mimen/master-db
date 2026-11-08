@@ -4,6 +4,7 @@ import { internalMutation, query, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 import { transcriptState as transcriptValidator, type CommaAttachmentDoc } from "../schema/comma/validators";
 
+import { aiExecutorStatus } from "./bridgeState";
 import { findAttachment } from "./conversationLookup";
 import { attachmentName, attachmentOnDisk, isAssociated, type AccountScope } from "./messageShape";
 
@@ -99,8 +100,8 @@ export const transcriptState = query({
     if (attachment.transcriptState === "working") return { state: "working" };
     if (attachment.transcriptState === "failed") return { state: "failed", error: attachment.transcriptError ?? "Transcription failed" };
     if (attachment.transcriptState === "unavailable") return { state: "unavailable", detail: attachment.transcriptDetail ?? "Transcription unavailable" };
-    const bridge = await ctx.db.query("comma_bridge_state").withIndex("by_key", (q) => q.eq("key", "mini")).unique();
-    if (bridge?.key === "mini" && !bridge.whisperAvailable) return { state: "unavailable", detail: bridge.whisperDetail ?? "Whisper unavailable" };
+    const ai = await aiExecutorStatus(ctx);
+    if (ai && !ai.capabilities.whisperAvailable) return { state: "unavailable", detail: ai.capabilities.whisperDetail ?? "Whisper unavailable" };
     return { state: "not-requested" };
   },
 });

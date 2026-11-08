@@ -35,10 +35,12 @@ describe("production deployment publication order", () => {
     expect(deploy).toContain('rm -f "$REPO_DIR/apps/imsg/desktop/releases/current.json"');
   });
 
-  test("restarts the agent runner and fails the deploy when its identity is not running", () => {
-    const restart = position('launchctl kickstart -k "gui/$(id -u)/com.milad.imsg-agent"');
+  test("restarts the AI process and the agent runner and fails the deploy when either identity is not running", () => {
+    const restart = position('launchctl kickstart -k "gui/$(id -u)/com.milad.imsg-ai"');
+    expect(restart).toBeLessThan(position('launchctl kickstart -k "gui/$(id -u)/com.milad.imsg-agent"'));
     const health = position("== Health checks ==", restart);
-    expect(position("production health check failed: comma:agent is not running", health)).toBeLessThan(position("== Publishing verified release identity =="));
+    expect(position("for resident in imsg-ai:comma:ai imsg-agent:comma:agent; do", health)).toBeLessThan(position("== Publishing verified release identity =="));
+    expect(position("production health check failed: %s is not running", health)).toBeLessThan(position("== Publishing verified release identity =="));
   });
 
   test("includes lint in the production gate", () => {

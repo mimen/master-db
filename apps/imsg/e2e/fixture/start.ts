@@ -32,17 +32,6 @@ const config: Config = {
   appleContactsIngestSecret: null,
   convexCloudUrl: null,
   identityKey: null,
-  whisper: {
-    binaryPath: null,
-    modelPath: null,
-    workDir: join(runtimeDirectory, "whisper"),
-  },
-  ai: {
-    gatewayUrl: "http://127.0.0.1:9",
-    gatewayKey: "",
-    fastModel: "fixture",
-    vaultPath: runtimeDirectory,
-  },
 };
 
 const bb = new FixtureBlueBubbles(fixtureSeed());
@@ -149,11 +138,10 @@ const { app, dispose } = await createApp({
   now: () => FIXTURE_NOW,
   names: identity,
   identity,
-  ai,
   backgroundServices: false,
   staticRoot: Bun.env.IMSG_FIXTURE_DIST ?? join(fixtureDirectory, "dist"),
   configureFixtureRoutes: (fixtureApp, controls) => {
-    const resetConvex = registerConvexFixture(fixtureApp, controls, bb, db, identity, {
+    const resetConvex = registerConvexFixture(fixtureApp, { ...controls, ai }, bb, db, identity, {
       "comma/history:messageWindow": (args) => fixtureMessageWindow(bb, identity, args),
     });
     fixtureApp.post("/__fixture/reset", (c) => {

@@ -55,7 +55,10 @@ A merge to `main` automatically deploys production through the Mini runner. The 
 typecheck, lint, and tests; builds web in a sibling directory; builds immutable shell bytes;
 atomically activates web; restarts and health-checks the services; then publishes release
 pointers. The checked-in LaunchAgent installer gives the Mini processes `comma:server`,
-`comma:expo` and `comma:agent` argv identities. `comma:agent` (`server/agent/`) runs the agent
+`comma:expo`, `comma:ai` and `comma:agent` argv identities. `comma:ai` (`server/ai/main.ts`) runs the
+`ai` outbox lane (suggestions, identify, feedback, Whisper transcription) and the Today build; it reads
+and writes only Convex, needs no `BB_PASSWORD`, shares the Overlay file with `comma:server`, and logs to
+`~/Library/Logs/comma-ai.log`. `comma:agent` (`server/agent/`) runs the agent
 pane's Claude Agent SDK sessions; it idles without a heartbeat unless `COMMA_AGENT_ENABLED=true`
 is in the Mini's `apps/imsg/.env`, and logs to `~/Library/Logs/comma-agent.log`. Do not rsync `dist`, run raw `tauri dev`, copy worktree apps
 into Applications, or manually replace a running production bundle. Production-identical
@@ -65,10 +68,10 @@ and Restart banners.
 
 ## Convex architecture
 
-- The [bridge](server/bridge/) mirrors Messages history, BlueBubbles events and media into
-  Convex, and executes queued outbox commands in one drain loop per outbox lane (`imessage` and
-  `ai`; see "Outbox lane" in `CONTEXT.md`). An iMessage command runs through the route Convex
-  stamped on its row (see "Route" in `CONTEXT.md`).
+- The [bridge](server/bridge/) (`comma:server`) mirrors Messages history, BlueBubbles events and media
+  into Convex, and drains the `imessage` outbox lane; `comma:ai` drains the `ai` lane (see "Outbox lane"
+  in `CONTEXT.md`). An iMessage command runs through the route Convex stamped on its row (see "Route" in
+  `CONTEXT.md`). Each executor reports its own status row (see "Executor status").
 - A change to the outbox's Convex functions or arguments deploys to Convex before the merge that
   ships the Mini side, because a merge to `main` deploys only the Mini.
 - Convex owns Comma's triage state (settles, pins, mutes, marked-unread, read times and the

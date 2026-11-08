@@ -36,11 +36,9 @@ beforeEach(async () => {
     bbUrl: "fixture://bluebubbles", bbPassword: "fixture", hostname: "127.0.0.1", port: 0,
     dbPath: ":memory:", convexSiteUrl: null, appleContactsIngestSecret: null,
     convexCloudUrl: null, identityKey: null, commaBridgeSecret: null,
-    whisper: { binaryPath: null, modelPath: null, workDir: "/tmp/imsg-fixture-test" },
-    ai: { gatewayUrl: "http://127.0.0.1:9", gatewayKey: "", fastModel: "fixture", vaultPath: "/tmp" },
   };
-  fixture = await createApp({ config, bb, db, ai, names: identity, identity, now: () => FIXTURE_NOW, backgroundServices: false,
-    configureFixtureRoutes: (app, controls) => { registerConvexFixture(app, controls, bb, db, identity); },
+  fixture = await createApp({ config, bb, db, names: identity, identity, now: () => FIXTURE_NOW, backgroundServices: false,
+    configureFixtureRoutes: (app, controls) => { registerConvexFixture(app, { ...controls, ai }, bb, db, identity); },
   });
 });
 afterEach(() => fixture.dispose());

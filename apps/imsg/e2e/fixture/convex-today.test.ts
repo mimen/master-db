@@ -12,8 +12,6 @@ const config: Config = {
   bbUrl: "fixture://bluebubbles", bbPassword: "fixture", hostname: "127.0.0.1", port: 0,
   dbPath: ":memory:", convexSiteUrl: null, appleContactsIngestSecret: null,
   convexCloudUrl: null, identityKey: null, commaBridgeSecret: null,
-  whisper: { binaryPath: null, modelPath: null, workDir: "/tmp/imsg-fixture-test" },
-  ai: { gatewayUrl: "http://127.0.0.1:9", gatewayKey: "", fastModel: "fixture", vaultPath: "/tmp" },
 };
 let fixture: Awaited<ReturnType<typeof createApp>>;
 let reset: () => void;

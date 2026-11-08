@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OverlayDb } from "./db";
-import { FakeBlueBubbles } from "./bluebubbles-fake";
-import { WhisperService, probeWhisper, type ProcessResult, type WhisperRuntime } from "./whisper";
+import type { GenericId } from "convex/values";
+import { WhisperService, probeWhisper, type AudioSource, type ProcessResult, type WhisperRuntime } from "./whisper";
 
 class FakeWhisperRuntime implements WhisperRuntime {
   readonly files = new Map<string, Uint8Array | string>();
@@ -49,16 +49,14 @@ const config = {
   workDir: "/tmp/whisper-tests",
 };
 
-function fakeBlueBubbles(): FakeBlueBubbles {
-  return new FakeBlueBubbles({
-    chats: [],
-    attachments: {
-      audio1: {
-        meta: { guid: "audio1", mimeType: "audio/mp4", transferName: "memo.m4a" },
-        bytes: new Uint8Array([1, 2, 3]),
-      },
-    },
-  });
+const CONVERSATION = "conversation-1" as GenericId<"comma_conversations">;
+
+/** Convex storage's copy of the memo, by attachment and conversation, as the ai lane reads it. */
+function storedAudio(calls: string[] = []): AudioSource {
+  return async (guid, conversationId) => {
+    calls.push(`${guid}@${conversationId}`);
+    return guid === "audio1" ? { ok: true, bytes: new Uint8Array([1, 2, 3]), filename: "memo.m4a" } : { ok: false, error: "The original is not in Convex storage yet" };
+  };
 }
 
 describe("Whisper availability", () => {
@@ -77,54 +75,38 @@ describe("Whisper availability", () => {
 });
 
 describe("Whisper transcription", () => {
-  test("starts on demand and exposes working while the local job runs", async () => {
+  test("reads the original from Convex storage, converts, caches, and reuses the cache", async () => {
     const runtime = new FakeWhisperRuntime();
     const db = new OverlayDb(":memory:");
-    const service = new WhisperService(config, fakeBlueBubbles(), db, runtime);
-    expect(service.request("audio1")).toEqual({ state: "working" });
-    expect(service.state("audio1")).toEqual({ state: "working" });
-    await service.transcribe("audio1");
-    expect(service.state("audio1")).toEqual({
-      state: "ready",
-      text: "Bonjour from the memo",
-    });
+    const reads: string[] = [];
+    const service = new WhisperService(config, db, storedAudio(reads), runtime);
+    expect(await service.transcribe("audio1", CONVERSATION)).toEqual({ state: "ready", text: "Bonjour from the memo" });
+    expect(reads).toEqual(["audio1@conversation-1"]);
+    expect(runtime.commands).toHaveLength(2);
+    expect(runtime.commands[0]?.some((arg) => arg.endsWith(".source.m4a"))).toBe(true);
+    expect(runtime.timeouts).toEqual([60_000, 15 * 60_000]);
+    expect(db.getAttachmentTranscript("audio1")).toBe("Bonjour from the memo");
+    expect(await service.transcribe("audio1", CONVERSATION)).toEqual({ state: "ready", text: "Bonjour from the memo" });
+    expect(runtime.commands).toHaveLength(2);
+    expect(reads).toHaveLength(1);
   });
 
-  test("downloads through the seam, converts, caches, and reuses the cache", async () => {
+  test("a memo whose original has not reached storage fails without running whisper", async () => {
     const runtime = new FakeWhisperRuntime();
-    const db = new OverlayDb(":memory:");
-    const service = new WhisperService(config, fakeBlueBubbles(), db, runtime);
-    expect(service.state("audio1")).toEqual({ state: "not-requested" });
-    expect(await service.transcribe("audio1")).toEqual({
-      state: "ready",
-      text: "Bonjour from the memo",
-    });
-    expect(runtime.commands).toHaveLength(2);
-    expect(runtime.timeouts).toEqual([60_000, 15 * 60_000]);
-    expect(service.state("audio1")).toEqual({
-      state: "ready",
-      text: "Bonjour from the memo",
-    });
-    expect(await service.transcribe("audio1")).toEqual({
-      state: "ready",
-      text: "Bonjour from the memo",
-    });
-    expect(runtime.commands).toHaveLength(2);
+    const service = new WhisperService(config, new OverlayDb(":memory:"), storedAudio(), runtime);
+    expect(await service.transcribe("audio2", CONVERSATION)).toEqual({ state: "failed", error: "The original is not in Convex storage yet" });
+    expect(runtime.commands).toEqual([]);
   });
 
   test("returns a typed process failure and does not cache it", async () => {
     const runtime = new FakeWhisperRuntime();
     runtime.processResults.push({ exitCode: 1, stderr: "unsupported input" });
     const db = new OverlayDb(":memory:");
-    const service = new WhisperService(config, fakeBlueBubbles(), db, runtime);
-    expect(await service.transcribe("audio1")).toEqual({
+    const service = new WhisperService(config, db, storedAudio(), runtime);
+    expect(await service.transcribe("audio1", CONVERSATION)).toEqual({
       state: "failed",
       error: "Audio conversion failed: unsupported input",
     });
     expect(db.getAttachmentTranscript("audio1")).toBeNull();
-    expect(service.state("audio1")).toEqual({
-      state: "failed",
-      error: "Audio conversion failed: unsupported input",
-    });
   });
 });

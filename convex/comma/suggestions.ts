@@ -1,10 +1,16 @@
+import { makeFunctionReference } from "convex/server";
 import { v, type Infer } from "convex/values";
 
-import { internalMutation, query } from "../_generated/server";
+import type { Doc, Id } from "../_generated/dataModel";
+import { internalMutation, query, type MutationCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 import { commandSuggestions, suggestionDoc } from "../schema/comma/validators";
 
+import { aiExecutorStatus, imessageCapabilities } from "./bridgeState";
+import { conversationPeople } from "./conversationInfo";
 import { findConversation } from "./conversationLookup";
+import { enqueueCommand } from "./enqueue";
+import { resolveConversationNames } from "./names";
 
 const suggestionModel = commandSuggestions.fields.selectedModel;
 
@@ -52,6 +58,46 @@ export const publish = internalMutation({
   },
 });
 
+/**
+ * Reply suggestions are ready before the user opens a DM with a known person: a fresh inbound message queues a
+ * suggestions command for the AI lane once the thread has been quiet for `debounceMs`. A message older than
+ * `freshMs` (history a backfill posts) never does. The AI process holds the daily cap.
+ */
+export const SUGGESTION_PRECOMPUTE = { debounceMs: 3000, freshMs: 10 * 60_000, aiFreshMs: 3 * 60_000 } as const;
+const precomputeRef = makeFunctionReference<"mutation", { conversationId: Id<"comma_conversations">; messageGuid: string }, null>("comma/suggestions:precompute");
+
+export async function schedulePrecompute(ctx: MutationCtx, messages: readonly Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe">[]): Promise<void> {
+  const newest = new Map<Id<"comma_conversations">, (typeof messages)[number]>();
+  for (const message of messages) {
+    if (message.isFromMe || message.dateCreated < Date.now() - SUGGESTION_PRECOMPUTE.freshMs) continue;
+    if ((newest.get(message.conversationId)?.dateCreated ?? -Infinity) < message.dateCreated) newest.set(message.conversationId, message);
+  }
+  for (const { conversationId, guid } of newest.values()) {
+    await ctx.scheduler.runAfter(SUGGESTION_PRECOMPUTE.debounceMs, precomputeRef, { conversationId, messageGuid: guid });
+  }
+}
+
+export const precompute = internalMutation({
+  args: { conversationId: v.id("comma_conversations"), messageGuid: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { conversationId, messageGuid }) => {
+    const conversation = await ctx.db.get(conversationId);
+    // Only the conversation's newest message, still unanswered, gets a shelf.
+    if (!conversation?.lastMessage || conversation.lastMessage.guid !== messageGuid || conversation.lastMessage.isFromMe) return null;
+    if (conversation.isGroup || conversation.participants.length !== 1 || conversation.isSpam) return null;
+    const ai = await aiExecutorStatus(ctx);
+    // A stopped AI process never says so; without a recent heartbeat, precomputes would pile up for its return.
+    if (!ai?.connected || !ai.capabilities.suggestions || ai.lastSeenAt < Date.now() - SUGGESTION_PRECOMPUTE.aiFreshMs) return null;
+    if (!resolveConversationNames(conversation, (await conversationPeople(ctx, conversation)).map(({ person }) => person)).known) return null;
+    const shelf = await ctx.db.query("comma_suggestions")
+      .withIndex("by_conversation_model", (q) => q.eq("conversationId", conversationId).eq("model", "opus")).unique();
+    if (shelf?.anchorGuid === messageGuid) return null;
+    await enqueueCommand(ctx, { clientKey: `precompute:${conversationId}:${messageGuid}`, conversationId,
+      payload: { kind: "suggestions", model: "opus", refresh: false, precompute: true } });
+    return null;
+  },
+});
+
 export const getSuggestions = query({
   args: { conversationId: v.optional(v.id("comma_conversations")), chatGuid: v.optional(v.string()), model: suggestionModel },
   returns: v.union(suggestionDoc, v.null()),
@@ -73,13 +119,14 @@ export const aiStatus = query({
   returns: v.object({ suggestions: v.boolean(), reactionSuggestions: v.boolean(), agentHeartbeatAt: v.union(v.number(), v.null()) }),
   handler: async (ctx) => {
     await assertAllowed(ctx);
-    const state = await ctx.db.query("comma_bridge_state").withIndex("by_key", (q) => q.eq("key", "mini")).unique();
+    const ai = await aiExecutorStatus(ctx);
     const runner = await ctx.db.query("comma_bridge_state").withIndex("by_key", (q) => q.eq("key", "agent")).unique();
-    const mini = state?.key === "mini" ? state : null;
+    const suggestions = (ai?.connected ?? false) && (ai?.capabilities.suggestions ?? false);
     return {
-      suggestions: mini?.suggestions ?? false,
-      reactionSuggestions: mini?.reactionSuggestions ?? false,
-      agentHeartbeatAt: runner?.key === "agent" ? runner.updatedAt : null,
+      suggestions,
+      // Clients from before per-route reaction support read this; a current client asks the route.
+      reactionSuggestions: suggestions && ((await imessageCapabilities(ctx, { platform: "imessage" }))?.privateApi ?? false),
+      agentHeartbeatAt: runner && "updatedAt" in runner ? runner.updatedAt : null,
     };
   },
 });

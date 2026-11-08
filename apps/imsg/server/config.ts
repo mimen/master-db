@@ -19,8 +19,6 @@ export interface Config {
   convexCloudUrl: string | null;
   /** IMSG_SERVER_SECRET, the server-only key for convex/identity/key.ts. Optional — the mirror is skipped if unset. */
   identityKey: string | null;
-  whisper: WhisperConfig;
-  ai: AiConfig;
 }
 
 export interface WhisperConfig {
@@ -77,7 +75,6 @@ export function loadGatewayKey(): string {
 }
 
 export function loadConfig(): Config {
-  const home = Bun.env.HOME ?? "";
   return {
     bbUrl: (Bun.env.BB_URL ?? "http://localhost:1234").replace(/\/$/, ""),
     bbPassword: required("BB_PASSWORD"),
@@ -89,16 +86,22 @@ export function loadConfig(): Config {
     convexCloudUrl: Bun.env.CONVEX_CLOUD_URL?.replace(/\/$/, "") ?? null,
     identityKey: Bun.env.IMSG_SERVER_SECRET?.trim() || null,
     commaBridgeSecret: Bun.env.COMMA_BRIDGE_SECRET?.trim() || null,
-    whisper: {
-      binaryPath: Bun.env.WHISPER_BINARY_PATH?.trim() || null,
-      modelPath: Bun.env.WHISPER_MODEL_PATH?.trim() || null,
-      workDir: Bun.env.WHISPER_WORK_DIR ?? ".cache/whisper",
-    },
+  };
+}
+
+/** The AI process's model and Whisper settings; neither needs BlueBubbles. */
+export function loadAiSettings(env: Record<string, string | undefined>, gatewayKey: string): { ai: AiConfig; whisper: WhisperConfig } {
+  return {
     ai: {
-      gatewayUrl: (Bun.env.AI_GATEWAY_URL ?? "http://127.0.0.1:8317").replace(/\/$/, ""),
-      gatewayKey: loadGatewayKey(),
-      fastModel: Bun.env.AI_FAST_MODEL ?? "gpt-5.6-luna(low)",
-      vaultPath: Bun.env.AI_VAULT_PATH ?? `${home}/Documents/milad-vault`,
+      gatewayUrl: (env.AI_GATEWAY_URL ?? "http://127.0.0.1:8317").replace(/\/$/, ""),
+      gatewayKey,
+      fastModel: env.AI_FAST_MODEL ?? "gpt-5.6-luna(low)",
+      vaultPath: env.AI_VAULT_PATH ?? `${env.HOME ?? ""}/Documents/milad-vault`,
+    },
+    whisper: {
+      binaryPath: env.WHISPER_BINARY_PATH?.trim() || null,
+      modelPath: env.WHISPER_MODEL_PATH?.trim() || null,
+      workDir: env.WHISPER_WORK_DIR ?? ".cache/whisper",
     },
   };
 }

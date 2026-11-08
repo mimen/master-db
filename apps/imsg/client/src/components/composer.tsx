@@ -36,6 +36,7 @@ import { getDraft, setDraft } from "@/lib/drafts";
 import { draftBubble, pendingSends, SendCancelledError } from "@/lib/pending-sends";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatAddress } from "@shared/address";
+import { EXECUTOR_NAME } from "@shared/executors";
 import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
 import { onFillComposer, type SuggestionAttribution } from "@/lib/composer-fill";
 import type { GenericId } from "convex/values";
@@ -332,6 +333,7 @@ export function Composer({
   const config = composerConfig(conversationRoute({ route: chat.route, isGroup }));
   const enterSends = config.enterSends;
   const can = useRouteSupport({ route: chat.route, isGroup });
+  const checkExecutor = `Check ${EXECUTOR_NAME[chat.route.platform]} connection.`;
   const loadRemoteDraft = useCallback((draft: string) => {
     setText(draft);
     setSelection({ start: draft.length, end: draft.length });
@@ -585,7 +587,7 @@ export function Composer({
       } catch (error) {
         setSendStatus("idle");
         hapticFailure();
-        showToast(messagingCommandError(error, "Couldn't send the attachment. Check the Mac mini connection."));
+        showToast(messagingCommandError(error, `Couldn't send the attachment. ${checkExecutor}`));
       } finally {
         for (const attachment of attachments) cleanupPendingAttachment(attachment);
         setBusy(false);
@@ -614,7 +616,7 @@ export function Composer({
       setSendStatus("idle");
       if (error instanceof SendCancelledError) return;
       hapticFailure();
-      if (sendFailureToast()) showToast("Couldn't send. Check the Mac mini connection.");
+      if (sendFailureToast()) showToast(`Couldn't send. ${checkExecutor}`);
     }
   };
 
@@ -892,7 +894,7 @@ ${url}` : url;
         if (uri) stage([{ uri, name: filename, mime: "audio/mp4", isImage: false, voice: true, cleanup: Platform.OS === "web" ? "object-url" : null }]);
       }
       hapticFailure();
-      showToast(messagingCommandError(error, "Couldn't send the voice message. Check the Mac mini connection."));
+      showToast(messagingCommandError(error, `Couldn't send the voice message. ${checkExecutor}`));
     } finally {
       setBusy(false);
     }

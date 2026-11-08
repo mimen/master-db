@@ -453,7 +453,8 @@ export const imessagePayload = v.union(
 
 /** Model work. It reads the conversation from Convex and never touches a messaging platform. */
 export const aiPayload = v.union(
-  v.object({ kind: v.literal("suggestions"), model: suggestionModel, refresh: v.boolean() }),
+  /** `precompute` is Convex's own, queued on an inbound message; it counts against the AI process's daily cap. */
+  v.object({ kind: v.literal("suggestions"), model: suggestionModel, refresh: v.boolean(), precompute: v.optional(v.boolean()) }),
   v.object({ kind: v.literal("suggestionFeedback"), feedback: suggestionFeedback }),
   v.object({ kind: v.literal("clearSuggestionLearning") }),
   v.object({ kind: v.literal("identify") }),
@@ -476,12 +477,15 @@ export const outboxPayload = v.union(
   ...legacyTriagePayload.members,
 );
 
-/** The executor a command waits for. One lane per messaging platform, plus one for model work. */
-export const outboxLane = v.union(v.literal("imessage"), v.literal("ai"));
+/**
+ * The executor a command waits for. One lane per messaging platform, one for model work someone asked for, and
+ * `aiBackground` for model work nobody waits on (suggestion precompute), so it never holds back a user's command.
+ */
+export const outboxLane = v.union(v.literal("imessage"), v.literal("ai"), v.literal("aiBackground"));
 
 const AI_KINDS: ReadonlySet<string> = new Set(aiPayload.members.map((member) => member.fields.kind.value));
-/** Model work never waits behind a send. iMessage is the only messaging platform, so every other kind is its. */
-export const laneOf = (kind: Infer<typeof outboxPayload>["kind"]): Infer<typeof outboxLane> => AI_KINDS.has(kind) ? "ai" : "imessage";
+/** Model work, which waits in the ai lane whatever the conversation's platform. */
+export const isAiKind = (kind: Infer<typeof outboxPayload>["kind"]): boolean => AI_KINDS.has(kind);
 
 /**
  * `unknown` is a send whose outcome the bridge could not determine (for
@@ -610,7 +614,24 @@ export const suggestionFields = {
 export const presenceFields = {
   conversationId: v.id("comma_conversations"), peerTyping: v.boolean(), updatedAt: v.number(), expiresAt: v.number(),
 };
-export const bridgeStateFields = {
+/** What an executor can do beyond running its lane, per executor. */
+export const executorCapabilities = v.union(
+  /** The Mini's bridge, for one iMessage account: what its BlueBubbles can send. */
+  v.object({ executor: v.literal("imessage"), privateApi: v.boolean(), emojiReactions: v.boolean() }),
+  /** The Mini's AI process: reply suggestions through the gateway, and local Whisper. */
+  v.object({ executor: v.literal("ai"), suggestions: v.boolean(), whisperAvailable: v.boolean(), whisperDetail: v.optional(v.string()) }),
+);
+
+/**
+ * One executor's connection, keyed `<platform>:<accountId>` for a platform account's executor and `ai` for model work.
+ * `connected` is the executor's own word; a reader judges it stale by `lastSeenAt`.
+ */
+export const executorStatusFields = {
+  key: v.string(), connected: v.boolean(), lastSeenAt: v.number(), detail: v.optional(v.string()), capabilities: executorCapabilities,
+};
+
+/** The Mini's single row from before per-executor status. A publish in this shape is translated, and its row removed. */
+export const legacyBridgeStateFields = {
   key: v.literal("mini"), privateApi: v.boolean(), emojiReactions: v.optional(v.boolean()), suggestions: v.boolean(), reactionSuggestions: v.boolean(),
   whisperAvailable: v.boolean(), whisperDetail: v.optional(v.string()), lastSeenAt: v.number(),
 };
@@ -662,6 +683,7 @@ export type CommaTapback = Infer<typeof tapback>;
 export type CommaOutboxPayload = Infer<typeof outboxPayload>;
 export type CommaOutboxStatus = Infer<typeof outboxStatus>;
 export type CommaOutboxLane = Infer<typeof outboxLane>;
+export type CommaExecutorStatus = Infer<ReturnType<typeof v.object<typeof executorStatusFields>>>;
 export type CoreMessagingKind = Infer<typeof coreMessagingPayload>["kind"];
 export type IMessageOnlyKind = Infer<typeof imessagePayload>["kind"];
 export type AiKind = Infer<typeof aiPayload>["kind"];

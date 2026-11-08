@@ -6,6 +6,7 @@ import { commandMessage, modelTextFields, platform, route } from "../schema/comm
 import { people } from "../schema/identity/people";
 
 import { soleAccountScope } from "./accounts";
+import { imessageCapabilities } from "./bridgeState";
 import { sendRoute } from "./conversationIdentity";
 import { conversationPeople } from "./conversationInfo";
 import { findAttachment, findMessage, shownInThread } from "./conversationLookup";
@@ -110,16 +111,18 @@ export const agentContext = internalMutation({
 /**
  * The AI lane's thread: the newest 60 messages as the wire Message with their model text, folded reactions and
  * attachment kinds, participants named the way every client names them (`name` is null for someone with no known
- * name), and the route a reply takes.
+ * name) with their person's emails, the route a reply takes, and what that route's executor can send now.
  */
 export const aiThread = internalMutation({
   args: { conversationId: v.id("comma_conversations") },
   returns: v.object({
     title: v.string(),
     isGroup: v.boolean(),
-    participants: v.array(v.object({ address: v.string(), name: nullableString })),
+    participants: v.array(v.object({ address: v.string(), name: nullableString, emails: v.array(v.string()) })),
     route,
     messages: v.array(v.object({ ...commandMessage.fields, ...modelTextFields })),
+    /** The route's Mac's BlueBubbles, from its executor status; nothing before it reports. */
+    bridge: v.object({ privateApi: v.boolean(), emojiReactions: v.boolean() }),
   }),
   handler: async (ctx, { conversationId }) => {
     const conversation = await requireConversation(ctx, conversationId);
@@ -128,8 +131,9 @@ export const aiThread = internalMutation({
       .order("desc")
       .filter(shownInThread)
       .take(60);
-    const named = resolveConversationNames(conversation, (await conversationPeople(ctx, conversation)).map(({ person }) => person));
-    const participants = named.participants.map(({ address, name }) => ({ address, name }));
+    const people = (await conversationPeople(ctx, conversation)).map(({ person }) => person);
+    const named = resolveConversationNames(conversation, people);
+    const participants = named.participants.map(({ address, name }, index) => ({ address, name, emails: people[index]?.normalized_emails ?? [] }));
     const names = new Map(participants.map(({ address, name }) => [address, name]));
     const messages = await Promise.all(rows.reverse().map(async (row) => {
       // ponytail: the AI thread is iMessage's flat wire message; a second platform's rows need a neutral one.
@@ -149,7 +153,10 @@ export const aiThread = internalMutation({
         isGroupEvent: row.isGroupEvent, error: imessage?.error ?? 0, edited: row.edited, retracted: row.retracted,
       };
     }));
-    return { title: named.displayName, isGroup: conversation.isGroup, participants, route: sendRoute(conversation), messages };
+    const route = sendRoute(conversation);
+    const bridge = await imessageCapabilities(ctx, route);
+    return { title: named.displayName, isGroup: conversation.isGroup, participants, route, messages,
+      bridge: { privateApi: bridge?.privateApi ?? false, emojiReactions: bridge?.emojiReactions ?? false } };
   },
 });
 

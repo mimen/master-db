@@ -7,13 +7,13 @@ import type {
   CommaMessageInput,
   syncStateDoc,
 } from "../../../../convex/schema/comma/validators";
-import { presenceFields, bridgeStateFields } from "../../../../convex/schema/comma/validators";
+import { executorStatusFields, presenceFields } from "../../../../convex/schema/comma/validators";
 import type { Config } from "../config";
 
 const presenceValue = v.object(presenceFields);
-const bridgeStateValue = v.object(bridgeStateFields);
-export type BridgeState = Infer<typeof bridgeStateValue>;
-export type EphemeralState = ({ kind: "presence" } & Infer<typeof presenceValue>) | ({ kind: "bridgeState" } & BridgeState) | { kind: "typingCurrent"; clientKey: string; claimToken: string };
+const executorStatusValue = v.object(executorStatusFields);
+export type ExecutorStatus = Infer<typeof executorStatusValue>;
+export type EphemeralState = ({ kind: "presence" } & Infer<typeof presenceValue>) | ({ kind: "executorStatus" } & ExecutorStatus) | { kind: "typingCurrent"; clientKey: string; claimToken: string };
 
 type Fields<T> = Omit<T, "_id" | "_creationTime">;
 export type ConversationInput = Omit<Fields<CommaConversationDoc>, "primaryChatGuid" | "chatGuids" | "updatedAt" | "platform" | "accountId"> & {
@@ -48,6 +48,7 @@ export interface Bodies {
   mediaBacklog: FunctionArgs<typeof internal.comma.internal.mediaBacklog>;
   aiThread: FunctionArgs<typeof internal.comma.agentContext.aiThread>;
   aiSentText: FunctionArgs<typeof internal.comma.agentContext.aiSentText>;
+  agentAttachment: FunctionArgs<typeof internal.comma.agentContext.agentAttachment>;
 }
 export interface Results {
   account: BridgeAccount["accountId"];
@@ -69,6 +70,7 @@ export interface Results {
   mediaBacklog: FunctionReturnType<typeof internal.comma.internal.mediaBacklog>;
   aiThread: FunctionReturnType<typeof internal.comma.agentContext.aiThread>;
   aiSentText: FunctionReturnType<typeof internal.comma.agentContext.aiSentText>;
+  agentAttachment: FunctionReturnType<typeof internal.comma.agentContext.agentAttachment>;
 }
 
 /** The kinds whose batches write for one account. */

@@ -97,7 +97,8 @@ test("transcripts mirror working, failure, retry, and ready and clear stale erro
 
 test("bridge capability produces unavailable transcripts", async () => {
   const t = setup(); await seed(t);
-  await t.run((ctx) => ctx.db.insert("comma_bridge_state", { key: "mini", privateApi: false, suggestions: false, reactionSuggestions: false, whisperAvailable: false, whisperDetail: "no model", lastSeenAt: 1 }));
+  await t.run((ctx) => ctx.db.insert("comma_bridge_state", { key: "ai", connected: true, lastSeenAt: 1,
+    capabilities: { executor: "ai", suggestions: false, whisperAvailable: false, whisperDetail: "no model" } }));
   expect(await t.query(transcriptState, { attachmentGuid: "a0" })).toEqual({ state: "unavailable", detail: "no model" });
 });
 

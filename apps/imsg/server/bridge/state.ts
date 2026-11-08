@@ -1,12 +1,16 @@
-import type { BlueBubbles } from "../bluebubbles";
 import type { LeaseTimers } from "./commands/lease";
-import type { BridgeState, ConvexIngest } from "./convex-ingest";
+import type { ConvexIngest, ExecutorStatus } from "./convex-ingest";
 import { RetryWork } from "./retry";
 
-export const BRIDGE_HEARTBEAT_MS = 60_000;
-export type BridgeCapabilities = Omit<BridgeState, "key" | "lastSeenAt">;
+export const STATUS_HEARTBEAT_MS = 60_000;
+/** What an executor says about itself; the publisher adds its key and the time. */
+export type ExecutorReport = Omit<ExecutorStatus, "key" | "lastSeenAt">;
 
-export class BridgeStatePublisher {
+/**
+ * Publishes one executor's status row (comma/bridgeState): at startup, every minute as a heartbeat, within a second
+ * of its report changing, and whenever `reconnects` fires.
+ */
+export class StatusPublisher {
   private work: RetryWork;
   private heartbeat: ReturnType<typeof setInterval>;
   private changes: ReturnType<typeof setInterval>;
@@ -14,32 +18,28 @@ export class BridgeStatePublisher {
   private published: string | null = null;
 
   constructor(private deps: {
-    bb: BlueBubbles;
+    key: string;
     ingest: Pick<ConvexIngest, "post">;
-    capabilities: () => BridgeCapabilities;
+    report: () => ExecutorReport;
+    reconnects?: (listener: () => void) => () => void;
     now?: () => number;
     timers?: LeaseTimers;
   }) {
     const timers: LeaseTimers = deps.timers ?? { setInterval, clearInterval };
-    this.work = new RetryWork("bridge state", async () => {
-      const capabilities = deps.capabilities();
-      await deps.ingest.post("ephemeral", { state: {
-        kind: "bridgeState", key: "mini", ...capabilities, lastSeenAt: (deps.now ?? Date.now)(),
-      } });
-      this.published = JSON.stringify(capabilities);
+    this.work = new RetryWork(`status ${deps.key}`, async () => {
+      const report = deps.report();
+      await deps.ingest.post("ephemeral", { state: { kind: "executorStatus", key: deps.key, ...report, lastSeenAt: (deps.now ?? Date.now)() } });
+      this.published = JSON.stringify(report);
     });
-    this.heartbeat = timers.setInterval(() => this.work.request(), BRIDGE_HEARTBEAT_MS);
-    // BlueBubbles capabilities can change during its periodic REST reconnect.
+    this.heartbeat = timers.setInterval(() => this.work.request(), STATUS_HEARTBEAT_MS);
     this.changes = timers.setInterval(() => this.check(), 1000);
     this.heartbeat.unref?.(); this.changes.unref?.();
-    this.unsubscribe = deps.bb.onEvent((event) => {
-      if (event.kind === "stream-connected") this.work.request();
-    });
+    this.unsubscribe = deps.reconnects?.(() => this.work.request()) ?? (() => {});
     this.work.request();
   }
 
   check(): void {
-    if (JSON.stringify(this.deps.capabilities()) !== this.published) this.work.request();
+    if (JSON.stringify(this.deps.report()) !== this.published) this.work.request();
   }
   get pending(): number { return this.work.pending; }
   flush(): Promise<void> { return this.work.flush(); }

@@ -4,20 +4,20 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 import {
-  commandReceipt, commandResult, laneOf, legacyTriagePayload, outboxDoc, outboxLane, outboxPayload, outboxStatus,
+  commandReceipt, commandResult, legacyTriagePayload, outboxDoc, outboxLane, outboxPayload, outboxStatus,
   type CommaOutboxLane, type CommaOutboxPayload, type CommaOutboxStatus,
 } from "../schema/comma/validators";
 
 import { settleDraftChat } from "./agent";
 import { sameSecret } from "./bridgeAuth";
 import { enqueueCommand } from "./enqueue";
-import { applyIMessageResult } from "./imessageResults";
+import { laneOf, laneOfRow, laneSpec, wakeLane } from "./lanes";
 import { claimPendingSend, completePendingSend, expireIfStale, strandPendingSend } from "./pendingSends";
 import { readConversation, setConversationFlag, settleConversation, unsettleConversation } from "./triage";
 
 /**
- * The command queue. Clients enqueue (Convex Auth); the Mini's bridge claims
- * and executes through BlueBubbles, then completes each row.
+ * The command queue. Clients enqueue (Convex Auth); each lane's executor claims and executes its rows, then
+ * completes each one: the Mini for a pull lane, a Convex action for a convex lane (see lanes.ts).
  *
  * A send whose outcome is unknown (the bridge died after handing it over)
  * becomes "unknown" and is never retried. Idempotent kinds re-run safely, so
@@ -75,7 +75,8 @@ async function applyTriage(ctx: MutationCtx, clientKey: string, conversationId: 
   await triageCore(ctx, conversationId, payload);
   const now = Date.now();
   return await ctx.db.insert("comma_outbox", {
-    clientKey, conversationId, payload, lane: laneOf(payload.kind), status: "sent", result: { kind: payload.kind, ok: true }, attempts: 0, createdAt: now, updatedAt: now,
+    // Only clients from before comma/triage, all iMessage's, send these.
+    clientKey, conversationId, payload, lane: laneOf("imessage", payload).lane, status: "sent", result: { kind: payload.kind, ok: true }, attempts: 0, createdAt: now, updatedAt: now,
   });
 }
 
@@ -132,9 +133,8 @@ export const outboxStatusFor = query({
   },
 });
 
-/** One status's rows in a lane, oldest first. No lane is every lane, for a bridge from before lanes. */
-async function laneRows(ctx: QueryCtx, lane: CommaOutboxLane | undefined, status: CommaOutboxStatus, limit: number) {
-  if (!lane) return await ctx.db.query("comma_outbox").withIndex("by_status_createdAt", (q) => q.eq("status", status)).order("asc").take(limit);
+/** One status's rows in a lane, oldest first. */
+async function laneRows(ctx: QueryCtx, lane: CommaOutboxLane, status: CommaOutboxStatus, limit: number) {
   return await ctx.db.query("comma_outbox")
     .withIndex("by_lane_status_createdAt", (q) => q.eq("lane", lane).eq("status", status)).order("asc").take(limit);
 }
@@ -145,7 +145,7 @@ async function laneRows(ctx: QueryCtx, lane: CommaOutboxLane | undefined, status
  * gated by the bridge secret instead of Convex Auth.
  */
 export const pendingOutbox = query({
-  args: { bridgeKey: v.string(), lane: v.optional(outboxLane) },
+  args: { bridgeKey: v.string(), lane: outboxLane },
   returns: v.array(outboxDoc),
   handler: async (ctx, { bridgeKey, lane }) => {
     if (!sameSecret(bridgeKey)) throw new Error("Unauthorized");
@@ -154,14 +154,19 @@ export const pendingOutbox = query({
 });
 
 export const claimOutbox = internalMutation({
-  args: { now: v.number(), leaseMs: v.number(), limit: v.number(), lane: v.optional(outboxLane) },
+  args: { now: v.number(), leaseMs: v.number(), limit: v.number(), lane: outboxLane },
   returns: v.array(outboxDoc),
   handler: async (ctx, { now, leaseMs, limit, lane }) => {
     if (!Number.isFinite(leaseMs) || leaseMs <= 0) throw new Error("leaseMs must be positive");
     if (!Number.isInteger(limit) || limit < 0 || limit > 50) throw new Error("limit must be between 0 and 50");
+    const convexLane = laneSpec(lane).executor === "convex";
+    let busy = false;
     // Expired leases first: a send can't be known to have failed, so it is never retried.
     for (const row of await laneRows(ctx, lane, "claimed", 200)) {
-      if ((row.leaseUntil ?? 0) > now) continue;
+      if ((row.leaseUntil ?? 0) > now) {
+        busy = true;
+        continue;
+      }
       const retry = IDEMPOTENT_KINDS.has(row.payload.kind);
       await ctx.db.patch(row._id, {
         status: retry ? "pending" : "unknown",
@@ -172,6 +177,8 @@ export const claimOutbox = internalMutation({
       });
       if (!retry && row.payload.kind === "send") await strandPendingSend(ctx, row.clientKey, "failed");
     }
+    // A convex lane runs one row at a time, like a pull lane's executor; the running drive claims the next.
+    if (convexLane && busy) return [];
     const claimed: Doc<"comma_outbox">[] = [];
     for (const row of await laneRows(ctx, lane, "pending", limit)) {
       if (row.conversationId && isTriage(row.payload)) {
@@ -183,6 +190,8 @@ export const claimOutbox = internalMutation({
       if (row.conversationId && row.payload.kind === "markRead") await readConversation(ctx, row.conversationId, row.createdAt);
       const patch = { claimToken: `${row._id}:${row.attempts + 1}`, error: undefined, status: "claimed" as const, leaseUntil: now + leaseMs, attempts: row.attempts + 1, updatedAt: now };
       await ctx.db.patch(row._id, patch);
+      // If the action holding this claim dies, its lease's expiry starts the next drive.
+      if (convexLane) await wakeLane(ctx, lane, patch.leaseUntil + 1);
       claimed.push({ ...row, ...patch });
     }
     return claimed;
@@ -217,7 +226,7 @@ export const completeOutbox = internalMutation({
       result,
     });
     if (row.payload.kind === "send") await completePendingSend(ctx, clientKey, status, resultGuid);
-    if (status === "sent" && row.lane === "imessage") await applyIMessageResult(ctx, row);
+    if (status === "sent") await laneOfRow(row).onResult?.(ctx, row);
     return true;
   },
 });

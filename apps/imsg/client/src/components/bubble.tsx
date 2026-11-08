@@ -456,7 +456,8 @@ function QueuedReceipt({ message, onCancel, onWaiting, text, style }: {
   message: Message; onCancel: (message: Message) => void; onWaiting: (waiting: true) => void; text: string | null; style: StyleProp<TextStyle>;
 }) {
   const theme = useTheme();
-  const waiting = useSendWaiting(true);
+  // ponytail: a message names its platform but not its account; the platform's only account's executor answers.
+  const waiting = useSendWaiting(true, { platform: message.platform });
   useEffect(() => {
     if (waiting) onWaiting(true);
   }, [waiting, onWaiting]);

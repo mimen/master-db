@@ -19,13 +19,6 @@ const config: Config = {
   convexCloudUrl: null,
   identityKey: null,
   commaBridgeSecret: null,
-  whisper: { binaryPath: null, modelPath: null, workDir: "/tmp/imsg-test-whisper" },
-  ai: {
-    gatewayUrl: "http://127.0.0.1:9",
-    gatewayKey: "",
-    fastModel: "fixture",
-    vaultPath: "/tmp",
-  },
 };
 
 const entry = "/_expo/static/js/web/entry-abc.js";

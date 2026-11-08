@@ -1,25 +1,29 @@
 import { makeFunctionReference } from "convex/server";
 import type { ObjectType } from "convex/values";
-import type { ConversationId } from "@shared/types";
+import type { AccountId, ConversationId, Platform } from "@shared/types";
 import { useConvexAuth, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
-import type { bridgeStateFields, presenceFields } from "../../../../../convex/schema/comma/validators";
+import type { CommaExecutorStatus, presenceFields } from "../../../../../convex/schema/comma/validators";
 import { runCommand } from "./convex-commands";
 
-export type BridgeState = ObjectType<typeof bridgeStateFields>;
+export type ExecutorStatus = CommaExecutorStatus;
 export type PeerPresence = Omit<ObjectType<typeof presenceFields>, "conversationId">;
 export const presenceApi = {
   presence: makeFunctionReference<"query", { conversationId: ConversationId }, PeerPresence | null>("comma/presence:presence"),
-  bridgeState: makeFunctionReference<"query", Record<string, never>, BridgeState | null>("comma/bridgeState:bridgeState"),
+  routeStatus: makeFunctionReference<"query", { platform: Platform; accountId: AccountId | null }, ExecutorStatus | null>("comma/bridgeState:routeExecutorStatus"),
 };
 
 export async function setTyping(conversationId: ConversationId, active: boolean): Promise<void> {
   await runCommand(conversationId, { kind: "typing", active, expiresAt: Date.now() + 5000 });
 }
 
-export function useBridgeState(): BridgeState | null | undefined {
+/**
+ * The status of the executor that runs this route's commands: undefined while loading, null before it first reports.
+ * A route without an account reads its platform's only account's.
+ */
+export function useRouteStatus(route: { platform: Platform; accountId?: AccountId | null } | null | undefined): ExecutorStatus | null | undefined {
   const { isAuthenticated } = useConvexAuth();
-  return useQuery(presenceApi.bridgeState, isAuthenticated ? {} : "skip");
+  return useQuery(presenceApi.routeStatus, isAuthenticated && route ? { platform: route.platform, accountId: route.accountId ?? null } : "skip");
 }
 
 export function usePeerTypingValue(presence: PeerPresence | null | undefined): boolean {

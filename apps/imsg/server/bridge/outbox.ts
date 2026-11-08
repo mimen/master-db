@@ -1,13 +1,13 @@
 import { ConvexClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
-import { laneOf, type CommandResult, type CommaOutboxLane } from "../../../../convex/schema/comma/validators";
+import type { CommandResult, CommaOutboxLane } from "../../../../convex/schema/comma/validators";
 import { ChatCommands, UnknownSendError } from "../commands";
 import type { Config } from "../config";
-import type { Bodies, Results } from "./convex-ingest";
+import type { Bodies, ConvexIngest, Results } from "./convex-ingest";
 import type { MessageWriter } from "./live";
-import { commandHandlers, dispatchCommand } from "./commands";
+import { dispatchCommand } from "./commands";
 import { CommandLease, LeaseLostError, type LeaseTimers } from "./commands/lease";
-import type { AiContext, HandlerMap, IMessageContext } from "./commands/types";
+import type { AiContext, AiHandlers, CommandKind, HandlerMap, IMessageContext, IMessageHandlers } from "./commands/types";
 import { RetryWork } from "./retry";
 
 export type OutboxRow = Results["claim"][number];
@@ -15,7 +15,12 @@ const pendingOutbox = makeFunctionReference<"query", { bridgeKey: string; lane: 
 const LEASE_MS = 60_000;
 
 type LaneBase = Pick<IMessageContext, "row" | "signal" | "withLeaseRenewal">;
-type Execute = (row: OutboxRow, base: LaneBase) => Promise<CommandResult>;
+/** One lane this process executes: which commands renew their lease while they run, and how a row runs. */
+export interface LaneExecutor {
+  lane: CommaOutboxLane;
+  longRunning(kind: CommandKind): boolean;
+  execute(row: OutboxRow, base: LaneBase): Promise<CommandResult>;
+}
 
 /**
  * One lane's executor. It claims only its lane's rows and runs them one at a time, so a slow command
@@ -28,19 +33,19 @@ class LaneDrain {
   private stopped = false;
   private lease: CommandLease | null = null;
 
-  constructor(readonly lane: CommaOutboxLane, private deps: {
-    writer: MessageWriter;
-    handlers: HandlerMap;
-    execute: Execute;
+  constructor(private executor: LaneExecutor, private deps: {
+    ingest: Pick<ConvexIngest, "post">;
     now: () => number;
     leaseTimers?: LeaseTimers;
     executed: () => void;
   }) {
-    this.work = new RetryWork(`outbox:${lane}`, () => this.drain());
+    this.work = new RetryWork(`outbox:${executor.lane}`, () => this.drain());
   }
 
+  get lane(): CommaOutboxLane { return this.executor.lane; }
+
   private async drain(): Promise<void> {
-    const { ingest } = this.deps.writer.deps;
+    const { ingest } = this.deps;
     const now = this.deps.now;
     if (!this.claimed.length) {
       this.claimed = await ingest.post("claim", { now: now(), leaseMs: LEASE_MS, limit: 1, lane: this.lane });
@@ -55,13 +60,12 @@ class LaneDrain {
         }
         try {
           if (!row.claimToken) throw new Error("Claim has no fencing token");
-          if (laneOf(row.payload.kind) !== this.lane) throw new Error(`${row.payload.kind} does not run on the ${this.lane} lane`);
           const lease = new CommandLease(() => ingest.post("renew", {
             clientKey: row.clientKey, claimToken: row.claimToken!, now: now(), leaseMs: LEASE_MS,
           }), this.deps.leaseTimers);
           this.lease = lease;
-          if (this.deps.handlers[row.payload.kind].longRunning) lease.start();
-          const result = await this.deps.execute(row, { row, signal: lease.signal, withLeaseRenewal: (work) => lease.withRenewal(work) });
+          if (this.executor.longRunning(row.payload.kind)) lease.start();
+          const result = await this.executor.execute(row, { row, signal: lease.signal, withLeaseRenewal: (work) => lease.withRenewal(work) });
           await lease.check();
           this.completion = { clientKey: row.clientKey, claimToken: row.claimToken, status: "sent", result,
             ...("message" in result ? { resultGuid: result.message.guid } : {}) };
@@ -89,6 +93,38 @@ class LaneDrain {
   }
 }
 
+/** The iMessage lane: every command runs through the route Convex stamped on it, against BlueBubbles. */
+export function imessageLane(deps: { writer: MessageWriter; commands: ChatCommands; handlers: IMessageHandlers }): LaneExecutor {
+  const { writer, commands, handlers } = deps;
+  return {
+    lane: "imessage",
+    longRunning: (kind) => (handlers as Partial<HandlerMap>)[kind]?.longRunning ?? false,
+    execute: async (row, base) => {
+      if (row.payload.kind !== "createChat" && !row.conversationId) throw new Error("Command requires a conversation");
+      if (row.conversationId && !row.route) throw new Error("Command has no route");
+      const chatGuid = row.route?.chatGuid ?? null;
+      if (row.payload.kind === "send") writer.rememberOutboxSend(row.clientKey);
+      base.signal.throwIfAborted();
+      return dispatchCommand<IMessageContext>(handlers as HandlerMap, { ...base, chatGuid, commands, writer }, row.payload);
+    },
+  };
+}
+
+/** A model-work lane (ai, or aiBackground for precompute): reads and writes Convex by conversation id, never a platform. */
+export function aiLane(deps: { ingest: Pick<ConvexIngest, "post">; handlers: AiHandlers; lane?: Extract<CommaOutboxLane, "ai" | "aiBackground"> }): LaneExecutor {
+  const { ingest, handlers } = deps;
+  return {
+    lane: deps.lane ?? "ai",
+    longRunning: (kind) => (handlers as Partial<HandlerMap>)[kind]?.longRunning ?? false,
+    execute: async (row, base) => {
+      if (row.payload.kind !== "clearSuggestionLearning" && !row.conversationId) throw new Error("Command requires a conversation");
+      base.signal.throwIfAborted();
+      return dispatchCommand<AiContext>(handlers as HandlerMap, { ...base, conversationId: row.conversationId ?? null, ingest }, row.payload);
+    },
+  };
+}
+
+/** Drains each lane this process executes, woken by its subscription to the lane's pending rows. */
 export class OutboxBridge {
   private client: ConvexClient | null = null;
   private unsubscribes: (() => void)[] = [];
@@ -98,34 +134,16 @@ export class OutboxBridge {
 
   constructor(private deps: {
     config: Pick<Config, "convexCloudUrl" | "commaBridgeSecret">;
-    writer: MessageWriter;
-    commands: ChatCommands;
+    ingest: Pick<ConvexIngest, "post">;
+    lanes: LaneExecutor[];
     client?: ConvexClient;
     now?: () => number;
     backgroundServices?: boolean;
-    handlers?: Partial<HandlerMap>;
     leaseTimers?: LeaseTimers;
   }) {
-    const { writer, commands } = deps;
-    const handlers: HandlerMap = { ...commandHandlers, ...deps.handlers };
-    const lane = (name: CommaOutboxLane, execute: Execute) => new LaneDrain(name, {
-      writer, handlers, execute, now: () => this.now(), leaseTimers: deps.leaseTimers, executed: () => { this.lastExecutedAt = this.now(); },
-    });
-    this.lanes = [
-      lane("imessage", async (row, base) => {
-        if (row.payload.kind !== "createChat" && !row.conversationId) throw new Error("Command requires a conversation");
-        if (row.conversationId && !row.route) throw new Error("Command has no route");
-        const chatGuid = row.route?.chatGuid ?? null;
-        if (row.payload.kind === "send") writer.rememberOutboxSend(row.clientKey);
-        base.signal.throwIfAborted();
-        return dispatchCommand<IMessageContext>(handlers, { ...base, chatGuid, commands, writer }, row.payload);
-      }),
-      lane("ai", async (row, base) => {
-        if (row.payload.kind !== "clearSuggestionLearning" && !row.conversationId) throw new Error("Command requires a conversation");
-        base.signal.throwIfAborted();
-        return dispatchCommand<AiContext>(handlers, { ...base, conversationId: row.conversationId ?? null, ingest: writer.deps.ingest }, row.payload);
-      }),
-    ];
+    this.lanes = deps.lanes.map((executor) => new LaneDrain(executor, {
+      ingest: deps.ingest, now: () => this.now(), leaseTimers: deps.leaseTimers, executed: () => { this.lastExecutedAt = this.now(); },
+    }));
     const { convexCloudUrl, commaBridgeSecret } = deps.config;
     if (!convexCloudUrl || !commaBridgeSecret || deps.backgroundServices === false) return;
     const client = deps.client ?? new ConvexClient(convexCloudUrl);
@@ -133,7 +151,7 @@ export class OutboxBridge {
     for (const drain of this.lanes) {
       this.unsubscribes.push(client.onUpdate(pendingOutbox, { bridgeKey: commaBridgeSecret, lane: drain.lane }, (rows) => {
         if (rows.length) drain.work.request();
-      }, (error) => console.error(`comma bridge outbox subscription (${drain.lane}): ${String(error)}`)));
+      }, (error) => console.error(`comma outbox subscription (${drain.lane}): ${String(error)}`)));
     }
     // Expired claimed rows don't appear in pendingOutbox, including after a restart.
     this.timer = setInterval(() => this.request(), 30_000);
@@ -152,6 +170,6 @@ export class OutboxBridge {
     for (const drain of this.lanes) drain.stop();
     if (this.timer) clearInterval(this.timer);
     for (const unsubscribe of this.unsubscribes) unsubscribe();
-    if (this.client) void this.client.close().catch((error) => console.error(`comma bridge outbox close: ${String(error)}`));
+    if (this.client) void this.client.close().catch((error) => console.error(`comma outbox close: ${String(error)}`));
   }
 }

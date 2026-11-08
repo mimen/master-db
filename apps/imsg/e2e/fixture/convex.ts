@@ -1,7 +1,7 @@
 import { extractLinkPreview, parsePublicPreviewUrl } from "../../shared/link-preview";
 import type { Hono } from "hono";
 import type { GenericId, Infer } from "convex/values";
-import { laneOf, type attachmentDoc, type conversationDoc, type draftView, type messageDoc, type scheduledDoc, type CommaOutboxLane, type CommaOutboxPayload, type CommaReaction, type CommaReactionState, type CommandResult } from "../../../../convex/schema/comma/validators";
+import { isAiKind, type attachmentDoc, type conversationDoc, type draftView, type messageDoc, type scheduledDoc, type CommaOutboxLane, type CommaOutboxPayload, type CommaReaction, type CommaReactionState, type CommandResult } from "../../../../convex/schema/comma/validators";
 import { handleKey, imessage, routeFor } from "../../../../convex/comma/conversationIdentity";
 import { resolveConversationNames } from "../../../../convex/comma/names";
 import { formatAddress } from "../../shared/address";
@@ -12,9 +12,10 @@ import { NOT_SENT_AFTER_MS, NOT_SENT_ERROR, pendingGuid } from "../../shared/pen
 import { fromTapback, messageKey, reactionWrites, shownReactions } from "../../../../convex/comma/reactions";
 import { attachmentRead, messageRead } from "../../../../convex/comma/messageShape";
 import type { FixtureRouteControls } from "../../server/app";
+import type { AiServiceLike } from "../../server/ai/main";
 import { buildThread, isGenuineUnreadInbound, mapChat, mapMessage, type UnreadSummary } from "../../server/map";
 import { toConversationInputs, toMessageRow } from "../../server/bridge/mapper";
-import { BRIDGE_HEARTBEAT_MS } from "../../server/bridge/state";
+import { STATUS_HEARTBEAT_MS } from "../../server/bridge/state";
 import { mapScheduledMessage } from "../../server/scheduled";
 import { ScheduledSendNow } from "../../server/scheduled-send-now";
 import { ChatCommands } from "../../server/commands";
@@ -24,6 +25,7 @@ import type { OverlayDb } from "../../server/db";
 import type { BridgeMessage, ChatSummary, Contact, ReplySuggestions, TranscriptState } from "../../shared/types";
 import type { BBMessage } from "../../server/bb-types";
 import { createAgentFixture } from "./agent";
+import { FixtureAi } from "./ai";
 import { createTodayFixture, type TodayMode } from "./today";
 import { createTriageFixture } from "./triage";
 import type { FixtureBlueBubbles } from "./fake-bluebubbles";
@@ -155,7 +157,7 @@ export async function fixtureMessageWindow(bb: FixtureBlueBubbles, names: Fixtur
   return window.map((message) => messageRow(message, bb.clientKeyFor(message.guid)));
 }
 
-export function registerConvexFixture(app: Hono, controls: FixtureRouteControls, bb: FixtureBlueBubbles, db: OverlayDb, names: FixtureIdentity, additionalHandlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {}) {
+export function registerConvexFixture(app: Hono, controls: FixtureRouteControls & { ai?: AiServiceLike }, bb: FixtureBlueBubbles, db: OverlayDb, names: FixtureIdentity, additionalHandlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {}) {
   const drafts = new Map<string, Infer<typeof draftView>>();
   const receipts = new Map<string, { id: string; status: "pending" | "sent" | "failed"; clientKey: string; updatedAt: number; error?: string; result?: CommandResult; resultGuid?: string }>();
   /** Each send's conversation and payload, for a retry. */
@@ -200,7 +202,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     } else if (event.kind === "stream-connected") peerTyping.clear();
   });
   const commands = new ChatCommands(bb, names);
-  const ai = controls.ai;
+  // The AI process is separate in production; the fixture runs its model work in-process.
+  const ai = controls.ai ?? new FixtureAi(db, names);
+  const whisper = new WhisperService({ binaryPath: null, modelPath: null, workDir: "/tmp/imsg-fixture-whisper" }, db,
+    async () => ({ ok: false, error: "The fixture stores no audio" }));
   const health = () => controls.health();
   const miniAi = () => ({ suggestions: ai.available, reactionSuggestions: bb.hasPrivateApi });
   // The fake runner beats on the wall clock the browser judges it by, not the pinned Date.now.
@@ -346,7 +351,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       }
       case "transcribe": {
         transcripts.set(payload.attachmentGuid, { state: "working" });
-        const transcript = await WhisperService.forCache(db)!.transcribe(payload.attachmentGuid);
+        const transcript = await whisper.transcribe(payload.attachmentGuid, id(chatGuid));
         transcripts.set(payload.attachmentGuid, transcript);
         return { kind: "transcribe" as const, transcript };
       }
@@ -519,13 +524,14 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         .filter((typing) => typing !== undefined).sort((a, b) => b.updatedAt - a.updatedAt)[0];
       return row ? { ...row, peerTyping: row.peerTyping && row.expiresAt > new Date().getTime() } : null;
     },
-    "comma/bridgeState:bridgeState": async () => {
+    "comma/bridgeState:routeExecutorStatus": async () => {
       // On the wall clock the browser judges it by, once a minute like the bridge, so a poll is not a new state.
       // A Mini that is away last beat ten minutes ago.
       const now = new Date().getTime();
-      if (mini.heartbeat && now - mini.beatAt >= BRIDGE_HEARTBEAT_MS) mini.beatAt = now;
+      if (mini.heartbeat && now - mini.beatAt >= STATUS_HEARTBEAT_MS) mini.beatAt = now;
       const lastSeenAt = mini.beatAt - (mini.heartbeat ? 0 : 10 * 60_000);
-      return { key: "mini", ...health(), ...miniAi(), whisperAvailable: false, whisperDetail: "Fixture transcription unavailable", lastSeenAt };
+      const { privateApi, emojiReactions } = health();
+      return { key: "imessage:fixture", connected: true, lastSeenAt, capabilities: { executor: "imessage", privateApi, emojiReactions } };
     },
     "comma/uploads:generateAttachmentUploadUrl": async () => "/__fixture/upload",
     "comma/uploads:finalizeUpload": async (args) => {
@@ -540,7 +546,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return found ? { guid: found.guid, thumbUrl: found.thumbUrl, originalUrl: found.originalUrl } : null;
     },
     "comma/media:attachmentChatGuid": async (args) => (await attachment(String(args.guid)))?.conversationId ?? null,
-    "comma/media:transcriptState": async (args) => transcripts.get(String(args.attachmentGuid)) ?? WhisperService.forCache(db)!.state(String(args.attachmentGuid)),
+    "comma/media:transcriptState": async (args) => {
+      const cached = db.getAttachmentTranscript(String(args.attachmentGuid));
+      return transcripts.get(String(args.attachmentGuid)) ?? (cached !== null ? { state: "ready", text: cached } : { state: "unavailable", detail: "Fixture transcription unavailable" });
+    },
     "comma/media:gallery": async (args) => {
       const cap = Math.max(0, Math.min(120, Math.floor(Number(args.limit ?? 120))));
       const seen = new Set<string>();
@@ -662,7 +671,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         const finish = async () => {
           // Each lane on the Mini runs one command at a time, so a burst of sends lands one by one and a slow
           // model command holds back only the model work behind it.
-          const lane = laneOf(payload.kind);
+          const lane: CommaOutboxLane = isAiKind(payload.kind) ? "ai" : "imessage";
           const ordered = payload.kind === "send" || lane === "ai";
           const work = () => wait(`outbox:${payload.kind}`).then(() => execute(chatGuid, payload, clientKey));
           const run = ordered ? (turns.get(lane) ?? Promise.resolve()).then(work) : work();

@@ -3,16 +3,23 @@ import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { getFunctionName } from "convex/server";
-import { presenceApi, usePeerTypingValue, type PeerPresence } from "./presence-api";
-import { usePrivateApi } from "../hooks/use-health";
+import { presenceApi, usePeerTypingValue, type ExecutorStatus, type PeerPresence } from "./presence-api";
+import { routeStatus } from "@shared/executors";
+import { bridgeSupport } from "../hooks/use-health";
 
-test("health falls back to false for missing state and follows capability updates", () => {
-  expect(usePrivateApi(() => undefined)).toBe(false);
-  expect(usePrivateApi(() => null)).toBe(false);
-  const state = { key: "mini" as const, privateApi: true, suggestions: true, reactionSuggestions: true, whisperAvailable: false, lastSeenAt: 1000 };
-  expect(usePrivateApi(() => state)).toBe(true);
-  expect(usePrivateApi(() => ({ ...state, privateApi: false }))).toBe(false);
-  expect(getFunctionName(presenceApi.bridgeState)).toBe("comma/bridgeState:bridgeState");
+test("a route reads its own executor's capabilities, and nothing before that executor reports", () => {
+  const imessage = (accountId: string, privateApi: boolean): ExecutorStatus => ({ key: `imessage:${accountId}`, connected: true, lastSeenAt: 1000,
+    capabilities: { executor: "imessage", privateApi, emojiReactions: privateApi } });
+  const ai: ExecutorStatus = { key: "ai", connected: true, lastSeenAt: 1000, capabilities: { executor: "ai", suggestions: true, whisperAvailable: false } };
+  const rows = [ai, imessage("a1", true)];
+  expect(bridgeSupport(routeStatus(rows, { platform: "imessage", accountId: "a1" }))).toEqual({ privateApi: true, emojiReactions: true });
+  // A conversation the accounts backfill has not reached reads its platform's only account.
+  expect(bridgeSupport(routeStatus(rows, { platform: "imessage", accountId: null }))).toEqual({ privateApi: true, emojiReactions: true });
+  expect(routeStatus([...rows, imessage("a2", false)], { platform: "imessage", accountId: null })).toBeNull();
+  expect(bridgeSupport(routeStatus(rows, { platform: "imessage", accountId: "other" }))).toEqual({ privateApi: false, emojiReactions: false });
+  expect(bridgeSupport(undefined)).toEqual({ privateApi: false, emojiReactions: false });
+  expect(bridgeSupport(ai)).toEqual({ privateApi: false, emojiReactions: false });
+  expect(getFunctionName(presenceApi.routeStatus)).toBe("comma/bridgeState:routeExecutorStatus");
   expect(getFunctionName(presenceApi.presence)).toBe("comma/presence:presence");
 });
 

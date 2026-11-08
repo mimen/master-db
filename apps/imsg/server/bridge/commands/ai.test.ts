@@ -56,6 +56,26 @@ test("a stale service result is not published, and an anchor race rejected by Co
   expect((await raced.handlers.suggestions.execute(raced.context, { kind: "suggestions", model: "terra", refresh: false })).suggestions.stale).toBe(true);
 });
 
+test("a precompute spends the daily budget and stops once it is gone; a user's request never spends it", async () => {
+  let left = 1;
+  const h = fixture({ budget: { take: () => left-- > 0 }, now: () => 60_000 });
+  (h.context.row as { createdAt: number }).createdAt = 59_000;
+  await h.handlers.suggestions.execute(h.context, { kind: "suggestions", model: "opus", refresh: false, precompute: true });
+  await expect(h.handlers.suggestions.execute(h.context, { kind: "suggestions", model: "opus", refresh: false, precompute: true }))
+    .rejects.toThrow("Daily suggestion precompute cap reached");
+  await h.handlers.suggestions.execute(h.context, { kind: "suggestions", model: "opus", refresh: false });
+  expect(h.calls).toHaveLength(2);
+});
+
+test("a precompute that waited out the AI process's downtime is dropped without a model call or budget", async () => {
+  let spent = 0;
+  const h = fixture({ budget: { take: () => ++spent > 0 }, now: () => 10 * 60_000 });
+  (h.context.row as { createdAt: number }).createdAt = 60_000;
+  await expect(h.handlers.suggestions.execute(h.context, { kind: "suggestions", model: "opus", refresh: false, precompute: true }))
+    .rejects.toThrow("Suggestion precompute expired");
+  expect([h.calls.length, spent]).toEqual([0, 0]);
+});
+
 test("identify asks the service about the conversation", async () => {
   const h = fixture();
   expect(await h.handlers.identify.execute(h.context)).toEqual({ kind: "identify", contact: { name: "Alex", confidence: "high", reasoning: "Mini vault lookup" } });

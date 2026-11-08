@@ -469,11 +469,9 @@ describe("runner functions", () => {
     ]);
   });
 
-  test("aiStatus reports the runner's latest heartbeat beside the Mini's capabilities", async () => {
+  test("aiStatus reports the runner's latest heartbeat beside the AI process's capabilities", async () => {
     const { t, as } = await setup();
-    await t.run((ctx) => ctx.db.insert("comma_bridge_state", {
-      key: "mini", privateApi: true, suggestions: true, reactionSuggestions: false, whisperAvailable: false, lastSeenAt: 1,
-    }));
+    await t.run((ctx) => ctx.db.insert("comma_bridge_state", { key: "ai", connected: true, lastSeenAt: 1, capabilities: { executor: "ai" as const, suggestions: true, whisperAvailable: false } }));
     const status = () => as.query(api.comma.suggestions.aiStatus, {});
     expect(await status()).toEqual({ suggestions: true, reactionSuggestions: false, agentHeartbeatAt: null });
     await t.mutation(internal.comma.agent.agentHeartbeat, { now: 1_000 });
@@ -481,7 +479,7 @@ describe("runner functions", () => {
     await t.mutation(internal.comma.agent.agentHeartbeat, { now: 2_000 });
     expect((await status()).agentHeartbeatAt).toBe(2_000);
     expect(await t.run((ctx) => ctx.db.query("comma_bridge_state").collect())).toHaveLength(2);
-    expect(await as.query(api.comma.bridgeState.bridgeState, {})).toMatchObject({ key: "mini", suggestions: true });
+    expect(await t.run((ctx) => ctx.db.query("comma_bridge_state").withIndex("by_key", (q) => q.eq("key", "ai")).unique())).toMatchObject({ capabilities: { suggestions: true } });
   });
 
   test("agentSend enqueues a send the way the composer does and leaves the user's draft alone", async () => {

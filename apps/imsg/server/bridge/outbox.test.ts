@@ -3,11 +3,20 @@ import type { ConvexClient } from "convex/browser";
 import { ChatCommands } from "../commands";
 import { ContactBook } from "../contacts";
 import { FakeBlueBubbles } from "../bluebubbles-fake";
+import { imessageHandlers } from "./commands";
+import { createAiHandlers } from "./commands/ai";
 import type { LeaseTimers } from "./commands/lease";
+import type { AiHandlers, HandlerMap, IMessageHandlers } from "./commands/types";
 import { OverlayDb } from "../db";
 import { FakeIngest } from "./fake-ingest";
 import { MessageWriter } from "./live";
-import { OutboxBridge, type OutboxRow } from "./outbox";
+import { aiLane, imessageLane, OutboxBridge, type OutboxRow } from "./outbox";
+
+const unavailable = { ok: false as const, error: "not implemented" };
+const aiDefaults = createAiHandlers({ ai: {
+  replySuggestions: async () => unavailable, identify: async () => unavailable, recordSuggestionFeedback: () => unavailable,
+  recordReactionFeedback: () => {}, clearSuggestionLearning: () => { throw new Error("not implemented"); },
+} });
 
 const CHAT = "iMessage;-;+15550001111";
 
@@ -34,9 +43,12 @@ function harness(now = 1_000) {
   const writer = new MessageWriter({ bb, db, ingest });
   writer.conversationIds.set(CHAT, ingest.id);
   const { client, fire, lanes } = fakeClient();
-  const start = (options: Pick<ConstructorParameters<typeof OutboxBridge>[0], "handlers" | "leaseTimers"> = {}) => new OutboxBridge({
+  const start = ({ handlers = {}, leaseTimers }: { handlers?: Partial<HandlerMap>; leaseTimers?: LeaseTimers } = {}) => new OutboxBridge({
     config: { convexCloudUrl: "https://convex.test", commaBridgeSecret: "test" },
-    writer, commands, client, now: () => now, ...options,
+    ingest, client, now: () => now, leaseTimers, lanes: [
+      imessageLane({ writer, commands, handlers: { ...imessageHandlers, ...handlers } as IMessageHandlers }),
+      aiLane({ ingest, handlers: { ...aiDefaults, ...handlers } as AiHandlers }),
+    ],
   });
   return { bb, db, ingest, writer, start, fire, lanes, setNow: (value: number) => { now = value; } };
 }
@@ -119,8 +131,8 @@ test("an expired lease is skipped rather than executed", async () => {
 test("a disabled bridge does not subscribe or claim", async () => {
   const h = harness();
   const bridge = new OutboxBridge({
-    config: { convexCloudUrl: null, commaBridgeSecret: "test" },
-    writer: h.writer, commands: new ChatCommands(h.bb, new ContactBook(h.bb)),
+    config: { convexCloudUrl: null, commaBridgeSecret: "test" }, ingest: h.ingest,
+    lanes: [imessageLane({ writer: h.writer, commands: new ChatCommands(h.bb, new ContactBook(h.bb)), handlers: imessageHandlers })],
   });
   try {
     await bridge.flush();

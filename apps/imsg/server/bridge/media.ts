@@ -4,9 +4,6 @@ import { canThumbnail, thumbnailAttachment } from "../thumbnail";
 import { transcodeAttachment } from "../transcode";
 import type { AttachmentRow, ConvexIngest, Results } from "./convex-ingest";
 import { RetryWork } from "./retry";
-import { subscribeTranscripts } from "../whisper";
-import type { TranscriptState } from "../../shared/types";
-import { postMedia } from "./commands/media";
 
 /** GIFs keep their animation, so a small one is uploaded whole as its own thumbnail. */
 const GIF_THUMB_LIMIT = 2 * 1024 * 1024;
@@ -21,9 +18,6 @@ const BATCH = 5;
 export class MediaWorker {
   private work: RetryWork;
   private stopped = false;
-  private transcriptWork: RetryWork;
-  private unsubscribeTranscripts: () => void;
-  private transcripts = new Map<string, TranscriptState>();
   uploadedToday = 0;
   lastError: string | null = null;
 
@@ -35,24 +29,6 @@ export class MediaWorker {
     isBusy?: () => boolean;
   }) {
     this.work = new RetryWork("media", () => this.drain());
-    this.transcriptWork = new RetryWork("transcripts", async () => {
-      let failure: Error | undefined;
-      for (const [attachmentGuid, transcript] of this.transcripts) {
-        try {
-          const found = await postMedia(this.deps.ingest, { kind: "transcript", attachmentGuid, transcript });
-          if (!found) throw new Error(`Attachment ${attachmentGuid} is not mirrored yet`);
-          if (this.transcripts.get(attachmentGuid) === transcript) this.transcripts.delete(attachmentGuid);
-        } catch (error) {
-          failure ??= error instanceof Error ? error : new Error(String(error));
-        }
-      }
-      if (failure) throw failure;
-    });
-    this.unsubscribeTranscripts = subscribeTranscripts((cache, guid, state) => {
-      if (cache !== this.deps.db) return;
-      this.transcripts.set(guid, state);
-      this.transcriptWork.request();
-    });
   }
 
   /**
@@ -90,7 +66,7 @@ export class MediaWorker {
   }
 
   start(): void { this.work.request(); }
-  async flush(): Promise<void> { await Promise.all([this.work.flush(), this.transcriptWork.flush()]); }
+  async flush(): Promise<void> { await this.work.flush(); }
   counts(): { thumbsPending: number; originalsPending: number } { return this.deps.db.mediaCounts(); }
 
   private async drain(): Promise<void> {
@@ -159,7 +135,5 @@ export class MediaWorker {
   stop(): void {
     this.stopped = true;
     this.work.stop();
-    this.transcriptWork.stop();
-    this.unsubscribeTranscripts();
   }
 }
