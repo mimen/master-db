@@ -1,7 +1,6 @@
 import { v } from "convex/values";
 
 import { isPendingGuid } from "../../apps/imsg/shared/pending-send";
-import { PROFILES } from "../../apps/imsg/shared/platform-profile";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation } from "../_generated/server";
 import {
@@ -153,7 +152,7 @@ export const upsertMessages = internalMutation({
       const { imessage: { tapback, ...imessage }, ...core } = postedMessage(posted);
       const message = {
         ...core, platform: account.platform, accountId: account._id, imessage,
-        isFromMe: core.isFromMe || (!PROFILES[account.platform].reportsFromMe && isSelf(account, core.sender?.address)),
+        isFromMe: core.isFromMe || (!PLATFORM_IDENTITY[account.platform].reportsFromMe && isSelf(account, core.sender?.address)),
         mentionsMe: core.mentions.some((mention) => isSelf(account, mention.address)),
       };
       const existing = await findMessage(ctx, scope, message.guid);

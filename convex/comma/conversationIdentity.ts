@@ -43,6 +43,9 @@ export const imessage = {
   /** Newest activity wins; ties prefer iMessage, then RCS, then SMS. */
   choosePrimary: (chats: { chatGuid: string; lastMessageAt: number }[]) => choosePrimary(chats),
 
+  /** BlueBubbles marks Milad's own messages, so a self handle never decides from-me. */
+  reportsFromMe: true,
+
   /** BlueBubbles reports only whether a chat is a group. */
   kind: (input: { isGroup: boolean }): CommaConversationKind => (input.isGroup ? "group" : "dm"),
 
@@ -60,6 +63,8 @@ export const imessage = {
 /** What ingest asks a platform when it mirrors a conversation: its key, its primary thread, and an alias's service. */
 export interface PlatformIdentity {
   platform: CommaPlatform;
+  /** The platform marks its own messages from-me. Where it does not, a sender among the account's selfHandles is me. */
+  reportsFromMe: boolean;
   kind(input: { isGroup: boolean }): CommaConversationKind;
   conversationKey(input: { isGroup: boolean; primaryChatGuid: string; participants: Participant[] }): string;
   choosePrimary(chats: { chatGuid: string; lastMessageAt: number }[]): string;

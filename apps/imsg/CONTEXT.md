@@ -60,7 +60,7 @@ mailbox. Conversations, chat aliases, messages, attachments, scheduled messages 
 so a conversation key or a message id only needs to be unique within its account. The bridge names its account at
 startup (`POST /comma/ingest/account`, seeded idempotently) and stamps it on every batch; a bridge that names none
 writes for iMessage's. A snapshot (unread, scheduled) replaces only its own account's state. Where a platform reports no
-from-me flag (`reportsFromMe` in its profile; iMessage reports one), a sender among the account's `selfHandles` is me. The
+from-me flag (`reportsFromMe` in `PLATFORM_IDENTITY`; iMessage reports one), a sender among the account's `selfHandles` is me. The
 iMessage bridge names its handles at startup from chat.db's `chat.account_login`, the phone and email Messages signs in
 with. A message whose mention names one of them is **addressed to me** (`mentionsMe`, set at ingest). Rows from before accounts carry no `accountId` and count as
 their platform's only account's until the accounts backfill (`convex/comma/migrations.ts`) stamps them.

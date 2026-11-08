@@ -49,8 +49,6 @@ export type Screening = "known" | "stranger" | "spam";
 
 /** The rules core logic asks a platform, beyond what its routes can do. */
 export interface PlatformRules {
-  /** The platform marks its own messages from-me. Where it does not, a sender among the account's selfHandles is me. */
-  reportsFromMe: boolean;
   attention(conversation: { kind: ConversationKind }, last: { isFromMe: boolean } | null): Attention;
   screening(conversation: { isSpam: boolean; known: boolean }): Screening;
 }
@@ -77,7 +75,6 @@ export const IMESSAGE_PROFILE = {
     /** What the "Send with" menu lists. Only the conversation's own service can be picked: the outbox has no per-message service. */
     services: ["iMessage", "SMS"] satisfies RouteService[],
   },
-  reportsFromMe: true,
   /** Every inbound last message is owed a reply, and every outbound one waits on theirs, in a dm or a group alike. */
   attention: (_conversation: { kind: ConversationKind }, last: { isFromMe: boolean } | null): Attention =>
     last === null ? "none" : last.isFromMe ? "waiting" : "needsYou",

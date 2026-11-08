@@ -73,7 +73,7 @@ export function conversationFlags(
  * the whole inbox disappear.
  */
 function isScreened(chat: ChatSummary): boolean {
-  const screening = screeningOf({ platform: chat.route.platform, isSpam: chat.isSpam, known: chat.known });
+  const screening = screeningOf({ ...chat, platform: chat.route.platform });
   return screening === "spam" || (screening === "stranger" && chat.contactsAvailable !== false);
 }
 

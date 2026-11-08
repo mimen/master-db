@@ -3,8 +3,9 @@ import type { ChatSummary, ConversationId } from "./types";
 
 /**
  * Participant and sender addresses. An address is a bare string as its platform presents it; its kind decides how
- * it normalizes, matches and displays. `parseHandle` is the one place that decides the kind, and `HANDLES` holds each
- * kind's rules. Format only what a person reads; never rewrite the address used for sends or lookups.
+ * it normalizes, matches and displays. `parseHandle` is the one place that decides the kind; `HANDLES` holds each
+ * kind's match and display rules, and `normalizeHandle` its identity key, kept apart so the client bundle leaves the
+ * normalizers out. Format only what a person reads; never rewrite the address used for sends or lookups.
  */
 
 /** What an address is, named as `identities.kind` names it. */
@@ -17,8 +18,6 @@ export interface Handle {
 }
 
 interface HandleRules {
-  /** The identity graph's join key (`identities.normalized`), or "" when this spelling has none. */
-  normalize(address: string): string;
   /**
    * The key two services' spellings of one handle share, or "" when too weak to match on. Looser than
    * `normalize` for phones (the last ten digits), because Apple Contacts and BlueBubbles format one number
@@ -77,7 +76,6 @@ export function formatPhone(raw: string): string {
 
 export const HANDLES: Readonly<Record<HandleKind, HandleRules>> = {
   phone: {
-    normalize: normalizePhone,
     matchKey(address) {
       const digits = address.replace(/\D/g, "");
       return digits.length >= 7 ? digits.slice(-10) : "";
@@ -86,12 +84,10 @@ export const HANDLES: Readonly<Record<HandleKind, HandleRules>> = {
     format: (address) => (/^\+?[\d\s().-]+$/.test(address) ? formatPhone(address) : address),
   },
   email: {
-    normalize: normalizeEmail,
     matchKey: (address) => address.toLowerCase(),
     format: (address) => address,
   },
   slack: {
-    normalize: (address) => address,
     matchKey: (address) => address,
     // A Slack user id means nothing to a reader; Name Resolution supplies the name once the graph has it.
     format: () => "Slack user",
@@ -111,10 +107,18 @@ export function parseHandle(raw: string): Handle | null {
   return { kind: "phone", address };
 }
 
-/** The identity graph's key for a raw address, or "" when it has none. */
+/** The identity graph's join key for a raw address (`identities.normalized`), or "" when this spelling has none. */
 export function normalizeHandle(raw: string): string {
   const handle = parseHandle(raw);
-  return handle ? HANDLES[handle.kind].normalize(handle.address) : "";
+  if (!handle) return "";
+  switch (handle.kind) {
+    case "phone":
+      return normalizePhone(handle.address);
+    case "email":
+      return normalizeEmail(handle.address);
+    case "slack":
+      return handle.address;
+  }
 }
 
 /** The match key for a raw address, or "" when too weak to match on. Keys of different kinds never collide. */

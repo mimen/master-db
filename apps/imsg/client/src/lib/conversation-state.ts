@@ -26,7 +26,7 @@ export const rowAfter = {
     ? row : { ...row, flags: { ...row.flags, unresponded: false, waiting: false } },
   unsettle: (row: Row): Row => {
     if (!row.lastMessage) return row;
-    const attention = attentionOf({ platform: row.platform ?? "imessage", kind: row.kind }, row.lastMessage);
+    const attention = attentionOf({ ...row, platform: row.platform ?? "imessage" }, row.lastMessage);
     return { ...row, flags: { ...row.flags, unresponded: attention === "needsYou", waiting: attention === "waiting" } };
   },
   pin: (row: Row, pinned: boolean): Row => ({ ...row, flags: { ...row.flags, pinned } }),
