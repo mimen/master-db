@@ -11,6 +11,8 @@ What keeps iMessage working while Slack and Gmail land. The `Validate imsg` work
 | Comma Convex functions (ingest, outbox, triage, queries, reactions, lanes) | `convex/comma/*.test.ts` under vitest | yes |
 | Slack's profile: channel attention, no screening, every write greyed with its reason; the Service filter lists only platforms the inbox holds | `apps/imsg/shared/platform-profile.test.ts`, `apps/imsg/client/src/lib/inbox-model.test.ts` | yes |
 | Slack conversation keys, kinds and routes; mrkdwn display and model text; the Slack lane refuses a send and completes a read in Convex | `convex/comma/conversationIdentity.test.ts`, `convex/comma/slackText.test.ts`, `convex/comma/slackLane.test.ts` | yes |
+| Slack OAuth: install redirects a live single-use state to Slack, the callback seals Milad's token on the AUF account (and refuses another workspace), Disconnect revokes it; the accounts list never returns credentials; every URL the Slack manifest names is routed by `convex/http.ts` | `convex/comma/slackAuth.test.ts` (real HTTP router, fake Slack Web API in `convex/comma/fakeSlack.vitest.ts`) | yes |
+| Settings connects Slack in a new tab and disconnects it after a confirm | `fixture/slack-accounts.playwright.ts` | yes |
 | Send a text | `fixture/golden-send-text.playwright.ts`, `fixture/smoke.playwright.ts`, `fixture/send.playwright.ts` | yes |
 | A burst of sends keeps its order in the thread and the preview | `fixture/golden-send-burst.playwright.ts`, `fixture/send.playwright.ts` | yes |
 | Pending send: Mini away, browser offline, Cancel, Not sent, Retry, reload | `fixture/golden-pending-send.playwright.ts` | yes |

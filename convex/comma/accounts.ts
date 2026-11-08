@@ -2,8 +2,9 @@ import { v } from "convex/values";
 
 import { addressesMatch, stripServiceSuffix } from "../../apps/imsg/shared/address";
 import type { Doc, Id } from "../_generated/dataModel";
-import { internalMutation, type MutationCtx, type QueryCtx } from "../_generated/server";
-import { platform, type CommaPlatform } from "../schema/comma/validators";
+import { internalMutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { assertAllowed } from "../_lib/authed";
+import { accountHealth, platform, type CommaPlatform } from "../schema/comma/validators";
 
 import { IMESSAGE_ACCOUNT } from "./conversationIdentity";
 import type { AccountScope } from "./messageShape";
@@ -11,7 +12,8 @@ import type { AccountScope } from "./messageShape";
 /**
  * Accounts: one signed-in identity per platform login (the iMessage Mac, a Slack workspace, a mailbox). Every
  * conversation, message and sync cursor belongs to one, so keys and message ids only need to be unique per account.
- * iMessage has exactly one, seeded on first use. Credentials arrive with OAuth; nothing here holds a secret.
+ * iMessage has exactly one, seeded on first use. OAuth platforms keep a sealed token on the row (credentials.ts), which
+ * no query returns.
  */
 
 type Account = Doc<"comma_accounts">;
@@ -77,4 +79,20 @@ export const ensure = internalMutation({
   args: accountInput,
   returns: v.id("comma_accounts"),
   handler: async (ctx, args) => (await ensureAccount(ctx, args))._id,
+});
+
+/** Settings' accounts list. Fields are named one by one, so the sealed credentials never reach a client. */
+export const listAccounts = query({
+  args: {},
+  returns: v.array(v.object({
+    _id: v.id("comma_accounts"), platform, label: v.string(), health: accountHealth, connected: v.boolean(), createdAt: v.number(),
+  })),
+  handler: async (ctx) => {
+    await assertAllowed(ctx);
+    return (await ctx.db.query("comma_accounts").collect()).map((account) => ({
+      _id: account._id, platform: account.platform, label: account.label, health: account.health, createdAt: account.createdAt,
+      // The iMessage account has no token: the Mini's bridge is its connection.
+      connected: account.platform === "imessage" || account.credentials !== undefined,
+    }));
+  },
 });

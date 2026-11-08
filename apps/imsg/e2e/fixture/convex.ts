@@ -166,6 +166,8 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
    * The Mini as the outbox sees it. While it is away a send stays queued, cancellable, until it comes back or the
    * Not sent deadline passes, as production's outbox holds it.
    */
+  // Settings' accounts: the Mac's iMessage account, and Slack once a spec connects it.
+  const slackAccount = { connected: false, ever: false };
   const mini = { online: true, heartbeat: true, beatAt: new Date().getTime(), notSentAfterMs: NOT_SENT_AFTER_MS, held: new Map<string, { release: () => void; timer: ReturnType<typeof setTimeout> }>() };
   const strand = (clientKey: string, error: string) => {
     const receipt = receipts.get(clientKey);
@@ -481,6 +483,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     uploads.set(storageId, { bytes });
     return c.json({ storageId });
   });
+  app.get("/__fixture/slack-connected", (c) => c.html("<p>Slack is connected. You can close this tab.</p>"));
   app.get("/__fixture/media/:guid", (c) => {
     const upload = uploads.get(c.req.param("guid"));
     return upload ? new Response(upload.bytes) : bb.downloadAttachment(c.req.param("guid"));
@@ -536,6 +539,19 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
       const lastSeenAt = mini.beatAt - (mini.heartbeat ? 0 : 10 * 60_000);
       const { privateApi, emojiReactions } = health();
       return { key: "imessage:fixture", connected: true, lastSeenAt, capabilities: { executor: "imessage", privateApi, emojiReactions } };
+    },
+    "comma/accounts:listAccounts": async () => [
+      { _id: "account-imessage", platform: "imessage", label: "iMessage", health: "ok", connected: true, createdAt: 1 },
+      ...(slackAccount.ever ? [{ _id: "account-slack", platform: "slack", label: "AUF", health: "ok", connected: slackAccount.connected, createdAt: 2 }] : []),
+    ],
+    // The fixture's Slack consent screen approves at once, the way the real callback lands the account.
+    "comma/slackAuth:startSlackConnect": async () => {
+      Object.assign(slackAccount, { connected: true, ever: true });
+      return "/__fixture/slack-connected";
+    },
+    "comma/slackAuth:disconnectSlack": async () => {
+      slackAccount.connected = false;
+      return null;
     },
     "comma/uploads:generateAttachmentUploadUrl": async () => "/__fixture/upload",
     "comma/uploads:finalizeUpload": async (args) => {
@@ -775,6 +791,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
   });
   return () => {
     for (const { timer } of mini.held.values()) clearTimeout(timer);
+    Object.assign(slackAccount, { connected: false, ever: false });
     mini.held.clear(); mini.online = true; mini.heartbeat = true; mini.beatAt = new Date().getTime(); mini.notSentAfterMs = NOT_SENT_AFTER_MS; sendPayloads.clear();
     turns.clear(); names.reset(); agent.reset(); today.reset(); triage.reset(); latency.clear(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
     for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };

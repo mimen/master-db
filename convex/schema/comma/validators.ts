@@ -11,6 +11,8 @@ export const platform = v.union(v.literal("imessage"), v.literal("slack"));
 
 /** One signed-in identity on a platform: an iMessage Mac, a Slack workspace, a mailbox. Credentials arrive with OAuth. */
 export const accountHealth = v.union(v.literal("ok"), v.literal("needsAttention"));
+/** An OAuth token, AES-GCM encrypted under COMMA_TOKEN_KEY (convex/comma/credentials.ts). Only internal actions open it. */
+export const sealedCredentials = v.object({ keyVersion: v.number(), iv: v.string(), ciphertext: v.string() });
 export const accountFields = {
   platform,
   /** The platform's own id for the account, unique within the platform. */
@@ -20,7 +22,12 @@ export const accountFields = {
   selfHandles: v.array(v.string()),
   health: accountHealth,
   createdAt: v.number(),
+  /** Absent on the iMessage account, which needs none, and on an account that was disconnected. */
+  credentials: v.optional(sealedCredentials),
 };
+
+/** A single-use OAuth state: an authed client asked to connect, and the platform's callback must name it before it expires. */
+export const oauthStateFields = { state: v.string(), platform, expiresAt: v.number() };
 
 /**
  * Where a command executes: the platform, the account, and that platform's own thread id. Convex chooses it; a
@@ -637,6 +644,8 @@ export const presenceFields = {
 export const executorCapabilities = v.union(
   /** The Mini's bridge, for one iMessage account: what its BlueBubbles can send. */
   v.object({ executor: v.literal("imessage"), privateApi: v.boolean(), emojiReactions: v.boolean() }),
+  /** Slack's account: Convex runs its lane, and the Events webhook and OAuth report its connection. */
+  v.object({ executor: v.literal("slack") }),
   /** The Mini's AI process: reply suggestions through the gateway, and local Whisper. */
   v.object({ executor: v.literal("ai"), suggestions: v.boolean(), whisperAvailable: v.boolean(), whisperDetail: v.optional(v.string()) }),
 );

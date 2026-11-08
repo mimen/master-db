@@ -192,6 +192,21 @@ export declare const api: {
     signOut: FunctionReference<"action", "public", {}, any>;
   };
   comma: {
+    accounts: {
+      listAccounts: FunctionReference<
+        "query",
+        "public",
+        {},
+        Array<{
+          _id: Id<"comma_accounts">;
+          connected: boolean;
+          createdAt: number;
+          health: "ok" | "needsAttention";
+          label: string;
+          platform: "imessage" | "slack";
+        }>
+      >;
+    };
     agent: {
       answer: FunctionReference<
         "mutation",
@@ -476,6 +491,7 @@ export declare const api: {
                 executor: "imessage";
                 privateApi: boolean;
               }
+            | { executor: "slack" }
             | {
                 executor: "ai";
                 suggestions: boolean;
@@ -2358,6 +2374,15 @@ export declare const api: {
           updatedAt: number;
         }>
       >;
+    };
+    slackAuth: {
+      disconnectSlack: FunctionReference<
+        "action",
+        "public",
+        { accountId: Id<"comma_accounts"> },
+        null
+      >;
+      startSlackConnect: FunctionReference<"action", "public", {}, string>;
     };
     suggestions: {
       aiStatus: FunctionReference<
@@ -6021,6 +6046,7 @@ export declare const internal: {
                       executor: "imessage";
                       privateApi: boolean;
                     }
+                  | { executor: "slack" }
                   | {
                       executor: "ai";
                       suggestions: boolean;
@@ -6046,6 +6072,52 @@ export declare const internal: {
               }
             | { claimToken: string; clientKey: string; kind: "typingCurrent" };
         },
+        boolean
+      >;
+    };
+    slackAuth: {
+      accountCredentials: FunctionReference<
+        "query",
+        "internal",
+        { accountId: Id<"comma_accounts"> },
+        {
+          credentials?: { ciphertext: string; iv: string; keyVersion: number };
+          externalId: string;
+        } | null
+      >;
+      connect: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          credentials: { ciphertext: string; iv: string; keyVersion: number };
+          externalId: string;
+          label: string;
+          selfHandle: string;
+        },
+        Id<"comma_accounts">
+      >;
+      consumeState: FunctionReference<
+        "mutation",
+        "internal",
+        { state: string },
+        boolean
+      >;
+      disconnect: FunctionReference<
+        "mutation",
+        "internal",
+        { accountId: Id<"comma_accounts"> },
+        null
+      >;
+      saveState: FunctionReference<
+        "mutation",
+        "internal",
+        { expiresAt: number; state: string },
+        null
+      >;
+      stateIsLive: FunctionReference<
+        "query",
+        "internal",
+        { state: string },
         boolean
       >;
     };

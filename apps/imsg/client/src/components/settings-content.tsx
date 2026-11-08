@@ -1,8 +1,12 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { displayReleaseSha } from "@shared/release-identity";
 import type { SuggestionModel } from "@shared/types";
+import type { api as convexApi } from "@convex-api";
+import type { AccountId } from "@shared/types";
+import { useAction, useConvexAuth, useQuery } from "convex/react";
+import { anyApi } from "convex/server";
 import { createContext, useContext, useState, useSyncExternalStore, type JSX, type ReactNode } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Dropdown, type DropdownOption } from "./ui/dropdown";
 
@@ -158,6 +162,69 @@ function Group({ title, children }: { title: string; children: ReactNode }): JSX
   );
 }
 
+const accountsApi = anyApi.comma.accounts as unknown as typeof convexApi.comma.accounts;
+const slackAuthApi = anyApi.comma.slackAuth as unknown as typeof convexApi.comma.slackAuth;
+
+function QuietButton({ label, destructive = false, onPress }: { label: string; destructive?: boolean; onPress: () => void }): JSX.Element {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ hovered, pressed }) => [styles.quietButton, (hovered || pressed) && { backgroundColor: theme.backgroundElement }]}
+    >
+      <Text style={[styles.quietButtonText, { color: destructive ? theme.destructive : theme.accent }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/** Each signed-in account and its connection. Slack connects through OAuth in a browser tab. */
+function AccountsGroup(): JSX.Element | null {
+  const { isAuthenticated } = useConvexAuth();
+  const accounts = useQuery(accountsApi.listAccounts, isAuthenticated ? {} : "skip");
+  const startSlackConnect = useAction(slackAuthApi.startSlackConnect);
+  const disconnectSlack = useAction(slackAuthApi.disconnectSlack);
+  const showSheet = useActionSheet();
+  const theme = useTheme();
+  if (!accounts) return null;
+  const imessage = accounts.find((account) => account.platform === "imessage");
+  const slack = accounts.find((account) => account.platform === "slack");
+  const connect = (): void => void startSlackConnect({}).then(
+    (url) => Linking.openURL(url),
+    () => showToast("Couldn't start connecting Slack. Try again."),
+  );
+  const disconnect = (accountId: AccountId): void => showSheet({
+    title: "Disconnect Slack? Comma stops reading it until you reconnect.",
+    actions: [{
+      label: "Disconnect",
+      destructive: true,
+      onPress: () => void disconnectSlack({ accountId }).then(
+        () => showToast("Slack disconnected"),
+        () => showToast("Couldn't disconnect Slack. Try again."),
+      ),
+    }],
+  });
+  return (
+    <Group title="Accounts">
+      {imessage && (
+        <SettingRow first title="iMessage" caption="Through the Mac mini.">
+          <Text style={[styles.rowCaption, { color: theme.textSecondary }]}>Connected</Text>
+        </SettingRow>
+      )}
+      <SettingRow
+        first={!imessage}
+        title="Slack"
+        caption={slack?.connected ? `${slack.label}. Comma reads your DMs, group DMs and threads. Sending is coming.`
+          : slack ? `${slack.label}. Not connected.` : "Read your AUF DMs, group DMs and threads in Comma."}
+      >
+        {slack?.connected
+          ? <QuietButton label="Disconnect" destructive onPress={() => disconnect(slack._id)} />
+          : <QuietButton label={slack ? "Reconnect" : "Connect"} onPress={connect} />}
+      </SettingRow>
+    </Group>
+  );
+}
+
 /** Below this pane width a row stacks its field under the label. */
 const INLINE_MIN_WIDTH = 480;
 const InlineContext = createContext(false);
@@ -257,6 +324,8 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
               <Dropdown label="Name order" value={nameOrder} options={NAME_ORDER_OPTIONS} onChange={setNameOrder} />
             </SettingRow>
           </Group>
+
+          <AccountsGroup />
 
           <Group title="Lists">
             <SettingRow first title="Open on" caption="The lens Comma shows when it starts.">

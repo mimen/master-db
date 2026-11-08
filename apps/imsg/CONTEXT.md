@@ -69,7 +69,9 @@ startup (`POST /comma/ingest/account`, seeded idempotently) and stamps it on eve
 writes for iMessage's. A snapshot (unread, scheduled) replaces only its own account's state. Where a platform reports no
 from-me flag (`reportsFromMe` in `PLATFORM_IDENTITY`; iMessage reports one), a sender among the account's `selfHandles` is me. The
 iMessage bridge names its handles at startup from chat.db's `chat.account_login`, the phone and email Messages signs in
-with. A message whose mention names one of them is **addressed to me** (`mentionsMe`, set at ingest). Rows from before accounts carry no `accountId` and count as
+with. An OAuth account (Slack's workspace) keeps its token on the row as `credentials`, AES-GCM sealed under the Convex
+env `COMMA_TOKEN_KEY` and bound to the account (`convex/comma/credentials.ts`); only internal actions open it, and Settings'
+`listAccounts` names its fields so the token never reaches a client. A message whose mention names one of them is **addressed to me** (`mentionsMe`, set at ingest). Rows from before accounts carry no `accountId` and count as
 their platform's only account's until the accounts backfill (`convex/comma/migrations.ts`) stamps them.
 _Avoid_: workspace, login (for the stored identity)
 

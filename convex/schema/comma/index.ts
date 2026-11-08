@@ -17,6 +17,7 @@ import {
   conversationStateFields,
   draftFields,
   messageRowFields,
+  oauthStateFields,
   outboxFields,
   reactionFields,
   scheduledFields,
@@ -28,6 +29,7 @@ import {
 } from "./validators";
 
 export const comma_accounts = defineTable(accountFields).index("by_platform_externalId", ["platform", "externalId"]);
+export const comma_oauth_states = defineTable(oauthStateFields).index("by_state", ["state"]);
 
 export const comma_conversations = defineTable(conversationFields)
   .index("by_platform_account_key", ["platform", "accountId", "conversationKey"])
