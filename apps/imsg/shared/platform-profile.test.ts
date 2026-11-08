@@ -105,3 +105,45 @@ describe("iMessage's attention and screening", () => {
     expect(screeningOf({ platform: "imessage", isSpam: false, known: false })).toBe("stranger");
   });
 });
+
+describe("Slack", () => {
+  const slack = (kind: "dm" | "group" | "channel") => ({ platform: "slack" as const, kind });
+  const route = (isGroup: boolean): ProfileRoute => ({ platform: "slack", service: "Slack", isGroup });
+
+  test("a channel needs the user only when someone else's last message mentions them, and never waits", () => {
+    expect(attentionOf(slack("channel"), { isFromMe: false })).toBe("none");
+    expect(attentionOf(slack("channel"), { isFromMe: false, mentionsMe: true })).toBe("needsYou");
+    expect(attentionOf(slack("channel"), { isFromMe: true, mentionsMe: true })).toBe("none");
+    expect(attentionOf(slack("channel"), null)).toBe("none");
+  });
+
+  test("a dm, group dm or thread follows iMessage's rule", () => {
+    for (const kind of ["dm", "group"] as const) {
+      expect(attentionOf(slack(kind), { isFromMe: false })).toBe("needsYou");
+      expect(attentionOf(slack(kind), { isFromMe: true })).toBe("waiting");
+    }
+  });
+
+  test("no Slack conversation is screened", () => {
+    expect(screeningOf({ platform: "slack", isSpam: false, known: false })).toBe("known");
+  });
+
+  test("everything that writes greys with the coming-soon reason; what Slack lacks says so; group controls are absent", () => {
+    for (const feature of ["send", "react", "emojiReact", "reply", "edit", "deleteMessage", "attachments", "schedule"] as const) {
+      expect(support(route(true), feature)).toEqual({ ok: false, reason: "Sending from Slack is coming" });
+    }
+    expect(support(route(false), "call")).toEqual({ ok: false, reason: "Slack can't call" });
+    expect(support(route(false), "rename")).toBeNull();
+    expect(reactionSupport(route(false), "emoji:🔥")).toEqual({ ok: false, reason: "Sending from Slack is coming" });
+  });
+
+  test("the composer draws Slack's badge and placeholder, and Enter sends", () => {
+    expect(composerConfig({ platform: "slack", service: "Slack" })).toMatchObject({
+      placeholder: "Message", enterSends: true, badge: { label: "Slack" }, serviceOptions: [{ label: "Slack" }],
+    });
+  });
+
+  test("iMessage still sends text on every service", () => {
+    for (const service of ["iMessage", "SMS", "RCS"] as const) expect(support(dm(service), "send")).toEqual({ ok: true });
+  });
+});

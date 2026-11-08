@@ -71,12 +71,14 @@ async function createPendingSend(ctx: MutationCtx, { conversation, route, client
     dateCreated: now,
     isFromMe: true,
     text: payload.text,
-    imessage: {
-      chatGuid: route.chatGuid,
-      service: messageService(profileRoute(route, conversation.isGroup).service),
-      error: 0,
-      isAssociatedMessage: false,
-    },
+    ...(route.platform === "imessage" ? {
+      imessage: {
+        chatGuid: route.chatGuid,
+        service: messageService(profileRoute(route, conversation.isGroup).service),
+        error: 0,
+        isAssociatedMessage: false,
+      },
+    } : {}),
     edited: false,
     retracted: false,
     replyToGuid: payload.replyToGuid,

@@ -142,7 +142,7 @@ export async function personContext(ctx: QueryCtx, input: PersonContextInput) {
     (row) => !row.isFromMe && shown(row),
   ))))).flat();
   // ponytail: one-to-one keys are looked up on iMessage's account, the only one; loop the accounts when another lands.
-  const scope = await soleAccountScope(ctx, platform.value);
+  const scope = await soleAccountScope(ctx, "imessage");
   const dms = (await Promise.all(dmKeys.map((key) => findByKey(ctx, scope, key))))
     .filter((dm): dm is Doc<"comma_conversations"> => dm !== null && dm._id !== exclude);
   const both = [...new Set(dms.map((dm) => dm._id))].map((id) => source(
@@ -171,7 +171,7 @@ export async function personContext(ctx: QueryCtx, input: PersonContextInput) {
       if (!conversation) return null;
       // A named group's title needs no participant names.
       const people = conversation.isGroup && conversation.rawDisplayName?.trim() ? [] : (await conversationPeople(ctx, conversation)).map((p) => p.person);
-      return { title: resolveConversationNames(conversation, people).displayName, isGroup: conversation.isGroup, platform: conversation.platform ?? platform.value };
+      return { title: resolveConversationNames(conversation, people).displayName, isGroup: conversation.isGroup, platform: conversation.platform ?? "imessage" };
     })());
     return conversations.get(id)!;
   };

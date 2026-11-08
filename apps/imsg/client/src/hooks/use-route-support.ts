@@ -12,14 +12,14 @@ export type RouteSupport = (feature: Feature) => Support | null;
 /** What the conversation's route can do, per its platform profile and its executor's live capabilities. Null before it loads. */
 export function useRouteSupport(chat: Pick<ChatSummary, "route" | "isGroup"> | null | undefined): RouteSupport {
   const { privateApi, emojiReactions } = bridgeSupport(useRouteStatus(chat?.route));
-  // The callback keys on the route's fields, not the chat object, so it survives list re-renders.
-  const platform = chat?.route.platform;
-  const accountId = chat?.route.accountId ?? null;
-  const chatGuid = chat?.route.imessage.chatGuid;
-  const isGroup = chat?.isGroup ?? false;
+  // The callback keys on the profile route's fields, not the chat object, so it survives list re-renders.
+  const route = chat ? conversationRoute(chat) : null;
+  const platform = route?.platform;
+  const service = route?.service;
+  const isGroup = route?.isGroup ?? false;
   return useCallback(
-    (feature: Feature) => platform === undefined || chatGuid === undefined ? null
-      : support(conversationRoute({ route: { platform, accountId, imessage: { chatGuid } }, isGroup }), feature, { privateApi, emojiReactions }),
-    [platform, accountId, chatGuid, isGroup, privateApi, emojiReactions],
+    (feature: Feature) => platform === undefined || service === undefined ? null
+      : support({ platform, service, isGroup }, feature, { privateApi, emojiReactions }),
+    [platform, service, isGroup, privateApi, emojiReactions],
   );
 }

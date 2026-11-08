@@ -195,9 +195,11 @@ export function draftBubble(chat: Pick<ChatSummary, "route" | "isGroup">, draft:
     edited: false,
     retracted: false,
     sendState: "queued",
-    imessage: {
-      chatGuid: chat.route.imessage.chatGuid, service: messageService(conversationRoute(chat).service), special: null, sendEffect: null, error: 0,
-    },
+    ...(chat.route.platform === "imessage" ? {
+      imessage: {
+        chatGuid: chat.route.imessage.chatGuid, service: messageService(conversationRoute(chat).service), special: null, sendEffect: null, error: 0,
+      },
+    } : {}),
   };
 }
 

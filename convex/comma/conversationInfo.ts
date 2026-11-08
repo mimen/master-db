@@ -6,7 +6,7 @@ import { assertAllowed } from "../_lib/authed";
 import { personName } from "../identity/names";
 
 import { soleAccountScope } from "./accounts";
-import { imessage, primaryChat, routeFor } from "./conversationIdentity";
+import { imessage, routeFor } from "./conversationIdentity";
 import { findByHandle, findConversation } from "./conversationLookup";
 import { personForAddress } from "./photos";
 
@@ -22,7 +22,7 @@ export const findChat = query({
     const found = await findByHandle(ctx, await soleAccountScope(ctx, imessage.platform), args.address);
     const conversation = found && !found.isGroup && found.participants.length === 1 ? found : null;
     const route = conversation && routeFor(conversation, args.service);
-    return route ? { conversationId: conversation._id, chatGuid: route.chatGuid, service: imessage.sendService(route.chatGuid),
+    return conversation && route?.platform === "imessage" ? { conversationId: conversation._id, chatGuid: route.chatGuid, service: imessage.sendService(route.chatGuid),
       isGroup: false as const, participants: conversation.participants.map((p) => p.address) } : null;
   },
 });
@@ -40,7 +40,8 @@ export const chatInfo = query({
     const participants = (await conversationPeople(ctx, conversation)).map(({ address, name, person }) => ({
       address, name, ...(person?.is_favorite !== undefined ? { is_favorite: person.is_favorite } : {}),
     }));
-    return { guid: ref.chatGuid ?? primaryChat(conversation), displayName: conversation.rawDisplayName || null, isGroup: conversation.isGroup, participants };
+    // A conversation with no chat (Slack's) answers with its own id.
+    return { guid: ref.chatGuid ?? conversation.primaryChatGuid ?? conversation._id, displayName: conversation.rawDisplayName || null, isGroup: conversation.isGroup, participants };
   },
 });
 

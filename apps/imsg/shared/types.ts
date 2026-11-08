@@ -53,7 +53,7 @@ export type SpecialContent =
   | { kind: "unknown"; label: string };
 
 /** The platforms Comma mirrors. */
-export type Platform = "imessage";
+export type Platform = "imessage" | "slack";
 
 /** A conversation's shape: one person, a group, a workspace channel, or an email thread. */
 export type ConversationKind = "dm" | "group" | "channel" | "emailThread";
@@ -174,6 +174,11 @@ export type ChatRoute = {
   accountId: AccountId | null;
   /** The chat GUID the conversation sends through. Parse it only through shared/imessage.ts. */
   imessage: { chatGuid: string };
+} | {
+  platform: "slack";
+  accountId: AccountId;
+  /** The Slack channel, DM or group DM, and the thread when the conversation is one thread inside a channel. */
+  slack: { channel: string; threadTs?: string };
 };
 
 export interface ChatSummary {

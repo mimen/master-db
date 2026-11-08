@@ -17,8 +17,10 @@ export function createMessagingApi(run: typeof runCommand) {
     newChat: async (body: { addresses: string[]; text: string }) => run(null, { kind: "createChat", ...body }),
     participant: async (conversationId: ConversationId, address: string, action: "add" | "remove") => run(conversationId, { kind: "participant", address, action }),
     leaveGroup: async (conversationId: ConversationId) => run(conversationId, { kind: "leaveGroup" }),
-    deleteChat: async (chat: Pick<ChatSummary, "conversationId" | "route">) =>
-      run(chat.conversationId, { kind: "deleteChat", chatGuid: chat.route.imessage.chatGuid }),
+    deleteChat: async (chat: Pick<ChatSummary, "conversationId" | "route">) => {
+      if (chat.route.platform !== "imessage") throw new Error("Only an iMessage conversation can be deleted");
+      return run(chat.conversationId, { kind: "deleteChat", chatGuid: chat.route.imessage.chatGuid });
+    },
     createFaceTimeLink: async (conversationId: ConversationId) => ({ message: fromBridgeMessage((await run(conversationId, { kind: "createFaceTimeLink" })).message) }),
   };
 }

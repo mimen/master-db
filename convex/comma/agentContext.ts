@@ -7,7 +7,7 @@ import { people } from "../schema/identity/people";
 
 import { soleAccountScope } from "./accounts";
 import { imessageCapabilities } from "./bridgeState";
-import { primaryChat, sendRoute } from "./conversationIdentity";
+import { sendRoute } from "./conversationIdentity";
 import { conversationPeople } from "./conversationInfo";
 import { findAttachment, findMessage, shownInThread } from "./conversationLookup";
 import { attachmentName, isAssociated, messageImessage, modelTextFieldsOf, scopeOf, type AccountScope } from "./messageShape";
@@ -139,7 +139,7 @@ export const aiThread = internalMutation({
       // ponytail: the AI thread is iMessage's flat wire message; a second platform's rows need a neutral one.
       const imessage = messageImessage(row);
       return {
-        guid: row.guid, chatGuid: imessage?.chatGuid ?? primaryChat(conversation), text: row.text, ...modelTextFieldsOf(row), dateCreated: row.dateCreated,
+        guid: row.guid, chatGuid: imessage?.chatGuid ?? conversation.primaryChatGuid ?? "", text: row.text, ...modelTextFieldsOf(row), dateCreated: row.dateCreated,
         dateRead: row.dateRead ?? null, dateDelivered: row.dateDelivered ?? null, isFromMe: row.isFromMe, service: imessage?.service ?? "iMessage",
         sender: row.sender ? { address: row.sender.address, name: names.get(row.sender.address) ?? row.sender.name } : null,
         attachments: (await Promise.all(row.attachmentGuids.map((guid) => findAttachment(ctx, scopeOf(row), guid)))).flatMap((a) => a ? [{

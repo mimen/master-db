@@ -8,6 +8,8 @@ import {
 } from "./beeper/sync/handleAttachments";
 import { handleIngest as handleBeeperIngest } from "./beeper/sync/handleIngest";
 import { handleIngest as handleCommaIngest, handleUploadUrl as handleCommaUploadUrl } from "./comma/ingest";
+import { handleCallback as handleSlackCallback, handleInstall as handleSlackInstall } from "./comma/slackAuth";
+import { handleSlackEvents } from "./comma/slackEvents";
 import { handleIngestContacts } from "./identity/sync/handleIngestContacts";
 import { handleTodoistWebhook } from "./todoist/webhook";
 
@@ -111,5 +113,15 @@ http.route({
  */
 http.route({ pathPrefix: "/comma/ingest/", method: "POST", handler: handleCommaIngest });
 http.route({ path: "/comma/ingest-upload-url", method: "POST", handler: handleCommaUploadUrl });
+
+/**
+ * Comma's Slack connection: the browser leg of OAuth. Public by design; each needs a single-use state that only an
+ * authed client can mint. The Slack app's redirect URL is the callback (apps/imsg/slack/manifest.json).
+ */
+http.route({ path: "/comma/oauth/slack/install", method: "GET", handler: handleSlackInstall });
+http.route({ path: "/comma/oauth/slack/callback", method: "GET", handler: handleSlackCallback });
+
+/** Slack's Events API, signed with SLACK_SIGNING_SECRET. The Slack app's Event Subscriptions request URL. */
+http.route({ path: "/comma/slack/events", method: "POST", handler: handleSlackEvents });
 
 export default http;

@@ -12,7 +12,7 @@ import {
   useUnlinkEvent,
 } from "@/lib/identity";
 import { useTheme } from "@/hooks/use-theme";
-import { HOVER_DIM, Radii, Type } from "@/constants/theme";
+import { FAVORITE_GOLD, HOVER_DIM, Radii, Type } from "@/constants/theme";
 import { Dropdown, type DropdownOption } from "./ui/dropdown";
 import { showToast } from "@/lib/toast";
 import { crmSummary } from "@/lib/crm-summary";
@@ -39,14 +39,6 @@ export const PRIORITY_OPTIONS: readonly DropdownOption<Priority>[] = [
   { value: 4, label: "P4" },
   { value: 5, label: "P5" },
 ];
-
-// iOS Contacts' own favorite-star gold — a fixed brand-adjacent color, same
-// rationale as NETWORK_META's per-network brand colors and Colors.sms: a
-// favorite star needs to read as "gold" in both light and dark, not shift
-// with the app theme. Exported so the contacts list's trailing star
-// (contacts-list-pane.tsx) matches exactly.
-/** The favorite star. A fill-only color: labels next to it stay in the text color. */
-export const FAVORITE_GOLD = "#B07800";
 
 /**
  * Collapsed-by-default wrapper for the CRM editors. The editors are reference

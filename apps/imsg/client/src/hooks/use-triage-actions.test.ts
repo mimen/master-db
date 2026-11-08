@@ -108,7 +108,7 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
       ...overrides,
     };
     rows.set(summary.conversationId, {
-      _id: summary.conversationId, primaryChatGuid: summary.route.imessage.chatGuid, ...(summary.lastMessage ? { lastMessage: summary.lastMessage } : {}),
+      _id: summary.conversationId, primaryChatGuid: summary.route.platform === "imessage" ? summary.route.imessage.chatGuid : "", ...(summary.lastMessage ? { lastMessage: summary.lastMessage } : {}),
       lastMessageAt: summary.lastMessage?.dateCreated ?? 0, unreadCount: 0, flags: summary.flags,
     });
     if (summary.agent) agentChats.push({ conversationId: summary.conversationId });

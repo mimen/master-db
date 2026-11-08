@@ -7,6 +7,13 @@ import { applyIMessageResult } from "./imessageResults";
 type OutboxRow = Doc<"comma_outbox">;
 
 /**
+ * What a convex lane's execute throws when the platform never took the command: it refused it, or the request never
+ * left. Only this fails a row, which the user may retry. Any other throw may come after the platform acted (a timeout
+ * on a send that landed), so the row ends unknown and is never replayed.
+ */
+export class NotSentError extends Error {}
+
+/**
  * Who runs a lane's commands. A pull lane waits for an outside executor to claim its rows (the Mini, for iMessage);
  * a convex lane runs each row in a Convex action, scheduled at enqueue. Both share the claim token, lease and receipt.
  */
@@ -18,6 +25,15 @@ export type LaneSpec = {
 
 export const PLATFORM_LANES: Record<CommaPlatform, LaneSpec> = {
   imessage: { lane: "imessage", executor: "pull", onResult: applyIMessageResult },
+  slack: {
+    lane: "slack",
+    executor: "convex",
+    // Slack is read-only until sending lands: a read stays in Comma, and the profile greys everything that writes.
+    execute: async (_ctx, row) => {
+      if (row.payload.kind === "markRead") return { kind: "markRead", ok: true };
+      throw new NotSentError("Sending from Slack is coming");
+    },
+  },
 };
 
 /** Model work, whatever the conversation's platform. The Mini's AI process claims it. */

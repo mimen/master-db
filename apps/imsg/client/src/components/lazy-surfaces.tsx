@@ -62,6 +62,12 @@ export const RowPan = deferred(
  */
 export const TapbackTray = deferred(() => import("@/components/tapback-tray").then((m) => m.TapbackTray), () => <></>);
 TapbackTray.preload().catch(() => undefined);
+/** Mounted closed under every list; it loads at boot so the first open never waits. */
+export const ConversationFiltersPanel = deferred(
+  () => import("@/components/conversation-filters-panel").then((m) => m.ConversationFiltersPanel),
+  () => <></>,
+);
+ConversationFiltersPanel.preload().catch(() => undefined);
 export const KeyboardHelp = deferred(() => import("@/components/keyboard-help").then((m) => m.KeyboardHelp), () => <></>);
 export const ReleaseUpdateBanners = deferred(
   () => import("@/components/release-update-banners").then((m) => m.ReleaseUpdateBanners),

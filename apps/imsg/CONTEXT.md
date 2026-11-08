@@ -9,11 +9,17 @@ The client has no feature REST calls or Mini event-stream connection.
 
 **Conversation**:
 One thread in Comma, whatever carries it, named everywhere by its Convex id (`comma_conversations`).
-Its identity is a platform and account plus a key unique within that account; iMessage is the only platform, and
+Its identity is a platform and account plus a key unique within that account. On iMessage
 its service siblings (the iMessage, SMS and RCS chats with one person or group) share one key. Convex
 owns the identity in `convex/comma/conversationIdentity.ts`: the key, the primary chat (newest
 activity, ties to iMessage, then RCS, then SMS), and lookups by chat GUID or handle. The chat fields
-(`primaryChatGuid`, `chatGuids`, `hasGroupPhoto`) are iMessage's and absent on another platform's row. Group CRM
+(`primaryChatGuid`, `chatGuids`, `hasGroupPhoto`) are iMessage's and absent on another platform's row. A Slack
+conversation is a DM (`im:D…`), a group DM (`mpim:G…`), a channel (`ch:C…`) or one thread inside a channel
+(`th:C…:<root ts>`), and keeps its channel and thread root under `slack`. Convex reads Slack itself
+(`convex/comma/slackEvents.ts`, `slackSync.ts`): the Events webhook keeps every DM and group DM message, a thread Milad
+started, replied in or is mentioned in, and top-level messages in the channels on the account's `slackChannels`, and drops
+the rest before any write; a 90-day backfill and a 15-minute backstop cron write through the same idempotent ingest.
+Each Slack user is a `slack` identity that joins the person with exactly its email, or else a person of its own. Group CRM
 (`chat_crm`, chat `tags`, chat `event_links`) belongs to the conversation.
 Its **kind** is `dm`, `group`, `channel` or `emailThread` (`comma_conversations.kind`); iMessage ingest derives `dm` or
 `group`, and `isGroup` (every kind but `dm`) is derived from it for older readers. Rows from before kinds read theirs
@@ -30,7 +36,8 @@ never match.
 _Avoid_: address type, raw handle (for the parsed form)
 
 **Route**:
-Where a command executes: a platform, an account, and that platform's thread id, for iMessage a chat GUID.
+Where a command executes: a platform, an account, and that platform's thread id: for iMessage a chat GUID, for
+Slack a channel and, in a thread, its root.
 Enqueue stamps the conversation's primary chat on each outbox row; the bridge runs exactly the
 stamped route and never picks one.
 _Avoid_: send target, resolved chat
@@ -45,7 +52,10 @@ _Avoid_: filter logic, flag logic
 What a platform's rules are and what a route can do, as data in `shared/platform-profile.ts`. Its **attention** reads a
 conversation's last message as needs you, waiting or none, and Unresponded and Waiting are that attention until the
 message is dismissed. Its **screening** says known, stranger or spam, which the type lens and Today's candidates use;
-for iMessage, junk is spam and a participant who resolves to a named person makes the conversation known. For routes,
+for iMessage, junk is spam and a participant who resolves to a named person makes the conversation known. Slack's
+attention follows iMessage's in a DM, group DM or thread; a channel needs you only when its last message is someone
+else's and mentions you (`mentionsMe` on the last message), and never waits. Slack screens nothing: everyone in the
+workspace is known. Slack is read-only for now, so everything that writes greys with "Sending from Slack is coming". For routes,
 each feature (reactions and which
 tapbacks, reply, edit, unsend, typing, mentions, scheduling, calls, attachments, FaceTime links, group management,
 deleting) lists the services that carry it, whether it exists only in a group, and whether BlueBubbles needs its
@@ -63,7 +73,9 @@ startup (`POST /comma/ingest/account`, seeded idempotently) and stamps it on eve
 writes for iMessage's. A snapshot (unread, scheduled) replaces only its own account's state. Where a platform reports no
 from-me flag (`reportsFromMe` in `PLATFORM_IDENTITY`; iMessage reports one), a sender among the account's `selfHandles` is me. The
 iMessage bridge names its handles at startup from chat.db's `chat.account_login`, the phone and email Messages signs in
-with. A message whose mention names one of them is **addressed to me** (`mentionsMe`, set at ingest). Rows from before accounts carry no `accountId` and count as
+with. An OAuth account (Slack's workspace) keeps its token on the row as `credentials`, AES-GCM sealed under the Convex
+env `COMMA_TOKEN_KEY` and bound to the account (`convex/comma/credentials.ts`); only internal actions open it, and Settings'
+`listAccounts` names its fields so the token never reaches a client. A message whose mention names one of them is **addressed to me** (`mentionsMe`, set at ingest). Rows from before accounts carry no `accountId` and count as
 their platform's only account's until the accounts backfill (`convex/comma/migrations.ts`) stamps them.
 _Avoid_: workspace, login (for the stored identity)
 
@@ -133,7 +145,8 @@ _Avoid_: temp message, optimistic send, local send
 
 **Outbox lane**:
 The executor a queued command waits for, stamped on its `comma_outbox` row at enqueue from the route's
-platform and the command's kind: one lane per messaging platform (only `imessage` today), an `ai` lane
+platform and the command's kind: one lane per messaging platform (`imessage`, and `slack`, a convex lane that
+completes a read receipt without calling Slack and refuses the rest until sending lands), an `ai` lane
 for suggestions, identify, suggestion feedback, clearing learning and transcription, and an `aiBackground`
 lane for suggestion precompute, which nobody waits on. The lane registry
 (`convex/comma/laneRegistry.ts`) says who runs each: a **pull** lane waits for an outside executor to

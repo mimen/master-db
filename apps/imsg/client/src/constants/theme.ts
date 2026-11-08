@@ -74,3 +74,11 @@ export { HOVER_DIM, PRESS_DIM } from "./interaction";
 export const CardShadow = {
   shadowColor: '#000',
 } as const;
+
+// iOS Contacts' own favorite-star gold — a fixed brand-adjacent color, same
+// rationale as NETWORK_META's per-network brand colors and Colors.sms: a
+// favorite star needs to read as "gold" in both light and dark, not shift
+// with the app theme. Lives here so a chat row's star
+// matches without loading the CRM section.
+/** The favorite star. A fill-only color: labels next to it stay in the text color. */
+export const FAVORITE_GOLD = "#B07800";

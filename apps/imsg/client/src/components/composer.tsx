@@ -52,7 +52,7 @@ import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { TriageGeometry } from "@/constants/triage-theme";
 import { useComposerDraft } from "@/hooks/use-composer-draft";
 import { useRouteSupport } from "@/hooks/use-route-support";
-import { gated } from "@/lib/route-support";
+import { gated, reasonOf } from "@/lib/route-support";
 import { HOVER_DIM, PRESS_DIM, Radii } from "@/constants/theme";
 import {
   browserFilesToAttachments,
@@ -333,6 +333,8 @@ export function Composer({
   const config = composerConfig(conversationRoute({ route: chat.route, isGroup }));
   const enterSends = config.enterSends;
   const can = useRouteSupport({ route: chat.route, isGroup });
+  // A platform Comma only reads (Slack, for now) greys the whole composer with its reason.
+  const sendBlocked = reasonOf(can("send"));
   const checkExecutor = `Check ${EXECUTOR_NAME[chat.route.platform]} connection.`;
   const loadRemoteDraft = useCallback((draft: string) => {
     setText(draft);
@@ -342,7 +344,7 @@ export function Composer({
     setInputHeight(IOS_INPUT_MIN_HEIGHT);
   }, []);
   const draftSync = useComposerDraft(conversationId, editing !== null, loadRemoteDraft);
-  const replySuggestions = useReplySuggestions(conversationId, { ...suggestions, pend: onEdit });
+  const replySuggestions = useReplySuggestions(conversationId, { ...suggestions, enabled: suggestions.enabled && !sendBlocked, pend: onEdit });
   const ghost = replySuggestions.slots.kind === "ready" ? replySuggestions.slots.ghost : null;
   const [ghostTextHeight, setGhostHeight] = useState(0);
 
@@ -527,6 +529,7 @@ export function Composer({
     if (text !== sentText.current) sentText.current = null;
   }, [text]);
   const send = async () => {
+    if (sendBlocked) return;
     const outgoing = trimMentionAnnotations(text, mentions);
     const trimmed = outgoing.text;
     const outgoingMentions = can("mentions")?.ok ? outgoing.mentions : [];
@@ -965,7 +968,7 @@ ${url}` : url;
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [recording]);
 
-  const canSend = text.trim().length > 0 || pending.length > 0;
+  const canSend = !sendBlocked && (text.trim().length > 0 || pending.length > 0);
   const canSchedule = text.trim().length > 0 && pending.length === 0 && !editing;
   const sendColor = theme[config.badge.color];
   const serviceLabel = config.badge.label;
@@ -1107,7 +1110,8 @@ ${url}` : url;
         onFocus={() => { setListMode(false); draftSync.onFocus(); }}
         onBlur={draftSync.onBlur}
         onChangeText={onChangeText}
-        placeholder={editing ? "Edit message" : pending.length > 0 ? "Add a comment or Send" : config.placeholder}
+        editable={!sendBlocked}
+        placeholder={sendBlocked ?? (editing ? "Edit message" : pending.length > 0 ? "Add a comment or Send" : config.placeholder)}
         // The ghost suggestion takes the placeholder's place; the attribute stays for assistive tech.
         placeholderTextColor={ghostShown ? "transparent" : theme.textSecondary}
         multiline

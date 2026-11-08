@@ -130,6 +130,20 @@ describe("accounts", () => {
       "to-me": true, "to-me-by-email": true, "to-them": false, plain: false,
     });
   });
+
+  test("the conversation's last message says whether it mentions me, and says nothing when it does not", async () => {
+    const t = convexTest(schema, commaModules);
+    await t.mutation(internal.comma.accounts.ensure, { ...IMESSAGE_ACCOUNT, selfHandles: ["+15550009999"] });
+    const conversationId = await conversationIn(t);
+    const last = async () => (await t.run((ctx) => ctx.db.get(conversationId)))?.lastMessage;
+    await t.mutation(internal.comma.internal.upsertMessages, { messages: [
+      posted(conversationId, "to-me", { dateCreated: 10, mentions: [{ start: 0, length: 3, address: "+15550009999" }] }),
+    ] });
+    expect(await last()).toMatchObject({ guid: "to-me", mentionsMe: true });
+    await t.mutation(internal.comma.internal.upsertMessages, { messages: [posted(conversationId, "plain", { dateCreated: 20 })] });
+    expect(await last()).toMatchObject({ guid: "plain" });
+    expect(await last()).not.toHaveProperty("mentionsMe");
+  });
 });
 
 describe("the neutral message form", () => {

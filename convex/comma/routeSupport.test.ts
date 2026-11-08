@@ -25,3 +25,15 @@ describe("unsupportedReason", () => {
     expect(unsupportedReason(sms, false, { kind: "suggestions", model: "opus", refresh: false })).toBeNull();
   });
 });
+
+describe("a Slack route", () => {
+  const slack = { platform: "slack" as const, accountId: "a" as never, channel: "D1" };
+
+  test("refuses every write with the coming-soon reason, and lets a read through", () => {
+    expect(unsupportedReason(slack, false, { kind: "send", text: "hi" })).toBe("Sending from Slack is coming");
+    expect(unsupportedReason(slack, false, { kind: "react", messageGuid: "D1:1.0", reaction: "emoji:🔥", remove: false })).toBe("Sending from Slack is coming");
+    expect(unsupportedReason(slack, false, { kind: "markRead" })).toBeNull();
+    expect(unsupportedReason(slack, false, { kind: "suggestions", model: "opus", refresh: false })).toBe("Sending from Slack is coming");
+    expect(unsupportedReason(imessage, false, { kind: "suggestions", model: "opus", refresh: false })).toBeNull();
+  });
+});

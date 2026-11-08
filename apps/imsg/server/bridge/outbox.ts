@@ -102,6 +102,7 @@ export function imessageLane(deps: { writer: MessageWriter; commands: ChatComman
     execute: async (row, base) => {
       if (row.payload.kind !== "createChat" && !row.conversationId) throw new Error("Command requires a conversation");
       if (row.conversationId && !row.route) throw new Error("Command has no route");
+      if (row.route && row.route.platform !== "imessage") throw new Error(`The iMessage lane can't run a ${row.route.platform} command`);
       const chatGuid = row.route?.chatGuid ?? null;
       if (row.payload.kind === "send") writer.rememberOutboxSend(row.clientKey);
       base.signal.throwIfAborted();

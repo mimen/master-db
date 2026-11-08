@@ -5,7 +5,9 @@ import type { Doc } from "../_generated/dataModel";
 import { internalAction, type MutationCtx } from "../_generated/server";
 import { isAiKind, outboxLane, type CommandResult, type CommaOutboxLane, type CommaOutboxPayload, type CommaPlatform } from "../schema/comma/validators";
 
-import { AI_BACKGROUND_LANE, AI_LANE, PLATFORM_LANES, type LaneSpec } from "./laneRegistry";
+import { AI_BACKGROUND_LANE, AI_LANE, NotSentError, PLATFORM_LANES, type LaneSpec } from "./laneRegistry";
+
+export { NotSentError };
 
 /** A Convex action runs at most ten minutes, so a live action's claim never expires under it. */
 export const CONVEX_LEASE_MS = 11 * 60_000;
@@ -31,13 +33,6 @@ const driveRef = makeFunctionReference<"action", { lane: CommaOutboxLane }, null
 const claimRef = makeFunctionReference<"mutation", { now: number; leaseMs: number; limit: number; lane: CommaOutboxLane }, Doc<"comma_outbox">[]>("comma/outbox:claimOutbox");
 type Completion = { status: "sent"; result: CommandResult; resultGuid?: string } | { status: "failed" | "unknown"; error: string };
 const completeRef = makeFunctionReference<"mutation", { clientKey: string; claimToken: string } & Completion, boolean>("comma/outbox:completeOutbox");
-
-/**
- * What a convex lane's execute throws when the platform never took the command: it refused it, or the request never
- * left. Only this fails a row, which the user may retry. Any other throw may come after the platform acted (a timeout
- * on a send that landed), so the row ends unknown and is never replayed.
- */
-export class NotSentError extends Error {}
 
 /** Starts a convex lane's executor at `at`. A pull lane's executor learns of work by its own subscription. */
 export async function wakeLane(ctx: Pick<MutationCtx, "scheduler">, lane: CommaOutboxLane, at = Date.now()): Promise<void> {

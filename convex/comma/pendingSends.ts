@@ -115,6 +115,7 @@ export async function refreshLastMessage(ctx: MutationCtx, conversationId: Id<"c
       isFromMe: newest.isFromMe,
       senderName: newest.sender?.name ?? null,
       hasAttachments: newest.attachmentGuids.length > 0,
+      ...(newest.mentionsMe ? { mentionsMe: true } : {}),
     },
     lastMessageAt: Math.max(conversation.lastMessageAt, newest.dateCreated),
   });
