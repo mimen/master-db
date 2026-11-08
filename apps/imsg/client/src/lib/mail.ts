@@ -1,21 +1,8 @@
 /**
- * The Mail workspace's pure rules: which threads each lens shows, and the document an email's cleaned HTML renders in.
- * Convex cleans the HTML (convex/comma/emailHtml.ts); the reader shows it in an iframe with no scripts, under a CSP
- * that blocks every remote load until the user asks for images, so either layer alone keeps a script out.
+ * The Mail workspace's pure rules for the document an email's cleaned HTML renders in, and for replies. Convex cleans
+ * the HTML (convex/comma/emailHtml.ts); the reader shows it in an iframe with no scripts, under a CSP that blocks every
+ * remote load until the user asks for images, so either layer alone keeps a script out. The lenses are in mail-lens.ts.
  */
-
-export type MailLens = "people" | "all";
-
-export interface MailRow {
-  known: boolean;
-  gmail?: { bulk: boolean };
-  flags: { unresponded: boolean };
-}
-
-/** People: someone who resolves to a person wrote last and is owed a reply. All inbox: everything in the inbox. */
-export function inLens(row: MailRow, lens: MailLens): boolean {
-  return lens === "all" || (row.known && !row.gmail?.bulk && row.flags.unresponded);
-}
 
 /** The iframe's whole document. `images`: the user asked for this message's remote images. */
 export function emailDocument(html: string, { images }: { images: boolean }): string {

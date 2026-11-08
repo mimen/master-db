@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { EMAIL_SANDBOX, emailDocument, formatAddress, hasRecipient, inLens, replyFields } from "./mail";
+import { EMAIL_SANDBOX, emailDocument, formatAddress, hasRecipient, replyFields } from "./mail";
+import { inLens } from "./mail-lens";
 
 describe("inLens", () => {
   const row = (known: boolean, bulk: boolean, unresponded: boolean) => ({ known, gmail: { bulk }, flags: { unresponded } });

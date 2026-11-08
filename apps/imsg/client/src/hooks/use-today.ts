@@ -4,7 +4,7 @@ import { todayWindow } from "@shared/today";
 import type { ChatSummary } from "@shared/types";
 import { conversationToChat } from "@/lib/convex-adapters";
 import { commaApi, todayApi } from "@/lib/convex-api";
-import { inLens } from "@/lib/mail";
+import { inLens } from "@/lib/mail-lens";
 import { toTodayView, type TodayMode, type TodayView } from "@/lib/today";
 
 interface TodayContextValue {

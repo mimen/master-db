@@ -21,7 +21,8 @@ import { conversationState } from "@/lib/conversation-state";
 import { commaApi } from "@/lib/convex-api";
 import { formatListTimestamp, formatReceiptTime } from "@/lib/format";
 import { headerFace } from "@/lib/header-font";
-import { EMAIL_SANDBOX, emailDocument, inLens, type MailLens, type ReplyMode } from "@/lib/mail";
+import { EMAIL_SANDBOX, emailDocument, type ReplyMode } from "@/lib/mail";
+import { inLens, type MailLens } from "@/lib/mail-lens";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
 import { showToast } from "@/lib/toast";
 
