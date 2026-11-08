@@ -523,12 +523,12 @@ test("ratchet: an arriving message renders only its row and its neighbour, not t
  * Opening a conversation from the list, then switching to another, from the click to 600 ms after the server's
  * messages painted. Before #80 an open cost 26 commits and 8,136 component renders and a switch 7,109: every shell
  * state change and route change re-rendered both workspaces, and every directory update re-rendered every sidebar
- * cell. Now an open measures 25 commits and 3,908 renders, and a switch 2,736 to 3,537 as polls land in the window.
- * The ceilings leave about 10% over the highest reading. A fixture poll can add a commit inside the window, so the
- * commit ceiling stays at the old count.
+ * cell. Now a laptop measures an open at 25 commits and 3,908 renders and a switch at 2,736 to 3,537. On the CI
+ * runner a 500 ms fixture poll can land inside the window and add a commit and a row pass (27 and 4,326 on
+ * 05e70b05), so the ceilings sit about 10% above the runner's reading, still half the old cost.
  */
-const OPEN_COMMITS = 26;
-const OPEN_COMPONENTS = 4_300;
+const OPEN_COMMITS = 30;
+const OPEN_COMPONENTS = 4_800;
 const SWITCH_COMPONENTS = 3_900;
 
 async function openFromList(page: Page, name: string): Promise<Renders> {
