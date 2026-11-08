@@ -9,7 +9,8 @@ import { FlashList } from "@shopify/flash-list";
 import { disambiguators } from "@shared/address";
 import { TODAY_SETTLE_GROUP } from "@shared/today";
 import { ChatRow } from "./chat-row";
-import { ConversationFiltersPanel, FilterChipRow, LensTabs } from "./conversation-filters";
+import { FilterChipRow, LensTabs } from "./conversation-filters";
+import { ConversationFiltersPanel } from "./lazy-surfaces";
 import { EmptyLens } from "./empty-lens";
 import { Collapse } from "./motion/collapse";
 import { SkeletonList } from "./skeleton-list";
@@ -47,6 +48,7 @@ import {
   filterInbox,
   LENSES,
   lensOf,
+  platformsInUse,
   tagsInUse,
   viewName,
   type InboxFilters,
@@ -251,6 +253,7 @@ export function ConversationListPane({
   const lensTotal = useMemo(() => filterInbox(allChats, filters, "", undefined, browseIds).length, [allChats, filters, browseIds]);
   const toggleCounts = useMemo(() => checkboxCounts(allChats, filters, browseIds, refine), [allChats, filters, browseIds, refine]);
   const tags = useMemo(() => tagsInUse(allChats), [allChats]);
+  const platforms = useMemo(() => platformsInUse(allChats), [allChats]);
   const chips = activeChips(filters, refinements);
   const lensLabel = LENSES.find((lens) => lens.value === filters.state)?.label ?? "Settled";
   const clearAll = useCallback(() => {
@@ -523,6 +526,7 @@ export function ConversationListPane({
         onClearAll={clearAll}
         onSaveView={() => saveView({ name: viewName(filters, refinements), state: filters.state, type: filters.type, refinements })}
         tags={tags}
+        platforms={platforms}
         counts={toggleCounts}
         showing={deskModel.listChats.length}
         total={lensTotal}

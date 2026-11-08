@@ -113,14 +113,27 @@ export interface ServiceOption {
 
 const PLATFORMS = Object.keys(PROFILES) as Platform[];
 
-/** The Service dropdown: each platform, then its services. A lone platform lists only its services, as "Any service" already covers it. */
-export const SERVICE_OPTIONS: readonly ServiceOption[] = [
-  { value: "any", label: "Any service" },
-  ...PLATFORMS.flatMap((platform): ServiceOption[] => [
-    ...(PLATFORMS.length > 1 ? [{ value: platform, label: PROFILES[platform].name }] : []),
-    ...platformServiceBadges(platform).map((badge) => ({ value: `${platform}:${badge.label}` as const, label: badge.label, badge })),
-  ]),
-];
+/**
+ * The Service dropdown over the platforms the inbox holds: each platform, then its services. A lone platform lists
+ * only its services, as "Any service" already covers it. An inbox with no conversations yet lists iMessage's.
+ */
+export function serviceOptions(present: readonly Platform[]): ServiceOption[] {
+  const platforms = present.length ? PLATFORMS.filter((platform) => present.includes(platform)) : ["imessage" as const];
+  return [
+    { value: "any", label: "Any service" },
+    ...platforms.flatMap((platform): ServiceOption[] => [
+      ...(platforms.length > 1 ? [{ value: platform, label: PROFILES[platform].name }] : []),
+      ...platformServiceBadges(platform).map((badge) => ({ value: `${platform}:${badge.label}` as const, label: badge.label, badge })),
+    ]),
+  ];
+}
+
+export function platformsInUse(chats: readonly Pick<ChatSummary, "route">[]): Platform[] {
+  return [...new Set(chats.map((chat) => chat.route.platform))];
+}
+
+/** Every option any inbox can show, for reading a stored filter and its label. */
+export const SERVICE_OPTIONS: readonly ServiceOption[] = serviceOptions(PLATFORMS);
 
 export function serviceFilterLabel(value: ServiceFilter): string {
   return SERVICE_OPTIONS.find((option) => option.value === value)?.label ?? value;

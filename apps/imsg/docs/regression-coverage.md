@@ -9,6 +9,8 @@ What keeps iMessage working while Slack and Gmail land. The `Validate imsg` work
 | Flat legacy message rows; a claim renewed and completed | `convex/comma/bridgeContract.test.ts` | yes |
 | Agent runner round trip over the ingest routes | `convex/comma/agentContract.test.ts` | yes |
 | Comma Convex functions (ingest, outbox, triage, queries, reactions, lanes) | `convex/comma/*.test.ts` under vitest | yes |
+| Slack's profile: channel attention, no screening, every write greyed with its reason; the Service filter lists only platforms the inbox holds | `apps/imsg/shared/platform-profile.test.ts`, `apps/imsg/client/src/lib/inbox-model.test.ts` | yes |
+| Slack conversation keys, kinds and routes; mrkdwn display and model text; the Slack lane refuses a send and completes a read in Convex | `convex/comma/conversationIdentity.test.ts`, `convex/comma/slackText.test.ts`, `convex/comma/slackLane.test.ts` | yes |
 | Send a text | `fixture/golden-send-text.playwright.ts`, `fixture/smoke.playwright.ts`, `fixture/send.playwright.ts` | yes |
 | A burst of sends keeps its order in the thread and the preview | `fixture/golden-send-burst.playwright.ts`, `fixture/send.playwright.ts` | yes |
 | Pending send: Mini away, browser offline, Cancel, Not sent, Retry, reload | `fixture/golden-pending-send.playwright.ts` | yes |

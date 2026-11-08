@@ -19,7 +19,7 @@ import {
   type RefineContext,
   type Refinements,
   parseServiceFilter,
-  SERVICE_OPTIONS,
+  serviceOptions,
 } from "./inbox-model";
 import type { TodayPlan } from "./today";
 
@@ -458,11 +458,19 @@ describe("Today lens", () => {
 
 describe("service filter", () => {
   test("with only iMessage, the dropdown lists its services under Any service, dotted as they draw", () => {
-    expect(SERVICE_OPTIONS.map((option) => [option.value, option.label, option.badge?.color])).toEqual([
-      ["any", "Any service", undefined],
-      ["imessage:iMessage", "iMessage", "accent"],
-      ["imessage:SMS", "SMS", "sms"],
-    ]);
+    for (const present of [["imessage" as const], []]) {
+      expect(serviceOptions(present).map((option) => [option.value, option.label, option.badge?.color])).toEqual([
+        ["any", "Any service", undefined],
+        ["imessage:iMessage", "iMessage", "accent"],
+        ["imessage:SMS", "SMS", "sms"],
+      ]);
+    }
+  });
+
+  test("with Slack beside iMessage, each platform heads its services", () => {
+    expect(serviceOptions(["slack", "imessage"]).map((option) => option.value)).toEqual(
+      ["any", "imessage", "imessage:iMessage", "imessage:SMS", "slack", "slack:Slack"]);
+    expect(parseServiceFilter("slack:Slack")).toBe("slack:Slack");
   });
 
   test("a filter stored before platforms reads as iMessage's service, and anything unknown as any", () => {

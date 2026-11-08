@@ -99,7 +99,8 @@ export const deleteChat = internalMutation({
     await ctx.db.patch(conversationId, {
       primaryChatGuid, chatGuids: siblings.map((row) => row.chatGuid).sort(),
       lastMessage: newest ? { guid: newest.guid, text: newest.text, dateCreated: newest.dateCreated,
-        isFromMe: newest.isFromMe, senderName: newest.sender?.name ?? null, hasAttachments: newest.attachmentGuids.length > 0 } : undefined,
+        isFromMe: newest.isFromMe, senderName: newest.sender?.name ?? null, hasAttachments: newest.attachmentGuids.length > 0,
+        ...(newest.mentionsMe ? { mentionsMe: true } : {}) } : undefined,
       lastMessageAt: newest?.dateCreated ?? 0, updatedAt: Date.now(),
     });
     return { done: true };

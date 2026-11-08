@@ -22,7 +22,7 @@ export const findChat = query({
     const found = await findByHandle(ctx, await soleAccountScope(ctx, imessage.platform), args.address);
     const conversation = found && !found.isGroup && found.participants.length === 1 ? found : null;
     const route = conversation && routeFor(conversation, args.service);
-    return route ? { conversationId: conversation._id, chatGuid: route.chatGuid, service: imessage.sendService(route.chatGuid),
+    return conversation && route?.platform === "imessage" ? { conversationId: conversation._id, chatGuid: route.chatGuid, service: imessage.sendService(route.chatGuid),
       isGroup: false as const, participants: conversation.participants.map((p) => p.address) } : null;
   },
 });

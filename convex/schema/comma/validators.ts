@@ -6,8 +6,8 @@ import { v, type Infer, type PropertyValidators } from "convex/values";
  * through auth-gated queries. Shapes follow apps/imsg/shared/types.ts.
  */
 
-/** The service that carries a conversation. iMessage is the only one so far. */
-export const platform = v.literal("imessage");
+/** The service that carries a conversation. */
+export const platform = v.union(v.literal("imessage"), v.literal("slack"));
 
 /** One signed-in identity on a platform: an iMessage Mac, a Slack workspace, a mailbox. Credentials arrive with OAuth. */
 export const accountHealth = v.union(v.literal("ok"), v.literal("needsAttention"));
@@ -26,7 +26,11 @@ export const accountFields = {
  * Where a command executes: the platform, the account, and that platform's own thread id. Convex chooses it; a
  * bridge only runs it. `accountId` is absent on routes stamped before accounts and on conversations not yet backfilled.
  */
-export const route = v.object({ platform: v.literal("imessage"), accountId: v.optional(v.id("comma_accounts")), chatGuid: v.string() });
+export const route = v.union(
+  v.object({ platform: v.literal("imessage"), accountId: v.optional(v.id("comma_accounts")), chatGuid: v.string() }),
+  /** A Slack channel, DM or group DM, and the thread inside it when the conversation is one thread. */
+  v.object({ platform: v.literal("slack"), accountId: v.id("comma_accounts"), channel: v.string(), threadTs: v.optional(v.string()) }),
+);
 
 export const participant = v.object({
   address: v.string(),
@@ -80,6 +84,8 @@ export const lastMessageSummary = v.object({
   isFromMe: v.boolean(),
   senderName: v.union(v.string(), v.null()),
   hasAttachments: v.boolean(),
+  /** The message names the user; a Slack channel needs the user only then. */
+  mentionsMe: v.optional(v.boolean()),
 });
 
 /** What a tapback the bridge posts does. Ingest writes it to comma_reactions and stores no message row. */
@@ -100,6 +106,8 @@ export const conversationFields = {
   /** iMessage's: the chat a conversation sends through, and every chat merged into it. Other platforms have neither. */
   primaryChatGuid: v.optional(v.string()),
   chatGuids: v.optional(v.array(v.string())),
+  /** Slack's: the channel, DM or group DM, and the root of the thread when the conversation is one thread. */
+  slack: v.optional(v.object({ channel: v.string(), threadTs: v.optional(v.string()) })),
   displayName: v.string(),
   rawDisplayName: v.optional(v.string()),
   groupPhotoGuid: v.optional(v.string()),
@@ -492,7 +500,7 @@ export const outboxPayload = v.union(
  * The executor a command waits for. One lane per messaging platform, one for model work someone asked for, and
  * `aiBackground` for model work nobody waits on (suggestion precompute), so it never holds back a user's command.
  */
-export const outboxLane = v.union(v.literal("imessage"), v.literal("ai"), v.literal("aiBackground"));
+export const outboxLane = v.union(v.literal("imessage"), v.literal("slack"), v.literal("ai"), v.literal("aiBackground"));
 
 const AI_KINDS: ReadonlySet<string> = new Set(aiPayload.members.map((member) => member.fields.kind.value));
 /** Model work, which waits in the ai lane whatever the conversation's platform. */

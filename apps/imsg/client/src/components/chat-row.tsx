@@ -35,7 +35,7 @@ import { useWebContextMenu } from "@/lib/use-web-context-menu";
 import { AgentBadge } from "./agent-badge";
 import { ChatAvatar } from "./avatar";
 import { RowPan } from "./lazy-surfaces";
-import { FAVORITE_GOLD } from "./person-crm-section";
+import { FAVORITE_GOLD } from "@/constants/theme";
 
 /** The Agents lens status word's color: the attention's own, so the line reads like the badge. */
 const STATUS_COLOR = {

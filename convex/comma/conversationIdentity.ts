@@ -71,7 +71,32 @@ export interface PlatformIdentity {
   reportsFromMe: boolean;
 }
 
-export const PLATFORM_IDENTITY = { imessage } satisfies Record<CommaPlatform, PlatformIdentity>;
+/** A Slack conversation as Slack names it: a DM, a group DM, a channel, or a thread inside a channel. */
+export type SlackConversationRef =
+  | { type: "im" | "mpim" | "channel"; channel: string }
+  | { type: "thread"; channel: string; threadTs: string };
+
+/** The Slack workspace Milad reads as himself. A message id is `<channel>:<ts>`, unique within the workspace. */
+export const slack = {
+  platform: "slack" as const satisfies CommaPlatform,
+
+  /** Slack never says a message is from the token's user; a sender equal to the account's `slack:` self handle is. */
+  reportsFromMe: false,
+
+  kind(ref: SlackConversationRef): CommaConversationKind {
+    if (ref.type === "im") return "dm";
+    return ref.type === "channel" ? "channel" : "group";
+  },
+
+  /** `im:D…`, `mpim:G…`, `ch:C…`, or `th:C…:<root ts>`. */
+  conversationKey(ref: SlackConversationRef): string {
+    return ref.type === "thread" ? `th:${ref.channel}:${ref.threadTs}` : `${ref.type === "channel" ? "ch" : ref.type}:${ref.channel}`;
+  },
+
+  messageGuid: (channel: string, ts: string): string => `${channel}:${ts}`,
+};
+
+export const PLATFORM_IDENTITY = { imessage, slack } satisfies Record<CommaPlatform, PlatformIdentity>;
 
 /** A stored conversation's kind; rows from before kinds read theirs off `isGroup` until the kinds backfill stamps them. */
 export function conversationKind(conversation: { kind?: CommaConversationKind; isGroup: boolean }): CommaConversationKind {
@@ -98,7 +123,10 @@ export function choosePrimary(chats: { chatGuid: string; lastMessageAt: number }
   return first.chatGuid;
 }
 
-type Routable = { primaryChatGuid?: string; accountId?: CommaRoute["accountId"] };
+type Routable = {
+  platform?: CommaPlatform; primaryChatGuid?: string; accountId?: CommaRoute["accountId"];
+  slack?: { channel: string; threadTs?: string };
+};
 
 /** An iMessage conversation's primary chat. Only iMessage conversations have chats. */
 export function primaryChat(conversation: { primaryChatGuid?: string }): string {
@@ -110,9 +138,11 @@ function routeThrough(conversation: Routable, chatGuid: string): CommaRoute {
   return { platform: "imessage", ...(conversation.accountId ? { accountId: conversation.accountId } : {}), chatGuid };
 }
 
-/** The route a conversation's commands take: its account and primary chat. */
+/** The route a conversation's commands take: iMessage's account and primary chat, or Slack's channel and thread. */
 export function sendRoute(conversation: Routable): CommaRoute {
-  return routeThrough(conversation, primaryChat(conversation));
+  if (conversation.platform !== "slack") return routeThrough(conversation, primaryChat(conversation));
+  if (!conversation.slack || !conversation.accountId) throw new Error("Slack conversation has no channel");
+  return { platform: "slack", accountId: conversation.accountId, ...conversation.slack };
 }
 
 /** A route through the service asked for: the primary chat if it carries it, else the best sibling that does. */
@@ -120,6 +150,7 @@ export function routeFor(
   conversation: Routable & { chatGuids?: string[] },
   service?: "iMessage" | "SMS",
 ): CommaRoute | null {
+  if (conversation.platform === "slack") return service ? null : sendRoute(conversation);
   const carries = (chatGuid: string) => !service || imessage.sendService(chatGuid) === service;
   if (carries(primaryChat(conversation))) return sendRoute(conversation);
   const candidates = (conversation.chatGuids ?? []).filter(carries);

@@ -22,13 +22,18 @@ export function chatGuidRoute(chatGuid: string): Pick<ProfileRoute, "platform" |
 
 /** The route a conversation's commands take, as its platform profile reads it. */
 export function conversationRoute(chat: Pick<ChatSummary, "route" | "isGroup">): ProfileRoute {
-  return { ...chatGuidRoute(chat.route.imessage.chatGuid), platform: chat.route.platform, isGroup: chat.isGroup };
+  switch (chat.route.platform) {
+    case "imessage":
+      return { ...chatGuidRoute(chat.route.imessage.chatGuid), isGroup: chat.isGroup };
+    case "slack":
+      return { platform: "slack", service: "Slack", isGroup: chat.isGroup };
+  }
 }
 
 /** The other person's handle in a one-to-one conversation, or null for a group. */
 export function dmAddress(chat: Pick<ChatSummary, "isGroup" | "participants" | "route">): string | null {
   if (chat.isGroup) return null;
-  return chat.participants[0]?.address ?? imessageChat.identifier(chat.route.imessage.chatGuid);
+  return chat.participants[0]?.address ?? (chat.route.platform === "imessage" ? imessageChat.identifier(chat.route.imessage.chatGuid) : null);
 }
 
 /** The service a message drew in: green when SMS. A message on another platform is never SMS. */

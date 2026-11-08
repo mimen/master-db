@@ -465,7 +465,10 @@ export declare const api: {
       routeExecutorStatus: FunctionReference<
         "query",
         "public",
-        { accountId: Id<"comma_accounts"> | null; platform: "imessage" },
+        {
+          accountId: Id<"comma_accounts"> | null;
+          platform: "imessage" | "slack";
+        },
         {
           capabilities:
             | {
@@ -575,7 +578,7 @@ export declare const api: {
             mimeType?: string;
             originalStorageId?: Id<"_storage">;
             originalUrl: string | null;
-            platform?: "imessage";
+            platform?: "imessage" | "slack";
             sourceVersion: number;
             thumbStorageId?: Id<"_storage">;
             thumbUrl: string | null;
@@ -626,7 +629,7 @@ export declare const api: {
           mentions: Array<{ address: string; length: number; start: number }>;
           mentionsMe?: boolean;
           modelText?: string;
-          platform?: "imessage";
+          platform?: "imessage" | "slack";
           reactions: Array<{
             emoji?: string;
             isFromMe: boolean;
@@ -1269,7 +1272,10 @@ export declare const api: {
       pendingOutbox: FunctionReference<
         "query",
         "public",
-        { bridgeKey: string; lane: "imessage" | "ai" | "aiBackground" },
+        {
+          bridgeKey: string;
+          lane: "imessage" | "slack" | "ai" | "aiBackground";
+        },
         Array<{
           _creationTime: number;
           _id: Id<"comma_outbox">;
@@ -1279,7 +1285,7 @@ export declare const api: {
           conversationId?: Id<"comma_conversations">;
           createdAt: number;
           error?: string;
-          lane?: "imessage" | "ai" | "aiBackground";
+          lane?: "imessage" | "slack" | "ai" | "aiBackground";
           leaseUntil?: number;
           payload:
             | {
@@ -1796,11 +1802,18 @@ export declare const api: {
             | { kind: "suggestionFeedback"; ok: true }
             | { kind: "clearSuggestionLearning"; ok: true };
           resultGuid?: string;
-          route?: {
-            accountId?: Id<"comma_accounts">;
-            chatGuid: string;
-            platform: "imessage";
-          };
+          route?:
+            | {
+                accountId?: Id<"comma_accounts">;
+                chatGuid: string;
+                platform: "imessage";
+              }
+            | {
+                accountId: Id<"comma_accounts">;
+                channel: string;
+                platform: "slack";
+                threadTs?: string;
+              };
           status: "pending" | "claimed" | "sent" | "failed" | "unknown";
           updatedAt: number;
         }>
@@ -1866,6 +1879,7 @@ export declare const api: {
             guid: string;
             hasAttachments: boolean;
             isFromMe: boolean;
+            mentionsMe?: boolean;
             senderName: string | null;
             text: string;
           };
@@ -1875,10 +1889,11 @@ export declare const api: {
             name: string | null;
             photoUrl?: string | null;
           }>;
-          platform?: "imessage";
+          platform?: "imessage" | "slack";
           primaryChatGuid?: string;
           rawDisplayName?: string;
           searchNames: Array<string>;
+          slack?: { channel: string; threadTs?: string };
           unread?: { count: number; firstAt: number };
           unreadCount: number;
           updatedAt: number;
@@ -1993,6 +2008,7 @@ export declare const api: {
               guid: string;
               hasAttachments: boolean;
               isFromMe: boolean;
+              mentionsMe?: boolean;
               senderName: string | null;
               text: string;
             };
@@ -2002,10 +2018,11 @@ export declare const api: {
               name: string | null;
               photoUrl?: string | null;
             }>;
-            platform?: "imessage";
+            platform?: "imessage" | "slack";
             primaryChatGuid?: string;
             rawDisplayName?: string;
             searchNames: Array<string>;
+            slack?: { channel: string; threadTs?: string };
             unread?: { count: number; firstAt: number };
             unreadCount: number;
             updatedAt: number;
@@ -2071,7 +2088,7 @@ export declare const api: {
               mimeType?: string;
               originalStorageId?: Id<"_storage">;
               originalUrl: string | null;
-              platform?: "imessage";
+              platform?: "imessage" | "slack";
               sourceVersion: number;
               thumbStorageId?: Id<"_storage">;
               thumbUrl: string | null;
@@ -2122,7 +2139,7 @@ export declare const api: {
             mentions: Array<{ address: string; length: number; start: number }>;
             mentionsMe?: boolean;
             modelText?: string;
-            platform?: "imessage";
+            platform?: "imessage" | "slack";
             reactions: Array<{
               emoji?: string;
               isFromMe: boolean;
@@ -2173,7 +2190,7 @@ export declare const api: {
           chatGuid: string;
           conversationId?: Id<"comma_conversations">;
           error?: string;
-          platform?: "imessage";
+          platform?: "imessage" | "slack";
           sendAt: number;
           sentAt?: number;
           status:
@@ -2224,6 +2241,7 @@ export declare const api: {
             guid: string;
             hasAttachments: boolean;
             isFromMe: boolean;
+            mentionsMe?: boolean;
             senderName: string | null;
             text: string;
           };
@@ -2233,10 +2251,11 @@ export declare const api: {
             name: string | null;
             photoUrl?: string | null;
           }>;
-          platform?: "imessage";
+          platform?: "imessage" | "slack";
           primaryChatGuid?: string;
           rawDisplayName?: string;
           searchNames: Array<string>;
+          slack?: { channel: string; threadTs?: string };
           unread?: { count: number; firstAt: number };
           unreadCount: number;
           updatedAt: number;
@@ -2287,7 +2306,7 @@ export declare const api: {
           mentions: Array<{ address: string; length: number; start: number }>;
           mentionsMe?: boolean;
           modelText?: string;
-          platform?: "imessage";
+          platform?: "imessage" | "slack";
           reactions: Array<{
             emoji?: string;
             isFromMe: boolean;
@@ -4068,7 +4087,7 @@ export declare const internal: {
         {
           externalId: string;
           label: string;
-          platform: "imessage";
+          platform: "imessage" | "slack";
           selfHandles?: Array<string>;
         },
         Id<"comma_accounts">
@@ -4333,7 +4352,7 @@ export declare const internal: {
             conversationId: Id<"comma_conversations">;
             fromMe: boolean;
             kind: "dm" | "group";
-            platform: "imessage";
+            platform: "imessage" | "slack";
             sender: string;
             text: string;
           }>;
@@ -4371,7 +4390,7 @@ export declare const internal: {
       aiSentText: FunctionReference<
         "mutation",
         "internal",
-        { accountId?: Id<"comma_accounts">; platform: "imessage" },
+        { accountId?: Id<"comma_accounts">; platform: "imessage" | "slack" },
         Array<string>
       >;
       aiThread: FunctionReference<
@@ -4443,11 +4462,18 @@ export declare const internal: {
             emails: Array<string>;
             name: string | null;
           }>;
-          route: {
-            accountId?: Id<"comma_accounts">;
-            chatGuid: string;
-            platform: "imessage";
-          };
+          route:
+            | {
+                accountId?: Id<"comma_accounts">;
+                chatGuid: string;
+                platform: "imessage";
+              }
+            | {
+                accountId: Id<"comma_accounts">;
+                channel: string;
+                platform: "slack";
+                threadTs?: string;
+              };
           title: string;
         }
       >;
@@ -4562,7 +4588,7 @@ export declare const internal: {
           key: string;
           lastEventAt?: number;
           lastReconcileAt?: number;
-          platform?: "imessage";
+          platform?: "imessage" | "slack";
         },
         null
       >;
@@ -4613,7 +4639,7 @@ export declare const internal: {
               | "expired";
             text: string;
           }>;
-          platform?: "imessage";
+          platform?: "imessage" | "slack";
         },
         { deleted: number; upserted: number }
       >;
@@ -4623,7 +4649,7 @@ export declare const internal: {
         {
           accountId?: Id<"comma_accounts">;
           chats: Array<{ chatGuid: string; count: number; firstAt: number }>;
-          platform?: "imessage";
+          platform?: "imessage" | "slack";
         },
         { changed: number; unresolved: number }
       >;
@@ -4725,7 +4751,7 @@ export declare const internal: {
                 messageGuid: string;
                 mimeType?: string;
                 originalStorageId?: Id<"_storage">;
-                platform?: "imessage";
+                platform?: "imessage" | "slack";
                 sourceVersion: number;
                 thumbStorageId?: Id<"_storage">;
                 totalBytes?: number;
@@ -4744,7 +4770,7 @@ export declare const internal: {
                 width?: number;
               }
           >;
-          platform?: "imessage";
+          platform?: "imessage" | "slack";
         },
         { skipped: number; written: number }
       >;
@@ -4765,6 +4791,7 @@ export declare const internal: {
               guid: string;
               hasAttachments: boolean;
               isFromMe: boolean;
+              mentionsMe?: boolean;
               senderName: string | null;
               text: string;
             };
@@ -4772,7 +4799,7 @@ export declare const internal: {
             participants: Array<{ address: string; name: string | null }>;
             rawDisplayName?: string;
           }>;
-          platform?: "imessage";
+          platform?: "imessage" | "slack";
         },
         Record<string, Id<"comma_conversations">>
       >;
@@ -4855,7 +4882,7 @@ export declare const internal: {
                   start: number;
                 }>;
                 modelText?: string;
-                platform?: "imessage";
+                platform?: "imessage" | "slack";
                 reactions?: Array<{
                   emoji?: string;
                   isFromMe: boolean;
@@ -4889,7 +4916,7 @@ export declare const internal: {
                 threadRef?: string;
               }
           >;
-          platform?: "imessage";
+          platform?: "imessage" | "slack";
         },
         { skipped: number; written: number }
       >;
@@ -4898,7 +4925,7 @@ export declare const internal: {
       drive: FunctionReference<
         "action",
         "internal",
-        { lane: "imessage" | "ai" | "aiBackground" },
+        { lane: "imessage" | "slack" | "ai" | "aiBackground" },
         null
       >;
     };
@@ -4978,7 +5005,7 @@ export declare const internal: {
         "mutation",
         "internal",
         {
-          lane: "imessage" | "ai" | "aiBackground";
+          lane: "imessage" | "slack" | "ai" | "aiBackground";
           leaseMs: number;
           limit: number;
           now: number;
@@ -4992,7 +5019,7 @@ export declare const internal: {
           conversationId?: Id<"comma_conversations">;
           createdAt: number;
           error?: string;
-          lane?: "imessage" | "ai" | "aiBackground";
+          lane?: "imessage" | "slack" | "ai" | "aiBackground";
           leaseUntil?: number;
           payload:
             | {
@@ -5509,11 +5536,18 @@ export declare const internal: {
             | { kind: "suggestionFeedback"; ok: true }
             | { kind: "clearSuggestionLearning"; ok: true };
           resultGuid?: string;
-          route?: {
-            accountId?: Id<"comma_accounts">;
-            chatGuid: string;
-            platform: "imessage";
-          };
+          route?:
+            | {
+                accountId?: Id<"comma_accounts">;
+                chatGuid: string;
+                platform: "imessage";
+              }
+            | {
+                accountId: Id<"comma_accounts">;
+                channel: string;
+                platform: "slack";
+                threadTs?: string;
+              };
           status: "pending" | "claimed" | "sent" | "failed" | "unknown";
           updatedAt: number;
         }>
@@ -6102,7 +6136,7 @@ export declare const internal: {
             isGroup: boolean;
             kind: "dm" | "group" | "channel" | "emailThread";
             lastMessageAt: number;
-            platform: "imessage";
+            platform: "imessage" | "slack";
             state: "needsYou" | "waiting";
             title: string;
             unreadCount: number;

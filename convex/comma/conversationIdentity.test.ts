@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { choosePrimary, handleKey, imessage, routeFor, sendRoute } from "./conversationIdentity";
+import { choosePrimary, handleKey, imessage, routeFor, sendRoute, slack } from "./conversationIdentity";
 
 function dm(address: string): string {
   return imessage.conversationKey({
@@ -86,4 +86,24 @@ describe("routes", () => {
 test("a conversation with no iMessage chat has no route rather than a made-up one", () => {
   expect(() => sendRoute({})).toThrow("Conversation has no iMessage chat");
   expect(() => routeFor({}, "SMS")).toThrow("Conversation has no iMessage chat");
+});
+
+describe("slack", () => {
+  test("keys a DM, a group DM, a channel and a thread apart, and kinds them", () => {
+    const refs = [
+      { type: "im", channel: "D1" }, { type: "mpim", channel: "G1" }, { type: "channel", channel: "C1" },
+      { type: "thread", channel: "C1", threadTs: "1700000000.000100" },
+    ] as const;
+    expect(refs.map((ref) => [slack.conversationKey(ref), slack.kind(ref)])).toEqual([
+      ["im:D1", "dm"], ["mpim:G1", "group"], ["ch:C1", "channel"], ["th:C1:1700000000.000100", "group"],
+    ]);
+  });
+
+  test("a Slack conversation routes through its channel and thread, and has no iMessage service", () => {
+    const conversation = { platform: "slack" as const, accountId: "acct" as never, slack: { channel: "C1", threadTs: "1.0" } };
+    expect(sendRoute(conversation)).toEqual({ platform: "slack", accountId: "acct", channel: "C1", threadTs: "1.0" });
+    expect(routeFor(conversation)).toEqual(sendRoute(conversation));
+    expect(routeFor(conversation, "SMS")).toBeNull();
+    expect(() => sendRoute({ platform: "slack" })).toThrow("Slack conversation has no channel");
+  });
 });

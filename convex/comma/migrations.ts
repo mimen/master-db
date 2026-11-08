@@ -3,6 +3,7 @@ import { v } from "convex/values";
 
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalMutation, type MutationCtx } from "../_generated/server";
+import type { CommaPlatform } from "../schema/comma/validators";
 
 import { ensureAccount } from "./accounts";
 import { conversationKind, IMESSAGE_ACCOUNT } from "./conversationIdentity";
@@ -25,7 +26,7 @@ type Table = (typeof TABLES)[number];
 const pageResult = v.object({ scanned: v.number(), changed: v.number(), cursor: v.string(), isDone: v.boolean() });
 
 async function patchPage(ctx: MutationCtx, name: Table, accountId: Id<"comma_accounts">, cursor: string | null, numItems: number, dryRun: boolean) {
-  const stamp = (row: { platform?: "imessage"; accountId?: Id<"comma_accounts"> }) =>
+  const stamp = (row: { platform?: CommaPlatform; accountId?: Id<"comma_accounts"> }) =>
     row.platform !== undefined && row.platform !== "imessage" ? null
       : row.accountId === undefined || row.platform === undefined ? { platform: "imessage" as const, accountId: row.accountId ?? accountId } : null;
   const page = await ctx.db.query(name).paginate({ cursor, numItems });

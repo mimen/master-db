@@ -19,7 +19,7 @@ const ROUTE_FEATURE = {
 const routeFeature: Partial<Record<CommaOutboxPayload["kind"], Feature | null>> = ROUTE_FEATURE;
 
 function neededFeatures(payload: CommaOutboxPayload): Feature[] {
-  if (payload.kind === "send") return [...(payload.replyToGuid ? ["reply" as const] : []), ...(payload.mentions?.length ? ["mentions" as const] : [])];
+  if (payload.kind === "send") return ["send", ...(payload.replyToGuid ? ["reply" as const] : []), ...(payload.mentions?.length ? ["mentions" as const] : [])];
   if (payload.kind === "sendAttachment") return [payload.isAudioMessage ? "voiceMemo" : "attachments"];
   const feature = routeFeature[payload.kind];
   return feature ? [feature] : [];
@@ -27,7 +27,12 @@ function neededFeatures(payload: CommaOutboxPayload): Feature[] {
 
 /** A stamped route as its platform profile reads it. */
 export function profileRoute(route: CommaRoute, isGroup: boolean): ProfileRoute {
-  return { platform: route.platform, service: routeService(imessage.service(route.chatGuid)), isGroup };
+  switch (route.platform) {
+    case "imessage":
+      return { platform: "imessage", service: routeService(imessage.service(route.chatGuid)), isGroup };
+    case "slack":
+      return { platform: "slack", service: "Slack", isGroup };
+  }
 }
 
 function routeSupport(route: CommaRoute, isGroup: boolean, payload: CommaOutboxPayload): Support | null {
