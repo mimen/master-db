@@ -46,9 +46,15 @@ describe("a Slack route", () => {
 describe("a Gmail route", () => {
   const gmail = { platform: "gmail" as const, accountId: "a" as never, threadId: "t1" };
 
-  test("is read-only: sending and model replies wait for G2 with the reason, a read passes", () => {
-    expect(unsupportedReason(gmail, true, { kind: "send", text: "hi" })).toBe("Sending from Gmail is coming");
-    expect(unsupportedReason(gmail, true, { kind: "suggestions", model: "opus", refresh: false })).toBe("Sending from Gmail is coming");
+  test("sends and replies an email with recipients; model replies, attachments and other platforms' kinds are refused", () => {
+    const email = { to: ["sam@venue.test"], cc: [], subject: "Re: Doors" };
+    expect(unsupportedReason(gmail, true, { kind: "send", text: "hi", email })).toBeNull();
+    expect(unsupportedReason(gmail, true, { kind: "send", text: "hi", replyToGuid: "m1", email: { ...email, to: [], cc: ["pat@agency.test"] } })).toBeNull();
+    expect(unsupportedReason(gmail, true, { kind: "send", text: "hi" })).toBe("An email needs someone to send it to");
+    expect(unsupportedReason(gmail, true, { kind: "suggestions", model: "opus", refresh: false })).toBe("Reply suggestions aren't on for email");
+    expect(unsupportedReason(gmail, true, { kind: "sendAttachment", storageId: "s" as never, filename: "a", mimeType: "a", isAudioMessage: false })).toBe("Not in Comma's Gmail yet");
+    expect(unsupportedReason(gmail, true, { kind: "archive" })).toBeNull();
+    expect(unsupportedReason({ platform: "slack", accountId: "a" as never, channel: "D1" }, false, { kind: "unarchive" })).toBe("Only a mailbox archives");
     expect(unsupportedReason(gmail, true, { kind: "react", messageGuid: "m", reaction: "emoji:🔥", remove: false })).toBe("Gmail can't send emoji reactions");
     expect(unsupportedReason(gmail, true, { kind: "markRead" })).toBeNull();
   });

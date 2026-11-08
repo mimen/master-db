@@ -46,6 +46,10 @@ export class FakeGmail {
   /** Threads per page on threads.list. */
   pageSize = 100;
   watches: { topicName: string }[] = [];
+  /** Every message users.messages.send took, as its RFC 822 text, with the threadId it was sent into. */
+  readonly sent: { raw: string; threadId?: string }[] = [];
+  /** Gmail sets its own Message-ID on a send instead of keeping Comma's. */
+  replacesMessageId = false;
   stopped = false;
   private keys: CryptoKeyPair | null = null;
   readonly kid = `kid-${Math.random().toString(36).slice(2)}`;
@@ -69,6 +73,23 @@ export class FakeGmail {
       return { body: {} };
     });
     this.on("GET", /^https:\/\/www\.googleapis\.com\/oauth2\/v3\/certs$/, () => ({ body: { keys: this.publicJwk ? [this.publicJwk] : [] } }));
+    this.on("POST", /\/users\/me\/messages\/send$/, (call) => this.send(call));
+    this.on("GET", /\/users\/me\/messages$/, (call) => {
+      const wanted = /^rfc822msgid:(.+)$/.exec(call.url.searchParams.get("q") ?? "")?.[1];
+      const found = this.mail.filter((message) => wanted && message.headers["Message-ID"] === `<${wanted}>`);
+      return { body: found.length ? { messages: found.map((message) => ({ id: message.id, threadId: message.threadId })) } : {} };
+    });
+    this.on("GET", /\/users\/me\/messages\/[^/]+$/, (call) => {
+      const message = this.mail.find((candidate) => candidate.id === decodeURIComponent(call.url.pathname.split("/").pop()!));
+      return message ? { body: this.serialize(message, "full", new Set()) } : { status: 404, body: { error: { code: 404, status: "NOT_FOUND" } } };
+    });
+    this.on("POST", /\/users\/me\/threads\/[^/]+\/modify$/, (call) => {
+      const threadId = decodeURIComponent(call.url.pathname.split("/").slice(-2)[0]!);
+      if (!this.mail.some((message) => message.threadId === threadId)) return { status: 404, body: { error: { code: 404, status: "NOT_FOUND" } } };
+      const { addLabelIds = [], removeLabelIds = [] } = call.json as { addLabelIds?: string[]; removeLabelIds?: string[] };
+      this.relabel(threadId, { add: addLabelIds, remove: removeLabelIds });
+      return { body: { id: threadId } };
+    });
     this.on("GET", /\/users\/me\/settings\/sendAs$/, () => ({ body: { sendAs: [{ sendAsEmail: MAILBOX }, { sendAsEmail: ALIAS }] } }));
   }
 
@@ -147,8 +168,12 @@ export class FakeGmail {
     if (!messages.length) return { status: 404, body: { error: { code: 404, status: "NOT_FOUND" } } };
     const format = call.url.searchParams.get("format");
     const wanted = new Set(call.url.searchParams.getAll("metadataHeaders").map((name) => name.toLowerCase()));
-    return { body: { id: threadId, historyId: String(this.historyId), messages: messages.map((message) => ({
-      id: message.id, threadId, labelIds: message.labelIds, internalDate: String(message.internalDate),
+    return { body: { id: threadId, historyId: String(this.historyId), messages: messages.map((message) => this.serialize(message, format, wanted)) } };
+  }
+
+  private serialize(message: FakeMail, format: string | null, wanted: Set<string>) {
+    return {
+      id: message.id, threadId: message.threadId, labelIds: message.labelIds, internalDate: String(message.internalDate),
       snippet: message.snippet ?? (message.text ?? "").slice(0, 100),
       payload: {
         mimeType: "multipart/alternative",
@@ -158,7 +183,21 @@ export class FakeGmail {
           ...(message.html !== undefined ? [{ mimeType: "text/html", body: { data: b64text(message.html) } }] : []),
         ] } : {}),
       },
-    })) } };
+    };
+  }
+
+  /** users.messages.send: the raw message joins its thread (or starts one) as a SENT message, as Gmail files it. */
+  private send(call: Call): Answer {
+    const { raw, threadId } = call.json as { raw: string; threadId?: string };
+    const text = new TextDecoder().decode(Uint8Array.from(atob(raw.replace(/-/g, "+").replace(/_/g, "/")), (char) => char.charCodeAt(0)));
+    this.sent.push({ raw: text, ...(threadId ? { threadId } : {}) });
+    const { headers, parts } = parseRfc822(text);
+    if (this.replacesMessageId) headers["Message-ID"] = `<gmail-${this.sent.length}@mail.gmail.com>`;
+    const mail = this.deliver({
+      id: `sent-${this.sent.length}`, threadId: threadId ?? `thread-sent-${this.sent.length}`, labelIds: ["SENT"], headers,
+      text: parts["text/plain"], html: parts["text/html"],
+    });
+    return { body: { id: mail.id, threadId: mail.threadId, labelIds: mail.labelIds } };
   }
 
   private listHistory(call: Call): Answer {
@@ -228,6 +267,20 @@ export class FakeGmail {
   gmailCalls(path: string): Call[] {
     return this.calls.filter((call) => call.url.host === "gmail.googleapis.com" && call.url.pathname.includes(path));
   }
+}
+
+/** An RFC 822 message's headers and its base64 parts by type, as the Gmail lane writes them. */
+export function parseRfc822(text: string): { headers: Record<string, string>; parts: Record<string, string> } {
+  const [head = "", ...rest] = text.split("\r\n\r\n");
+  const headers = Object.fromEntries(head.split("\r\n").map((line) => [line.slice(0, line.indexOf(":")), line.slice(line.indexOf(":") + 1).trim()]));
+  const boundary = /boundary="([^"]+)"/.exec(headers["Content-Type"] ?? "")?.[1];
+  const parts: Record<string, string> = {};
+  for (const chunk of boundary ? rest.join("\r\n\r\n").split(`--${boundary}`) : []) {
+    const [partHead, body] = chunk.split("\r\n\r\n");
+    const type = /Content-Type: ([^;\r\n]+)/.exec(partHead ?? "")?.[1];
+    if (type && body !== undefined) parts[type] = new TextDecoder().decode(Uint8Array.from(atob(body.replace(/\s+/g, "")), (char) => char.charCodeAt(0)));
+  }
+  return { headers, parts };
 }
 
 /** A Pub/Sub push request for a change in `emailAddress`'s mailbox. */

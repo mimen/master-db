@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { EMAIL_SANDBOX, emailDocument, inLens } from "./mail";
+import { EMAIL_SANDBOX, emailDocument, formatAddress, hasRecipient, inLens, replyFields } from "./mail";
 
 describe("inLens", () => {
   const row = (known: boolean, bulk: boolean, unresponded: boolean) => ({ known, gmail: { bulk }, flags: { unresponded } });
@@ -32,5 +32,34 @@ describe("emailDocument", () => {
 
   test("the sandbox never allows scripts", () => {
     expect(EMAIL_SANDBOX).not.toContain("allow-scripts");
+  });
+});
+
+describe("replyFields", () => {
+  const me = { address: "milad@auf.test", name: "Milad" };
+  const sam = { address: "sam@venue.test", name: "Sam Lee" };
+  const pat = { address: "pat@agency.test", name: null };
+  const dana = { address: "dana@venue.test", name: "Ortiz, Dana" };
+  const self = new Set(["milad@auf.test"]);
+  const inbound = { isFromMe: false, from: sam, to: [me, dana], cc: [pat] };
+
+  test("reply answers the sender; reply all adds everyone else on the message, never the user", () => {
+    expect(replyFields(inbound, "reply", "Doors", self)).toEqual({ to: "Sam Lee <sam@venue.test>", cc: "", subject: "Re: Doors" });
+    expect(replyFields(inbound, "replyAll", "Doors", self)).toEqual({
+      to: 'Sam Lee <sam@venue.test>, "Ortiz, Dana" <dana@venue.test>', cc: "pat@agency.test", subject: "Re: Doors",
+    });
+  });
+
+  test("on the user's own message, reply goes back to its recipients, and a subject that is already a reply keeps its prefix", () => {
+    const outbound = { isFromMe: true, from: me, to: [sam], cc: [pat, me] };
+    expect(replyFields(outbound, "reply", "RE: Doors", self)).toEqual({ to: "Sam Lee <sam@venue.test>", cc: "", subject: "RE: Doors" });
+    expect(replyFields(outbound, "replyAll", "Doors", self)).toEqual({ to: "Sam Lee <sam@venue.test>", cc: "pat@agency.test", subject: "Re: Doors" });
+  });
+
+  test("an address and a quoted name format as typed, and a field needs an address to send", () => {
+    expect(formatAddress(dana)).toBe('"Ortiz, Dana" <dana@venue.test>');
+    expect(formatAddress(pat)).toBe("pat@agency.test");
+    expect(hasRecipient({ to: "Sam", cc: "" })).toBe(false);
+    expect(hasRecipient({ to: "", cc: "pat@agency.test" })).toBe(true);
   });
 });

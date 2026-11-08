@@ -1,5 +1,5 @@
 import type {
-  AiKind, CommandResult, CommaOutboxPayload, CoreMessagingKind, IMessageOnlyKind, LegacyTriageKind,
+  AiKind, CommandResult, CommaOutboxPayload, CoreMessagingKind, GmailOnlyKind, IMessageOnlyKind, LegacyTriageKind,
 } from "../../../../../convex/schema/comma/validators";
 import type { ChatCommands } from "../../commands";
 import type { ConvexIngest } from "../convex-ingest";
@@ -36,7 +36,8 @@ export interface CommandHandler<K extends CommandKind, C = K extends AiKind ? Ai
 }
 export type IMessageHandlers = { [K in IMessageKind]: CommandHandler<K> };
 export type AiHandlers = { [K in AiKind]: CommandHandler<K> };
-export type HandlerMap = IMessageHandlers & AiHandlers;
+/** Gmail's own kinds run in Convex's Gmail lane, so the Mini has no handler for them. */
+export type HandlerMap = IMessageHandlers & AiHandlers & { [K in GmailOnlyKind]?: never };
 
 export function requireChat(context: IMessageContext): string {
   if (!context.chatGuid) throw new Error("Command requires a conversation");

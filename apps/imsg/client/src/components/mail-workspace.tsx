@@ -1,12 +1,15 @@
-import { support } from "@shared/platform-profile";
+import type { api as convexApi } from "@convex-api";
+import { pendingClientKey } from "@shared/pending-send";
 import type { ConversationId } from "@shared/types";
-import { useConvexAuth, usePaginatedQuery } from "convex/react";
-import type { FunctionReturnType } from "convex/server";
+import { useConvexAuth, usePaginatedQuery, useQuery } from "convex/react";
+import { anyApi, type FunctionReturnType } from "convex/server";
+import { ConvexError } from "convex/values";
 import { useGlobalSearchParams } from "expo-router";
 import { createElement, useEffect, useMemo, useState, type JSX } from "react";
 import { ActivityIndicator, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { DesktopSplit } from "@/components/desktop-split";
+import { EmailComposer, type ComposerStart } from "@/components/email-composer";
 import { PHONE_TAB_BAR_CLEARANCE } from "@/components/phone-tab-bar";
 import { SidebarChrome } from "@/components/sidebar/sidebar-chrome";
 import { SidebarFooter } from "@/components/sidebar/sidebar-footer";
@@ -14,21 +17,23 @@ import { SidebarFrame } from "@/components/sidebar/sidebar-frame";
 import { SidebarHeader } from "@/components/sidebar/sidebar-header";
 import { TriageGeometry } from "@/constants/triage-theme";
 import { useTheme } from "@/hooks/use-theme";
+import { conversationState } from "@/lib/conversation-state";
 import { commaApi } from "@/lib/convex-api";
 import { formatListTimestamp, formatReceiptTime } from "@/lib/format";
 import { headerFace } from "@/lib/header-font";
-import { EMAIL_SANDBOX, emailDocument, inLens, type MailLens } from "@/lib/mail";
+import { EMAIL_SANDBOX, emailDocument, inLens, type MailLens, type ReplyMode } from "@/lib/mail";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
+import { showToast } from "@/lib/toast";
 
 /**
- * The Mail workspace: a mailbox's inbox threads under two lenses, and a reader that shows each message as a card.
- * Gmail is read-only until G2, so the reader's reply bar says why it can't send.
+ * The Mail workspace: a mailbox's inbox threads under two lenses, and a reader that shows each message as a card, with
+ * Reply, Reply all and Archive. The email composer opens below the cards; an agent's draft opens it on its own.
  */
 
 type Thread = FunctionReturnType<typeof commaApi.listEmailThreads>["page"][number];
 type Email = FunctionReturnType<typeof commaApi.listMessages>["page"][number];
 
-const READ_ONLY = support({ platform: "gmail", service: "Gmail", isGroup: true }, "reply");
+const accountsApi = anyApi.comma.accounts as unknown as typeof convexApi.comma.accounts;
 const LENSES: readonly { id: MailLens; label: string }[] = [{ id: "people", label: "People" }, { id: "all", label: "All inbox" }];
 
 export function MailWorkspace({ wide }: { readonly wide: boolean }): JSX.Element {
@@ -149,6 +154,34 @@ function EmailReader({ conversationId, subject, onBack }: { conversationId: Conv
   const theme = useTheme();
   const { results, status, loadMore } = usePaginatedQuery(commaApi.listMessages, { conversationId }, { initialNumItems: 25 });
   const messages = useMemo(() => [...results].sort((a, b) => a.dateCreated - b.dateCreated), [results]);
+  const conversation = useQuery(commaApi.getConversation, { conversationId });
+  const draft = useQuery(commaApi.getDraft, { conversationId });
+  const accounts = useQuery(accountsApi.listAccounts, {});
+  const [composing, setComposing] = useState<ComposerStart | null>(null);
+  const [openedDraft, setOpenedDraft] = useState<number | null>(null);
+  const threadSubject = subject ?? messages[0]?.subject ?? "";
+  const self = useMemo(() => new Set([
+    ...(accounts ?? []).filter((account) => account._id === conversation?.accountId).map((account) => account.label.toLowerCase()),
+    ...messages.filter((message) => message.isFromMe && message.gmail).map((message) => message.gmail!.from.address.toLowerCase()),
+  ]), [accounts, conversation?.accountId, messages]);
+  const replyTarget = [...messages].reverse().find((message) => message.gmail && !pendingClientKey(message.guid));
+  const compose = (mode: ReplyMode, extra: Pick<ComposerStart, "text" | "note"> = {}) => {
+    if (!replyTarget?.gmail) return;
+    const { from, to, cc } = replyTarget.gmail;
+    setComposing({ mode, replyTo: { guid: replyTarget.guid, isFromMe: replyTarget.isFromMe, from, to, cc }, ...extra });
+  };
+  // An agent's draft for this thread opens the composer with its text, once per draft.
+  useEffect(() => {
+    if (!draft?.text || composing || openedDraft === draft.updatedAt || !replyTarget) return;
+    setOpenedDraft(draft.updatedAt);
+    compose("reply", { text: draft.text, ...(draft.note ? { note: draft.note } : {}) });
+  });
+  const settled = conversation ? !conversation.flags.unresponded && !conversation.flags.waiting : false;
+  const archive = () => {
+    if (!conversation) return;
+    void conversationState().then((state) => settled ? state.unsettle(conversationId) : state.settle(conversationId, conversation.lastMessage?.guid))
+      .catch((error: unknown) => showToast(error instanceof ConvexError ? String(error.data) : settled ? "Couldn't move it to the inbox." : "Couldn't archive it."));
+  };
   return (
     <View testID="email-reader" style={[styles.fill, { backgroundColor: theme.thread }]}>
       <View style={[styles.readerHeader, { borderBottomColor: theme.divider }]}>
@@ -157,7 +190,17 @@ function EmailReader({ conversationId, subject, onBack }: { conversationId: Conv
             <Text style={[styles.back, { color: theme.accent }]}>Mail</Text>
           </Pressable>
         ) : null}
-        <Text accessibilityRole="header" numberOfLines={2} style={[styles.readerSubject, { color: theme.text }]}>{subject ?? messages[0]?.subject ?? ""}</Text>
+        <View style={styles.readerTitle}>
+          <Text accessibilityRole="header" numberOfLines={2} style={[styles.readerSubject, { color: theme.text }]}>{threadSubject}</Text>
+          {conversation ? (
+            <Pressable accessibilityRole="button" onPress={archive} style={({ hovered }: { hovered?: boolean }) => [styles.action, { borderColor: theme.divider, backgroundColor: hovered ? theme.rowHover : "transparent" }]}>
+              <Text style={[styles.actionText, { color: theme.text }]}>{settled ? "Move to Inbox" : "Archive"}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        {conversation?.gmail?.archiveError ? (
+          <Text accessibilityRole="alert" style={[styles.archiveError, { color: theme.destructive }]}>{conversation.gmail.archiveError}</Text>
+        ) : null}
       </View>
       <ScrollView contentContainerStyle={styles.cards}>
         {status === "CanLoadMore" ? (
@@ -167,9 +210,33 @@ function EmailReader({ conversationId, subject, onBack }: { conversationId: Conv
         ) : null}
         {status === "LoadingFirstPage" ? <ActivityIndicator style={styles.loading} /> : messages.map((message) => <EmailCard key={message._id} message={message} />)}
       </ScrollView>
-      <View style={[styles.replyBar, onBack && { paddingBottom: PHONE_TAB_BAR_CLEARANCE }, { borderTopColor: theme.divider, backgroundColor: theme.background }]}>
-        <Text style={[styles.replyText, { color: theme.textTertiary }]}>{READ_ONLY?.ok === false ? READ_ONLY.reason : ""}</Text>
-      </View>
+      {composing ? (
+        <View style={onBack && { paddingBottom: PHONE_TAB_BAR_CLEARANCE }}>
+          <EmailComposer
+            key={`${composing.replyTo.guid}:${openedDraft ?? 0}`}
+            conversationId={conversationId}
+            start={composing}
+            subject={threadSubject}
+            self={self}
+            hasDraft={draft !== null && draft !== undefined}
+            onClose={() => setComposing(null)}
+          />
+        </View>
+      ) : (
+        <View style={[styles.replyBar, onBack && { paddingBottom: PHONE_TAB_BAR_CLEARANCE }, { borderTopColor: theme.divider, backgroundColor: theme.background }]}>
+          {(["reply", "replyAll"] as const).map((mode) => (
+            <Pressable
+              key={mode}
+              accessibilityRole="button"
+              disabled={!replyTarget}
+              onPress={() => compose(mode)}
+              style={({ hovered }: { hovered?: boolean }) => [styles.action, { borderColor: theme.divider, backgroundColor: hovered ? theme.rowHover : "transparent" }]}
+            >
+              <Text style={[styles.actionText, { color: theme.text }]}>{mode === "reply" ? "Reply" : "Reply all"}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -198,6 +265,7 @@ function EmailCard({ message }: { message: Email }): JSX.Element {
         </View>
         <Text style={[styles.time, { color: theme.textTertiary }]}>{formatReceiptTime(message.dateCreated)}</Text>
       </View>
+      {message.sendState ? <SendState clientKey={pendingClientKey(message.guid) ?? ""} state={message.sendState} /> : null}
       {html !== undefined && Platform.OS === "web" ? (
         <>
           {blocked > 0 && !images ? (
@@ -214,6 +282,17 @@ function EmailCard({ message }: { message: Email }): JSX.Element {
       )}
     </View>
   );
+}
+
+/** Where an email that has not landed stands. An unknown outcome is never offered for a resend. */
+function SendState({ clientKey, state }: { clientKey: string; state: NonNullable<Email["sendState"]> }): JSX.Element {
+  const theme = useTheme();
+  const [row] = useQuery(commaApi.outboxStatusFor, state === "failed" ? { clientKeys: [clientKey] } : "skip") ?? [];
+  const copy = state === "queued" || state === "sending" ? "Sending…"
+    : state === "notSent" ? "Not sent. Nothing took it in time."
+      : row?.status === "unknown" ? "Not sure this went through. Check Sent in Gmail before sending again."
+        : `Couldn't send${row?.error ? `: ${row.error}` : "."}`;
+  return <Text style={[styles.sendState, { color: state === "failed" || state === "notSent" ? theme.destructive : theme.textTertiary }]}>{copy}</Text>;
 }
 
 /** The cleaned HTML in a sandboxed iframe that runs no scripts, sized to its content once it loads. */
@@ -255,7 +334,12 @@ const styles = StyleSheet.create({
   empty: { fontSize: 13, paddingHorizontal: 12, paddingTop: 24 },
   readerHeader: { borderBottomWidth: StyleSheet.hairlineWidth, gap: 6, paddingHorizontal: 24, paddingVertical: 16 },
   back: { fontSize: 15 },
-  readerSubject: { ...headerFace, fontSize: 19, letterSpacing: -0.3 },
+  readerTitle: { alignItems: "flex-start", flexDirection: "row", gap: 12 },
+  readerSubject: { ...headerFace, flex: 1, fontSize: 19, letterSpacing: -0.3 },
+  archiveError: { fontSize: 12.5 },
+  action: { borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 6 },
+  actionText: { fontSize: 13, fontWeight: "600" },
+  sendState: { fontSize: 12.5 },
   cards: { gap: 12, padding: 20, paddingBottom: 32 },
   card: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, gap: 12, padding: 16 },
   cardHead: { alignItems: "flex-start", flexDirection: "row", gap: 12 },
@@ -265,6 +349,5 @@ const styles = StyleSheet.create({
   loadImages: { alignItems: "center", borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 10, paddingHorizontal: 12, paddingVertical: 8 },
   loadImagesText: { fontSize: 13, fontWeight: "600" },
   loadImagesNote: { fontSize: 12.5 },
-  replyBar: { alignItems: "center", borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: 14 },
-  replyText: { fontSize: 13 },
+  replyBar: { borderTopWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 8, paddingHorizontal: 20, paddingVertical: 12 },
 });

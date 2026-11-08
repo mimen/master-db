@@ -31,10 +31,16 @@ it is bulk under `gmail`; Convex reads the mailbox itself (`convex/comma/gmailPu
 verified by Google's OIDC token, schedules a history sync from the stored historyId, a 5-minute backstop cron runs the same
 sync, and a paged backfill reads the inbox and 90 days of threads where Milad wrote or a participant resolves to a person.
 Each non-bulk sender is an `email` identity joined to the person who has exactly that address. Archived in Gmail is
-settled in Comma; a backfill or resync settles quietly, without a clear in the log. Email threads list in the Mail
+settled in Comma; a backfill or resync settles quietly, without a clear in the log. Settling an email thread in Comma
+queues an archive on the Gmail lane (unsettling, an unarchive); a confirmed one records the thread's inbox state, so
+Gmail's echo changes nothing, and a refused one takes the move back and keeps Gmail's error on the thread
+(`gmail.archiveError`) until the thread's next sync or settle. Email threads list in the Mail
 workspace (`client/src/components/mail-workspace.tsx`, its own chunk), not in Messages or Today: People holds threads
 from someone who resolves to a person and is owed a reply, All inbox everything in the inbox, and the reader shows each
 message as a card with the cleaned HTML in an iframe that runs no scripts and loads no remote content until Load images.
+The reader's Reply and Reply all open the email composer (`client/src/components/email-composer.tsx`, in Mail's chunk)
+with To, Cc and subject filled as Gmail fills them; Enter adds a line and ⌘Enter sends. An agent's draft for the thread
+opens the composer with its text and note. Archive and Move to Inbox settle and unsettle.
 Group CRM
 (`chat_crm`, chat `tags`, chat `event_links`) belongs to the conversation.
 Its **kind** is `dm`, `group`, `channel` or `emailThread` (`comma_conversations.kind`); iMessage ingest derives `dm` or
@@ -75,9 +81,10 @@ nothing, and costs the list no read. Slack screens nothing: everyone in the
 workspace is known. On Slack, Comma sends, replies in a thread, reacts (any number per sender), edits and deletes;
 mentions, scheduling and attachments grey with "Not in Comma's Slack yet". Gmail's attention follows iMessage's; its
 screening says bulk for mail sent to a list (a List-Unsubscribe or List-Id header, `Precedence: bulk`, `Auto-Submitted`,
-a Promotions, Social, Updates or Forums label, or a no-reply sender), which stays out of People and Today. Gmail is
-read-only until G2: sending, replying, attachments and scheduling grey with "Sending from Gmail is coming", and settling
-an email thread from Comma is refused with "Archiving from Comma is coming". For routes,
+a Promotions, Social, Updates or Forums label, or a no-reply sender), which stays out of People and Today. On Gmail,
+Comma sends and replies; an email send carries its To, Cc and subject (`email` on the send), and Convex refuses one
+with no recipients. Attachments and scheduling grey with "Not in Comma's Gmail yet", and reply suggestions stay off for
+email. For routes,
 each feature (reactions and which
 tapbacks, reply, edit, unsend, typing, mentions, scheduling, calls, attachments, FaceTime links, group management,
 deleting) lists the services that carry it, whether it exists only in a group, and whether BlueBubbles needs its
@@ -171,8 +178,8 @@ _Avoid_: temp message, optimistic send, local send
 **Outbox lane**:
 The executor a queued command waits for, stamped on its `comma_outbox` row at enqueue from the route's
 platform and the command's kind: one lane per messaging platform (`imessage`; `slack`, a convex lane that
-calls Slack's Web API as Milad, `convex/comma/slackLane.ts`; `gmail`, a convex lane that completes a read and refuses the
-rest until G2), an `ai` lane
+calls Slack's Web API as Milad, `convex/comma/slackLane.ts`; `gmail`, a convex lane that sends, archives and unarchives
+through the Gmail API, `convex/comma/gmailLane.ts`), an `ai` lane
 for suggestions, identify, suggestion feedback, clearing learning and transcription, and an `aiBackground`
 lane for suggestion precompute, which nobody waits on. The lane registry
 (`convex/comma/laneRegistry.ts`) says who runs each: a **pull** lane waits for an outside executor to
@@ -181,7 +188,10 @@ Convex action that enqueue schedules, which claims under the same lease and whos
 the next drive. A convex lane's thrown error leaves its command `unknown`, because the platform may have acted;
 only a `NotSentError` (refused, or never sent) fails it. A Slack send that ends unknown is looked for in Slack's history at
 20 seconds and 2 minutes, by the clientKey in its message metadata or by Milad's id and exact text, and lands as sent
-when found; it is never posted again. Every lane runs one command at a time, so a slow model
+when found; it is never posted again. A Gmail send goes out as RFC 822 with the replied message's Message-ID as
+In-Reply-To and References and the thread's id, so it threads in Gmail, and with its own Message-ID built from the
+clientKey; unknown, it is looked for at the same times by that Message-ID (`rfc822msgid:`), then as a Sent message in
+the thread with the same subject and text, and is never sent again. Every lane runs one command at a time, so a slow model
 call never holds back a send.
 What a confirmed command changes in Convex beyond its receipt is the lane's `onResult`. AI work reads the
 conversation from Convex by conversation id, never from BlueBubbles. Convex queues a reply-suggestion

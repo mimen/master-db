@@ -2,8 +2,9 @@ import type { Doc } from "../_generated/dataModel";
 import type { ActionCtx, MutationCtx } from "../_generated/server";
 import type { CommandResult, CommaOutboxLane, CommaPlatform } from "../schema/comma/validators";
 
+import { applyGmailFailure, applyGmailResult, checkUnknownGmailSend, executeGmail } from "./gmailLane";
 import { applyIMessageResult } from "./imessageResults";
-import { applySlackResult, executeSlack } from "./slackLane";
+import { applySlackResult, checkUnknownSend, executeSlack } from "./slackLane";
 
 type OutboxRow = Doc<"comma_outbox">;
 
@@ -14,12 +15,6 @@ type OutboxRow = Doc<"comma_outbox">;
  */
 export class NotSentError extends Error {}
 
-/** Gmail is read-only until G2: a read completes in Convex, and the rest is refused (the profile greys it first). */
-async function executeGmail(_ctx: ActionCtx, row: OutboxRow): Promise<CommandResult> {
-  if (row.payload.kind === "markRead") return { kind: "markRead", ok: true };
-  throw new NotSentError("Sending from Gmail is coming");
-}
-
 /**
  * Who runs a lane's commands. A pull lane waits for an outside executor to claim its rows (the Mini, for iMessage);
  * a convex lane runs each row in a Convex action, scheduled at enqueue. Both share the claim token, lease and receipt.
@@ -28,12 +23,16 @@ export type LaneSpec = {
   lane: CommaOutboxLane;
   /** What a confirmed command changes in Convex that no platform event will report. */
   onResult?: (ctx: MutationCtx, row: OutboxRow) => Promise<void>;
+  /** What a failed command takes back in Convex. */
+  onFailed?: (ctx: MutationCtx, row: OutboxRow) => Promise<void>;
+  /** Looks for a command whose outcome is unknown, without running it again. */
+  onUnknown?: (ctx: MutationCtx, row: OutboxRow) => Promise<void>;
 } & ({ executor: "pull" } | { executor: "convex"; execute: (ctx: ActionCtx, row: OutboxRow) => Promise<CommandResult> });
 
 export const PLATFORM_LANES: Record<CommaPlatform, LaneSpec> = {
   imessage: { lane: "imessage", executor: "pull", onResult: applyIMessageResult },
-  slack: { lane: "slack", executor: "convex", execute: executeSlack, onResult: applySlackResult },
-  gmail: { lane: "gmail", executor: "convex", execute: executeGmail },
+  slack: { lane: "slack", executor: "convex", execute: executeSlack, onResult: applySlackResult, onUnknown: checkUnknownSend },
+  gmail: { lane: "gmail", executor: "convex", execute: executeGmail, onResult: applyGmailResult, onFailed: applyGmailFailure, onUnknown: checkUnknownGmailSend },
 };
 
 /** Model work, whatever the conversation's platform. The Mini's AI process claims it. */

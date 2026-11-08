@@ -37,6 +37,7 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Settle a conversation](./settle.md) covers settling from the row, the header and the keyboard, and Undo.
 - [Send attachments](./attachments.md) covers file drops with a caption, voice memos, and an unknown outcome.
 - [Schedule a message](./schedule.md) covers Send later, the date editor, and the Scheduled list.
+- [Mail sending](./mail-send.md) covers the email composer, Reply and Reply all, ⌘Enter, a lost answer, Archive and Move to Inbox, a refused archive, and an agent's draft. Its drive is `apps/imsg/e2e/fixture/mail-send.playwright.ts`.
 - [Slack sending](./slack-send.md) covers the Slack composer, send, many reactions, edit, Delete, and a lost answer the unknown-send check lands. Its drive is `apps/imsg/e2e/fixture/slack-send.playwright.ts`.
 - [Mail](./mail.md) covers the Mail workspace's People and All inbox lenses, the email reader's cards, the cleaned HTML in a no-scripts iframe, Load images, and the phone tab. Its drive is `apps/imsg/e2e/fixture/mail.playwright.ts`.
 - [Agent pane](./agent-pane.md) covers ⌘J, asking, the work log, question cards, composer and pane drafts, New chat, and the state strip. Its drive is `drives/agent-pane.ts`.

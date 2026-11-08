@@ -30,7 +30,7 @@ import { createTodayFixture, type TodayMode } from "./today";
 import { createSlackFixture, SLACK_CHANNEL, SLACK_DM } from "./slack";
 import { createTriageFixture } from "./triage";
 import type { FixtureBlueBubbles } from "./fake-bluebubbles";
-import { mailWorld } from "./mail";
+import { createMailFixture } from "./mail";
 import { AGENT_SEED, fixtureSeed, FIXTURE_NOW, type FixtureIdentity } from "./world";
 
 type Conversation = Infer<typeof conversationDoc> & Pick<ChatSummary, "flags" | "unreadCount"> & { groupPhotoUrl: string | null };
@@ -163,6 +163,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
   const drafts = new Map<string, Infer<typeof draftView>>();
   const receipts = new Map<string, { id: string; status: "pending" | "sent" | "failed" | "unknown"; clientKey: string; updatedAt: number; error?: string; result?: CommandResult; resultGuid?: string }>();
   const slackWorld = createSlackFixture(receipts);
+  const mailWorld = createMailFixture(receipts);
   /** Each send's conversation and payload, for a retry. */
   const sendPayloads = new Map<string, { chatGuid: string; payload: CommaOutboxPayload }>();
   /**
@@ -514,6 +515,8 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
   const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
     ...today.handlers,
     ...triage.handlers,
+    "comma/triage:settle": async (args) => mailWorld.owns(String(args.conversationId)) ? mailWorld.settle(String(args.conversationId)) : triage.handlers["comma/triage:settle"]!(args),
+    "comma/triage:unsettle": async (args) => mailWorld.owns(String(args.conversationId)) ? mailWorld.unsettle(String(args.conversationId)) : triage.handlers["comma/triage:unsettle"]!(args),
     "comma/triage:markRead": async (args) => {
       triage.read(String(args.conversationId), Number(args.at));
       return handlers["comma/outbox:enqueue"]!({ clientKey: `markRead-${String(args.conversationId)}-${new Date().getTime()}`, conversationId: args.conversationId, payload: { kind: "markRead" } });
@@ -613,6 +616,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     "comma/queries:listConversations": async (args) => paginate([...slackWorld.listed(), ...await conversations()], args.paginationOpts as Pagination),
     "comma/queries:resolveChat": async (args) => (await conversations()).find((row) => row.primaryChatGuid === args.chatGuid) ?? null,
     "comma/queries:getConversation": async (args) => slackWorld.owns(String(args.conversationId)) ? slackWorld.conversation(String(args.conversationId))
+      : mailWorld.owns(String(args.conversationId)) ? mailWorld.conversation(String(args.conversationId))
       : (await conversations()).find((row) => row._id === args.conversationId) ?? null,
     "comma/queries:listMessages": async (args) => paginate(slackWorld.owns(String(args.conversationId)) ? slackWorld.messages(String(args.conversationId))
       : mailWorld.owns(String(args.conversationId)) ? mailWorld.messages(String(args.conversationId))
@@ -704,6 +708,12 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
         const payload = args.payload as CommaOutboxPayload;
         const chatGuid = typeof args.conversationId === "string" ? args.conversationId : "";
         if (slackWorld.owns(chatGuid)) return slackWorld.enqueue(chatGuid, clientKey, payload);
+        if (mailWorld.owns(chatGuid)) {
+          const queued = mailWorld.enqueue(chatGuid, clientKey, payload);
+          // Production's enqueue takes the thread's draft with its send.
+          if (payload.kind === "send") drafts.delete(chatGuid);
+          return queued;
+        }
         const conversation = (await conversations()).find((row) => row._id === chatGuid);
         if (payload.kind === "createChat" || payload.kind === "clearSuggestionLearning") {
           if (chatGuid) throw new FixtureError(`${payload.kind} must be global`, 400);
@@ -792,7 +802,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     },
     "comma/outbox:outboxStatusFor": async (args) => (args.clientKeys as string[]).slice(0, 100).flatMap((clientKey) => {
       const row = receipts.get(clientKey);
-      return row ? [{ clientKey, status: row.status }] : [];
+      return row ? [{ clientKey, status: row.status, ...(row.error ? { error: row.error } : {}) }] : [];
     }),
   };
   // Takes the Mini away from the outbox or brings it back; `notSentAfterMs` shortens the Not sent deadline for a drive.
@@ -818,6 +828,13 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     if (body.loseNextAnswerMs !== undefined) slackWorld.loseNextAnswer(body.loseNextAnswerMs);
     return c.json({ ok: true, conversationId: fixtureConversationId(body.seedChannel ? SLACK_CHANNEL : SLACK_DM) });
   });
+  // Makes the next email send's answer get lost (unknown until the check finds it), or Gmail refuse the next archive.
+  app.post("/__fixture/mail", async (c) => {
+    const body = await c.req.json<{ loseNextAnswerMs?: number; refuseNextArchive?: string }>();
+    if (body.loseNextAnswerMs !== undefined) mailWorld.loseNextAnswer(body.loseNextAnswerMs);
+    if (body.refuseNextArchive !== undefined) mailWorld.refuseNextArchive(body.refuseNextArchive);
+    return c.json({ ok: true });
+  });
   app.post("/__fixture/latency", async (c) => {
     const { name, delayMs } = await c.req.json<{ name: string; delayMs: number | null }>();
     if (delayMs === null) latency.delete(name);
@@ -841,6 +858,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     Object.assign(slackAccount, { connected: false, ever: false });
     Object.assign(gmailAccount, { connected: false, ever: false });
     slackWorld.reset();
+    mailWorld.reset();
     mini.held.clear(); mini.online = true; mini.heartbeat = true; mini.beatAt = new Date().getTime(); mini.notSentAfterMs = NOT_SENT_AFTER_MS; sendPayloads.clear();
     turns.clear(); names.reset(); agent.reset(); today.reset(); triage.reset(); latency.clear(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
     for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };

@@ -5,7 +5,7 @@ import { api, internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { ALLOWED_EMAIL } from "../_lib/authed";
 import schema from "../schema";
-import { aiPayload, coreMessagingPayload, imessagePayload, legacyTriagePayload, outboxPayload, type CommaOutboxPayload } from "../schema/comma/validators";
+import { aiPayload, coreMessagingPayload, gmailPayload, imessagePayload, legacyTriagePayload, outboxPayload, type CommaOutboxPayload } from "../schema/comma/validators";
 import { normalizeModules } from "../test-utils.vitest";
 
 import { laneOf } from "./lanes";
@@ -288,7 +288,7 @@ describe("lanes", () => {
 
   test("the kind groups partition every payload kind, and only model work leaves the iMessage lane", () => {
     const kinds = (union: { members: { fields: { kind: { value: string } } }[] }) => union.members.map((m) => m.fields.kind.value);
-    const groups = [coreMessagingPayload, imessagePayload, aiPayload, legacyTriagePayload].flatMap(kinds);
+    const groups = [coreMessagingPayload, imessagePayload, gmailPayload, aiPayload, legacyTriagePayload].flatMap(kinds);
     expect(groups.sort()).toEqual(kinds(outboxPayload).sort());
     expect(new Set(groups).size).toBe(groups.length);
     expect(kinds(outboxPayload).filter((kind) => laneOf("imessage", { kind } as CommaOutboxPayload).lane === "ai").sort())
@@ -405,7 +405,7 @@ test("renewal is fenced, cannot resurrect an expired lease, and prevents expiry 
 
 test("every new kind has the specified expiry policy and legacy claims remain valid", async () => {
   const { t, c } = await setup();
-  const retryable = ["pin", "mute", "markRead", "markUnread", "settle", "unsettle", "rename", "typing", "clearSuggestionLearning", "suggestions", "identify", "transcribe"];
+  const retryable = ["pin", "mute", "markRead", "markUnread", "settle", "unsettle", "rename", "typing", "clearSuggestionLearning", "suggestions", "identify", "transcribe", "archive", "unarchive"];
   expect(Object.keys(AUTO_RETRY).filter((kind) => AUTO_RETRY[kind as keyof typeof AUTO_RETRY]).sort()).toEqual(retryable.sort());
   const storageId = await t.run((ctx) => ctx.storage.store(new Blob(["attachment"])));
   const payloads: CommaOutboxPayload[] = [

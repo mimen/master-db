@@ -1,6 +1,6 @@
 # Mail
 
-Mail is its own workspace (sidebar footer and phone tab). It lists the mailbox's inbox threads under two lenses. People holds a thread whose last message came from someone who resolves to a person and is owed a reply. All inbox holds everything, newsletters and strangers included. Email threads never show in Messages. The reader shows each message as a card: sender, To and Cc, time, and the body. The body is HTML that Convex cleaned, shown in an iframe that runs no scripts and loads nothing remote until **Load images**. Gmail is read-only in G1, so the reply bar reads "Sending from Gmail is coming".
+Mail is its own workspace (sidebar footer and phone tab). It lists the mailbox's inbox threads under two lenses. People holds a thread whose last message came from someone who resolves to a person and is owed a reply. All inbox holds everything, newsletters and strangers included. Email threads never show in Messages. The reader shows each message as a card: sender, To and Cc, time, and the body. The body is HTML that Convex cleaned, shown in an iframe that runs no scripts and loads nothing remote until **Load images**. The reader's Reply and Reply all open the email composer, and Archive settles the thread; [Mail sending](./mail-send.md) covers both.
 
 ## Sub-features
 

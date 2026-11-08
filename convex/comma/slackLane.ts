@@ -5,7 +5,7 @@ import { keyEmoji } from "../../apps/imsg/shared/platform-profile";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type ActionCtx, type MutationCtx } from "../_generated/server";
-import { outboxDoc, slackMessage, type CommandResult, type CommaRoute } from "../schema/comma/validators";
+import { slackMessage, type CommandResult, type CommaRoute } from "../schema/comma/validators";
 
 import { slack } from "./conversationIdentity";
 import { findMessage } from "./conversationLookup";
@@ -199,15 +199,6 @@ export async function checkUnknownSend(ctx: MutationCtx, row: OutboxRow): Promis
   await ctx.scheduler.runAfter(FIRST_CHECK_MS, internal.comma.slackLane.findSend, { clientKey: row.clientKey, last: false });
 }
 
-export const unknownSend = internalQuery({
-  args: { clientKey: v.string() },
-  returns: v.union(outboxDoc, v.null()),
-  handler: async (ctx, { clientKey }) => {
-    const row = await ctx.db.query("comma_outbox").withIndex("by_clientKey", (q) => q.eq("clientKey", clientKey)).unique();
-    return row?.status === "unknown" ? row : null;
-  },
-});
-
 /** Milad's messages since the send was queued that could be it: its own clientKey first, then the same text. */
 async function candidates(ctx: ActionCtx, row: OutboxRow, route: SlackRoute, text: string, replyToGuid: string | undefined): Promise<SlackMessage[]> {
   const token = await slackToken(ctx, route.accountId);
@@ -229,7 +220,7 @@ export const findSend = internalAction({
   args: { clientKey: v.string(), last: v.boolean() },
   returns: v.null(),
   handler: async (ctx, { clientKey, last }) => {
-    const row = await ctx.runQuery(internal.comma.slackLane.unknownSend, { clientKey });
+    const row = await ctx.runQuery(internal.comma.outbox.unknownSend, { clientKey });
     if (row?.route?.platform !== "slack" || row.payload.kind !== "send") return null;
     let found: SlackMessage[] = [];
     try {

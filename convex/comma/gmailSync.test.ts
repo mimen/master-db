@@ -241,7 +241,7 @@ describe("archive in both directions, from Gmail", () => {
     expect(await clears(t)).toEqual([]);
   });
 
-  test("a new message reopens an archived thread on its own; settling it from Comma waits for G2", async () => {
+  test("a new message reopens an archived thread on its own", async () => {
     seedMailbox();
     const { t, as } = await setup();
     await connect(t, as);
@@ -251,8 +251,6 @@ describe("archive in both directions, from Gmail", () => {
     await settle(t);
     const view = await as.query(api.comma.queries.getConversation, { conversationId: old._id });
     expect(view?.flags.unresponded).toBe(true);
-    await expect(as.mutation(api.comma.triage.settle, { conversationId: old._id })).rejects.toThrow("Archiving from Comma is coming");
-    await expect(as.mutation(api.comma.triage.unsettle, { conversationId: old._id })).rejects.toThrow("Archiving from Comma is coming");
   });
 });
 

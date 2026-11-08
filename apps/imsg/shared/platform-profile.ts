@@ -187,10 +187,12 @@ export const SLACK_PROFILE: PlatformProfile = {
   )) as Record<Feature, FeatureRule>,
 };
 
-/** What Gmail has that Comma does not run yet (G2). Reactions, edits, typing and the rest Gmail lacks. */
-const GMAIL_SOON: readonly Feature[] = ["send", "reply", "attachments", "schedule"];
+/** What Comma runs on Gmail. */
+const GMAIL_LIVE: readonly Feature[] = ["send", "reply"];
+/** What Gmail has that Comma does not run yet. Reactions, edits, typing and the rest Gmail lacks. */
+const GMAIL_SOON: readonly Feature[] = ["attachments", "schedule"];
 
-/** Milad's Google Workspace mailbox, read-only until G2. */
+/** Milad's Google Workspace mailbox. The email composer replaces the chat composer. */
 export const GMAIL_PROFILE: PlatformProfile = {
   name: "Gmail",
   badges: { Gmail: { label: "Gmail", color: "icon" } },
@@ -206,7 +208,7 @@ export const GMAIL_PROFILE: PlatformProfile = {
   reactions: [],
   features: Object.fromEntries((Object.entries(IMESSAGE_PROFILE.features) as [Feature, FeatureRule][]).map(
     ([feature, { privateApi: _privateApi, needs: _needs, ...rule }]): [Feature, FeatureRule] => [feature, {
-      ...rule, services: [], ...(GMAIL_SOON.includes(feature) ? { soon: "Sending from Gmail is coming" } : {}),
+      ...rule, services: GMAIL_LIVE.includes(feature) ? ["Gmail"] : [], ...(GMAIL_SOON.includes(feature) ? { soon: "Not in Comma's Gmail yet" } : {}),
     }],
   )) as Record<Feature, FeatureRule>,
 };
