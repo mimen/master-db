@@ -2129,6 +2129,88 @@ export declare const api: {
           updatedAt: number;
         }>
       >;
+      listEmailThreads: FunctionReference<
+        "query",
+        "public",
+        {
+          paginationOpts: {
+            cursor: string | null;
+            endCursor?: string | null;
+            id?: number;
+            maximumBytesRead?: number;
+            maximumRowsRead?: number;
+            numItems: number;
+          };
+        },
+        {
+          continueCursor: string;
+          isDone: boolean;
+          page: Array<{
+            _creationTime: number;
+            _id: Id<"comma_conversations">;
+            accountId?: Id<"comma_accounts">;
+            chatGuids?: Array<string>;
+            contactsAvailable: boolean;
+            conversationKey: string;
+            crm?: {
+              is_favorite?: boolean;
+              priority?: number;
+              tags?: Array<string>;
+            };
+            displayName: string;
+            flags: {
+              mutedUnresponded: boolean;
+              pinned: boolean;
+              unread: boolean;
+              unresponded: boolean;
+              waiting: boolean;
+            };
+            gmail?: {
+              bulk: boolean;
+              inInbox: boolean;
+              subject: string;
+              threadId: string;
+            };
+            groupPhotoGuid?: string;
+            groupPhotoStorageId?: Id<"_storage">;
+            groupPhotoUrl: string | null;
+            hasGroupPhoto?: boolean;
+            isGroup: boolean;
+            isSpam: boolean;
+            kind: "dm" | "group" | "channel" | "thread" | "emailThread";
+            known: boolean;
+            lastMessage?: {
+              dateCreated: number;
+              guid: string;
+              hasAttachments: boolean;
+              isFromMe: boolean;
+              mentionsMe?: boolean;
+              senderName: string | null;
+              text: string;
+            };
+            lastMessageAt: number;
+            participants: Array<{
+              address: string;
+              name: string | null;
+              photoUrl?: string | null;
+            }>;
+            platform?: "imessage" | "slack" | "gmail";
+            primaryChatGuid?: string;
+            rawDisplayName?: string;
+            searchNames: Array<string>;
+            slack?: { channel: string; following?: boolean; threadTs?: string };
+            thread?: {
+              parentId?: Id<"comma_conversations">;
+              replyCount: number;
+            };
+            unread?: { count: number; firstAt: number };
+            unreadCount: number;
+            updatedAt: number;
+          }>;
+          pageStatus?: "SplitRecommended" | "SplitRequired" | null;
+          splitCursor?: string | null;
+        }
+      >;
       listMessages: FunctionReference<
         "query",
         "public",

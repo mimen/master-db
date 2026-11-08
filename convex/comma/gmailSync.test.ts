@@ -303,3 +303,17 @@ describe("history sync", () => {
     expect((await thread(t, "t-later"))?.lastMessage?.guid).toBe("m12");
   });
 });
+
+describe("the Mail list", () => {
+  test("lists inbox threads newest first, with what People and All inbox filter on, and needs Milad", async () => {
+    seedMailbox();
+    const { t, as } = await setup();
+    await connect(t, as);
+    await expect(t.query(api.comma.queries.listEmailThreads, { paginationOpts: { numItems: 10, cursor: null } })).rejects.toThrow("Unauthorized");
+    const { page } = await as.query(api.comma.queries.listEmailThreads, { paginationOpts: { numItems: 10, cursor: null } });
+    expect(page.map((row) => [row.gmail?.threadId, row.known, row.gmail?.bulk, row.flags.unresponded])).toEqual([
+      ["t-news", false, true, true], ["t-stranger", false, false, true], ["t-sam", true, false, true],
+    ]);
+    expect(page.find((row) => row.gmail?.threadId === "t-sam")).toMatchObject({ displayName: "Sam Lee", gmail: { subject: "Doors" } });
+  });
+});

@@ -12,6 +12,7 @@ export const triageApi = anyApi.comma.triage as unknown as typeof api.comma.tria
 /** Include public foundation functions whose module differs from comma/queries. */
 export const commaApi = {
   listConversations: queries.listConversations,
+  listEmailThreads: queries.listEmailThreads,
   getConversation: queries.getConversation,
   listMessages: queries.listMessages,
   searchMessages: queries.searchMessages,

@@ -30,6 +30,7 @@ import { createTodayFixture, type TodayMode } from "./today";
 import { createSlackFixture, SLACK_CHANNEL, SLACK_DM } from "./slack";
 import { createTriageFixture } from "./triage";
 import type { FixtureBlueBubbles } from "./fake-bluebubbles";
+import { mailWorld } from "./mail";
 import { AGENT_SEED, fixtureSeed, FIXTURE_NOW, type FixtureIdentity } from "./world";
 
 type Conversation = Infer<typeof conversationDoc> & Pick<ChatSummary, "flags" | "unreadCount"> & { groupPhotoUrl: string | null };
@@ -614,10 +615,13 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     "comma/queries:getConversation": async (args) => slackWorld.owns(String(args.conversationId)) ? slackWorld.conversation(String(args.conversationId))
       : (await conversations()).find((row) => row._id === args.conversationId) ?? null,
     "comma/queries:listMessages": async (args) => paginate(slackWorld.owns(String(args.conversationId)) ? slackWorld.messages(String(args.conversationId))
-      : await messages(String(args.conversationId)), args.paginationOpts as Pagination),
+      : mailWorld.owns(String(args.conversationId)) ? mailWorld.messages(String(args.conversationId))
+        : await messages(String(args.conversationId)), args.paginationOpts as Pagination),
+    "comma/queries:listEmailThreads": async (args) => paginate(mailWorld.threads(), args.paginationOpts as Pagination),
     "comma/queries:searchMessages": async (args) => {
       const text = String(args.query).trim();
       if (text.length < 2) return [];
+      if (args.platform === "gmail") return mailWorld.search(text);
       const chatGuid = args.conversationId ? String(args.conversationId) : undefined;
       const found = await bb.queryMessages({ limit: 50, offset: 0, text, chatGuid,
         from: args.from === "me" || args.from === "them" ? args.from : undefined });

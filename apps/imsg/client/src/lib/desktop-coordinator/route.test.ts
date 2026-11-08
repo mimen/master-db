@@ -18,6 +18,15 @@ function projected(
 }
 
 describe("projectDesktopRoute", () => {
+  test("projects the Mail workspace path, with an expo tab group prefix or not", () => {
+    for (const path of ["/mail", "/(tabs)/mail/"]) {
+      expect(projected(projectDesktopRoute(path))).toEqual({
+        kind: "workspace", pathname: "/mail", workspace: "mail", workspaceProvenance: { kind: "path" },
+      });
+    }
+    expect(workspacePath("mail")).toBe("/mail");
+  });
+
   test("projects primary workspace paths without clearing retained selection semantics", () => {
     expect(projected(projectDesktopRoute("/"))).toEqual({
       kind: "workspace",

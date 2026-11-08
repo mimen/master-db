@@ -1,3 +1,4 @@
+import Mail01Icon from "@hugeicons/core-free-icons/Mail01Icon";
 import Message01Icon from "@hugeicons/core-free-icons/Message01Icon";
 import UserMultipleIcon from "@hugeicons/core-free-icons/UserMultipleIcon";
 import type { IconSvgElement } from "@hugeicons/react-native";
@@ -19,6 +20,7 @@ interface Workspace {
  */
 export const WORKSPACES = [
   { id: "messages", label: "Messages", icon: Message01Icon, path: "/", tab: "index", keywords: ["tab", "inbox"] },
+  { id: "mail", label: "Mail", icon: Mail01Icon, path: "/mail", tab: "mail", keywords: ["tab", "email", "gmail", "inbox"] },
   { id: "contacts", label: "Contacts", icon: UserMultipleIcon, path: "/contacts", tab: "contacts", keywords: ["tab", "people"] },
 ] as const satisfies readonly Workspace[];
 

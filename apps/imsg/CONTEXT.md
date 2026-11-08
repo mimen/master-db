@@ -32,7 +32,10 @@ verified by Google's OIDC token, schedules a history sync from the stored histor
 sync, and a paged backfill reads the inbox and 90 days of threads where Milad wrote or a participant resolves to a person.
 Each non-bulk sender is an `email` identity joined to the person who has exactly that address. Archived in Gmail is
 settled in Comma; a backfill or resync settles quietly, without a clear in the log. Email threads list in the Mail
-workspace, not in Messages or Today. Group CRM
+workspace (`client/src/components/mail-workspace.tsx`, its own chunk), not in Messages or Today: People holds threads
+from someone who resolves to a person and is owed a reply, All inbox everything in the inbox, and the reader shows each
+message as a card with the cleaned HTML in an iframe that runs no scripts and loads no remote content until Load images.
+Group CRM
 (`chat_crm`, chat `tags`, chat `event_links`) belongs to the conversation.
 Its **kind** is `dm`, `group`, `channel` or `emailThread` (`comma_conversations.kind`); iMessage ingest derives `dm` or
 `group`, and `isGroup` (every kind but `dm`) is derived from it for older readers. Rows from before kinds read theirs
