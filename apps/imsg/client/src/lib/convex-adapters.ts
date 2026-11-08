@@ -19,7 +19,9 @@ export function conversationToChat(
     conversationId: row._id,
     route: row.platform === "slack" && row.slack && row.accountId
       ? { platform: "slack", accountId: row.accountId, slack: row.slack }
-      : { platform: "imessage", accountId: row.accountId ?? null, imessage: { chatGuid: row.primaryChatGuid ?? "" } },
+      : row.platform === "gmail" && row.gmail && row.accountId
+        ? { platform: "gmail", accountId: row.accountId, gmail: { threadId: row.gmail.threadId } }
+        : { platform: "imessage", accountId: row.accountId ?? null, imessage: { chatGuid: row.primaryChatGuid ?? "" } },
     displayName: row.displayName,
     kind: row.kind,
     isGroup: row.isGroup,
@@ -29,6 +31,7 @@ export function conversationToChat(
     known: row.known,
     contactsAvailable: row.contactsAvailable,
     isSpam: row.isSpam,
+    ...(row.gmail?.bulk ? { bulk: true } : {}),
     lastMessage: row.lastMessage ?? null,
     unreadCount: row.unreadCount,
     firstUnreadAt: row.unreadCount ? row.unread?.firstAt ?? null : null,

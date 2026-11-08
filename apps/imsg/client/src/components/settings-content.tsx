@@ -4,7 +4,7 @@ import type { SuggestionModel } from "@shared/types";
 import type { api as convexApi } from "@convex-api";
 import type { AccountId } from "@shared/types";
 import { useAction, useConvexAuth, useQuery } from "convex/react";
-import { anyApi } from "convex/server";
+import { anyApi, type FunctionReturnType } from "convex/server";
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type JSX, type ReactNode } from "react";
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 
@@ -212,12 +212,16 @@ function SlackChannels({ accountId }: { accountId: AccountId }): JSX.Element {
     </>
   );
 }
+const googleAuthApi = anyApi.comma.googleAuth as unknown as typeof convexApi.comma.googleAuth;
 
-function QuietButton({ label, destructive = false, onPress }: { label: string; destructive?: boolean; onPress: () => void }): JSX.Element {
+function QuietButton({ label, accessibilityLabel, destructive = false, onPress }: {
+  label: string; accessibilityLabel?: string; destructive?: boolean; onPress: () => void;
+}): JSX.Element {
   const theme = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
       onPress={onPress}
       style={({ hovered, pressed }) => [styles.quietButton, (hovered || pressed) && { backgroundColor: theme.backgroundElement }]}
     >
@@ -226,32 +230,54 @@ function QuietButton({ label, destructive = false, onPress }: { label: string; d
   );
 }
 
-/** Each signed-in account and its connection. Slack connects through OAuth in a browser tab. */
+type Account = FunctionReturnType<typeof accountsApi.listAccounts>[number];
+
+/** One OAuth account's row: Connect opens the platform's consent in a browser tab; a token Google refused shows Reconnect. */
+function OAuthAccountRow({ first, name, account, about, reading, start, stop }: {
+  first: boolean; name: string; account: Account | undefined; about: string; reading: string;
+  start: () => Promise<string>; stop: (accountId: AccountId) => Promise<null>;
+}): JSX.Element {
+  const showSheet = useActionSheet();
+  const connect = (): void => void start().then(
+    (url) => Linking.openURL(url),
+    () => showToast(`Couldn't start connecting ${name}. Try again.`),
+  );
+  const disconnect = (accountId: AccountId): void => showSheet({
+    title: `Disconnect ${name}? Comma stops reading it until you reconnect.`,
+    actions: [{
+      label: "Disconnect",
+      destructive: true,
+      onPress: () => void stop(accountId).then(
+        () => showToast(`${name} disconnected`),
+        () => showToast(`Couldn't disconnect ${name}. Try again.`),
+      ),
+    }],
+  });
+  const live = account?.connected && account.health === "ok";
+  const caption = live ? `${account.label}. ${reading}`
+    : account?.connected ? `${account.label}. ${name} stopped answering. Reconnect to keep reading.`
+      : account ? `${account.label}. Not connected.` : about;
+  return (
+    <SettingRow first={first} title={name} caption={caption}>
+      {live
+        ? <QuietButton label="Disconnect" accessibilityLabel={`Disconnect ${name}`} destructive onPress={() => disconnect(account._id)} />
+        : <QuietButton label={account ? "Reconnect" : "Connect"} accessibilityLabel={`${account ? "Reconnect" : "Connect"} ${name}`} onPress={connect} />}
+    </SettingRow>
+  );
+}
+
+/** Each signed-in account and its connection. Slack and Gmail connect through OAuth in a browser tab. */
 function AccountsGroup(): JSX.Element | null {
   const { isAuthenticated } = useConvexAuth();
   const accounts = useQuery(accountsApi.listAccounts, isAuthenticated ? {} : "skip");
   const startSlackConnect = useAction(slackAuthApi.startSlackConnect);
   const disconnectSlack = useAction(slackAuthApi.disconnectSlack);
-  const showSheet = useActionSheet();
+  const startGmailConnect = useAction(googleAuthApi.startGmailConnect);
+  const disconnectGmail = useAction(googleAuthApi.disconnectGmail);
   const theme = useTheme();
   if (!accounts) return null;
   const imessage = accounts.find((account) => account.platform === "imessage");
   const slack = accounts.find((account) => account.platform === "slack");
-  const connect = (): void => void startSlackConnect({}).then(
-    (url) => Linking.openURL(url),
-    () => showToast("Couldn't start connecting Slack. Try again."),
-  );
-  const disconnect = (accountId: AccountId): void => showSheet({
-    title: "Disconnect Slack? Comma stops reading it until you reconnect.",
-    actions: [{
-      label: "Disconnect",
-      destructive: true,
-      onPress: () => void disconnectSlack({ accountId }).then(
-        () => showToast("Slack disconnected"),
-        () => showToast("Couldn't disconnect Slack. Try again."),
-      ),
-    }],
-  });
   return (
     <Group title="Accounts">
       {imessage && (
@@ -259,17 +285,25 @@ function AccountsGroup(): JSX.Element | null {
           <Text style={[styles.rowCaption, { color: theme.textSecondary }]}>Connected</Text>
         </SettingRow>
       )}
-      <SettingRow
+      <OAuthAccountRow
         first={!imessage}
-        title="Slack"
-        caption={slack?.connected ? `${slack.label}. Comma reads your DMs, group DMs, threads and the channels you follow.`
-          : slack ? `${slack.label}. Not connected.` : "Read your AUF DMs, group DMs and threads in Comma."}
-      >
-        {slack?.connected
-          ? <QuietButton label="Disconnect" destructive onPress={() => disconnect(slack._id)} />
-          : <QuietButton label={slack ? "Reconnect" : "Connect"} onPress={connect} />}
-      </SettingRow>
+        name="Slack"
+        account={slack}
+        about="Read your AUF DMs, group DMs and threads in Comma."
+        reading="Comma reads your DMs, group DMs, threads and the channels you follow."
+        start={() => startSlackConnect({})}
+        stop={(accountId) => disconnectSlack({ accountId })}
+      />
       {slack?.connected ? <SlackChannels accountId={slack._id} /> : null}
+      <OAuthAccountRow
+        first={false}
+        name="Gmail"
+        account={accounts.find((account) => account.platform === "gmail")}
+        about="Read your AUF mailbox in Comma's Mail."
+        reading="Comma reads your inbox. Replying and archiving from Comma are coming."
+        start={() => startGmailConnect({})}
+        stop={(accountId) => disconnectGmail({ accountId })}
+      />
     </Group>
   );
 }

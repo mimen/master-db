@@ -5,7 +5,7 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { action, httpAction, internalMutation, internalQuery, type ActionCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
-import { sealedCredentials } from "../schema/comma/validators";
+import { oauthStateFields, platform, sealedCredentials } from "../schema/comma/validators";
 
 import { ensureAccount } from "./accounts";
 import { publishExecutorStatus } from "./bridgeState";
@@ -29,9 +29,9 @@ export const SLACK_USER_SCOPES = [
   "reactions:read", "reactions:write", "search:read", "users:read", "users:read.email",
 ] as const;
 
-const STATE_TTL_MS = 10 * 60_000;
+export const STATE_TTL_MS = 10 * 60_000;
 
-function siteUrl(): string {
+export function siteUrl(): string {
   const url = process.env.CONVEX_SITE_URL;
   if (!url) throw new Error("CONVEX_SITE_URL is not set");
   return url;
@@ -45,10 +45,12 @@ function env(name: "SLACK_CLIENT_ID" | "SLACK_CLIENT_SECRET"): string {
   return value;
 }
 
+export const randomHex = (bytes: number) => Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 
 /** What the browser tab shows when the flow ends. */
-function page(status: number, message: string): Response {
+export function page(status: number, message: string): Response {
   return new Response(`<!doctype html><meta charset="utf-8"><title>Comma</title><p style="font:16px system-ui;margin:40px">${escapeHtml(message)}</p>`,
     { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
@@ -59,46 +61,47 @@ export const startSlackConnect = action({
   returns: v.string(),
   handler: async (ctx) => {
     await assertAllowed(ctx);
-    const state = Array.from(crypto.getRandomValues(new Uint8Array(24)), (byte) => byte.toString(16).padStart(2, "0")).join("");
-    await ctx.runMutation(internal.comma.slackAuth.saveState, { state, expiresAt: Date.now() + STATE_TTL_MS });
+    const state = randomHex(24);
+    await ctx.runMutation(internal.comma.slackAuth.saveState, { state, platform: "slack", expiresAt: Date.now() + STATE_TTL_MS });
     return `${siteUrl()}/comma/oauth/slack/install?state=${state}`;
   },
 });
 
+/** A single-use state for Slack's or Google's connect flow. */
 export const saveState = internalMutation({
-  args: { state: v.string(), expiresAt: v.number() },
+  args: oauthStateFields,
   returns: v.null(),
   handler: async (ctx, args) => {
-    await ctx.db.insert("comma_oauth_states", { ...args, platform: "slack" });
+    await ctx.db.insert("comma_oauth_states", args);
     return null;
   },
 });
 
 export const stateIsLive = internalQuery({
-  args: { state: v.string() },
+  args: { state: v.string(), platform },
   returns: v.boolean(),
-  handler: async (ctx, { state }) => {
+  handler: async (ctx, { state, platform }) => {
     const row = await ctx.db.query("comma_oauth_states").withIndex("by_state", (q) => q.eq("state", state)).unique();
-    return row !== null && row.expiresAt > Date.now();
+    return row !== null && row.platform === platform && row.expiresAt > Date.now();
   },
 });
 
-/** True once, for a live state; the row goes either way. */
+/** The state's row once, while it is live and the platform's; the row goes either way. */
 export const consumeState = internalMutation({
-  args: { state: v.string() },
-  returns: v.boolean(),
-  handler: async (ctx, { state }) => {
+  args: { state: v.string(), platform },
+  returns: v.union(v.object({ verifier: v.optional(v.string()) }), v.null()),
+  handler: async (ctx, { state, platform }) => {
     const row = await ctx.db.query("comma_oauth_states").withIndex("by_state", (q) => q.eq("state", state)).unique();
-    if (!row) return false;
+    if (!row) return null;
     await ctx.db.delete(row._id);
-    return row.expiresAt > Date.now();
+    return row.platform === platform && row.expiresAt > Date.now() ? { ...(row.verifier ? { verifier: row.verifier } : {}) } : null;
   },
 });
 
 /** GET /comma/oauth/slack/install?state=…: sends a live state on to Slack's consent screen for the AUF workspace. */
 export const handleInstall = httpAction(async (ctx, request) => {
   const state = new URL(request.url).searchParams.get("state");
-  if (!state || !(await ctx.runQuery(internal.comma.slackAuth.stateIsLive, { state }))) {
+  if (!state || !(await ctx.runQuery(internal.comma.slackAuth.stateIsLive, { state, platform: "slack" }))) {
     return page(400, "This link has expired. Start again from Comma's Settings.");
   }
   const authorize = new URL("https://slack.com/oauth/v2/authorize");
@@ -116,7 +119,7 @@ export const handleCallback = httpAction(async (ctx, request) => {
   const params = new URL(request.url).searchParams;
   const state = params.get("state");
   const code = params.get("code");
-  if (!state || !(await ctx.runMutation(internal.comma.slackAuth.consumeState, { state }))) {
+  if (!state || !(await ctx.runMutation(internal.comma.slackAuth.consumeState, { state, platform: "slack" }))) {
     return page(400, "This link has expired. Start again from Comma's Settings.");
   }
   if (params.get("error") || !code) return page(400, `Slack didn't connect: ${params.get("error") ?? "no code"}.`);
@@ -138,10 +141,10 @@ export const handleCallback = httpAction(async (ctx, request) => {
   }
 });
 
-async function markConnection(ctx: Parameters<typeof publishExecutorStatus>[0], accountId: Id<"comma_accounts">, connected: boolean) {
+export async function markConnection(platform: "slack" | "gmail", ctx: Parameters<typeof publishExecutorStatus>[0], accountId: Id<"comma_accounts">, connected: boolean) {
   await publishExecutorStatus(ctx, {
-    key: accountStatusKey("slack", accountId), connected, lastSeenAt: Date.now(),
-    ...(connected ? {} : { detail: "Disconnected" }), capabilities: { executor: "slack" },
+    key: accountStatusKey(platform, accountId), connected, lastSeenAt: Date.now(),
+    ...(connected ? {} : { detail: "Disconnected" }), capabilities: { executor: platform },
   });
 }
 
@@ -151,7 +154,7 @@ export const connect = internalMutation({
   handler: async (ctx, { selfHandle, credentials, ...account }) => {
     const { _id } = await ensureAccount(ctx, { platform: "slack", ...account, selfHandles: [selfHandle] });
     await ctx.db.patch(_id, { credentials, health: "ok" });
-    await markConnection(ctx, _id, true);
+    await markConnection("slack", ctx, _id, true);
     await ctx.scheduler.runAfter(0, internal.comma.slackSync.startBackfill, { accountId: _id });
     return _id;
   },
@@ -192,7 +195,7 @@ export const disconnect = internalMutation({
   returns: v.null(),
   handler: async (ctx, { accountId }) => {
     await ctx.db.patch(accountId, { credentials: undefined });
-    await markConnection(ctx, accountId, false);
+    await markConnection("slack", ctx, accountId, false);
     return null;
   },
 });

@@ -170,6 +170,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
    */
   // Settings' accounts: the Mac's iMessage account, and Slack once a spec connects it.
   const slackAccount = { connected: false, ever: false };
+  const gmailAccount = { connected: false, ever: false };
   const mini = { online: true, heartbeat: true, beatAt: new Date().getTime(), notSentAfterMs: NOT_SENT_AFTER_MS, held: new Map<string, { release: () => void; timer: ReturnType<typeof setTimeout> }>() };
   const strand = (clientKey: string, error: string) => {
     const receipt = receipts.get(clientKey);
@@ -492,6 +493,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     return c.json({ storageId });
   });
   app.get("/__fixture/slack-connected", (c) => c.html("<p>Slack is connected. You can close this tab.</p>"));
+  app.get("/__fixture/gmail-connected", (c) => c.html("<p>Gmail is connected. You can close this tab.</p>"));
   app.get("/__fixture/media/:guid", (c) => {
     const upload = uploads.get(c.req.param("guid"));
     return upload ? new Response(upload.bytes) : bb.downloadAttachment(c.req.param("guid"));
@@ -554,7 +556,17 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     "comma/accounts:listAccounts": async () => [
       { _id: "account-imessage", platform: "imessage", label: "iMessage", health: "ok", connected: true, createdAt: 1 },
       ...(slackAccount.ever ? [{ _id: "account-slack", platform: "slack", label: "AUF", health: "ok", connected: slackAccount.connected, createdAt: 2 }] : []),
+      ...(gmailAccount.ever ? [{ _id: "account-gmail", platform: "gmail", label: "milad@afternoonumbrellafriends.com", health: "ok", connected: gmailAccount.connected, createdAt: 3 }] : []),
     ],
+    // The fixture's Google consent screen approves at once, as the real callback lands the mailbox.
+    "comma/googleAuth:startGmailConnect": async () => {
+      Object.assign(gmailAccount, { connected: true, ever: true });
+      return "/__fixture/gmail-connected";
+    },
+    "comma/googleAuth:disconnectGmail": async () => {
+      gmailAccount.connected = false;
+      return null;
+    },
     // The fixture's Slack consent screen approves at once, the way the real callback lands the account.
     "comma/slackAuth:startSlackConnect": async () => {
       Object.assign(slackAccount, { connected: true, ever: true });
@@ -823,6 +835,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
   return () => {
     for (const { timer } of mini.held.values()) clearTimeout(timer);
     Object.assign(slackAccount, { connected: false, ever: false });
+    Object.assign(gmailAccount, { connected: false, ever: false });
     slackWorld.reset();
     mini.held.clear(); mini.online = true; mini.heartbeat = true; mini.beatAt = new Date().getTime(); mini.notSentAfterMs = NOT_SENT_AFTER_MS; sendPayloads.clear();
     turns.clear(); names.reset(); agent.reset(); today.reset(); triage.reset(); latency.clear(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();

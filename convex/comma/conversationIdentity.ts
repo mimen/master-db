@@ -99,7 +99,19 @@ export const slack = {
   messageGuid: (channel: string, ts: string): string => `${channel}:${ts}`,
 };
 
-export const PLATFORM_IDENTITY = { imessage, slack } satisfies Record<CommaPlatform, PlatformIdentity>;
+/** A Gmail mailbox. A conversation is one Gmail thread; a message id is Gmail's, unique within the mailbox. */
+export const gmail = {
+  platform: "gmail" as const satisfies CommaPlatform,
+
+  /** Gmail marks sent mail with the SENT label, but a message is from me when its From is one of the account's addresses. */
+  reportsFromMe: false,
+
+  kind: (): CommaConversationKind => "emailThread",
+
+  conversationKey: (threadId: string): string => `t:${threadId}`,
+};
+
+export const PLATFORM_IDENTITY = { imessage, slack, gmail } satisfies Record<CommaPlatform, PlatformIdentity>;
 
 /**
  * A stored conversation's kind. Rows from before kinds read theirs off `isGroup` until the kinds backfill stamps them,
@@ -135,6 +147,7 @@ export function choosePrimary(chats: { chatGuid: string; lastMessageAt: number }
 type Routable = {
   platform?: CommaPlatform; primaryChatGuid?: string; accountId?: CommaRoute["accountId"];
   slack?: { channel: string; threadTs?: string };
+  gmail?: { threadId: string };
 };
 
 /** An iMessage conversation's primary chat. Only iMessage conversations have chats. */
@@ -147,8 +160,12 @@ function routeThrough(conversation: Routable, chatGuid: string): CommaRoute {
   return { platform: "imessage", ...(conversation.accountId ? { accountId: conversation.accountId } : {}), chatGuid };
 }
 
-/** The route a conversation's commands take: iMessage's account and primary chat, or Slack's channel and thread. */
+/** The route a conversation's commands take: iMessage's account and primary chat, Slack's channel and thread, or Gmail's thread. */
 export function sendRoute(conversation: Routable): CommaRoute {
+  if (conversation.platform === "gmail") {
+    if (!conversation.gmail || !conversation.accountId) throw new Error("Gmail conversation has no thread");
+    return { platform: "gmail", accountId: conversation.accountId, threadId: conversation.gmail.threadId };
+  }
   if (conversation.platform !== "slack") return routeThrough(conversation, primaryChat(conversation));
   if (!conversation.slack || !conversation.accountId) throw new Error("Slack conversation has no channel");
   return { platform: "slack", accountId: conversation.accountId, ...conversation.slack };
@@ -159,7 +176,7 @@ export function routeFor(
   conversation: Routable & { chatGuids?: string[] },
   service?: "iMessage" | "SMS",
 ): CommaRoute | null {
-  if (conversation.platform === "slack") return service ? null : sendRoute(conversation);
+  if (conversation.platform === "slack" || conversation.platform === "gmail") return service ? null : sendRoute(conversation);
   const carries = (chatGuid: string) => !service || imessage.sendService(chatGuid) === service;
   if (carries(primaryChat(conversation))) return sendRoute(conversation);
   const candidates = (conversation.chatGuids ?? []).filter(carries);

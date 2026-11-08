@@ -34,6 +34,8 @@ export function profileRoute(route: CommaRoute, isGroup: boolean): ProfileRoute 
       return { platform: "imessage", service: routeService(imessage.service(route.chatGuid)), isGroup };
     case "slack":
       return { platform: "slack", service: "Slack", isGroup };
+    case "gmail":
+      return { platform: "gmail", service: "Gmail", isGroup };
   }
 }
 

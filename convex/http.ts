@@ -7,6 +7,7 @@ import {
   handleUploadUrl as handleBeeperAttachmentsUploadUrl,
 } from "./beeper/sync/handleAttachments";
 import { handleIngest as handleBeeperIngest } from "./beeper/sync/handleIngest";
+import { handleGoogleCallback } from "./comma/googleAuth";
 import { handleIngest as handleCommaIngest, handleUploadUrl as handleCommaUploadUrl } from "./comma/ingest";
 import { handleCallback as handleSlackCallback, handleInstall as handleSlackInstall } from "./comma/slackAuth";
 import { handleSlackEvents } from "./comma/slackEvents";
@@ -120,6 +121,9 @@ http.route({ path: "/comma/ingest-upload-url", method: "POST", handler: handleCo
  */
 http.route({ path: "/comma/oauth/slack/install", method: "GET", handler: handleSlackInstall });
 http.route({ path: "/comma/oauth/slack/callback", method: "GET", handler: handleSlackCallback });
+
+/** Comma's Gmail connection: Google's OAuth redirect URI. Public by design; it needs a single-use state and its PKCE verifier. */
+http.route({ path: "/comma/oauth/google/callback", method: "GET", handler: handleGoogleCallback });
 
 /** Slack's Events API, signed with SLACK_SIGNING_SECRET. The Slack app's Event Subscriptions request URL. */
 http.route({ path: "/comma/slack/events", method: "POST", handler: handleSlackEvents });

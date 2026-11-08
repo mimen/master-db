@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { choosePrimary, handleKey, imessage, routeFor, sendRoute, slack } from "./conversationIdentity";
+import { choosePrimary, gmail, handleKey, imessage, routeFor, sendRoute, slack } from "./conversationIdentity";
 
 function dm(address: string): string {
   return imessage.conversationKey({
@@ -105,5 +105,15 @@ describe("slack", () => {
     expect(routeFor(conversation)).toEqual(sendRoute(conversation));
     expect(routeFor(conversation, "SMS")).toBeNull();
     expect(() => sendRoute({ platform: "slack" })).toThrow("Slack conversation has no channel");
+  });
+});
+
+describe("gmail", () => {
+  test("a thread is one emailThread conversation, keyed by its thread id, routed through it", () => {
+    expect([gmail.conversationKey("18c2a"), gmail.kind()]).toEqual(["t:18c2a", "emailThread"]);
+    const conversation = { platform: "gmail" as const, accountId: "acct" as never, gmail: { threadId: "18c2a" } };
+    expect(sendRoute(conversation)).toEqual({ platform: "gmail", accountId: "acct", threadId: "18c2a" });
+    expect(routeFor(conversation, "iMessage")).toBeNull();
+    expect(() => sendRoute({ platform: "gmail" })).toThrow("Gmail conversation has no thread");
   });
 });

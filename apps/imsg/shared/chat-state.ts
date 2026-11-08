@@ -76,7 +76,7 @@ export function conversationFlags(
  */
 function isScreened(chat: ChatSummary): boolean {
   const screening = screeningOf({ ...chat, platform: chat.route.platform });
-  return screening === "spam" || (screening === "stranger" && chat.contactsAvailable !== false);
+  return screening === "spam" || screening === "bulk" || (screening === "stranger" && chat.contactsAvailable !== false);
 }
 
 /**

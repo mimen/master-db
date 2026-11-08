@@ -203,7 +203,7 @@ export declare const api: {
           createdAt: number;
           health: "ok" | "needsAttention";
           label: string;
-          platform: "imessage" | "slack";
+          platform: "imessage" | "slack" | "gmail";
         }>
       >;
     };
@@ -482,7 +482,7 @@ export declare const api: {
         "public",
         {
           accountId: Id<"comma_accounts"> | null;
-          platform: "imessage" | "slack";
+          platform: "imessage" | "slack" | "gmail";
         },
         {
           capabilities:
@@ -492,6 +492,7 @@ export declare const api: {
                 privateApi: boolean;
               }
             | { executor: "slack" }
+            | { executor: "gmail" }
             | {
                 executor: "ai";
                 suggestions: boolean;
@@ -557,6 +558,15 @@ export declare const api: {
         null
       >;
     };
+    googleAuth: {
+      disconnectGmail: FunctionReference<
+        "action",
+        "public",
+        { accountId: Id<"comma_accounts"> },
+        null
+      >;
+      startGmailConnect: FunctionReference<"action", "public", {}, string>;
+    };
     history: {
       messageWindow: FunctionReference<
         "query",
@@ -594,7 +604,7 @@ export declare const api: {
             mimeType?: string;
             originalStorageId?: Id<"_storage">;
             originalUrl: string | null;
-            platform?: "imessage" | "slack";
+            platform?: "imessage" | "slack" | "gmail";
             sourceVersion: number;
             thumbStorageId?: Id<"_storage">;
             thumbUrl: string | null;
@@ -645,7 +655,7 @@ export declare const api: {
           mentions: Array<{ address: string; length: number; start: number }>;
           mentionsMe?: boolean;
           modelText?: string;
-          platform?: "imessage" | "slack";
+          platform?: "imessage" | "slack" | "gmail";
           reactions: Array<{
             emoji?: string;
             isFromMe: boolean;
@@ -1307,7 +1317,7 @@ export declare const api: {
         "public",
         {
           bridgeKey: string;
-          lane: "imessage" | "slack" | "ai" | "aiBackground";
+          lane: "imessage" | "slack" | "gmail" | "ai" | "aiBackground";
         },
         Array<{
           _creationTime: number;
@@ -1318,7 +1328,7 @@ export declare const api: {
           conversationId?: Id<"comma_conversations">;
           createdAt: number;
           error?: string;
-          lane?: "imessage" | "slack" | "ai" | "aiBackground";
+          lane?: "imessage" | "slack" | "gmail" | "ai" | "aiBackground";
           leaseUntil?: number;
           payload:
             | {
@@ -1858,6 +1868,11 @@ export declare const api: {
                 channel: string;
                 platform: "slack";
                 threadTs?: string;
+              }
+            | {
+                accountId: Id<"comma_accounts">;
+                platform: "gmail";
+                threadId: string;
               };
           status: "pending" | "claimed" | "sent" | "failed" | "unknown";
           updatedAt: number;
@@ -1911,6 +1926,12 @@ export declare const api: {
             unresponded: boolean;
             waiting: boolean;
           };
+          gmail?: {
+            bulk: boolean;
+            inInbox: boolean;
+            subject: string;
+            threadId: string;
+          };
           groupPhotoGuid?: string;
           groupPhotoStorageId?: Id<"_storage">;
           groupPhotoUrl: string | null;
@@ -1934,7 +1955,7 @@ export declare const api: {
             name: string | null;
             photoUrl?: string | null;
           }>;
-          platform?: "imessage" | "slack";
+          platform?: "imessage" | "slack" | "gmail";
           primaryChatGuid?: string;
           rawDisplayName?: string;
           searchNames: Array<string>;
@@ -2041,6 +2062,12 @@ export declare const api: {
               unresponded: boolean;
               waiting: boolean;
             };
+            gmail?: {
+              bulk: boolean;
+              inInbox: boolean;
+              subject: string;
+              threadId: string;
+            };
             groupPhotoGuid?: string;
             groupPhotoStorageId?: Id<"_storage">;
             groupPhotoUrl: string | null;
@@ -2064,7 +2091,7 @@ export declare const api: {
               name: string | null;
               photoUrl?: string | null;
             }>;
-            platform?: "imessage" | "slack";
+            platform?: "imessage" | "slack" | "gmail";
             primaryChatGuid?: string;
             rawDisplayName?: string;
             searchNames: Array<string>;
@@ -2138,7 +2165,7 @@ export declare const api: {
               mimeType?: string;
               originalStorageId?: Id<"_storage">;
               originalUrl: string | null;
-              platform?: "imessage" | "slack";
+              platform?: "imessage" | "slack" | "gmail";
               sourceVersion: number;
               thumbStorageId?: Id<"_storage">;
               thumbUrl: string | null;
@@ -2189,7 +2216,7 @@ export declare const api: {
             mentions: Array<{ address: string; length: number; start: number }>;
             mentionsMe?: boolean;
             modelText?: string;
-            platform?: "imessage" | "slack";
+            platform?: "imessage" | "slack" | "gmail";
             reactions: Array<{
               emoji?: string;
               isFromMe: boolean;
@@ -2245,7 +2272,7 @@ export declare const api: {
           chatGuid: string;
           conversationId?: Id<"comma_conversations">;
           error?: string;
-          platform?: "imessage" | "slack";
+          platform?: "imessage" | "slack" | "gmail";
           sendAt: number;
           sentAt?: number;
           status:
@@ -2283,6 +2310,12 @@ export declare const api: {
             unresponded: boolean;
             waiting: boolean;
           };
+          gmail?: {
+            bulk: boolean;
+            inInbox: boolean;
+            subject: string;
+            threadId: string;
+          };
           groupPhotoGuid?: string;
           groupPhotoStorageId?: Id<"_storage">;
           groupPhotoUrl: string | null;
@@ -2306,7 +2339,7 @@ export declare const api: {
             name: string | null;
             photoUrl?: string | null;
           }>;
-          platform?: "imessage" | "slack";
+          platform?: "imessage" | "slack" | "gmail";
           primaryChatGuid?: string;
           rawDisplayName?: string;
           searchNames: Array<string>;
@@ -2323,7 +2356,7 @@ export declare const api: {
         {
           conversationId?: Id<"comma_conversations">;
           from?: "me" | "them";
-          platform?: "imessage" | "slack";
+          platform?: "imessage" | "slack" | "gmail";
           query: string;
         },
         Array<{
@@ -2363,7 +2396,7 @@ export declare const api: {
           mentions: Array<{ address: string; length: number; start: number }>;
           mentionsMe?: boolean;
           modelText?: string;
-          platform?: "imessage" | "slack";
+          platform?: "imessage" | "slack" | "gmail";
           reactions: Array<{
             emoji?: string;
             isFromMe: boolean;
@@ -4178,7 +4211,7 @@ export declare const internal: {
         {
           externalId: string;
           label: string;
-          platform: "imessage" | "slack";
+          platform: "imessage" | "slack" | "gmail";
           selfHandles?: Array<string>;
         },
         Id<"comma_accounts">
@@ -4443,7 +4476,7 @@ export declare const internal: {
             conversationId: Id<"comma_conversations">;
             fromMe: boolean;
             kind: "dm" | "group";
-            platform: "imessage" | "slack";
+            platform: "imessage" | "slack" | "gmail";
             sender: string;
             text: string;
           }>;
@@ -4481,7 +4514,10 @@ export declare const internal: {
       aiSentText: FunctionReference<
         "mutation",
         "internal",
-        { accountId?: Id<"comma_accounts">; platform: "imessage" | "slack" },
+        {
+          accountId?: Id<"comma_accounts">;
+          platform: "imessage" | "slack" | "gmail";
+        },
         Array<string>
       >;
       aiThread: FunctionReference<
@@ -4564,6 +4600,11 @@ export declare const internal: {
                 channel: string;
                 platform: "slack";
                 threadTs?: string;
+              }
+            | {
+                accountId: Id<"comma_accounts">;
+                platform: "gmail";
+                threadId: string;
               };
           title: string;
         }
@@ -4657,6 +4698,48 @@ export declare const internal: {
         { size: number; storageId: Id<"_storage"> }
       >;
     };
+    googleAuth: {
+      accountCredentials: FunctionReference<
+        "query",
+        "internal",
+        { accountId: Id<"comma_accounts"> },
+        {
+          credentials?: { ciphertext: string; iv: string; keyVersion: number };
+          externalId: string;
+        } | null
+      >;
+      connect: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          credentials: { ciphertext: string; iv: string; keyVersion: number };
+          email: string;
+          selfHandles: Array<string>;
+        },
+        Id<"comma_accounts">
+      >;
+      disconnect: FunctionReference<
+        "mutation",
+        "internal",
+        { accountId: Id<"comma_accounts"> },
+        null
+      >;
+      needsReconnect: FunctionReference<
+        "mutation",
+        "internal",
+        { accountId: Id<"comma_accounts">; code: string },
+        null
+      >;
+      saveCredentials: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          accountId: Id<"comma_accounts">;
+          credentials: { ciphertext: string; iv: string; keyVersion: number };
+        },
+        null
+      >;
+    };
     groupPhotos: {
       setGroupPhoto: FunctionReference<
         "mutation",
@@ -4679,7 +4762,7 @@ export declare const internal: {
           key: string;
           lastEventAt?: number;
           lastReconcileAt?: number;
-          platform?: "imessage" | "slack";
+          platform?: "imessage" | "slack" | "gmail";
         },
         null
       >;
@@ -4730,7 +4813,7 @@ export declare const internal: {
               | "expired";
             text: string;
           }>;
-          platform?: "imessage" | "slack";
+          platform?: "imessage" | "slack" | "gmail";
         },
         { deleted: number; upserted: number }
       >;
@@ -4740,7 +4823,7 @@ export declare const internal: {
         {
           accountId?: Id<"comma_accounts">;
           chats: Array<{ chatGuid: string; count: number; firstAt: number }>;
-          platform?: "imessage" | "slack";
+          platform?: "imessage" | "slack" | "gmail";
         },
         { changed: number; unresolved: number }
       >;
@@ -4842,7 +4925,7 @@ export declare const internal: {
                 messageGuid: string;
                 mimeType?: string;
                 originalStorageId?: Id<"_storage">;
-                platform?: "imessage" | "slack";
+                platform?: "imessage" | "slack" | "gmail";
                 sourceVersion: number;
                 thumbStorageId?: Id<"_storage">;
                 totalBytes?: number;
@@ -4861,7 +4944,7 @@ export declare const internal: {
                 width?: number;
               }
           >;
-          platform?: "imessage" | "slack";
+          platform?: "imessage" | "slack" | "gmail";
         },
         { skipped: number; written: number }
       >;
@@ -4890,7 +4973,7 @@ export declare const internal: {
             participants: Array<{ address: string; name: string | null }>;
             rawDisplayName?: string;
           }>;
-          platform?: "imessage" | "slack";
+          platform?: "imessage" | "slack" | "gmail";
         },
         Record<string, Id<"comma_conversations">>
       >;
@@ -4974,7 +5057,7 @@ export declare const internal: {
                   start: number;
                 }>;
                 modelText?: string;
-                platform?: "imessage" | "slack";
+                platform?: "imessage" | "slack" | "gmail";
                 reactions?: Array<{
                   emoji?: string;
                   isFromMe: boolean;
@@ -5009,7 +5092,7 @@ export declare const internal: {
                 threadRef?: string;
               }
           >;
-          platform?: "imessage" | "slack";
+          platform?: "imessage" | "slack" | "gmail";
         },
         { skipped: number; written: number }
       >;
@@ -5018,7 +5101,7 @@ export declare const internal: {
       drive: FunctionReference<
         "action",
         "internal",
-        { lane: "imessage" | "slack" | "ai" | "aiBackground" },
+        { lane: "imessage" | "slack" | "gmail" | "ai" | "aiBackground" },
         null
       >;
     };
@@ -5110,7 +5193,7 @@ export declare const internal: {
         "mutation",
         "internal",
         {
-          lane: "imessage" | "slack" | "ai" | "aiBackground";
+          lane: "imessage" | "slack" | "gmail" | "ai" | "aiBackground";
           leaseMs: number;
           limit: number;
           now: number;
@@ -5124,7 +5207,7 @@ export declare const internal: {
           conversationId?: Id<"comma_conversations">;
           createdAt: number;
           error?: string;
-          lane?: "imessage" | "slack" | "ai" | "aiBackground";
+          lane?: "imessage" | "slack" | "gmail" | "ai" | "aiBackground";
           leaseUntil?: number;
           payload:
             | {
@@ -5664,6 +5747,11 @@ export declare const internal: {
                 channel: string;
                 platform: "slack";
                 threadTs?: string;
+              }
+            | {
+                accountId: Id<"comma_accounts">;
+                platform: "gmail";
+                threadId: string;
               };
           status: "pending" | "claimed" | "sent" | "failed" | "unknown";
           updatedAt: number;
@@ -6151,6 +6239,7 @@ export declare const internal: {
                       privateApi: boolean;
                     }
                   | { executor: "slack" }
+                  | { executor: "gmail" }
                   | {
                       executor: "ai";
                       suggestions: boolean;
@@ -6203,8 +6292,8 @@ export declare const internal: {
       consumeState: FunctionReference<
         "mutation",
         "internal",
-        { state: string },
-        boolean
+        { platform: "imessage" | "slack" | "gmail"; state: string },
+        { verifier?: string } | null
       >;
       disconnect: FunctionReference<
         "mutation",
@@ -6215,13 +6304,18 @@ export declare const internal: {
       saveState: FunctionReference<
         "mutation",
         "internal",
-        { expiresAt: number; state: string },
+        {
+          expiresAt: number;
+          platform: "imessage" | "slack" | "gmail";
+          state: string;
+          verifier?: string;
+        },
         null
       >;
       stateIsLive: FunctionReference<
         "query",
         "internal",
-        { state: string },
+        { platform: "imessage" | "slack" | "gmail"; state: string },
         boolean
       >;
     };
@@ -6315,7 +6409,7 @@ export declare const internal: {
           conversationId?: Id<"comma_conversations">;
           createdAt: number;
           error?: string;
-          lane?: "imessage" | "slack" | "ai" | "aiBackground";
+          lane?: "imessage" | "slack" | "gmail" | "ai" | "aiBackground";
           leaseUntil?: number;
           payload:
             | {
@@ -6855,6 +6949,11 @@ export declare const internal: {
                 channel: string;
                 platform: "slack";
                 threadTs?: string;
+              }
+            | {
+                accountId: Id<"comma_accounts">;
+                platform: "gmail";
+                threadId: string;
               };
           status: "pending" | "claimed" | "sent" | "failed" | "unknown";
           updatedAt: number;
@@ -7056,7 +7155,7 @@ export declare const internal: {
             isGroup: boolean;
             kind: "dm" | "group" | "channel" | "thread" | "emailThread";
             lastMessageAt: number;
-            platform: "imessage" | "slack";
+            platform: "imessage" | "slack" | "gmail";
             state: "needsYou" | "waiting";
             title: string;
             unreadCount: number;

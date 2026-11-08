@@ -27,6 +27,8 @@ export function conversationRoute(chat: Pick<ChatSummary, "route" | "isGroup">):
       return { ...chatGuidRoute(chat.route.imessage.chatGuid), isGroup: chat.isGroup };
     case "slack":
       return { platform: "slack", service: "Slack", isGroup: chat.isGroup };
+    case "gmail":
+      return { platform: "gmail", service: "Gmail", isGroup: chat.isGroup };
   }
 }
 

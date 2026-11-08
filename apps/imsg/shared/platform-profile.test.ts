@@ -162,3 +162,33 @@ describe("Slack", () => {
     for (const service of ["iMessage", "SMS", "RCS"] as const) expect(support(dm(service), "send")).toEqual({ ok: true });
   });
 });
+
+describe("Gmail", () => {
+  const thread = { platform: "gmail" as const, kind: "emailThread" as const };
+  const route: ProfileRoute = { platform: "gmail", service: "Gmail", isGroup: true };
+
+  test("an inbound last email needs you and an outbound one waits", () => {
+    expect(attentionOf(thread, { isFromMe: false })).toBe("needsYou");
+    expect(attentionOf(thread, { isFromMe: true })).toBe("waiting");
+  });
+
+  test("bulk mail is its own verdict, ahead of a known sender; other mail screens like iMessage", () => {
+    expect(screeningOf({ platform: "gmail", isSpam: false, known: true, bulk: true })).toBe("bulk");
+    expect(screeningOf({ platform: "gmail", isSpam: false, known: true })).toBe("known");
+    expect(screeningOf({ platform: "gmail", isSpam: false, known: false })).toBe("stranger");
+    expect(screeningOf({ platform: "imessage", isSpam: false, known: true, bulk: true })).toBe("known");
+  });
+
+  test("read-only: sending greys with its reason, and what Gmail lacks says so", () => {
+    for (const feature of ["send", "reply", "attachments", "schedule"] as const) {
+      expect(support(route, feature)).toEqual({ ok: false, reason: "Sending from Gmail is coming" });
+    }
+    expect(support(route, "react")).toEqual({ ok: false, reason: "Gmail can't send reactions" });
+    expect(support(route, "edit")).toEqual({ ok: false, reason: "Gmail can't edit messages" });
+    expect(reactionSupport(route, "emoji:🔥")).toEqual({ ok: false, reason: "Gmail can't send emoji reactions" });
+  });
+
+  test("the composer draws Gmail's badge and Enter adds a line", () => {
+    expect(composerConfig({ platform: "gmail", service: "Gmail" })).toMatchObject({ placeholder: "Reply", enterSends: false, badge: { label: "Gmail" } });
+  });
+});
