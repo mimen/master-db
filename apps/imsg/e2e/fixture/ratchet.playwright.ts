@@ -407,6 +407,8 @@ test("the queue header moves at most once when the fonts arrive after first pain
 });
 
 const SEEDED = 200;
+/** use-messages' first page. */
+const FIRST_PAGE = 50;
 /** The 50 rows a page adds, plus the seam row whose grouping changes, with slack for list batching. */
 const ROW_RENDERS_PER_PAGE = 60;
 /** One render when the page is requested, one when it lands. */
@@ -424,6 +426,9 @@ async function openSeededThread(desk: Desk) {
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).first().click();
   const thread = page.getByTestId("thread-view");
   await expect(thread.getByText(`Seeded message ${SEEDED}`, { exact: true })).toBeVisible();
+  // The list mounts the page ten rows a batch after first paint, and a mount counts as a row render. On a slow
+  // runner the last batches landed inside the next measurement (PR #89: 20 of an arrival's 22 rows).
+  await expect(thread.getByTestId("message-bubble")).toHaveCount(FIRST_PAGE);
   await page.waitForTimeout(600);
   return thread;
 }
@@ -523,9 +528,10 @@ test("ratchet: an arriving message renders only its row and its neighbour, not t
  * Opening a conversation from the list, then switching to another, from the click to 600 ms after the server's
  * messages painted. Before #80 an open cost 26 commits and 8,136 component renders and a switch 7,109: every shell
  * state change and route change re-rendered both workspaces, and every directory update re-rendered every sidebar
- * cell. Now a laptop measures an open at 25 commits and 3,908 renders and a switch at 2,736 to 3,537. On the CI
- * runner a 500 ms fixture poll can land inside the window and add a commit and a row pass (27 and 4,326 on
- * 05e70b05), so the ceilings sit about 10% above the runner's reading, still half the old cost.
+ * cell. Now a laptop measures an open at 25 commits and 3,908 renders and a switch at 2,736. The fixture's agent
+ * heartbeat used to change on every 500 ms poll and add commits and a row pass to the window (27 and 4,326 on
+ * 05e70b05); it now beats every 30 s, as the runner does. The ceilings sit about 10% above the runner's old reading,
+ * still half the old cost.
  */
 const OPEN_COMMITS = 30;
 const OPEN_COMPONENTS = 4_800;

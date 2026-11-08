@@ -208,8 +208,14 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     async () => ({ ok: false, error: "The fixture stores no audio" }));
   const health = () => controls.health();
   const miniAi = () => ({ suggestions: ai.available, reactionSuggestions: bb.hasPrivateApi });
-  // The fake runner beats on the wall clock the browser judges it by, not the pinned Date.now.
-  const aiStatus = () => ({ ...miniAi(), agentHeartbeatAt: new Date().getTime() });
+  // The fake runner beats on the wall clock the browser judges it by, not the pinned Date.now, every 30 s like
+  // server/agent/main.ts. A beat on every poll was a new value every 500 ms, and a commit in every measured window.
+  let agentBeatAt = new Date().getTime();
+  const aiStatus = () => {
+    const now = new Date().getTime();
+    if (now - agentBeatAt >= 30_000) agentBeatAt = now;
+    return { ...miniAi(), agentHeartbeatAt: agentBeatAt };
+  };
   const agent = createAgentFixture({
     userText: (conversationId) => {
       const draft = drafts.get(conversationId);
