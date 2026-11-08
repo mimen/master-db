@@ -1,6 +1,7 @@
 import type { GenericId } from "convex/values";
 import type { TodayMode as BuildMode, TodayQueue, TodayRun, TodayView } from "../../../../convex/schema/comma/validators";
 import { matchesFilters } from "../../shared/chat-state";
+import { fixtureChatGuid } from "../../shared/fixture-ids";
 import { todayWindow } from "../../shared/today";
 import type { ChatSummary } from "../../shared/types";
 import { FIXTURE_NOW, TODAY_SEED } from "./world";
@@ -42,6 +43,8 @@ export function createTodayFixture(deps: {
   chats: () => Promise<ChatSummary[]>;
   clears: () => { chatGuid: string; clearedAt: number }[];
   canonical: (chatGuid: string) => Promise<string>;
+  /** Slack and email conversations owed a reply, which the build ranks beside iMessage as todayCandidateState lets them in. */
+  others: () => readonly { _id: string; lastMessageAt: number }[];
 }) {
   const dayStart = todayWindow(FIXTURE_NOW).start;
   let run: TodayRun | null = null;
@@ -65,9 +68,11 @@ export function createTodayFixture(deps: {
   setMode("seeded");
 
   async function build(attempt: number, snapshotAt: number, mode: BuildMode): Promise<void> {
-    const open = (await deps.chats())
-      .filter((chat) => matchesFilters(chat, "unresponded", "known") && chat.flags.unresponded)
-      .sort((a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0));
+    const open = [
+      ...(await deps.chats()).filter((chat) => matchesFilters(chat, "unresponded", "known") && chat.flags.unresponded)
+        .map((chat) => ({ guid: chat.guid, at: chat.lastMessage?.dateCreated ?? 0 })),
+      ...deps.others().map((row) => ({ guid: fixtureChatGuid(row._id), at: row.lastMessageAt })),
+    ].sort((a, b) => b.at - a.at);
     const half = Math.ceil(open.length / 2);
     const previous = queue?.session;
     const session = mode === "update" && previous

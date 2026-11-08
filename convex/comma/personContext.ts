@@ -37,6 +37,8 @@ export const personContextResult = v.object({
   lines: v.array(personLine),
   /** Older lines exist past `limit` or `maxChars`; page with the oldest `at` as `beforeAt`. */
   more: v.boolean(),
+  /** Their written summary across platforms (convex/comma/personSummaries.ts), when one has been built. */
+  summary: v.optional(v.string()),
 });
 
 export type PersonContextInput = {
@@ -112,12 +114,12 @@ async function handlesOf(ctx: QueryCtx, person: Doc<"people"> | null, address?: 
   return { senders: [...addresses].slice(0, MAX_HANDLES), dmKeys: [...new Set(direct.map(handleKey))].slice(0, MAX_HANDLES) };
 }
 
-export async function personContext(ctx: QueryCtx, input: PersonContextInput) {
-  const { person, address, excludeConversationId: exclude, sinceAt, beforeAt, limit, maxChars } = input;
-  const name = personName(person) ?? (address ? formatAddress(address) : "Unknown");
+/**
+ * Where a person talks: each handle's conversations they sent in, one index seek apiece, and their one-to-one
+ * conversations with Milad. `exclude` costs nothing however busy it is.
+ */
+export async function personConversations(ctx: QueryCtx, person: Doc<"people"> | null, address?: string, exclude?: Id<"comma_conversations">) {
   const { senders, dmKeys } = await handlesOf(ctx, person, address);
-
-  // Each conversation a handle sent in, one index seek apiece, so the excluded thread costs nothing however busy it is.
   const conversationsOf = async (handle: string) => {
     const found: Id<"comma_conversations">[] = [];
     while (found.length < MAX_CONVERSATIONS) {
@@ -129,22 +131,31 @@ export async function personContext(ctx: QueryCtx, input: PersonContextInput) {
       if (!next) break;
       found.push(next.conversationId);
     }
-    return found.filter((id) => id !== exclude);
+    return { handle, ids: found.filter((id) => id !== exclude) };
   };
+  // ponytail: one-to-one keys are looked up on iMessage's account, the only one; loop the accounts when another lands.
+  const scope = await soleAccountScope(ctx, "imessage");
+  const [sentIn, dms] = await Promise.all([
+    Promise.all(senders.map(conversationsOf)),
+    Promise.all(dmKeys.map((key) => findByKey(ctx, scope, key))),
+  ]);
+  return { sentIn, dms: dms.filter((dm): dm is Doc<"comma_conversations"> => dm !== null && dm._id !== exclude) };
+}
+
+export async function personContext(ctx: QueryCtx, input: PersonContextInput) {
+  const { person, address, excludeConversationId: exclude, sinceAt, beforeAt, limit, maxChars } = input;
+  const name = personName(person) ?? (address ? formatAddress(address) : "Unknown");
+  const { sentIn, dms } = await personConversations(ctx, person, address, exclude);
   const source = (rows: AsyncIterable<Row>, keep: (row: Row) => boolean): Source =>
     ({ rows: rows[Symbol.asyncIterator](), keep, read: 0, head: null });
-  const sent = (await Promise.all(senders.map(async (handle) => (await conversationsOf(handle)).map((id) => source(
+  const sent = sentIn.flatMap(({ handle, ids }) => ids.map((id) => source(
     ctx.db.query("comma_messages").withIndex("by_sender_conversation_date", (q) => {
       const scoped = q.eq("sender.address", handle).eq("conversationId", id);
       const after = sinceAt === undefined ? scoped : scoped.gt("dateCreated", sinceAt);
       return beforeAt === undefined ? after : after.lt("dateCreated", beforeAt);
     }).order("desc"),
     (row) => !row.isFromMe && shown(row),
-  ))))).flat();
-  // ponytail: one-to-one keys are looked up on iMessage's account, the only one; loop the accounts when another lands.
-  const scope = await soleAccountScope(ctx, "imessage");
-  const dms = (await Promise.all(dmKeys.map((key) => findByKey(ctx, scope, key))))
-    .filter((dm): dm is Doc<"comma_conversations"> => dm !== null && dm._id !== exclude);
+  )));
   const both = [...new Set(dms.map((dm) => dm._id))].map((id) => source(
     ctx.db.query("comma_messages").withIndex("by_conversation_date", (q) => {
       const scoped = q.eq("conversationId", id);

@@ -67,6 +67,8 @@ export const TODAY_SCHEMA: Anthropic.Messages.JSONOutputFormat["schema"] = {
 };
 
 const NOTE_CHARS = 400;
+/** A person summary's paragraph and its few points. */
+const SUMMARY_CHARS = 900;
 const REDUCE_MESSAGE_CHARS = 300;
 /** The reduce prompt's hard cap, system included. Notes, events and attachment lists are otherwise unbounded. */
 export const REDUCE_PROMPT_CHARS = 400_000;
@@ -114,9 +116,14 @@ function threadHead(thread: TodayThread, now: number): string[] {
   return [`<thread ${attrs}>`, crmLine(thread), ...notes];
 }
 
-/** One whole thread, each message clipped to `messageChars`: what the card model reads. */
+/**
+ * One whole thread, each message clipped to `messageChars`: what the card model reads. Each person's summary rides
+ * here, not in the reduce, so the card carries it and the Opus prompt stays its size.
+ */
 export function threadBlock(thread: TodayThread, now: number, messageChars: number): string {
-  return [...threadHead(thread, now), messageLines(thread.messages, messageChars), "</thread>"].join("\n");
+  const summaries = thread.people.filter((person) => person.summary?.trim())
+    .map((person) => `summary${thread.people.length > 1 ? ` of ${clean(person.name, 60)}` : ""}: ${clean(person.summary ?? "", SUMMARY_CHARS)}`);
+  return [...threadHead(thread, now), ...summaries, messageLines(thread.messages, messageChars), "</thread>"].join("\n");
 }
 
 /** Card fields are a model's reading of untrusted text, so they are cleaned like it. */

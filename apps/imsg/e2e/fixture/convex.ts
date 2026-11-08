@@ -504,6 +504,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     chats: chatSummaries,
     clears: triage.clears,
     canonical: async (chatGuid) => (await siblingsOf(chatGuid))[0]!,
+    others: () => [
+      ...slackWorld.listed().filter((row) => row.flags.unresponded),
+      ...mailWorld.threads().filter((row) => row.known && !row.gmail.bulk && row.flags.unresponded),
+    ],
   });
   // Drives switch the header between the seeded queue, before the morning build, and a failed build.
   app.post("/__fixture/today", async (c) => {
@@ -650,6 +654,20 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     },
     "comma/queries:getDraft": async (args) => drafts.get(String(args.conversationId)) ?? null,
     "comma/queries:getSuggestions": async () => null,
+    // Sam Lee reaches Milad on Slack and by email: the header lists each live open thread, as personSummaries.get does.
+    "comma/personSummaries:get": async (args) => {
+      if (args.conversationId !== SLACK_DM) return null;
+      const open = [...slackWorld.listed(), ...mailWorld.threads()]
+        .filter((row) => row.participants.some((person) => person.name === "Sam Lee") && (row.flags.unresponded || row.flags.waiting))
+        .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
+        .map((row) => ({ conversationId: fixtureChatGuid(row._id), title: row.displayName, platform: row.platform, kind: row.kind,
+          state: row.flags.unresponded ? "needsYou" : "waiting", lastMessageAt: row.lastMessageAt }));
+      return { personId: "person-sam", name: "Sam Lee", platforms: ["slack", "gmail"], threads: open, summary: {
+        text: "Runs production at the venue. Asks on Slack when something blocks the night and follows up by email with the details.",
+        points: ["Load-in time and the floor plan for Saturday, by email", "Wants a yes on the stage plot in Slack"],
+        model: "claude-haiku-5-5", generatedAt: FIXTURE_NOW - 20 * 60_000, basedOnAt: FIXTURE_NOW - 50 * 60_000,
+      } };
+    },
     "comma/suggestions:getSuggestions": async (args) => {
       const chat = (await conversations()).find((row) => row._id === args.conversationId);
       const shelf = chat && shelves.get(JSON.stringify([chat.primaryChatGuid, args.model]));

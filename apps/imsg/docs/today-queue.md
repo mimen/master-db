@@ -645,3 +645,12 @@ Where the build differs from the shapes above, and why.
 Write `client/src/lib/today.ts` `classifyToday` and `planToday` against the placement table, with `today.test.ts` covering each row, since every surface (list, count, header, strip, fixture) reads through it.
 
 - **Overnight builds no longer cancel the morning build.** `todaySchedule` requests the 7:00 AM build when the day has no build or only one Milad ran before 7:00 AM. A run the schedule started never re-requests, so a failed morning build is not retried in a loop.
+
+## Platforms and person summaries (P1)
+
+Today keeps its build and ranking; P1 widens what qualifies and what the build reads.
+
+- **Candidates.** `todayCandidateState` takes iMessage as before. Slack enters only when it needs Milad: a DM, group DM or followed thread owed a reply, or a channel mention. Email enters only as Mail's People lens: a known, non-bulk sender owed a reply. Neither enters as Waiting. On production data read on 2026-11-08, Slack Waiting would have been 261 threads, and they would have taken 34 of the 50 Waiting reads.
+- **Prefilter.** `todayCandidates` checks each row's flags (one state read) before the full projection, and skips unfollowed Slack threads in the query. On that data, 1,913 rows are scanned and 879 are projected, down from 1,913.
+- **Client.** `TodayProvider` also reads the newest 50 inbox threads and adds the People ones to the directory `planToday` sees. An email row opens `EmailReader` in the thread pane; on a phone, the conversation route redirects to the Mail tab.
+- **Person summaries.** The card model's thread block carries a `summary` line per person who has one (`agentPeople`), so the card folds it in. The Opus reduce reads cards, not summaries, so its prompt keeps its size: at most 900 characters a person across up to 200 read threads would otherwise add up to about 45,000 tokens. See "Person summary" in `CONTEXT.md`.

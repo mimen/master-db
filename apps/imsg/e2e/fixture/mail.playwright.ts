@@ -90,7 +90,8 @@ test("with a mailbox connected, search offers a Gmail chip whose hits open in Ma
   await expect(chips.getByRole("radio")).toHaveText(["Everywhere", "iMessage", "Gmail"]);
   await page.getByPlaceholder("Search contacts and messages…").fill("load-in");
   await chips.getByRole("radio", { name: "Gmail" }).click();
-  await page.getByText("Hi Milad, Load-in is at 6 pm, doors at 8.").first().click();
+  // Exact: Today's row in the sidebar reads "Sam: Hi Milad, …".
+  await page.getByText("Hi Milad, Load-in is at 6 pm, doors at 8.", { exact: true }).click();
   await expect(page.getByTestId("email-reader").getByRole("heading", { name: "Load-in for Saturday" })).toBeVisible();
   await expect(page.getByTestId("email-card")).toHaveCount(2);
 });

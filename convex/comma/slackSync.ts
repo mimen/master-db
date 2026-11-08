@@ -10,6 +10,7 @@ import { isGroupKind, slack, type SlackConversationRef } from "./conversationIde
 import { findByKey, findMessage } from "./conversationLookup";
 import { MODEL_TEXT_UNSET } from "./messageShape";
 import { landEcho, refreshLastMessage } from "./pendingSends";
+import { schedulePersonSummaries } from "./personSummaries";
 import { slackApi, SlackApiError, type SlackParams } from "./slackApi";
 import { slackToken } from "./slackAuth";
 import { mentions, parseSlackMessage, parseSlackUser, selfUserId, type SlackMessage, type SlackUser } from "./slackEvents";
@@ -142,7 +143,7 @@ export async function writeSlackBatch(ctx: MutationCtx, accountId: Id<"comma_acc
   let written = 0;
   let skipped = 0;
   const touched = new Set<Id<"comma_conversations">>();
-  const real: Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe">[] = [];
+  const real: Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe" | "sender">[] = [];
   for (const home of await homesOf(ctx, accountId, conversations)) {
     const conversationId = await upsertConversation(ctx, account, self, home);
     for (const message of home.messages) {
@@ -179,6 +180,7 @@ export async function writeSlackBatch(ctx: MutationCtx, accountId: Id<"comma_acc
     await countReplies(ctx, accountId, conversationId);
   }
   await logReplies(ctx, real);
+  await schedulePersonSummaries(ctx, real);
   return { written, skipped };
 }
 

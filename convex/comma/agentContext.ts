@@ -13,6 +13,7 @@ import { findAttachment, findMessage, shownInThread } from "./conversationLookup
 import { attachmentName, isAssociated, messageImessage, modelTextFieldsOf, scopeOf, type AccountScope } from "./messageShape";
 import { resolveConversationNames } from "./names";
 import { personContext, personContextResult } from "./personContext";
+import { summaryText } from "./personSummaries";
 import { normalizedAddress, personForAddress } from "./photos";
 import { searchMessageRows } from "./queries";
 import { reactionsOf } from "./reactionStore";
@@ -230,7 +231,8 @@ export const agentPersonContext = internalMutation({
       ? participants.some((participant) => participant.person?._id === personInThread)
       : participants.some((participant) => normalizedAddress(participant.address) === normalizedAddress(address!));
     if (!inThread) throw new Error("That person is not in this conversation");
-    return await personContext(ctx, { person, address, excludeConversationId: conversationId, sinceAt, beforeAt, limit, maxChars });
+    const summary = sinceAt === undefined && beforeAt === undefined ? await summaryText(ctx, person?._id) : undefined;
+    return { ...await personContext(ctx, { person, address, excludeConversationId: conversationId, sinceAt, beforeAt, limit, maxChars }), ...(summary ? { summary } : {}) };
   },
 });
 
@@ -240,6 +242,8 @@ export const agentPeople = internalMutation({
   returns: v.array(v.object({
     address: v.string(), name: v.string(), handles: v.array(v.string()), personId: v.optional(v.id("people")),
     notes, is_favorite, priority, organization,
+    /** Their written summary across platforms, when one has been built. */
+    summary: v.optional(v.string()),
     tags: v.array(v.string()),
     events: v.array(v.object({ airtable_event_id: v.string(), event_name: v.string(), start_date: v.optional(v.string()) })),
   })),
@@ -249,8 +253,9 @@ export const agentPeople = internalMutation({
       if (!person) return { address, name, handles, tags: [], events: [] };
       const tags = await ctx.db.query("tags").withIndex("by_person", (q) => q.eq("person_id", person._id)).collect();
       const events = await ctx.db.query("event_links").withIndex("by_person", (q) => q.eq("person_id", person._id)).collect();
+      const summary = await summaryText(ctx, person._id);
       return {
-        address, name, handles, personId: person._id, notes: person.notes, is_favorite: person.is_favorite,
+        address, name, handles, personId: person._id, notes: person.notes, is_favorite: person.is_favorite, ...(summary ? { summary } : {}),
         priority: person.priority, organization: person.organization, tags: tags.map(({ tag }) => tag),
         events: events.map(({ airtable_event_id, event_name, start_date }) => ({ airtable_event_id, event_name, start_date })),
       };

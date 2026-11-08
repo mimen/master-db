@@ -20,6 +20,7 @@ import { imessage, isGroupKind, PLATFORM_IDENTITY } from "./conversationIdentity
 import { findAlias, findAttachment, findByChatGuid, findByKey, findMessage } from "./conversationLookup";
 import { FLAT_ATTACHMENT_UNSET, FLAT_MESSAGE_UNSET, inScope, MODEL_TEXT_UNSET, postedAttachment, postedMessage, type AccountScope } from "./messageShape";
 import { landEcho, refreshLastMessage } from "./pendingSends";
+import { schedulePersonSummaries } from "./personSummaries";
 import { fromTapback } from "./reactions";
 import { applyReaction } from "./reactionStore";
 import { schedulePrecompute } from "./suggestions";
@@ -147,7 +148,7 @@ export const upsertMessages = internalMutation({
     let written = 0;
     let skipped = 0;
     const touchedConversations = new Set<Id<"comma_conversations">>();
-    const real: Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe">[] = [];
+    const real: Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe" | "sender">[] = [];
     for (const posted of messages) {
       const { imessage: { tapback, ...imessage }, ...core } = postedMessage(posted);
       const message = {
@@ -175,6 +176,7 @@ export const upsertMessages = internalMutation({
     }
     for (const conversationId of touchedConversations) await refreshLastMessage(ctx, conversationId);
     await logReplies(ctx, real);
+    await schedulePersonSummaries(ctx, real);
     await schedulePrecompute(ctx, real);
     return { written, skipped };
   },

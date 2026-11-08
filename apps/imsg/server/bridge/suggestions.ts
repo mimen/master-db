@@ -16,14 +16,26 @@ export async function publishShelf(ingest: Pick<ConvexIngest, "post">, update: S
 export const PRECOMPUTE_DAILY_CAP = 150;
 const BUDGET_KEY = "suggestion_precompute_budget";
 
-/** The day's precompute count, kept in the Overlay so a restart does not reset it. */
+/** Person summaries Convex queues a day; each is one cheap-model call. */
+export const PERSON_SUMMARY_DAILY_CAP = 100;
+export const PERSON_SUMMARY_BUDGET = { key: "person_summary_budget", cap: PERSON_SUMMARY_DAILY_CAP } as const;
+
+/** The day's count of model calls nobody asked for, kept in the Overlay so a restart does not reset it. */
 export class PrecomputeBudget {
   private day = "";
   private generatedToday = 0;
   private lastAt: number | null = null;
+  private key: string;
+  private cap: number;
 
-  constructor(private db: Pick<OverlayDb, "getAiMeta" | "setAiMeta">, private now: () => number = Date.now) {
-    const saved = db.getAiMeta(BUDGET_KEY);
+  constructor(
+    private db: Pick<OverlayDb, "getAiMeta" | "setAiMeta">,
+    private now: () => number = Date.now,
+    { key, cap }: { key: string; cap: number } = { key: BUDGET_KEY, cap: PRECOMPUTE_DAILY_CAP },
+  ) {
+    this.key = key;
+    this.cap = cap;
+    const saved = db.getAiMeta(key);
     if (!saved) return;
     try {
       const budget: unknown = JSON.parse(saved);
@@ -35,16 +47,16 @@ export class PrecomputeBudget {
       } else throw new Error("invalid suggestion budget");
     } catch (error) {
       // An unreadable budget spends nothing more today rather than risk a second day's worth.
-      console.error(`comma ai suggestions budget: ${String(error)}`);
+      console.error(`comma ai ${key}: ${String(error)}`);
       this.day = this.today();
-      this.generatedToday = PRECOMPUTE_DAILY_CAP;
+      this.generatedToday = this.cap;
     }
   }
 
   /** Spends one precompute; false once today's cap is spent. */
   take(): boolean {
     this.resetDay();
-    if (this.generatedToday >= PRECOMPUTE_DAILY_CAP) return false;
+    if (this.generatedToday >= this.cap) return false;
     this.generatedToday++;
     this.lastAt = this.now();
     this.save();
@@ -53,7 +65,7 @@ export class PrecomputeBudget {
 
   health() {
     this.resetDay();
-    return { generatedToday: this.generatedToday, cap: PRECOMPUTE_DAILY_CAP, lastAt: this.lastAt };
+    return { generatedToday: this.generatedToday, cap: this.cap, lastAt: this.lastAt };
   }
 
   private today(): string { return new Date(this.now()).toISOString().slice(0, 10); }
@@ -67,6 +79,6 @@ export class PrecomputeBudget {
   }
 
   private save(): void {
-    this.db.setAiMeta(BUDGET_KEY, JSON.stringify({ day: this.day, generatedToday: this.generatedToday, lastAt: this.lastAt }));
+    this.db.setAiMeta(this.key, JSON.stringify({ day: this.day, generatedToday: this.generatedToday, lastAt: this.lastAt }));
   }
 }

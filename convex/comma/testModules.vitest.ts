@@ -17,6 +17,7 @@ export const commaModules: Record<string, () => Promise<unknown>> = {
   "../../comma/internal.ts": () => import("./internal"),
   "../../comma/queries.ts": () => import("./queries"),
   "../../comma/today.ts": () => import("./today"),
+  "../../comma/personSummaries.ts": () => import("./personSummaries"),
 };
 
 /** Gives `address` a named person in the identity graph, the way Comma resolves names. */

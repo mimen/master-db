@@ -1,15 +1,20 @@
+import type { GenericId } from "convex/values";
 import type { TranscriptState } from "../../../shared/types";
 import type { AiService } from "../../ai/service";
 import type { WhisperService } from "../../whisper";
 import { publishShelf, type PrecomputeBudget } from "../suggestions";
 import { postMedia } from "./media";
-import { requireConversation, type AiHandlers } from "./types";
+import { requireConversation, type AiContext, type AiHandlers } from "./types";
 
 export interface AiCommandDeps {
   ai: Pick<AiService, "replySuggestions" | "identify" | "recordSuggestionFeedback" | "recordReactionFeedback" | "clearSuggestionLearning">;
   whisper?: Pick<WhisperService, "transcribe">;
   /** Convex's precompute commands spend it; a command the user asked for never does. */
   budget?: Pick<PrecomputeBudget, "take">;
+  /** Writes one person's summary; absent where no gateway runs, and then the command fails with that reason. */
+  summarize?: (ingest: AiContext["ingest"], personId: GenericId<"people">, signal: AbortSignal) => Promise<{ ok: true; written: boolean } | { ok: false; error: string }>;
+  /** Person summaries spend it. */
+  summaryBudget?: Pick<PrecomputeBudget, "take">;
   post?: typeof postMedia;
   now?: () => number;
 }
@@ -69,6 +74,16 @@ export function createAiHandlers(deps: AiCommandDeps) {
         service().clearSuggestionLearning(context.row.clientKey);
         await publishShelf(context.ingest, { kind: "clear", clientKey: context.row.clientKey, clearedAt: now() });
         return { kind: "clearSuggestionLearning", ok: true };
+      },
+    },
+    personSummary: {
+      longRunning: true,
+      execute: async (context, { personId }) => {
+        if (!deps.summarize) throw new Error("Person summaries are not available");
+        if (deps.summaryBudget && !deps.summaryBudget.take()) throw new Error("Daily person summary cap reached");
+        const result = await deps.summarize(context.ingest, personId, context.signal);
+        if (!result.ok) throw new Error(result.error);
+        return { kind: "personSummary", ok: true };
       },
     },
     transcribe: {

@@ -21,7 +21,8 @@ import { conversationState } from "@/lib/conversation-state";
 import { commaApi } from "@/lib/convex-api";
 import { formatListTimestamp, formatReceiptTime } from "@/lib/format";
 import { headerFace } from "@/lib/header-font";
-import { EMAIL_SANDBOX, emailDocument, inLens, type MailLens, type ReplyMode } from "@/lib/mail";
+import { EMAIL_SANDBOX, emailDocument, type ReplyMode } from "@/lib/mail";
+import { inLens, type MailLens } from "@/lib/mail-lens";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
 import { showToast } from "@/lib/toast";
 
@@ -150,7 +151,7 @@ function ThreadRow({ thread, selected, onPress }: { thread: Thread; selected: bo
 }
 
 /** `subject` is the listed row's; a thread opened from search, archived or not yet listed, reads it off its messages. */
-function EmailReader({ conversationId, subject, onBack }: { conversationId: ConversationId; subject?: string; onBack?: () => void }): JSX.Element {
+export function EmailReader({ conversationId, subject, onBack }: { conversationId: ConversationId; subject?: string; onBack?: () => void }): JSX.Element {
   const theme = useTheme();
   const { results, status, loadMore } = usePaginatedQuery(commaApi.listMessages, { conversationId }, { initialNumItems: 25 });
   const messages = useMemo(() => [...results].sort((a, b) => a.dateCreated - b.dateCreated), [results]);

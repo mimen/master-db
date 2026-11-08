@@ -224,7 +224,8 @@ export function ConversationListPane({
   // The section the held row sat in when the hold began, so a reply cannot drop it out of New since or Below the line.
   const [heldAt, setHeldAt] = useState<{ conversationId: ConversationId; section: TodaySectionKey | undefined } | null>(null);
   const heldSection = heldAt?.conversationId === held ? heldAt.section : undefined;
-  const plan = useMemo(() => planToday(today.view, allChats, { held, heldSection }), [today.view, allChats, held, heldSection]);
+  const todayChats = useMemo(() => (today.mail.length ? [...allChats, ...today.mail] : allChats), [allChats, today.mail]);
+  const plan = useMemo(() => planToday(today.view, todayChats, { held, heldSection }), [today.view, todayChats, held, heldSection]);
   if ((heldAt?.conversationId ?? null) !== held) {
     setHeldAt(held === null ? null : { conversationId: held, section: plan.sections.find((section) => section.rows.some((row) => row.chat.conversationId === held))?.key });
   }
