@@ -36,6 +36,13 @@ describe("chat snapshot", () => {
     expect(readChatSnapshot(store)).toBeNull();
     expect(readChatSnapshot(undefined)).toBeNull();
   });
+
+  test("a snapshot saved before conversations had a route is discarded instead of crashing the list", () => {
+    const store = memory();
+    const { route: _route, ...legacy } = chat(1);
+    store.setItem("imsg.chatSnapshot.v1", JSON.stringify({ version: 1, chats: [{ ...legacy, guid: "iMessage;-;+15550000001" }] }));
+    expect(readChatSnapshot(store)).toBeNull();
+  });
 });
 
 describe("bridgeSnapshot", () => {

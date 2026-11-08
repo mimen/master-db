@@ -5,7 +5,8 @@ import type { ChatSummary } from "@shared/types";
  * names before Convex answers (about 1.3 s on the tailnet). The live query replaces it.
  */
 const KEY = "imsg.chatSnapshot.v1";
-const VERSION = 1;
+/** Bump on any ChatSummary shape change: a cold start renders these rows with the new code before Convex answers. */
+const VERSION = 2;
 export const SNAPSHOT_MAX = 300;
 
 type Store = Pick<Storage, "getItem" | "setItem">;
