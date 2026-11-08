@@ -1,15 +1,22 @@
-import { useEffect, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { router } from "expo-router";
-import { api, type SearchHit } from "@/lib/api";
-import { formatListTimestamp } from "@/lib/format";
-import { conversationRoute, selectChat } from "@/lib/selection";
-import { useChatDirectory } from "@/hooks/use-chat-directory";
+import type { api as convexApi } from "@convex-api";
 import { addressesMatch } from "@shared/address";
 import { PROFILES } from "@shared/platform-profile";
 import type { Contact, ConversationId, Platform } from "@shared/types";
+import { useConvexAuth, useQuery } from "convex/react";
+import { anyApi } from "convex/server";
+import { router } from "expo-router";
+import { useEffect, useState } from "react";
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+
 import { ListRow } from "./list-row";
+
+import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { useTheme } from "@/hooks/use-theme";
+import { api, type SearchHit } from "@/lib/api";
+import { formatListTimestamp } from "@/lib/format";
+import { conversationRoute, selectChat } from "@/lib/selection";
+
+const accountsApi = anyApi.comma.accounts as unknown as typeof convexApi.comma.accounts;
 
 type SearchRow =
   | { kind: "header"; key: string; label: string }
@@ -39,8 +46,13 @@ export function SearchContent({
   const [messages, setMessages] = useState<SearchHit[]>([]);
   const [searching, setSearching] = useState(false);
   const directory = useChatDirectory();
-  // Offered only once the inbox holds a second platform, and never inside one conversation.
-  const platforms = scopeConversation ? [] : [...new Set((directory ?? []).map((chat) => chat.route.platform))];
+  const { isAuthenticated } = useConvexAuth();
+  // Mail is not in the Messages directory, so a connected mailbox offers Gmail by its account.
+  const mailbox = useQuery(accountsApi.listAccounts, isAuthenticated && !scopeConversation ? {} : "skip")
+    ?.some((account) => account.platform === "gmail" && account.connected);
+  // Offered only once there is a second platform to search, and never inside one conversation.
+  const platforms = scopeConversation ? []
+    : [...new Set([...(directory ?? []).map((chat) => chat.route.platform), ...(mailbox ? ["gmail" as const] : [])])];
   const [platform, setPlatform] = useState<Platform | null>(null);
 
   useEffect(() => {
@@ -81,6 +93,10 @@ export function SearchContent({
 
   const openMessage = (message: SearchHit) => {
     onClose();
+    if (message.platform === "gmail") {
+      router.push({ pathname: "/mail", params: { thread: message.conversationId } });
+      return;
+    }
     const jumpTarget = { guid: message.guid, dateCreated: message.dateCreated };
     if (!selectChat({ conversationId: message.conversationId, jumpTarget })) router.push(conversationRoute(message.conversationId, jumpTarget));
   };

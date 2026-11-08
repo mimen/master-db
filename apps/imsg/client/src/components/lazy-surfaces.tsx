@@ -42,6 +42,8 @@ export const AgentPane = deferred(() => import("@/components/agent/agent-pane").
 export const ChatInfoContent = deferred(() => import("@/components/chat-info-content").then((m) => m.ChatInfoContent));
 export const CommandPalette = deferred(() => import("@/components/command-palette").then((m) => m.CommandPalette));
 export const ContactsWorkspace = deferred(() => import("@/components/contacts-workspace").then((m) => m.ContactsWorkspace));
+/** Its own chunk: the Mail list and reader load on the first visit, off the first-visit bundle. */
+export const MailWorkspace = deferred(() => import("@/components/mail-workspace").then((m) => m.MailWorkspace));
 export const ForwardContent = deferred(() => import("@/components/forward-content").then((m) => m.ForwardContent));
 export const NewChatContent = deferred(() => import("@/components/new-chat-content").then((m) => m.NewChatContent));
 export const PersonContent = deferred(() => import("@/components/person-content").then((m) => m.PersonContent));
@@ -77,7 +79,7 @@ export const ReleaseUpdateBanners = deferred(
 /** Dev and fixture only, so it is not preloaded. */
 export const UiGallery = deferred(() => import("@/components/ui-gallery").then((m) => m.UiGallery));
 
-const surfaces = [AgentPane, ChatInfoContent, CommandPalette, ContactsWorkspace, ForwardContent, NewChatContent, PersonContent, ScheduledContent, SearchContent, SettingsContent, RowPan, ReleaseUpdateBanners, KeyboardHelp];
+const surfaces = [AgentPane, ChatInfoContent, CommandPalette, ContactsWorkspace, MailWorkspace, ForwardContent, NewChatContent, PersonContent, ScheduledContent, SearchContent, SettingsContent, RowPan, ReleaseUpdateBanners, KeyboardHelp];
 
 /** Fetches every surface chunk off the critical path, so a first open renders without the empty frame. */
 export function preloadSurfaces(): void {

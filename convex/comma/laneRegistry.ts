@@ -14,6 +14,12 @@ type OutboxRow = Doc<"comma_outbox">;
  */
 export class NotSentError extends Error {}
 
+/** Gmail is read-only until G2: a read completes in Convex, and the rest is refused (the profile greys it first). */
+async function executeGmail(_ctx: ActionCtx, row: OutboxRow): Promise<CommandResult> {
+  if (row.payload.kind === "markRead") return { kind: "markRead", ok: true };
+  throw new NotSentError("Sending from Gmail is coming");
+}
+
 /**
  * Who runs a lane's commands. A pull lane waits for an outside executor to claim its rows (the Mini, for iMessage);
  * a convex lane runs each row in a Convex action, scheduled at enqueue. Both share the claim token, lease and receipt.
@@ -27,6 +33,7 @@ export type LaneSpec = {
 export const PLATFORM_LANES: Record<CommaPlatform, LaneSpec> = {
   imessage: { lane: "imessage", executor: "pull", onResult: applyIMessageResult },
   slack: { lane: "slack", executor: "convex", execute: executeSlack, onResult: applySlackResult },
+  gmail: { lane: "gmail", executor: "convex", execute: executeGmail },
 };
 
 /** Model work, whatever the conversation's platform. The Mini's AI process claims it. */

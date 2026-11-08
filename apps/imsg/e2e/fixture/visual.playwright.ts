@@ -76,7 +76,8 @@ test("desktop width, theme, sidebar footer, row, and hover matrix", async ({ des
       await expect(page.getByTestId("triage-rail")).toHaveCount(0);
       await expect(page.getByTestId("window-controls")).toHaveCount(0);
       expect(await brand.locator("..").getAttribute("data-tauri-drag-region")).toBe("");
-      await expect(footer.locator("svg")).toHaveCount(3);
+      // Mail, Contacts, Scheduled and Settings.
+      await expect(footer.locator("svg")).toHaveCount(4);
       for (const control of await footer.getByRole("button").all()) {
         const icon = control.locator("svg");
         await expect(icon).toHaveCount(1);

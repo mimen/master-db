@@ -12,7 +12,7 @@ export function accountStatusKey(platform: Platform, accountId: string): string 
 }
 
 /** The executor's name as the user knows it, for "Check the Mac mini connection". */
-export const EXECUTOR_NAME: Readonly<Record<Platform, string>> = { imessage: "the Mac mini", slack: "Slack" };
+export const EXECUTOR_NAME: Readonly<Record<Platform, string>> = { imessage: "the Mac mini", slack: "Slack", gmail: "Gmail" };
 
 /** The status row for a route's executor. A route from before accounts is its platform's only account's. */
 export function routeStatus<T extends { key: string }>(rows: readonly T[], route: { platform: Platform; accountId?: string | null }): T | null {

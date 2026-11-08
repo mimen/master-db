@@ -15,6 +15,7 @@ import {
   ChatInfoContent,
   CommandPalette,
   ContactsWorkspace,
+  MailWorkspace,
   ForwardContent,
   KeyboardHelp,
   NewChatContent,
@@ -120,6 +121,9 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   // would otherwise share the boot socket with the first conversation page and first open.
   const [contactsVisited, setContactsVisited] = useState(false);
   if (activeWorkspace === "contacts" && !contactsVisited) setContactsVisited(true);
+  // Mail, likewise: its chunk and its first page wait for the first visit.
+  const [mailVisited, setMailVisited] = useState(false);
+  if (activeWorkspace === "mail" && !mailVisited) setMailVisited(true);
   const shellOwnsRoute = wide && projection !== null;
   const agentEnabled = useAgentEnabled();
   const agentOpen = useRef(false);
@@ -420,6 +424,13 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
                 importantForAccessibility={activeWorkspace === "contacts" ? "auto" : "no-hide-descendants"}
               >
                 {contactsVisited ? <ContactsWorkspace wide /> : null}
+              </View>
+              <View
+                style={[styles.workspace, activeWorkspace !== "mail" && styles.inactiveWorkspace]}
+                accessibilityElementsHidden={activeWorkspace !== "mail"}
+                importantForAccessibility={activeWorkspace === "mail" ? "auto" : "no-hide-descendants"}
+              >
+                {mailVisited ? <MailWorkspace wide /> : null}
               </View>
             </View>
             {utilityPane}

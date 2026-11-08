@@ -7,7 +7,7 @@ import type { ConversationKind, Platform, TapbackType } from "./types";
  */
 
 /** The service a route runs on. RCS is kept apart from SMS here, though both draw green. */
-export type RouteService = "iMessage" | "SMS" | "RCS" | "Slack";
+export type RouteService = "iMessage" | "SMS" | "RCS" | "Slack" | "Gmail";
 
 export interface ProfileRoute {
   platform: Platform;
@@ -46,8 +46,15 @@ interface FeatureRule {
 /** What a conversation wants from the user, read off its last message: a reply, their reply, or nothing. */
 export type Attention = "needsYou" | "waiting" | "none";
 
-/** Where a conversation sits against the screening boundary of the type lens and Today. */
-export type Screening = "known" | "stranger" | "spam";
+/** Where a conversation sits against the screening boundary of the type lens and Today. Bulk is mail sent to a list. */
+export type Screening = "known" | "stranger" | "spam" | "bulk";
+
+/** What screening reads. `bulk` is set at ingest on email threads (convex/comma/gmailMessage.ts). */
+export interface Screened {
+  isSpam: boolean;
+  known: boolean;
+  bulk?: boolean;
+}
 
 export interface LastForAttention {
   isFromMe: boolean;
@@ -58,7 +65,7 @@ export interface LastForAttention {
 export interface PlatformRules {
   /** `last.mentionsMe`: the last message names the user, set at ingest. `following`: false on a thread that isn't the user's. */
   attention(conversation: { kind: ConversationKind; following?: boolean }, last: LastForAttention | null): Attention;
-  screening(conversation: { isSpam: boolean; known: boolean }): Screening;
+  screening(conversation: Screened): Screening;
   /** A sender keeps one live reaction per message, and a new one replaces theirs. Otherwise each key stands alone. */
   oneReactionPerSender: boolean;
 }
@@ -110,7 +117,7 @@ export const IMESSAGE_PROFILE = {
   attention: (_conversation: { kind: ConversationKind }, last: LastForAttention | null): Attention =>
     last === null ? "none" : last.isFromMe ? "waiting" : "needsYou",
   /** Apple's junk flag screens; otherwise a participant who resolves to a named person makes the conversation known. */
-  screening: (conversation: { isSpam: boolean; known: boolean }): Screening =>
+  screening: (conversation: Screened): Screening =>
     conversation.isSpam ? "spam" : conversation.known ? "known" : "stranger",
   oneReactionPerSender: true,
   /** The tapbacks a react command may send where "react" is supported. */
@@ -180,6 +187,30 @@ export const SLACK_PROFILE: PlatformProfile = {
   )) as Record<Feature, FeatureRule>,
 };
 
+/** What Gmail has that Comma does not run yet (G2). Reactions, edits, typing and the rest Gmail lacks. */
+const GMAIL_SOON: readonly Feature[] = ["send", "reply", "attachments", "schedule"];
+
+/** Milad's Google Workspace mailbox, read-only until G2. */
+export const GMAIL_PROFILE: PlatformProfile = {
+  name: "Gmail",
+  badges: { Gmail: { label: "Gmail", color: "icon" } },
+  editWindowMs: 0,
+  unsendWindowMs: 0,
+  unsendLabel: "Undo send",
+  composer: { placeholder: { Gmail: "Reply" }, enterSends: false, services: ["Gmail"] },
+  /** A thread follows iMessage's rule: an inbound last message is owed a reply, an outbound one waits on theirs. */
+  attention: IMESSAGE_PROFILE.attention,
+  /** Bulk mail is its own verdict; otherwise a sender who resolves to a person makes the thread known. */
+  screening: (conversation) => conversation.bulk ? "bulk" : IMESSAGE_PROFILE.screening(conversation),
+  oneReactionPerSender: true,
+  reactions: [],
+  features: Object.fromEntries((Object.entries(IMESSAGE_PROFILE.features) as [Feature, FeatureRule][]).map(
+    ([feature, { privateApi: _privateApi, needs: _needs, ...rule }]): [Feature, FeatureRule] => [feature, {
+      ...rule, services: [], ...(GMAIL_SOON.includes(feature) ? { soon: "Sending from Gmail is coming" } : {}),
+    }],
+  )) as Record<Feature, FeatureRule>,
+};
+
 /** How each named tapback looks, for readers on any platform. */
 export const TAPBACK_GLYPHS: Readonly<Record<TapbackType, string>> = {
   love: "❤️", like: "👍", dislike: "👎", laugh: "😂", emphasize: "‼️", question: "❓",
@@ -202,7 +233,7 @@ export function keyEmoji(key: string): string | null {
   return key.startsWith("emoji:") ? key.slice("emoji:".length) || null : null;
 }
 
-export const PROFILES: Readonly<Record<Platform, PlatformProfile>> = { imessage: IMESSAGE_PROFILE, slack: SLACK_PROFILE };
+export const PROFILES: Readonly<Record<Platform, PlatformProfile>> = { imessage: IMESSAGE_PROFILE, slack: SLACK_PROFILE, gmail: GMAIL_PROFILE };
 
 /** What the conversation's platform says it wants from the user. */
 export function attentionOf(conversation: { platform: Platform; kind: ConversationKind; following?: boolean }, last: LastForAttention | null): Attention {
@@ -210,7 +241,7 @@ export function attentionOf(conversation: { platform: Platform; kind: Conversati
 }
 
 /** The conversation's platform's screening verdict. */
-export function screeningOf(conversation: { platform: Platform; isSpam: boolean; known: boolean }): Screening {
+export function screeningOf(conversation: Screened & { platform: Platform }): Screening {
   return PROFILES[conversation.platform].screening(conversation);
 }
 

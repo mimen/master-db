@@ -42,3 +42,14 @@ describe("a Slack route", () => {
     expect(unsupportedReason(imessage, false, { kind: "suggestions", model: "opus", refresh: false })).toBeNull();
   });
 });
+
+describe("a Gmail route", () => {
+  const gmail = { platform: "gmail" as const, accountId: "a" as never, threadId: "t1" };
+
+  test("is read-only: sending and model replies wait for G2 with the reason, a read passes", () => {
+    expect(unsupportedReason(gmail, true, { kind: "send", text: "hi" })).toBe("Sending from Gmail is coming");
+    expect(unsupportedReason(gmail, true, { kind: "suggestions", model: "opus", refresh: false })).toBe("Sending from Gmail is coming");
+    expect(unsupportedReason(gmail, true, { kind: "react", messageGuid: "m", reaction: "emoji:🔥", remove: false })).toBe("Gmail can't send emoji reactions");
+    expect(unsupportedReason(gmail, true, { kind: "markRead" })).toBeNull();
+  });
+});

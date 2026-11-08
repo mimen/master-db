@@ -158,7 +158,8 @@ export const todayCandidates = internalMutation({
     const result = await ctx.db.query("comma_conversations")
       .withIndex("by_lastMessageAt")
       .order("desc")
-      .filter((q) => q.neq(q.field("lastMessage"), undefined))
+      // Email joins Today with the prioritizer (P1); until then the Mail workspace holds it.
+      .filter((q) => q.and(q.neq(q.field("lastMessage"), undefined), q.neq(q.field("kind"), "emailThread")))
       .paginate({ cursor, numItems });
     const read = listReader(ctx);
     const page: TodayCandidate[] = [];

@@ -30,6 +30,7 @@ import { createTodayFixture, type TodayMode } from "./today";
 import { createSlackFixture, SLACK_CHANNEL, SLACK_DM } from "./slack";
 import { createTriageFixture } from "./triage";
 import type { FixtureBlueBubbles } from "./fake-bluebubbles";
+import { mailWorld } from "./mail";
 import { AGENT_SEED, fixtureSeed, FIXTURE_NOW, type FixtureIdentity } from "./world";
 
 type Conversation = Infer<typeof conversationDoc> & Pick<ChatSummary, "flags" | "unreadCount"> & { groupPhotoUrl: string | null };
@@ -170,6 +171,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
    */
   // Settings' accounts: the Mac's iMessage account, and Slack once a spec connects it.
   const slackAccount = { connected: false, ever: false };
+  const gmailAccount = { connected: false, ever: false };
   const mini = { online: true, heartbeat: true, beatAt: new Date().getTime(), notSentAfterMs: NOT_SENT_AFTER_MS, held: new Map<string, { release: () => void; timer: ReturnType<typeof setTimeout> }>() };
   const strand = (clientKey: string, error: string) => {
     const receipt = receipts.get(clientKey);
@@ -492,6 +494,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     return c.json({ storageId });
   });
   app.get("/__fixture/slack-connected", (c) => c.html("<p>Slack is connected. You can close this tab.</p>"));
+  app.get("/__fixture/gmail-connected", (c) => c.html("<p>Gmail is connected. You can close this tab.</p>"));
   app.get("/__fixture/media/:guid", (c) => {
     const upload = uploads.get(c.req.param("guid"));
     return upload ? new Response(upload.bytes) : bb.downloadAttachment(c.req.param("guid"));
@@ -554,7 +557,17 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     "comma/accounts:listAccounts": async () => [
       { _id: "account-imessage", platform: "imessage", label: "iMessage", health: "ok", connected: true, createdAt: 1 },
       ...(slackAccount.ever ? [{ _id: "account-slack", platform: "slack", label: "AUF", health: "ok", connected: slackAccount.connected, createdAt: 2 }] : []),
+      ...(gmailAccount.ever ? [{ _id: "account-gmail", platform: "gmail", label: "milad@afternoonumbrellafriends.com", health: "ok", connected: gmailAccount.connected, createdAt: 3 }] : []),
     ],
+    // The fixture's Google consent screen approves at once, as the real callback lands the mailbox.
+    "comma/googleAuth:startGmailConnect": async () => {
+      Object.assign(gmailAccount, { connected: true, ever: true });
+      return "/__fixture/gmail-connected";
+    },
+    "comma/googleAuth:disconnectGmail": async () => {
+      gmailAccount.connected = false;
+      return null;
+    },
     // The fixture's Slack consent screen approves at once, the way the real callback lands the account.
     "comma/slackAuth:startSlackConnect": async () => {
       Object.assign(slackAccount, { connected: true, ever: true });
@@ -602,10 +615,13 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     "comma/queries:getConversation": async (args) => slackWorld.owns(String(args.conversationId)) ? slackWorld.conversation(String(args.conversationId))
       : (await conversations()).find((row) => row._id === args.conversationId) ?? null,
     "comma/queries:listMessages": async (args) => paginate(slackWorld.owns(String(args.conversationId)) ? slackWorld.messages(String(args.conversationId))
-      : await messages(String(args.conversationId)), args.paginationOpts as Pagination),
+      : mailWorld.owns(String(args.conversationId)) ? mailWorld.messages(String(args.conversationId))
+        : await messages(String(args.conversationId)), args.paginationOpts as Pagination),
+    "comma/queries:listEmailThreads": async (args) => paginate(mailWorld.threads(), args.paginationOpts as Pagination),
     "comma/queries:searchMessages": async (args) => {
       const text = String(args.query).trim();
       if (text.length < 2) return [];
+      if (args.platform === "gmail") return mailWorld.search(text);
       const chatGuid = args.conversationId ? String(args.conversationId) : undefined;
       const found = await bb.queryMessages({ limit: 50, offset: 0, text, chatGuid,
         from: args.from === "me" || args.from === "them" ? args.from : undefined });
@@ -823,6 +839,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
   return () => {
     for (const { timer } of mini.held.values()) clearTimeout(timer);
     Object.assign(slackAccount, { connected: false, ever: false });
+    Object.assign(gmailAccount, { connected: false, ever: false });
     slackWorld.reset();
     mini.held.clear(); mini.online = true; mini.heartbeat = true; mini.beatAt = new Date().getTime(); mini.notSentAfterMs = NOT_SENT_AFTER_MS; sendPayloads.clear();
     turns.clear(); names.reset(); agent.reset(); today.reset(); triage.reset(); latency.clear(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();

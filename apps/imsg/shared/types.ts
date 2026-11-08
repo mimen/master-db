@@ -53,7 +53,7 @@ export type SpecialContent =
   | { kind: "unknown"; label: string };
 
 /** The platforms Comma mirrors. */
-export type Platform = "imessage" | "slack";
+export type Platform = "imessage" | "slack" | "gmail";
 
 /** A conversation's shape: one person, a group, a workspace channel, or an email thread. */
 export type ConversationKind = "dm" | "group" | "channel" | "thread" | "emailThread";
@@ -181,6 +181,10 @@ export type ChatRoute = {
   accountId: AccountId;
   /** The Slack channel, DM or group DM, and the thread when the conversation is one thread inside a channel. */
   slack: { channel: string; threadTs?: string };
+} | {
+  platform: "gmail";
+  accountId: AccountId;
+  gmail: { threadId: string };
 };
 
 export interface ChatSummary {
@@ -201,6 +205,8 @@ export interface ChatSummary {
   contactsAvailable?: boolean;
   /** Last message was flagged by Apple's junk detection. */
   isSpam: boolean;
+  /** An email thread sent to a list: newsletters, notifications, promotions. */
+  bulk?: boolean;
   participants: Participant[];
   lastMessage: {
     guid: string;

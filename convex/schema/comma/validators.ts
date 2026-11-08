@@ -7,7 +7,7 @@ import { v, type Infer, type PropertyValidators } from "convex/values";
  */
 
 /** The service that carries a conversation. */
-export const platform = v.union(v.literal("imessage"), v.literal("slack"));
+export const platform = v.union(v.literal("imessage"), v.literal("slack"), v.literal("gmail"));
 
 /** One signed-in identity on a platform: an iMessage Mac, a Slack workspace, a mailbox. Credentials arrive with OAuth. */
 export const accountHealth = v.union(v.literal("ok"), v.literal("needsAttention"));
@@ -32,7 +32,11 @@ export const accountFields = {
 export const slackEventFields = { eventId: v.string(), receivedAt: v.number() };
 
 /** A single-use OAuth state: an authed client asked to connect, and the platform's callback must name it before it expires. */
-export const oauthStateFields = { state: v.string(), platform, expiresAt: v.number() };
+export const oauthStateFields = {
+  state: v.string(), platform, expiresAt: v.number(),
+  /** Google's PKCE code verifier; the callback sends it with the code. */
+  verifier: v.optional(v.string()),
+};
 
 /**
  * Where a command executes: the platform, the account, and that platform's own thread id. Convex chooses it; a
@@ -42,6 +46,8 @@ export const route = v.union(
   v.object({ platform: v.literal("imessage"), accountId: v.optional(v.id("comma_accounts")), chatGuid: v.string() }),
   /** A Slack channel, DM or group DM, and the thread inside it when the conversation is one thread. */
   v.object({ platform: v.literal("slack"), accountId: v.id("comma_accounts"), channel: v.string(), threadTs: v.optional(v.string()) }),
+  /** A Gmail thread in one mailbox. */
+  v.object({ platform: v.literal("gmail"), accountId: v.id("comma_accounts"), threadId: v.string() }),
 );
 
 export const participant = v.object({
@@ -108,6 +114,9 @@ export const tapback = v.object({
   remove: v.boolean(),
 });
 
+/** Bulk mail (newsletters, notifications, promotions) stays out of the People lens and Today. Replying lifts a thread out. */
+export const gmailThreadFields = v.object({ threadId: v.string(), subject: v.string(), inInbox: v.boolean(), bulk: v.boolean() });
+
 export const conversationFields = {
   /** Every stored row has one. Optional because test fixtures across convex/comma still omit it. */
   platform: v.optional(platform),
@@ -123,6 +132,8 @@ export const conversationFields = {
    * is false on a thread kept only because its channel is opted in; absent on threads from before S3, which Milad follows.
    */
   slack: v.optional(v.object({ channel: v.string(), threadTs: v.optional(v.string()), following: v.optional(v.boolean()) })),
+  /** Gmail's: the thread, its subject, whether its newest message is in the inbox, and whether it is bulk mail. */
+  gmail: v.optional(gmailThreadFields),
   displayName: v.string(),
   rawDisplayName: v.optional(v.string()),
   groupPhotoGuid: v.optional(v.string()),
@@ -245,6 +256,17 @@ export const legacyMessageInput = v.object({ ...messageCoreFields, ...flatImessa
 export const pendingSendState = v.union(v.literal("queued"), v.literal("sending"), v.literal("notSent"), v.literal("failed"));
 export type CommaPendingSendState = Infer<typeof pendingSendState>;
 
+/** Gmail's own message fields: its addresses, whether it is bulk, and its HTML cleaned for the reader (emailHtml.ts). */
+export const gmailMessageFields = v.object({
+  from: participant,
+  to: v.array(participant),
+  cc: v.array(participant),
+  bulk: v.boolean(),
+  html: v.optional(v.string()),
+  /** Remote images the cleaned HTML holds back until the reader asks for them. */
+  blockedImages: v.optional(v.number()),
+});
+
 /**
  * A stored message: the core, its platform's side object, and, on rows the backfill has not reached, the flat
  * iMessage fields instead. Read iMessage fields through messageShape.ts. Only a pending send's own row carries `sendState`.
@@ -254,6 +276,7 @@ export const messageRowFields = {
   /** Computed at ingest: a mention names one of the account's selfHandles. Absent on rows written before it. */
   mentionsMe: v.optional(v.boolean()),
   imessage: v.optional(imessageMessage),
+  gmail: v.optional(gmailMessageFields),
   chatGuid: v.optional(flatImessageMessageFields.chatGuid),
   service: v.optional(flatImessageMessageFields.service),
   error: v.optional(flatImessageMessageFields.error),
@@ -517,7 +540,7 @@ export const outboxPayload = v.union(
  * The executor a command waits for. One lane per messaging platform, one for model work someone asked for, and
  * `aiBackground` for model work nobody waits on (suggestion precompute), so it never holds back a user's command.
  */
-export const outboxLane = v.union(v.literal("imessage"), v.literal("slack"), v.literal("ai"), v.literal("aiBackground"));
+export const outboxLane = v.union(v.literal("imessage"), v.literal("slack"), v.literal("gmail"), v.literal("ai"), v.literal("aiBackground"));
 
 const AI_KINDS: ReadonlySet<string> = new Set(aiPayload.members.map((member) => member.fields.kind.value));
 /** Model work, which waits in the ai lane whatever the conversation's platform. */
@@ -669,6 +692,8 @@ export const executorCapabilities = v.union(
   v.object({ executor: v.literal("imessage"), privateApi: v.boolean(), emojiReactions: v.boolean() }),
   /** Slack's account: Convex runs its lane, and the Events webhook and OAuth report its connection. */
   v.object({ executor: v.literal("slack") }),
+  /** A Gmail mailbox: Convex runs its lane; sync and the watch renewal report its connection. */
+  v.object({ executor: v.literal("gmail") }),
   /** The Mini's AI process: reply suggestions through the gateway, and local Whisper. */
   v.object({ executor: v.literal("ai"), suggestions: v.boolean(), whisperAvailable: v.boolean(), whisperDetail: v.optional(v.string()) }),
 );

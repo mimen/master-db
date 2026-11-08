@@ -186,7 +186,8 @@ export const listConversations = query({
       .query("comma_conversations")
       .withIndex("by_lastMessageAt")
       .order("desc")
-      .filter((q) => q.neq(q.field("lastMessage"), undefined))
+      // Email threads list in the Mail workspace, not in Messages.
+      .filter((q) => q.and(q.neq(q.field("lastMessage"), undefined), q.neq(q.field("kind"), "emailThread")))
       .paginate(args.paginationOpts);
     const read = listReader(ctx);
     const shown = (await Promise.all(result.page.map(async (conversation) => (await listed(ctx, conversation) ? conversation : null))))
@@ -195,6 +196,23 @@ export const listConversations = query({
       ...result,
       page: await Promise.all(shown.map((conversation) => withConversationState(ctx, conversation, read))),
     };
+  },
+});
+
+/** The Mail workspace: email threads in the inbox, newest first. Its People lens is a filter over these on the client. */
+export const listEmailThreads = query({
+  args: { paginationOpts: paginationOptsValidator },
+  returns: paginationResultValidator(conversationView),
+  handler: async (ctx, args) => {
+    await assertAllowed(ctx);
+    const result = await ctx.db
+      .query("comma_conversations")
+      .withIndex("by_kind_lastMessageAt", (q) => q.eq("kind", "emailThread"))
+      .order("desc")
+      .filter((q) => q.and(q.neq(q.field("lastMessage"), undefined), q.eq(q.field("gmail.inInbox"), true)))
+      .paginate(args.paginationOpts);
+    const read = listReader(ctx);
+    return { ...result, page: await Promise.all(result.page.map((conversation) => withConversationState(ctx, conversation, read))) };
   },
 });
 
@@ -314,12 +332,12 @@ export async function searchMessageRows(ctx: QueryCtx, args: {
       let search = q.search("text", args.query).eq("retracted", false);
       if (args.conversationId) search = search.eq("conversationId", args.conversationId);
       if (args.from) search = search.eq("isFromMe", args.from === "me");
-      // Messages from before platforms carry none and are all iMessage's, so only Slack filters in the index.
-      if (args.platform === "slack") search = search.eq("platform", "slack");
+      // Messages from before platforms carry none and are all iMessage's, so iMessage filters by leaving the others out.
+      if (args.platform && args.platform !== "imessage") search = search.eq("platform", args.platform);
       return search;
     })
     .filter((q) => q.and(q.neq(q.field("isTapback"), true), q.neq(q.field("imessage.isAssociatedMessage"), true),
-      args.platform === "imessage" ? q.neq(q.field("platform"), "slack") : true))
+      args.platform === "imessage" ? q.and(q.neq(q.field("platform"), "slack"), q.neq(q.field("platform"), "gmail")) : true))
     .take(50);
 }
 
