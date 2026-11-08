@@ -1,5 +1,5 @@
 import { routeService, type ProfileRoute } from "./platform-profile";
-import type { ChatSummary } from "./types";
+import type { BridgeMessage, ChatSummary, Message } from "./types";
 
 /**
  * iMessage chat GUIDs, `<service>;<+|->;<identifier>`. The app names conversations by their Convex
@@ -26,17 +26,41 @@ export const imessageChat = {
 };
 
 /** The service a conversation sends through; green when SMS. */
-export function conversationService(chat: Pick<ChatSummary, "imessage">): "iMessage" | "SMS" {
-  return imessageChat.service(chat.imessage.chatGuid) === "SMS" ? "SMS" : "iMessage";
+export function conversationService(chat: Pick<ChatSummary, "route">): "iMessage" | "SMS" {
+  return imessageChat.service(chat.route.imessage.chatGuid) === "SMS" ? "SMS" : "iMessage";
 }
 
 /** The route a conversation's commands take, as its platform profile reads it. */
-export function conversationRoute(chat: Pick<ChatSummary, "imessage" | "isGroup">): ProfileRoute {
-  return { platform: "imessage", service: routeService(chat.imessage.chatGuid.split(";")[0] ?? ""), isGroup: chat.isGroup };
+export function conversationRoute(chat: Pick<ChatSummary, "route" | "isGroup">): ProfileRoute {
+  return { platform: chat.route.platform, service: routeService(chat.route.imessage.chatGuid.split(";")[0] ?? ""), isGroup: chat.isGroup };
 }
 
 /** The other person's handle in a one-to-one conversation, or null for a group. */
-export function dmAddress(chat: Pick<ChatSummary, "isGroup" | "participants" | "imessage">): string | null {
+export function dmAddress(chat: Pick<ChatSummary, "isGroup" | "participants" | "route">): string | null {
   if (chat.isGroup) return null;
-  return chat.participants[0]?.address ?? imessageChat.identifier(chat.imessage.chatGuid);
+  return chat.participants[0]?.address ?? imessageChat.identifier(chat.route.imessage.chatGuid);
+}
+
+/** The service a message drew in: green when SMS. A message on another platform is never SMS. */
+export function serviceOf(message: Pick<Message, "imessage">): "iMessage" | "SMS" {
+  return message.imessage?.service ?? "iMessage";
+}
+
+/** Whether the platform reported an error sending this message. */
+export function hasSendError(message: Pick<Message, "imessage">): boolean {
+  return (message.imessage?.error ?? 0) !== 0;
+}
+
+/** A bridge's flat iMessage message as a Message. */
+export function fromBridgeMessage(message: BridgeMessage): Message {
+  const { chatGuid, service, special, sendEffect, error, isSpam, isAssociatedMessage, ...core } = message;
+  return {
+    ...core,
+    platform: "imessage",
+    imessage: {
+      chatGuid, service, special, sendEffect, error,
+      ...(isSpam !== undefined ? { isSpam } : {}),
+      ...(isAssociatedMessage !== undefined ? { isAssociatedMessage } : {}),
+    },
+  };
 }

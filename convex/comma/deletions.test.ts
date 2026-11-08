@@ -6,6 +6,8 @@ import { internal } from "../_generated/api";
 import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
+import { messageImessage } from "./messageShape";
+
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 type Page = { done: boolean; phase?: "messages" | "reactions" | "attachments" | "scheduled" | "suggestions" | "events" | "state" | "drafts" | "presence" | "finalize"; cursor?: string };
 const deletion = makeFunctionReference<"mutation", { chatGuid: string; phase?: Page["phase"]; cursor?: string }, Page>("comma/deletions:deleteChat") as unknown as FunctionReference<"mutation", "internal", { chatGuid: string; phase?: Page["phase"]; cursor?: string }, Page>;
@@ -115,7 +117,7 @@ test("deletion scans multiple pages without dropping surviving service messages"
   await t.run(async (ctx) => {
     const messages = await ctx.db.query("comma_messages").collect();
     expect(messages).toHaveLength(126);
-    expect(messages.every((row) => row.chatGuid === SIBLING)).toBe(true);
+    expect(messages.every((row) => messageImessage(row)?.chatGuid === SIBLING)).toBe(true);
     expect(await ctx.db.get(conversationId)).toMatchObject({ primaryChatGuid: SIBLING, lastMessage: { guid: "history-249" } });
   });
 });

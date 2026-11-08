@@ -2,18 +2,23 @@ import { v } from "convex/values";
 
 import { isPendingGuid } from "../../apps/imsg/shared/pending-send";
 import type { Doc, Id } from "../_generated/dataModel";
-import { internalMutation, type MutationCtx } from "../_generated/server";
+import { internalMutation } from "../_generated/server";
 import {
-  attachmentFields,
+  attachmentInput,
   lastMessageSummary,
-  messageFields,
+  legacyAttachmentInput,
+  legacyMessageInput,
+  messageInput,
   participant,
+  platform,
   scheduledStatus,
   suggestionFields,
 } from "../schema/comma/validators";
 
-import { choosePrimary, imessage } from "./conversationIdentity";
-import { findByChatGuid, findByKey } from "./conversationLookup";
+import { ingestAccount, isSelf } from "./accounts";
+import { PLATFORM_IDENTITY } from "./conversationIdentity";
+import { findAlias, findAttachment, findByChatGuid, findByKey, findMessage } from "./conversationLookup";
+import { FLAT_ATTACHMENT_UNSET, FLAT_MESSAGE_UNSET, inScope, postedAttachment, postedMessage, type AccountScope } from "./messageShape";
 import { landEcho, refreshLastMessage } from "./pendingSends";
 import { fromTapback } from "./reactions";
 import { applyReaction } from "./reactionStore";
@@ -30,7 +35,17 @@ import { logReplies } from "./triage";
  *
  * A tapback the bridge posts as a message row is a reaction: it lands in comma_reactions and
  * leaves no message row.
+ *
+ * Each batch names its platform and account (`ingestScope`). A bridge built before accounts names
+ * neither and writes for the iMessage account.
  */
+
+/** The platform and account a batch writes for. Both are optional for bridges built before accounts. */
+const ingestScope = { platform: v.optional(platform), accountId: v.optional(v.id("comma_accounts")) };
+
+function scopeFor(account: Doc<"comma_accounts">): AccountScope & { accountId: Id<"comma_accounts"> } {
+  return { platform: account.platform, accountId: account._id };
+}
 
 /** Structural equality over Convex values, ignoring object key order. */
 function sameValue(a: unknown, b: unknown): boolean {
@@ -60,26 +75,30 @@ const conversationInput = v.object({
 });
 
 export const upsertConversations = internalMutation({
-  args: { conversations: v.array(conversationInput) },
+  args: { ...ingestScope, conversations: v.array(conversationInput) },
   returns: v.record(v.string(), v.id("comma_conversations")),
-  handler: async (ctx, { conversations }) => {
+  handler: async (ctx, { conversations, ...named }) => {
+    const account = await ingestAccount(ctx, named);
+    const scope = scopeFor(account);
+    const identity = PLATFORM_IDENTITY[account.platform];
     const resolved: Record<string, Id<"comma_conversations">> = {};
     const now = Date.now();
     for (const input of conversations) {
-      const primaryChatGuid = choosePrimary(input.chats);
+      const primaryChatGuid = identity.choosePrimary(input.chats);
       const chatGuids = input.chats.map((chat) => chat.chatGuid).sort();
-      let existing = await findByKey(ctx, imessage.platform, input.conversationKey);
+      let existing = await findByKey(ctx, scope, input.conversationKey);
       if (!existing) {
         for (const chatGuid of chatGuids) {
-          const candidate = await findByChatGuid(ctx, chatGuid);
-          if (candidate && imessage.conversationKey(candidate) === input.conversationKey) {
+          const candidate = await findByChatGuid(ctx, scope, chatGuid);
+          if (candidate && identity.conversationKey(candidate) === input.conversationKey) {
             existing = candidate;
             break;
           }
         }
       }
       const fields = {
-        platform: imessage.platform,
+        platform: account.platform,
+        accountId: account._id,
         conversationKey: input.conversationKey,
         primaryChatGuid,
         chatGuids,
@@ -101,14 +120,13 @@ export const upsertConversations = internalMutation({
       }
 
       for (const chatGuid of chatGuids) {
-        const alias = await ctx.db
-          .query("comma_chat_aliases")
-          .withIndex("by_chatGuid", (q) => q.eq("chatGuid", chatGuid))
-          .unique();
+        const alias = await findAlias(ctx, scope, chatGuid);
         if (!alias) {
-          await ctx.db.insert("comma_chat_aliases", { chatGuid, conversationId, service: imessage.service(chatGuid) });
-        } else if (alias.conversationId !== conversationId) {
-          await ctx.db.patch(alias._id, { conversationId });
+          await ctx.db.insert("comma_chat_aliases", {
+            platform: account.platform, accountId: account._id, chatGuid, conversationId, service: identity.service(chatGuid),
+          });
+        } else if (alias.conversationId !== conversationId || alias.accountId !== account._id) {
+          await ctx.db.patch(alias._id, { conversationId, platform: account.platform, accountId: account._id });
         }
         resolved[chatGuid] = conversationId;
       }
@@ -118,34 +136,37 @@ export const upsertConversations = internalMutation({
 });
 
 export const upsertMessages = internalMutation({
-  args: { messages: v.array(v.object(messageFields)) },
+  args: { ...ingestScope, messages: v.array(v.union(messageInput, legacyMessageInput)) },
   returns: v.object({ written: v.number(), skipped: v.number() }),
-  handler: async (ctx, { messages }) => {
+  handler: async (ctx, { messages, ...named }) => {
+    const account = await ingestAccount(ctx, named);
+    const scope = scopeFor(account);
     let written = 0;
     let skipped = 0;
     const touchedConversations = new Set<Id<"comma_conversations">>();
-    const real: typeof messages = [];
-    for (const message of messages) {
-      const existing = await ctx.db
-        .query("comma_messages")
-        .withIndex("by_guid", (q) => q.eq("guid", message.guid))
-        .unique();
+    const real: Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe">[] = [];
+    for (const posted of messages) {
+      const { imessage: { tapback, ...imessage }, ...core } = postedMessage(posted);
+      const message = {
+        ...core, platform: account.platform, accountId: account._id, imessage,
+        isFromMe: core.isFromMe || isSelf(account, core.sender?.address),
+      };
+      const existing = await findMessage(ctx, scope, message.guid);
       if (existing && existing.sourceVersion >= message.sourceVersion) {
         skipped++;
         continue;
       }
-      const reaction = fromTapback(message);
+      const reaction = fromTapback({ ...message, tapback });
       if (reaction) {
         if (await applyReaction(ctx, reaction)) written++;
         else skipped++;
         continue;
       }
-      const row = { ...message, platform: imessage.platform };
-      if (existing) await ctx.db.patch(existing._id, row);
-      else await ctx.db.insert("comma_messages", row);
+      if (existing) await ctx.db.patch(existing._id, { ...message, ...FLAT_MESSAGE_UNSET });
+      else await ctx.db.insert("comma_messages", message);
       await landEcho(ctx, message);
       written++;
-      if (!isPendingGuid(message.guid) && !message.isTapback && !message.retracted) real.push(message);
+      if (!isPendingGuid(message.guid) && !imessage.isAssociatedMessage && !message.retracted) real.push(message);
       touchedConversations.add(message.conversationId);
     }
     for (const conversationId of touchedConversations) await refreshLastMessage(ctx, conversationId);
@@ -155,16 +176,16 @@ export const upsertMessages = internalMutation({
 });
 
 export const upsertAttachments = internalMutation({
-  args: { attachments: v.array(v.object(attachmentFields)) },
+  args: { ...ingestScope, attachments: v.array(v.union(attachmentInput, legacyAttachmentInput)) },
   returns: v.object({ written: v.number(), skipped: v.number() }),
-  handler: async (ctx, { attachments }) => {
+  handler: async (ctx, { attachments, ...named }) => {
+    const account = await ingestAccount(ctx, named);
+    const scope = scopeFor(account);
     let written = 0;
     let skipped = 0;
-    for (const attachment of attachments) {
-      const existing = await ctx.db
-        .query("comma_attachments")
-        .withIndex("by_guid", (q) => q.eq("guid", attachment.guid))
-        .unique();
+    for (const posted of attachments) {
+      const attachment = { ...postedAttachment(posted), platform: account.platform, accountId: account._id };
+      const existing = await findAttachment(ctx, scope, attachment.guid);
       if (existing && existing.sourceVersion >= attachment.sourceVersion) {
         skipped++;
         continue;
@@ -176,13 +197,16 @@ export const upsertAttachments = internalMutation({
         originalStorageId: attachment.originalStorageId ?? existing?.originalStorageId,
         transcript: attachment.transcript ?? existing?.transcript,
       };
-      if (existing) await ctx.db.patch(existing._id, row);
+      if (existing) await ctx.db.patch(existing._id, { ...row, ...FLAT_ATTACHMENT_UNSET });
       else await ctx.db.insert("comma_attachments", row);
       written++;
     }
     return { written, skipped };
   },
 });
+
+/** The bridge's media and transcript writes name an attachment by its iMessage guid alone. */
+const BRIDGE_MEDIA_SCOPE: AccountScope = { platform: "imessage", accountId: null };
 
 export const setAttachmentStorage = internalMutation({
   args: {
@@ -192,10 +216,7 @@ export const setAttachmentStorage = internalMutation({
   },
   returns: v.boolean(),
   handler: async (ctx, { guid, thumbStorageId, originalStorageId }) => {
-    const attachment = await ctx.db
-      .query("comma_attachments")
-      .withIndex("by_guid", (q) => q.eq("guid", guid))
-      .unique();
+    const attachment = await findAttachment(ctx, BRIDGE_MEDIA_SCOPE, guid);
     if (!attachment) return false;
     await ctx.db.patch(attachment._id, {
       ...(thumbStorageId ? { thumbStorageId } : {}),
@@ -209,26 +230,20 @@ export const setTranscript = internalMutation({
   args: { attachmentGuid: v.string(), transcript: v.string() },
   returns: v.boolean(),
   handler: async (ctx, { attachmentGuid, transcript }) => {
-    const attachment = await ctx.db
-      .query("comma_attachments")
-      .withIndex("by_guid", (q) => q.eq("guid", attachmentGuid))
-      .unique();
+    const attachment = await findAttachment(ctx, BRIDGE_MEDIA_SCOPE, attachmentGuid);
     if (!attachment) return false;
     await ctx.db.patch(attachment._id, { transcript });
     return true;
   },
 });
 
-async function conversationForChat(ctx: MutationCtx, chatGuid: string): Promise<Id<"comma_conversations"> | null> {
-  const alias = await ctx.db
-    .query("comma_chat_aliases")
-    .withIndex("by_chatGuid", (q) => q.eq("chatGuid", chatGuid))
-    .unique();
-  return alias?.conversationId ?? null;
-}
-
+/**
+ * Replaces the posting account's scheduled messages with one snapshot. Another account's rows are not the
+ * snapshot's to delete.
+ */
 export const replaceScheduled = internalMutation({
   args: {
+    ...ingestScope,
     items: v.array(
       v.object({
         bbId: v.number(),
@@ -242,23 +257,25 @@ export const replaceScheduled = internalMutation({
     ),
   },
   returns: v.object({ upserted: v.number(), deleted: v.number() }),
-  handler: async (ctx, { items }) => {
+  handler: async (ctx, { items, ...named }) => {
+    const account = await ingestAccount(ctx, named);
+    const scope = scopeFor(account);
     const now = Date.now();
     const keep = new Set(items.map((item) => item.bbId));
     let deleted = 0;
     for (const row of await ctx.db.query("comma_scheduled").collect()) {
-      if (!keep.has(row.bbId)) {
+      if (inScope(row, scope) && !keep.has(row.bbId)) {
         await ctx.db.delete(row._id);
         deleted++;
       }
     }
     for (const item of items) {
-      const conversationId = (await conversationForChat(ctx, item.chatGuid)) ?? undefined;
-      const existing = await ctx.db
+      const conversationId = (await findAlias(ctx, scope, item.chatGuid))?.conversationId;
+      const existing = (await ctx.db
         .query("comma_scheduled")
         .withIndex("by_bbId", (q) => q.eq("bbId", item.bbId))
-        .unique();
-      const row = { ...item, conversationId, updatedAt: now };
+        .collect()).find((row) => inScope(row, scope));
+      const row = { ...item, platform: account.platform, accountId: account._id, conversationId, updatedAt: now };
       if (existing) await ctx.db.patch(existing._id, row);
       else await ctx.db.insert("comma_scheduled", row);
     }
@@ -266,15 +283,16 @@ export const replaceScheduled = internalMutation({
   },
 });
 
-/** Replaces every conversation's unread state with one chat.db snapshot. */
+/** Replaces the posting account's unread state with one snapshot; another account's conversations keep theirs. */
 export const replaceUnread = internalMutation({
-  args: { chats: v.array(v.object({ chatGuid: v.string(), count: v.number(), firstAt: v.number() })) },
+  args: { ...ingestScope, chats: v.array(v.object({ chatGuid: v.string(), count: v.number(), firstAt: v.number() })) },
   returns: v.object({ changed: v.number(), unresolved: v.number() }),
-  handler: async (ctx, { chats }) => {
+  handler: async (ctx, { chats, ...named }) => {
+    const scope = scopeFor(await ingestAccount(ctx, named));
     const next = new Map<Id<"comma_conversations">, { count: number; firstAt: number }>();
     let unresolved = 0;
     for (const chat of chats) {
-      const id = await conversationForChat(ctx, chat.chatGuid);
+      const id = (await findAlias(ctx, scope, chat.chatGuid))?.conversationId;
       if (!id) {
         unresolved++;
         continue;
@@ -284,8 +302,8 @@ export const replaceUnread = internalMutation({
     }
     let changed = 0;
     // Only rows unread now or unread next can change; a full scan cost a second on every arrival.
-    const unread = await ctx.db.query("comma_conversations")
-      .withIndex("by_unreadCount", (q) => q.gt("unread.count", -1)).collect();
+    const unread = (await ctx.db.query("comma_conversations")
+      .withIndex("by_unreadCount", (q) => q.gt("unread.count", -1)).collect()).filter((row) => inScope(row, scope));
     const seen = new Set(unread.map((row) => row._id));
     const added = await Promise.all([...next.keys()].filter((id) => !seen.has(id)).map((id) => ctx.db.get(id)));
     for (const conversation of [...unread, ...added]) {
@@ -299,8 +317,10 @@ export const replaceUnread = internalMutation({
   },
 });
 
+/** A bridge's cursor row, per account. iMessage's rows from before accounts carry none and are adopted. */
 export const markSyncState = internalMutation({
   args: {
+    ...ingestScope,
     key: v.string(),
     cursor: v.optional(v.string()),
     lastEventAt: v.optional(v.number()),
@@ -308,18 +328,18 @@ export const markSyncState = internalMutation({
     counts: v.optional(v.record(v.string(), v.number())),
   },
   returns: v.null(),
-  handler: async (ctx, args) => {
+  handler: async (ctx, { platform, accountId, ...args }) => {
+    const account = await ingestAccount(ctx, { platform, accountId });
     const existing = await ctx.db
       .query("comma_sync_state")
-      .withIndex("by_key", (q) => q.eq("key", args.key))
-      .unique();
-    const row = { ...existing, ...args, updatedAt: Date.now() };
-    if (existing) {
-      const { _id, _creationTime, ...fields } = row as Doc<"comma_sync_state">;
-      await ctx.db.patch(existing._id, fields);
-    } else {
-      await ctx.db.insert("comma_sync_state", { ...args, updatedAt: Date.now() });
-    }
+      .withIndex("by_account_key", (q) => q.eq("accountId", account._id).eq("key", args.key))
+      .unique() ?? (account.platform === "imessage" ? await ctx.db
+      .query("comma_sync_state")
+      .withIndex("by_account_key", (q) => q.eq("accountId", undefined).eq("key", args.key))
+      .unique() : null);
+    const updatedAt = Date.now();
+    if (existing) await ctx.db.patch(existing._id, { ...args, accountId: account._id, updatedAt });
+    else await ctx.db.insert("comma_sync_state", { ...args, accountId: account._id, updatedAt });
     return null;
   },
 });

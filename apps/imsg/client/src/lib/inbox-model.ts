@@ -131,8 +131,8 @@ const DAY = 86_400_000;
 const LINK = /\bhttps?:\/\/|\bwww\.[a-z0-9-]+\.[a-z]/i;
 
 /** Service of the conversation's primary chat. RCS renders green, so it reads as SMS. */
-export function chatService(chat: Pick<ChatSummary, "imessage">): Exclude<Service, "any"> | null {
-  return imessageChat.service(chat.imessage.chatGuid);
+export function chatService(chat: Pick<ChatSummary, "route">): Exclude<Service, "any"> | null {
+  return imessageChat.service(chat.route.imessage.chatGuid);
 }
 
 /** CRM priority is P1-P5 with one highest: P1-P2 high, P3 medium, P4-P5 low. */

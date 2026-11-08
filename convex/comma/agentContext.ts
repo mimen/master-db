@@ -6,6 +6,8 @@ import { commandMessage } from "../schema/comma/validators";
 import { people } from "../schema/identity/people";
 
 import { conversationPeople } from "./conversationInfo";
+import { findAttachment, findMessage, shownInThread } from "./conversationLookup";
+import { attachmentName, messageImessage, scopeOf, type AccountScope } from "./messageShape";
 import { resolveConversationNames } from "./names";
 import { personContext, personContextResult } from "./personContext";
 import { normalizedAddress, personForAddress } from "./photos";
@@ -39,9 +41,8 @@ async function participantsOf(ctx: QueryCtx, conversation: Doc<"comma_conversati
   }));
 }
 
-async function attachmentFor(ctx: QueryCtx, guid: string) {
-  return await ctx.db.query("comma_attachments").withIndex("by_guid", (q) => q.eq("guid", guid)).unique();
-}
+/** The runner names an attachment by its iMessage guid alone. */
+const IMESSAGE_ANY: AccountScope = { platform: "imessage", accountId: null };
 
 async function messageViews(ctx: QueryCtx, participants: { address: string; name: string }[], rows: Doc<"comma_messages">[]): Promise<AgentMessage[]> {
   const names = new Map(participants.map(({ address, name }) => [address, name]));
@@ -49,8 +50,8 @@ async function messageViews(ctx: QueryCtx, participants: { address: string; name
     guid: message.guid, at: message.dateCreated, fromMe: message.isFromMe, text: message.text,
     sender: message.isFromMe ? "Me" : names.get(message.sender?.address ?? "") ?? message.sender?.name ?? message.sender?.address ?? "Unknown",
     attachments: await Promise.all(message.attachmentGuids.map(async (guid) => {
-      const attachment = await attachmentFor(ctx, guid);
-      return { guid, name: attachment?.transferName ?? attachment?.filename ?? null, mime: attachment?.mimeType ?? null };
+      const attachment = await findAttachment(ctx, scopeOf(message), guid);
+      return { guid, name: (attachment && attachmentName(attachment)) ?? null, mime: attachment?.mimeType ?? null };
     })),
     reactions: (await reactionsOf(ctx, message)).map((reaction) => ({
       reaction: reaction.emoji ?? reaction.key, fromMe: reaction.isFromMe,
@@ -82,7 +83,7 @@ export const agentContext = internalMutation({
         return beforeMessageAt === undefined ? after : after.lt("dateCreated", beforeMessageAt);
       })
       .order("desc")
-      .filter((q) => q.and(q.eq(q.field("isTapback"), false), q.eq(q.field("retracted"), false)))
+      .filter(shownInThread)
       .take(limit);
     const participants = await participantsOf(ctx, conversation);
     return {
@@ -110,25 +111,29 @@ export const aiThread = internalMutation({
     const rows = await ctx.db.query("comma_messages")
       .withIndex("by_conversation_date", (q) => q.eq("conversationId", conversationId))
       .order("desc")
-      .filter((q) => q.and(q.eq(q.field("isTapback"), false), q.eq(q.field("retracted"), false)))
+      .filter(shownInThread)
       .take(60);
     const named = resolveConversationNames(conversation, (await conversationPeople(ctx, conversation)).map(({ person }) => person));
     const participants = named.participants.map(({ address, name }) => ({ address, name }));
     const names = new Map(participants.map(({ address, name }) => [address, name]));
-    const messages = await Promise.all(rows.reverse().map(async (row) => ({
-      guid: row.guid, chatGuid: row.chatGuid, text: row.text, dateCreated: row.dateCreated,
-      dateRead: row.dateRead ?? null, dateDelivered: row.dateDelivered ?? null, isFromMe: row.isFromMe, service: row.service,
-      sender: row.sender ? { address: row.sender.address, name: names.get(row.sender.address) ?? row.sender.name } : null,
-      attachments: (await Promise.all(row.attachmentGuids.map((guid) => attachmentFor(ctx, guid)))).flatMap((a) => a ? [{
-        guid: a.guid, mimeType: a.mimeType ?? null, filename: a.transferName ?? a.filename ?? null,
-        width: a.width ?? null, height: a.height ?? null, totalBytes: a.totalBytes ?? null,
-      }] : []),
-      mentions: row.mentions, special: row.special ?? null, sendEffect: row.sendEffect ?? null,
-      reactions: (await reactionsOf(ctx, row)).map((reaction) =>
-        ({ ...reaction, senderName: reaction.senderAddress ? names.get(reaction.senderAddress) ?? null : null })),
-      replyToGuid: row.replyToGuid ?? null, replyToPreview: row.replyToPreview ?? null, replyToFromMe: row.replyToFromMe ?? null,
-      isGroupEvent: row.isGroupEvent, error: row.error, edited: row.edited, retracted: row.retracted,
-    })));
+    const messages = await Promise.all(rows.reverse().map(async (row) => {
+      // ponytail: the AI thread is iMessage's flat wire message; a second platform's rows need a neutral one.
+      const imessage = messageImessage(row);
+      return {
+        guid: row.guid, chatGuid: imessage?.chatGuid ?? conversation.primaryChatGuid, text: row.text, dateCreated: row.dateCreated,
+        dateRead: row.dateRead ?? null, dateDelivered: row.dateDelivered ?? null, isFromMe: row.isFromMe, service: imessage?.service ?? "iMessage",
+        sender: row.sender ? { address: row.sender.address, name: names.get(row.sender.address) ?? row.sender.name } : null,
+        attachments: (await Promise.all(row.attachmentGuids.map((guid) => findAttachment(ctx, scopeOf(row), guid)))).flatMap((a) => a ? [{
+          guid: a.guid, mimeType: a.mimeType ?? null, filename: attachmentName(a) ?? null,
+          width: a.width ?? null, height: a.height ?? null, totalBytes: a.totalBytes ?? null,
+        }] : []),
+        mentions: row.mentions, special: imessage?.special ?? null, sendEffect: imessage?.sendEffect ?? null,
+        reactions: (await reactionsOf(ctx, row)).map((reaction) =>
+          ({ ...reaction, senderName: reaction.senderAddress ? names.get(reaction.senderAddress) ?? null : null })),
+        replyToGuid: row.replyToGuid ?? null, replyToPreview: row.replyToPreview ?? null, replyToFromMe: row.replyToFromMe ?? null,
+        isGroupEvent: row.isGroupEvent, error: imessage?.error ?? 0, edited: row.edited, retracted: row.retracted,
+      };
+    }));
     return { title: named.displayName, isGroup: conversation.isGroup, participants, messages };
   },
 });
@@ -207,13 +212,13 @@ export const agentAttachment = internalMutation({
   args: { conversationId: v.id("comma_conversations"), guid: v.string() },
   returns: v.union(v.null(), v.object({ url: nullableString, name: nullableString, mime: nullableString })),
   handler: async (ctx, { conversationId, guid }) => {
-    const attachment = await attachmentFor(ctx, guid);
+    const attachment = await findAttachment(ctx, IMESSAGE_ANY, guid);
     if (!attachment) return null;
-    const message = await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", attachment.messageGuid)).first();
+    const message = await findMessage(ctx, scopeOf(attachment), attachment.messageGuid);
     if (message?.conversationId !== conversationId) return null;
     return {
       url: attachment.originalStorageId ? await ctx.storage.getUrl(attachment.originalStorageId) : null,
-      name: attachment.transferName ?? attachment.filename ?? null,
+      name: attachmentName(attachment) ?? null,
       mime: attachment.mimeType ?? null,
     };
   },

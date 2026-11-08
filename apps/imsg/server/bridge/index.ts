@@ -6,7 +6,8 @@ import { makeFunctionReference } from "convex/server";
 import type { Config } from "../config";
 import type { OverlayDb } from "../db";
 import { typingHandler } from "./commands/presence";
-import { ConvexIngest } from "./convex-ingest";
+import { IMESSAGE_ACCOUNT } from "../../../../convex/comma/conversationIdentity";
+import { ConvexIngest, withAccount } from "./convex-ingest";
 import { GroupPhotoMirror } from "./group-photos";
 import { LiveBridge, MessageWriter } from "./live";
 import { MediaWorker } from "./media";
@@ -65,7 +66,9 @@ export function startBridge(deps: {
   }
   const startup = new RetryWork("startup", async () => {
     if (!deps.config.convexSiteUrl) throw new Error("CONVEX_SITE_URL is unset");
-    const ingest = deps.ingest ?? new ConvexIngest(deps.config);
+    const base = deps.ingest ?? new ConvexIngest(deps.config);
+    // Every batch names the account it writes for; Convex seeds iMessage's on first use.
+    const ingest = withAccount(base, { platform: IMESSAGE_ACCOUNT.platform, accountId: await base.post("account", IMESSAGE_ACCOUNT) });
     const writer = new MessageWriter({ bb: deps.bb, db: deps.db, ingest });
     try {
       groupPhotos = new GroupPhotoMirror(deps.bb, deps.db, ingest);

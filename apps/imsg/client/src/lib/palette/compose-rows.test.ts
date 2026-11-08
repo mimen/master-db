@@ -4,11 +4,11 @@ import { describe, expect, test } from "bun:test";
 import { composeSections, looksLikeAddress } from "./compose-rows";
 
 const dm = (address: string, name: string): ChatSummary => ({
-  conversationId: `conv-${address}` as ConversationId, imessage: { chatGuid: `iMessage;-;${address}` }, displayName: name, isGroup: false, known: true, isSpam: false,
+  conversationId: `conv-${address}` as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: `iMessage;-;${address}` } }, displayName: name, isGroup: false, known: true, isSpam: false,
   participants: [{ address, name }], lastMessage: null, unreadCount: 0,
   flags: { unresponded: false, waiting: false, unread: false, mutedUnresponded: false, pinned: false },
 });
-const group: ChatSummary = { ...dm("+15550009999", "Crew"), conversationId: "conv-crew" as ConversationId, imessage: { chatGuid: "iMessage;+;crew" }, isGroup: true };
+const group: ChatSummary = { ...dm("+15550009999", "Crew"), conversationId: "conv-crew" as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;+;crew" } }, isGroup: true };
 const directory = [dm("+15550001111", "Alex Rivera"), group, dm("+15550002222", "Nick Chase")];
 const titles = (s: ReturnType<typeof composeSections>) => s.map((x) => `${x.title}: ${x.rows.map((r) => (r.kind === "airtable" ? r.human.display_name : r.contact.name)).join(", ")}`);
 

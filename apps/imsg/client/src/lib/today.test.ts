@@ -9,7 +9,7 @@ const done: TodayRun = { status: "done", attempt: 1, source: "schedule", finishe
 
 function chat(id: string, flags: Partial<ChatSummary["flags"]> = {}, extra: Partial<ChatSummary> = {}): ChatSummary {
   return {
-    conversationId: id as ConversationId, imessage: { chatGuid: `iMessage;-;${id}` }, displayName: id, isGroup: false, known: true, isSpam: false, participants: [],
+    conversationId: id as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: `iMessage;-;${id}` } }, displayName: id, isGroup: false, known: true, isSpam: false, participants: [],
     lastMessage: { guid: `m-${id}`, text: "hi", dateCreated: 1, isFromMe: false, senderName: null, hasAttachments: false },
     unreadCount: 0,
     flags: { unresponded: false, waiting: false, unread: false, mutedUnresponded: false, pinned: false, ...flags },

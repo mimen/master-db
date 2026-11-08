@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AiConfig } from "../config";
 import { OverlayDb } from "../db";
-import type { Message, SuggestionFeedbackRequest } from "../../shared/types";
+import type { BridgeMessage, SuggestionFeedbackRequest } from "../../shared/types";
 import { AiService, isStale, serializeSuggestionCache, type AiThread, type ConversationId } from "./service";
 import { Gateway } from "./gateway";
 
@@ -18,7 +18,7 @@ function makeConfig(): AiConfig {
   };
 }
 
-function makeMessage(overrides: Partial<Message> = {}): Message {
+function makeMessage(overrides: Partial<BridgeMessage> = {}): BridgeMessage {
   return {
     guid: "m1",
     chatGuid: "chat-1",
@@ -78,7 +78,7 @@ function suggestionSet(text: string, overrides: Record<string, object | string |
 }
 
 function makeService(options: {
-  messages?: Message[];
+  messages?: BridgeMessage[];
   reply?: string;
   structured?: object;
   db?: OverlayDb;

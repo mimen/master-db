@@ -6,7 +6,9 @@ import { mutation, type MutationCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 
 import { reopenConversationChats, settleConversationChats } from "./agent";
+import { findMessage } from "./conversationLookup";
 import { enqueueCommand } from "./enqueue";
+import { isAssociated, scopeOf } from "./messageShape";
 
 /**
  * Comma's own per-conversation triage state: settle anchors, pins, mutes, marked-unread, read times and the
@@ -49,12 +51,12 @@ async function conversationOf(ctx: MutationCtx, conversationId: ConversationId):
 }
 
 /** A settle taken on a pending row still names the last message once its send lands as that message. */
-async function sameSend(ctx: MutationCtx, anchor: string, lastGuid: string): Promise<boolean> {
+async function sameSend(ctx: MutationCtx, conversation: Doc<"comma_conversations">, anchor: string, lastGuid: string): Promise<boolean> {
   const clientKey = pendingClientKey(anchor);
   if (clientKey === null) return false;
   const send = await ctx.db.query("comma_outbox").withIndex("by_clientKey", (q) => q.eq("clientKey", clientKey)).unique();
   if (send?.payload.kind === "send" && send.resultGuid === lastGuid) return true;
-  const real = await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", lastGuid)).unique();
+  const real = await findMessage(ctx, scopeOf(conversation), lastGuid);
   return real?.clientKey === clientKey;
 }
 
@@ -63,9 +65,10 @@ async function sameSend(ctx: MutationCtx, anchor: string, lastGuid: string): Pro
  * anchor, a different last message rejects the settle, so a message the user has not seen is never dismissed.
  */
 export async function settleConversation(ctx: MutationCtx, conversationId: ConversationId, anchor?: string): Promise<void> {
-  const last = (await conversationOf(ctx, conversationId)).lastMessage;
+  const conversation = await conversationOf(ctx, conversationId);
+  const last = conversation.lastMessage;
   if (!last) throw new ConvexError("chat has no last message");
-  if (anchor !== undefined && anchor !== last.guid && !(await sameSend(ctx, anchor, last.guid))) throw new ConvexError("latest message changed");
+  if (anchor !== undefined && anchor !== last.guid && !(await sameSend(ctx, conversation, anchor, last.guid))) throw new ConvexError("latest message changed");
   await writeState(ctx, conversationId, last.isFromMe ? { dismissedWaitingGuid: last.guid } : { dismissedUnrespondedGuid: last.guid });
   await logClear(ctx, conversationId, last.guid, "dismiss", Date.now());
   await settleConversationChats(ctx, conversationId);
@@ -118,7 +121,7 @@ async function neighbor(ctx: MutationCtx, message: Ingested, side: "before" | "a
       : q.eq("conversationId", message.conversationId).gte("dateCreated", message.dateCreated))
     .order(side === "before" ? "desc" : "asc")
     .take(NEIGHBOR_SCAN + 1);
-  return rows.find((row) => row.guid !== message.guid && !row.isTapback && !row.retracted && !isPendingGuid(row.guid)) ?? null;
+  return rows.find((row) => row.guid !== message.guid && !isAssociated(row) && !row.retracted && !isPendingGuid(row.guid)) ?? null;
 }
 
 /**

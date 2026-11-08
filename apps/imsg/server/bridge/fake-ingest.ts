@@ -25,6 +25,7 @@ export class FakeIngest extends ConvexIngest {
     if (kind === this.fail) throw new Error("ingest offline");
     const conversations = kind === "conversations" ? body as Bodies["conversations"] : null;
     const results: Results = {
+      account: "account-test" as Results["account"],
       ephemeral: true,
       conversations: Object.fromEntries((conversations?.conversations ?? []).flatMap((row) =>
         row.chats.map((chat) => [chat.chatGuid, this.id]))),

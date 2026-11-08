@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test";
 import { getFunctionName } from "convex/server";
+import { fromBridgeMessage } from "@shared/imessage";
 import { NOT_SENT_AFTER_MS, NOT_SENT_ERROR } from "@shared/pending-send";
-import type { ChatSummary, ConversationId, Message } from "@shared/types";
+import type { BridgeMessage, ChatSummary, ConversationId } from "@shared/types";
 import type { CommandReceipt } from "./command-results";
 import { pendingSends, resetPendingSendsForTests, SendCancelledError, withPendingSends, type KeptSend, type SendClient, type SendStore } from "./pending-sends";
 
 const ALEX = "conv-alex" as ConversationId;
-const alex = { conversationId: ALEX, isGroup: false, imessage: { chatGuid: "iMessage;-;+16195550101" } };
+const alex = { conversationId: ALEX, isGroup: false, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;-;+16195550101" } } };
 
 /** The device's storage, shared by every tab, with locks that queue the way navigator.locks does. */
 function device() {
@@ -107,8 +108,8 @@ function outbox(connected = true) {
   };
 }
 
-const real = (guid: string, extra: Partial<Message> = {}): Message => ({
-  guid, chatGuid: alex.imessage.chatGuid, text: "hi", dateCreated: Date.now(), dateRead: null, dateDelivered: null, isFromMe: true,
+const real = (guid: string, extra: Partial<BridgeMessage> = {}): BridgeMessage => ({
+  guid, chatGuid: alex.route.imessage.chatGuid, text: "hi", dateCreated: Date.now(), dateRead: null, dateDelivered: null, isFromMe: true,
   service: "iMessage", sender: null, attachments: [], mentions: [], special: null, sendEffect: null, reactions: [], replyToGuid: null,
   replyToPreview: null, replyToFromMe: null, isGroupEvent: false, error: 0, edited: false, retracted: false, ...extra,
 });
@@ -216,7 +217,7 @@ describe("a send while Convex is out of reach", () => {
 
 describe("withPendingSends", () => {
   const chat = (id: string, lastAt: number): ChatSummary => ({
-    conversationId: id as ConversationId, imessage: { chatGuid: `iMessage;-;${id}` }, displayName: id, isGroup: false, isSpam: false, known: true, hasGroupPhoto: false,
+    conversationId: id as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: `iMessage;-;${id}` } }, displayName: id, isGroup: false, isSpam: false, known: true, hasGroupPhoto: false,
     participants: [], unreadCount: 0, flags: { unresponded: true, waiting: false } as ChatSummary["flags"],
     lastMessage: { guid: `last-${id}`, text: "old", dateCreated: lastAt, isFromMe: false, senderName: null, hasAttachments: false },
   } as ChatSummary);
@@ -233,7 +234,7 @@ describe("withPendingSends", () => {
   });
 
   test("a newer message, a send Convex already shows, or a send that landed leaves the directory alone", () => {
-    const bubble = { ...real("temp-k", { dateCreated: 10 }), clientKey: "k", sendState: "queued" as const };
+    const bubble = fromBridgeMessage({ ...real("temp-k", { dateCreated: 10 }), clientKey: "k", sendState: "queued" as const });
     const chats = [chat("a", 20)];
     expect(withPendingSends(chats, new Map([["a" as ConversationId, [bubble]]]))).toBe(chats);
     const shownByConvex = [{ ...chat("a", 10), lastMessage: { ...chat("a", 10).lastMessage!, guid: "temp-k" } }];

@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useConvexConnectionState } from "convex/react";
 import type { FunctionArgs, FunctionReference, FunctionReturnType } from "convex/server";
 import type { GenericId } from "convex/values";
-import { conversationRoute } from "@shared/imessage";
+import { conversationRoute, fromBridgeMessage } from "@shared/imessage";
 import type { MentionAnnotation } from "@shared/mentions";
 import { messageService } from "@shared/platform-profile";
 import { NOT_SENT_AFTER_MS, NOT_SENT_ERROR, pendingClientKey, pendingGuid, type PendingSendState } from "@shared/pending-send";
-import type { ChatSummary, ConversationId, Message } from "@shared/types";
+import type { BridgeMessage, ChatSummary, ConversationId, Message } from "@shared/types";
 import { pendingSendsApi } from "./convex-api";
 import { runCommandVia, watchCommandVia, type ResultCommandClient } from "./convex-commands";
 import { settleTemp, upsertMessage } from "./message-window";
@@ -173,38 +173,42 @@ function newSendKey(): string {
 }
 
 /** An outgoing message drawn before it is queued, under the guid Convex gives its pending row. */
-export function draftBubble(chat: Pick<ChatSummary, "imessage" | "isGroup">, draft: SendDraft, clientKey = newSendKey()): Message {
+export function draftBubble(chat: Pick<ChatSummary, "route" | "isGroup">, draft: SendDraft, clientKey = newSendKey()): Message {
   const { replyTo = null, mentions = [] } = draft;
   return {
     guid: pendingGuid(clientKey),
+    platform: chat.route.platform,
     clientKey,
-    chatGuid: chat.imessage.chatGuid,
     text: draft.text,
     dateCreated: Date.now(),
     dateRead: null,
     dateDelivered: null,
     isFromMe: true,
-    service: messageService(conversationRoute(chat).service),
     sender: null,
     attachments: [],
     mentions: [...mentions],
-    special: null,
-    sendEffect: null,
     reactions: [],
     replyToGuid: replyTo?.guid ?? null,
     replyToPreview: replyTo ? replyTo.text.slice(0, 120) : null,
     replyToFromMe: replyTo?.isFromMe ?? null,
     isGroupEvent: false,
-    error: 0,
     edited: false,
     retracted: false,
     sendState: "queued",
+    imessage: {
+      chatGuid: chat.route.imessage.chatGuid, service: messageService(conversationRoute(chat).service), special: null, sendEffect: null, error: 0,
+    },
   };
+}
+
+/** The bubble with its iMessage send error set; a bubble on another platform has none. */
+function withError(bubble: Message, error: number): Message {
+  return bubble.imessage ? { ...bubble, imessage: { ...bubble.imessage, error } } : bubble;
 }
 
 /** A send that did not go out takes the time it stopped, so it sorts among the messages around its attempt. */
 function stranded(bubble: Message, sendState: Extract<PendingSendState, "failed" | "notSent">): Message {
-  return { ...bubble, sendState, error: 1, dateCreated: Date.now() };
+  return { ...withError(bubble, 1), sendState, dateCreated: Date.now() };
 }
 
 /** Resolves true once Convex is reachable, false at the deadline or when the wait is given up. */
@@ -230,17 +234,18 @@ function reachable(client: SendClient, clientKey: string, deadline: number): Pro
  * The landed copy keeps what the user drew where the platform's echo lags: BlueBubbles can report a fresh SMS as
  * iMessage before it reclassifies, and can drop mention runs. The mirrored row replaces it once it arrives.
  */
-function landedAs(bubble: Message, message: Message): Message {
+function landedAs(bubble: Message, sent: BridgeMessage): Message {
+  const message = fromBridgeMessage(sent);
   return {
     ...message,
-    service: bubble.service,
+    ...(bubble.imessage && message.imessage ? { imessage: { ...message.imessage, service: bubble.imessage.service } } : {}),
     ...((bubble.mentions ?? []).length > 0 && (message.mentions ?? []).length === 0 ? { mentions: bubble.mentions } : {}),
   };
 }
 
 /** Waits for Convex, runs `queue`, and settles the bubble with what the platform made of it. */
 async function deliver(conversationId: ConversationId, bubble: Message, client: SendClient,
-  queue: () => Promise<{ message: Message }>): Promise<Message> {
+  queue: () => Promise<{ message: BridgeMessage }>): Promise<Message> {
   const clientKey = bubble.clientKey!;
   const ok = await reachable(client, clientKey, bubble.dateCreated + NOT_SENT_AFTER_MS);
   if (cancelled.has(clientKey)) throw new SendCancelledError();
@@ -291,7 +296,7 @@ export const pendingSends = {
     update(conversationId, (current) => current.every(keep) ? current : current.filter(keep)),
 
   /** Draws the bubble now and sends it once Convex is reachable. Resolves with the landed message, rejects when it did not go out. */
-  async send(chat: Pick<ChatSummary, "conversationId" | "imessage" | "isGroup">, draft: SendDraft, client?: SendClient): Promise<Message> {
+  async send(chat: Pick<ChatSummary, "conversationId" | "route" | "isGroup">, draft: SendDraft, client?: SendClient): Promise<Message> {
     const bubble = draftBubble(chat, draft);
     pendingSends.upsert(chat.conversationId, bubble);
     keep(chat.conversationId, bubble);
@@ -320,7 +325,7 @@ export const pendingSends = {
     if (!clientKey) throw new Error("Only a pending send can be retried");
     const via = client ?? await defaultClient();
     const local = neverQueued.delete(clientKey);
-    const revived: Message = { ...message, clientKey: local ? clientKey : newSendKey(), sendState: "queued", error: 0, dateCreated: Date.now() };
+    const revived: Message = { ...withError(message, 0), clientKey: local ? clientKey : newSendKey(), sendState: "queued", dateCreated: Date.now() };
     pendingSends.retain(conversationId, (m) => m.guid !== message.guid);
     pendingSends.upsert(conversationId, revived);
     if (local) keep(conversationId, revived);

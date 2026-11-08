@@ -7,7 +7,7 @@ const H = 3_600_000;
 
 function chat(guid: string, unresponded: boolean, lastAt: number): ChatSummary {
   return {
-    conversationId: guid as ConversationId, imessage: { chatGuid: `iMessage;-;${guid}` }, displayName: guid, isGroup: false, known: true, isSpam: false, participants: [], unreadCount: 0, firstUnreadAt: null,
+    conversationId: guid as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: `iMessage;-;${guid}` } }, displayName: guid, isGroup: false, known: true, isSpam: false, participants: [], unreadCount: 0, firstUnreadAt: null,
     lastMessage: { guid: `${guid}-m`, text: "", dateCreated: lastAt, isFromMe: false, senderName: null, hasAttachments: false },
     flags: { unresponded, waiting: !unresponded, unread: false, mutedUnresponded: false, pinned: false },
   };

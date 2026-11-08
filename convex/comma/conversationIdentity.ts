@@ -22,6 +22,9 @@ export function handleKey(handle: string): string {
   return `dm:${phone || address.toLowerCase()}`;
 }
 
+/** The iMessage account: the Mac whose Messages the Mini's bridge mirrors. Its bridge names it at startup. */
+export const IMESSAGE_ACCOUNT = { platform: "imessage", externalId: "mini", label: "iMessage" } as const satisfies { platform: CommaPlatform; externalId: string; label: string };
+
 /** iMessage's chat GUID, `<service>;<+|->;<identifier>`. Nothing else in Convex or the bridge parses one. */
 export const imessage = {
   platform: "imessage" as const satisfies CommaPlatform,
@@ -37,6 +40,9 @@ export const imessage = {
     return service === "SMS" || service === "RCS" ? "SMS" : "iMessage";
   },
 
+  /** Newest activity wins; ties prefer iMessage, then RCS, then SMS. */
+  choosePrimary: (chats: { chatGuid: string; lastMessageAt: number }[]) => choosePrimary(chats),
+
   /** Service siblings (the iMessage, SMS and RCS chats with one person, or one group) share a key. */
   conversationKey(input: { isGroup: boolean; primaryChatGuid: string; participants: Participant[] }): string {
     if (!input.isGroup && input.participants.length === 1) return handleKey(input.participants[0].address);
@@ -47,6 +53,16 @@ export const imessage = {
     return `chat:${input.primaryChatGuid}`;
   },
 };
+
+/** What ingest asks a platform when it mirrors a conversation: its key, its primary thread, and an alias's service. */
+export interface PlatformIdentity {
+  platform: CommaPlatform;
+  conversationKey(input: { isGroup: boolean; primaryChatGuid: string; participants: Participant[] }): string;
+  choosePrimary(chats: { chatGuid: string; lastMessageAt: number }[]): string;
+  service(chatGuid: string): string;
+}
+
+export const PLATFORM_IDENTITY = { imessage } satisfies Record<CommaPlatform, PlatformIdentity>;
 
 const SERVICE_RANK: Record<string, number> = { iMessage: 0, RCS: 1, SMS: 2 };
 
@@ -63,19 +79,25 @@ export function choosePrimary(chats: { chatGuid: string; lastMessageAt: number }
   return first.chatGuid;
 }
 
-/** The route a conversation's commands take: its primary chat. */
-export function sendRoute(conversation: { primaryChatGuid: string }): CommaRoute {
-  return { platform: "imessage", chatGuid: conversation.primaryChatGuid };
+type Routable = { primaryChatGuid: string; accountId?: CommaRoute["accountId"] };
+
+function routeThrough(conversation: Routable, chatGuid: string): CommaRoute {
+  return { platform: "imessage", ...(conversation.accountId ? { accountId: conversation.accountId } : {}), chatGuid };
+}
+
+/** The route a conversation's commands take: its account and primary chat. */
+export function sendRoute(conversation: Routable): CommaRoute {
+  return routeThrough(conversation, conversation.primaryChatGuid);
 }
 
 /** A route through the service asked for: the primary chat if it carries it, else the best sibling that does. */
 export function routeFor(
-  conversation: { primaryChatGuid: string; chatGuids: string[] },
+  conversation: Routable & { chatGuids: string[] },
   service?: "iMessage" | "SMS",
 ): CommaRoute | null {
   const carries = (chatGuid: string) => !service || imessage.sendService(chatGuid) === service;
   if (carries(conversation.primaryChatGuid)) return sendRoute(conversation);
   const candidates = conversation.chatGuids.filter(carries);
   if (!candidates.length) return null;
-  return { platform: "imessage", chatGuid: choosePrimary(candidates.map((chatGuid) => ({ chatGuid, lastMessageAt: 0 }))) };
+  return routeThrough(conversation, choosePrimary(candidates.map((chatGuid) => ({ chatGuid, lastMessageAt: 0 }))));
 }

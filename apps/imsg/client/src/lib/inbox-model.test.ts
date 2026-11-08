@@ -28,7 +28,7 @@ const cid = (id: string) => id as ConversationId;
 function makeChat(overrides: Partial<ChatSummary> = {}): ChatSummary {
   return {
     conversationId: cid("chat-1"),
-    imessage: { chatGuid: "iMessage;-;chat-1" },
+    route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;-;chat-1" } },
     displayName: "Chat 1",
     isGroup: false,
     known: true,
@@ -240,10 +240,10 @@ describe("groupByAge", () => {
 });
 
 describe("refinements", () => {
-  const sms = chatAt("sms", 1, { imessage: { chatGuid: "SMS;-;+1555" }, flags: replyFlags });
-  const imsg = chatAt("imsg", 1, { imessage: { chatGuid: "iMessage;-;a@b.c" }, flags: replyFlags, crm: { priority: 1, tags: ["showcase"], is_favorite: true } });
-  const old = chatAt("old", 24 * 10, { imessage: { chatGuid: "iMessage;-;old" }, flags: replyFlags, crm: { priority: 4, tags: ["press"] } });
-  const settled = chatAt("conv-s", 2, { imessage: { chatGuid: "iMessage;-;settled" } });
+  const sms = chatAt("sms", 1, { route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "SMS;-;+1555" } }, flags: replyFlags });
+  const imsg = chatAt("imsg", 1, { route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;-;a@b.c" } }, flags: replyFlags, crm: { priority: 1, tags: ["showcase"], is_favorite: true } });
+  const old = chatAt("old", 24 * 10, { route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;-;old" } }, flags: replyFlags, crm: { priority: 4, tags: ["press"] } });
+  const settled = chatAt("conv-s", 2, { route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;-;settled" } } });
   const chats = [sms, imsg, old, settled];
   const guids = (r: Partial<Refinements>, scheduled?: string[]) =>
     deriveInboxModel(chats, needsReply, "", undefined, undefined, ctx(r, scheduled)).listChats.map((c) => c.conversationId);

@@ -65,7 +65,7 @@ describe("enqueue", () => {
     await t.run((ctx) => ctx.db.patch(c, { primaryChatGuid, chatGuids: [primaryChatGuid] }));
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "k1", conversationId: c, payload: send });
     const [temp] = await t.run((ctx) => ctx.db.query("comma_messages").collect());
-    expect(temp?.service).toBe(service);
+    expect(temp?.imessage?.service).toBe(service);
   });
 
   test("requires Convex Auth", async () => {
@@ -231,7 +231,7 @@ describe("claim and complete", () => {
         if (ending === "lease lost") await t.mutation(internal.comma.outbox.claimOutbox, { now: 9_000, leaseMs: 1000, limit: 10 });
         else await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "s", claimToken: claim.claimToken!, status: ending, error: "BB 500" });
         const temp = await t.run((ctx) => ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "temp-s")).unique());
-        expect(temp).toMatchObject({ error: 1, dateCreated: 9_000 });
+        expect(temp).toMatchObject({ imessage: { error: 1 }, dateCreated: 9_000 });
       } finally {
         vi.useRealTimers();
       }
@@ -358,7 +358,7 @@ describe("routes", () => {
     const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 1 });
     expect(claim?.route).toEqual({ platform: "imessage", chatGuid: "SMS;-;+15550001111" });
     const temp = await t.run((ctx) => ctx.db.query("comma_messages").collect());
-    expect(temp.map((m) => [m.chatGuid, m.service])).toEqual([["SMS;-;+15550001111", "SMS"]]);
+    expect(temp.map((m) => [m.imessage?.chatGuid, m.imessage?.service])).toEqual([["SMS;-;+15550001111", "SMS"]]);
   });
 
 });

@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { query } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 
+import { shownInThread } from "./conversationLookup";
 import { listReader, messageView, withMessageAttachments } from "./queries";
 
 export const messageWindow = query({
@@ -26,7 +27,7 @@ export const messageWindow = query({
           : inclusive ? range.lte("dateCreated", timestamp) : range.lt("dateCreated", timestamp);
       })
       .order(direction === "before" ? "desc" : "asc")
-      .filter((q) => q.and(q.eq(q.field("isTapback"), false), q.eq(q.field("retracted"), false)))
+      .filter(shownInThread)
       .take(40);
     // Reverse the descending index result, preserving its creation-time tie order.
     const rows = args.around !== undefined

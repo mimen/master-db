@@ -24,7 +24,9 @@ import {
   type CommaMessageDoc,
 } from "../schema/comma/validators";
 
-import { findByChatGuid } from "./conversationLookup";
+import { soleAccountScope } from "./accounts";
+import { findByChatGuid, findMessage, shownInThread } from "./conversationLookup";
+import { attachmentRead, messageRead as readMessage, scopeOf } from "./messageShape";
 import { resolveConversationNames } from "./names";
 import { normalizedAddress, personForNormalized } from "./photos";
 import { reactionsOf } from "./reactionStore";
@@ -132,7 +134,7 @@ export async function withConversationState(
   if (lastMessage && !lastMessage.isFromMe) {
     const senderAddress = !conversation.isGroup && conversation.participants.length === 1
       ? conversation.participants[0].address
-      : (await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", lastMessage.guid)).unique())?.sender?.address;
+      : (await findMessage(ctx, scopeOf(conversation), lastMessage.guid))?.sender?.address;
     if (senderAddress) senderName = personName(await read.person(senderAddress)) ?? formatAddress(senderAddress);
   }
   return { ...conversation, displayName: names.displayName, participants, flags, unreadCount, ...(crm ? { crm } : {}),
@@ -177,7 +179,10 @@ const attachmentView = v.object({
   originalUrl: v.union(v.string(), v.null()),
 });
 
-/** A stored message as clients read it: `reactions` is the merged reaction list, not the row's legacy fold. */
+/**
+ * A stored message as clients read it: its iMessage fields under `imessage` and, for clients built before that,
+ * flat as well; `reactions` is the merged reaction list, not the row's legacy fold.
+ */
 export const messageRead = v.object({
   ...messageDoc.fields,
   reactions: v.array(reaction),
@@ -192,7 +197,7 @@ export const messageView = v.object({
 async function withSenderNames(ctx: QueryCtx, message: CommaMessageDoc, read: ListReader): Promise<Infer<typeof messageRead>> {
   const nameOf = async (address: string) => personName(await read.person(address));
   return {
-    ...message,
+    ...readMessage(message),
     ...(message.sender ? { sender: { ...message.sender, name: await nameOf(message.sender.address) } } : {}),
     reactions: await Promise.all((await reactionsOf(ctx, message)).map(async (reaction) =>
       ({ ...reaction, senderName: reaction.senderAddress ? await nameOf(reaction.senderAddress) : null }))),
@@ -203,12 +208,12 @@ export async function withMessageAttachments(ctx: QueryCtx, message: CommaMessag
   const attachments = await ctx.db
     .query("comma_attachments")
     .withIndex("by_messageGuid", (q) => q.eq("messageGuid", message.guid))
-    .filter((q) => q.eq(q.field("hideAttachment"), false))
+    .filter((q) => q.and(q.eq(q.field("hideAttachment"), false), q.eq(q.field("conversationId"), message.conversationId)))
     .collect();
   return {
     ...await withSenderNames(ctx, message, read),
     attachments: await Promise.all(attachments.map(async (attachment) => ({
-      ...attachment,
+      ...attachmentRead(attachment),
       thumbUrl: attachment.thumbStorageId ? await ctx.storage.getUrl(attachment.thumbStorageId) : null,
       originalUrl: attachment.originalStorageId ? await ctx.storage.getUrl(attachment.originalStorageId) : null,
     }))),
@@ -227,7 +232,7 @@ export const listMessages = query({
       .query("comma_messages")
       .withIndex("by_conversation_date", (q) => q.eq("conversationId", args.conversationId))
       .order("desc")
-      .filter((q) => q.and(q.eq(q.field("isTapback"), false), q.eq(q.field("retracted"), false)))
+      .filter(shownInThread)
       .paginate(args.paginationOpts);
     const read = listReader(ctx);
     const page = await Promise.all(result.page.map((message) => withMessageAttachments(ctx, message, read)));
@@ -249,13 +254,14 @@ export const searchMessages = query({
   },
 });
 
+/** Associated messages are filtered after the search: rows written since the side object carry no isTapback to match. */
 export async function searchMessageRows(ctx: QueryCtx, args: {
   query: string; conversationId?: Id<"comma_conversations">; from?: "me" | "them";
 }): Promise<CommaMessageDoc[]> {
   return await ctx.db
     .query("comma_messages")
     .withSearchIndex("search_text", (q) => {
-      let search = q.search("text", args.query).eq("isTapback", false).eq("retracted", false);
+      let search = q.search("text", args.query).eq("retracted", false);
       if (args.conversationId) search = search.eq("conversationId", args.conversationId);
       // The sibling schema branch adds isFromMe to search_text.filterFields.
       if (args.from) {
@@ -267,6 +273,7 @@ export async function searchMessageRows(ctx: QueryCtx, args: {
       }
       return search;
     })
+    .filter((q) => q.and(q.neq(q.field("isTapback"), true), q.neq(q.field("imessage.isAssociatedMessage"), true)))
     .take(50);
 }
 
@@ -275,7 +282,7 @@ export const resolveChat = query({
   returns: v.union(conversationView, v.null()),
   handler: async (ctx, args) => {
     await assertAllowed(ctx);
-    const conversation = await findByChatGuid(ctx, args.chatGuid);
+    const conversation = await findByChatGuid(ctx, await soleAccountScope(ctx, "imessage"), args.chatGuid);
     return conversation ? await withConversationState(ctx, conversation) : null;
   },
 });

@@ -1,4 +1,5 @@
 import type { GenericId } from "convex/values";
+import { fromBridgeMessage } from "@shared/imessage";
 import type { ConversationId, Message } from "@shared/types";
 import { mediaApi } from "./media-api";
 import { runCommand, type CommandPayload } from "./convex-commands";
@@ -65,7 +66,7 @@ async function productionDeps(): Promise<StoreDeps> {
 }
 
 export async function uploadAndSendAttachment(conversationId: ConversationId, attachment: AttachmentUpload): Promise<Message> {
-  return uploadAndSendAttachmentVia({ ...await productionDeps(), send: (chat, payload) => runCommand(chat, payload) }, conversationId, attachment);
+  return uploadAndSendAttachmentVia({ ...await productionDeps(), send: async (chat, payload) => ({ message: fromBridgeMessage((await runCommand(chat, payload)).message) }) }, conversationId, attachment);
 }
 
 export async function storeAttachment(attachment: AttachmentFile): Promise<StoredAttachment> {

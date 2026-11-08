@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { Message } from "../../shared/types";
+import type { BridgeMessage } from "../../shared/types";
 import { extractEventSuggestion, passesEchoGate, validateSuggestionSet } from "./suggestions";
 
-function message(overrides: Partial<Message> = {}): Message {
+function message(overrides: Partial<BridgeMessage> = {}): BridgeMessage {
   return {
     guid: "in-1", chatGuid: "chat-1", text: "we can hold september 19 but need an answer tomorrow. deposit is 50%",
     dateCreated: 1, dateRead: null, dateDelivered: null, isFromMe: false, service: "iMessage",
@@ -20,7 +20,7 @@ function raw(text: string, overrides: Record<string, object | string | boolean |
   }] };
 }
 
-const options = (messages: Message[]) => ({
+const options = (messages: BridgeMessage[]) => ({
   messages,
   renderedGuids: new Set(messages.map((item) => item.guid)),
   reactionSuggestions: true,

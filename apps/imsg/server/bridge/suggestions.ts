@@ -72,7 +72,7 @@ export class SuggestionsBridge {
   observe(messages: MessageRow[]): void {
     if (this.stopped || !this.deps.ai.available) return;
     for (const message of [...messages].sort((a, b) => a.dateCreated - b.dateCreated)) {
-      if (message.isTapback || message.isGroupEvent || message.retracted) continue;
+      if (message.imessage.isAssociatedMessage || message.isGroupEvent || message.retracted) continue;
       if ((this.latest.get(message.conversationId)?.dateCreated ?? 0) <= message.dateCreated) this.latest.set(message.conversationId, message);
       const previous = this.queue.get(message.conversationId);
       if (previous && previous.message.dateCreated > message.dateCreated) continue;
@@ -110,8 +110,8 @@ export class SuggestionsBridge {
 
   private async generate(message: MessageRow): Promise<void> {
     const startedAt = this.now();
-    const chat = this.deps.conversation(message.chatGuid);
-    if (!chat || !this.isLatest(message) || message.isSpam ||
+    const chat = this.deps.conversation(message.imessage.chatGuid);
+    if (!chat || !this.isLatest(message) || message.imessage.isSpam ||
       (SUGGESTION_PRECOMPUTE.directMessagesOnly && (chat.isGroup || chat.participants.length !== 1)) ||
       (SUGGESTION_PRECOMPUTE.knownContactsOnly && !chat.participants[0]?.name?.trim())) return;
     const cached = await this.deps.ai.cachedReplySuggestions?.(message.conversationId, message.guid, "opus");

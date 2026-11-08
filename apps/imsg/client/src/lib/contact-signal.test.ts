@@ -20,7 +20,7 @@ const NOW = Date.UTC(2026, 9, 4, 12, 0, 0);
 function chat(guid: string, addresses: string[], minutesAgo: number, extra: Partial<ChatSummary> = {}): ChatSummary {
   return {
     conversationId: guid as ConversationId,
-    imessage: { chatGuid: guid },
+    route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: guid } },
     displayName: guid,
     isGroup: guid.includes(";+;"),
     known: true,

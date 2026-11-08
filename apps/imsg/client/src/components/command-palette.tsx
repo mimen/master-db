@@ -34,7 +34,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { useToday } from "@/hooks/use-today";
 
 import { addressesMatch, formatAddress } from "@shared/address";
-import { imessageChat } from "@shared/imessage";
+import { fromBridgeMessage, imessageChat } from "@shared/imessage";
 import { composeSections, type ComposeRow } from "@/lib/palette/compose-rows";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { openAgentChat } from "@/hooks/use-agent-toasts";
@@ -561,7 +561,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
   useEffect(() => reset(), [needle, reset]);
 
   const [only] = recipients;
-  const existing = recipients.length === 1 && only ? directory?.find((chat) => !chat.isGroup && imessageChat.service(chat.imessage.chatGuid) === "iMessage" &&
+  const existing = recipients.length === 1 && only ? directory?.find((chat) => !chat.isGroup && imessageChat.service(chat.route.imessage.chatGuid) === "iMessage" &&
     chat.participants.length === 1 && addressesMatch(chat.participants[0]?.address ?? "", only.address)) : undefined;
   const send = (): void => {
     const body = text.trim();
@@ -581,7 +581,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
     }
     runCommand(null, { kind: "createChat", addresses: recipients.map((c) => c.address), text: body })
       .then(({ conversationId, message }) => {
-        if (existing && temp && conversationId === existing.conversationId) return pendingSends.settle(conversationId, temp.guid, message);
+        if (existing && temp && conversationId === existing.conversationId) return pendingSends.settle(conversationId, temp.guid, fromBridgeMessage(message));
         if (existing && temp) pendingSends.retain(existing.conversationId, (m) => m.guid !== temp.guid);
         onClose();
         if (conversationId) selectChat({ conversationId });

@@ -2,6 +2,7 @@ import { defineTable } from "convex/server";
 import { v } from "convex/values";
 
 import {
+  accountFields,
   agentBridgeStateFields,
   agentChatFields,
   agentCommandFields,
@@ -25,7 +26,11 @@ import {
   triageOpenFields,
 } from "./validators";
 
+export const comma_accounts = defineTable(accountFields).index("by_platform_externalId", ["platform", "externalId"]);
+
 export const comma_conversations = defineTable(conversationFields)
+  .index("by_platform_account_key", ["platform", "accountId", "conversationKey"])
+  /** Finds rows written before accounts; drop after the accounts backfill. */
   .index("by_platform_conversationKey", ["platform", "conversationKey"])
   .index("by_lastMessageAt", ["lastMessageAt"])
   .index("by_primaryChatGuid", ["primaryChatGuid"])
@@ -36,6 +41,8 @@ export const comma_chat_aliases = defineTable(chatAliasFields)
   .index("by_conversationId", ["conversationId"]);
 
 export const comma_messages = defineTable(messageRowFields)
+  .index("by_platform_account_guid", ["platform", "accountId", "guid"])
+  /** Finds rows written before accounts; drop after the accounts backfill. */
   .index("by_guid", ["guid"])
   .index("by_conversation_date", ["conversationId", "dateCreated"])
   .index("by_sender_conversation_date", ["sender.address", "conversationId", "dateCreated"])
@@ -82,7 +89,7 @@ export const comma_suggestions = defineTable(suggestionFields)
   .index("by_conversationId", ["conversationId"])
   .index("by_conversation_model", ["conversationId", "model"]);
 
-export const comma_sync_state = defineTable(syncStateFields).index("by_key", ["key"]);
+export const comma_sync_state = defineTable(syncStateFields).index("by_key", ["key"]).index("by_account_key", ["accountId", "key"]);
 
 export const comma_presence = defineTable(presenceFields).index("by_conversationId", ["conversationId"]);
 export const comma_bridge_state = defineTable(v.union(v.object(bridgeStateFields), v.object(agentBridgeStateFields)))

@@ -1,10 +1,10 @@
-import { v, type Infer } from "convex/values";
+import { v, type GenericId, type Infer } from "convex/values";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import type { internal } from "../../../../convex/_generated/api";
 import type {
-  CommaAttachmentDoc,
+  CommaAttachmentInput,
   CommaConversationDoc,
-  CommaMessageDoc,
+  CommaMessageInput,
   syncStateDoc,
 } from "../../../../convex/schema/comma/validators";
 import { presenceFields, bridgeStateFields } from "../../../../convex/schema/comma/validators";
@@ -16,22 +16,27 @@ export type BridgeState = Infer<typeof bridgeStateValue>;
 export type EphemeralState = ({ kind: "presence" } & Infer<typeof presenceValue>) | ({ kind: "bridgeState" } & BridgeState) | { kind: "typingCurrent"; clientKey: string; claimToken: string };
 
 type Fields<T> = Omit<T, "_id" | "_creationTime">;
-export type ConversationInput = Omit<Fields<CommaConversationDoc>, "primaryChatGuid" | "chatGuids" | "updatedAt"> & {
+export type ConversationInput = Omit<Fields<CommaConversationDoc>, "primaryChatGuid" | "chatGuids" | "updatedAt" | "platform" | "accountId"> & {
   chats: { chatGuid: string; lastMessageAt: number }[];
 };
-export type MessageRow = Fields<CommaMessageDoc>;
-export type AttachmentRow = Fields<CommaAttachmentDoc>;
-export type SyncInput = Omit<Fields<Infer<typeof syncStateDoc>>, "updatedAt">;
+export type MessageRow = CommaMessageInput;
+export type AttachmentRow = CommaAttachmentInput;
+
+/** The account a batch writes for; withAccount stamps it on every batch that needs it. */
+export interface BridgeAccount { platform: "imessage"; accountId: GenericId<"comma_accounts"> }
+type Scoped = Partial<BridgeAccount>;
+export type SyncInput = Omit<Fields<Infer<typeof syncStateDoc>>, "updatedAt" | "accountId"> & Scoped;
 
 export interface Bodies {
+  account: FunctionArgs<typeof internal.comma.accounts.ensure>;
   ephemeral: { state: EphemeralState };
-  conversations: { conversations: ConversationInput[] };
-  messages: { messages: MessageRow[] };
-  attachments: { attachments: AttachmentRow[] };
+  conversations: { conversations: ConversationInput[] } & Scoped;
+  messages: { messages: MessageRow[] } & Scoped;
+  attachments: { attachments: AttachmentRow[] } & Scoped;
   sync: SyncInput;
   suggestions: FunctionArgs<typeof internal.comma.internal.setSuggestions>;
   // Typed by hand: the committed generated API predates replaceUnread.
-  unread: { chats: { chatGuid: string; count: number; firstAt: number }[] };
+  unread: { chats: { chatGuid: string; count: number; firstAt: number }[] } & Scoped;
   scheduled: FunctionArgs<typeof internal.comma.internal.replaceScheduled>;
   claim: FunctionArgs<typeof internal.comma.outbox.claimOutbox>;
   renew: FunctionArgs<typeof internal.comma.outbox.renewOutbox>;
@@ -44,6 +49,7 @@ export interface Bodies {
   aiThread: FunctionArgs<typeof internal.comma.agentContext.aiThread>;
 }
 export interface Results {
+  account: BridgeAccount["accountId"];
   ephemeral: boolean;
   conversations: Record<string, MessageRow["conversationId"]>;
   messages: { written: number; skipped: number };
@@ -61,6 +67,17 @@ export interface Results {
   transcript: boolean;
   mediaBacklog: FunctionReturnType<typeof internal.comma.internal.mediaBacklog>;
   aiThread: FunctionReturnType<typeof internal.comma.agentContext.aiThread>;
+}
+
+/** The kinds whose batches write for one account. */
+const SCOPED_KINDS: ReadonlySet<keyof Bodies> = new Set(["conversations", "messages", "attachments", "unread", "scheduled", "sync"]);
+
+/** An ingest that stamps the bridge's account on every batch that writes per account. */
+export function withAccount(ingest: Pick<ConvexIngest, "post" | "upload">, account: BridgeAccount): Pick<ConvexIngest, "post" | "upload"> {
+  return {
+    upload: (bytes, contentType) => ingest.upload(bytes, contentType),
+    post: (kind, body) => ingest.post(kind, SCOPED_KINDS.has(kind) ? { ...body, ...account } : body),
+  };
 }
 
 export class ConvexIngest {

@@ -1,4 +1,5 @@
-import type { Message } from "@shared/types";
+import { fromBridgeMessage } from "@shared/imessage";
+import type { BridgeMessage, Message } from "@shared/types";
 import { describe, expect, test } from "bun:test";
 
 import { deliveryState } from "./delivery-state";
@@ -6,8 +7,8 @@ import { deliveryState } from "./delivery-state";
 const NOW = 100 * 60_000;
 const HOUR_AGO = NOW - 60 * 60_000;
 
-function message(extra: Partial<Message> = {}): Message {
-  return {
+function message(extra: Partial<BridgeMessage> = {}): Message {
+  return fromBridgeMessage({
     guid: "m-1",
     chatGuid: "iMessage;-;+19512335053",
     text: "He said he's spent like 1000 on Henry's hahah",
@@ -29,7 +30,7 @@ function message(extra: Partial<Message> = {}): Message {
     edited: false,
     retracted: false,
     ...extra,
-  };
+  });
 }
 
 describe("delivery state", () => {
