@@ -7,7 +7,8 @@ import { ScheduleEditor } from "@/components/schedule-editor";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { formatScheduledWhen, useScheduled } from "@/hooks/use-scheduled";
 import { useTypeRamp } from "@/hooks/use-type";
-import { imessageChat } from "@shared/imessage";
+import { chatGuidRoute } from "@shared/imessage";
+import { platformBadge } from "@shared/platform-profile";
 import { groupScheduled, isNotSent } from "@/lib/scheduled-groups";
 import { showToast } from "@/lib/toast";
 import { ChatAvatar, PersonAvatar } from "./avatar";
@@ -119,7 +120,7 @@ function ScheduledRow({
   const [focused, setFocused] = useState(false);
   const failed = isNotSent(item.status);
   const editable = item.status === "pending" || failed;
-  const service = imessageChat.service(item.chatGuid) === "SMS" ? "SMS" : "iMessage";
+  const service = platformBadge(chatGuidRoute(item.chatGuid)).label;
   const meta = failed
     ? `${service}, was due ${formatScheduledWhen(item.sendAt).replace(/^(Today|Tomorrow),/, (_m, day: string) => day.toLowerCase())}`
     : chat?.isGroup ? `${service}, ${chat.participants.length + 1} people` : service;

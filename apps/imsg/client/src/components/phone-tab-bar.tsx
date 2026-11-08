@@ -1,7 +1,5 @@
 import Clock01Icon from "@hugeicons/core-free-icons/Clock01Icon";
-import Message01Icon from "@hugeicons/core-free-icons/Message01Icon";
 import Settings02Icon from "@hugeicons/core-free-icons/Settings02Icon";
-import UserMultipleIcon from "@hugeicons/core-free-icons/UserMultipleIcon";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react-native";
 import { router, type Tabs } from "expo-router";
 import type { ComponentProps } from "react";
@@ -9,6 +7,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "@/hooks/use-theme";
+import { HOME_WORKSPACE, WORKSPACES } from "@/lib/workspaces";
 
 import { RollingNumber } from "./motion/rolling-number";
 
@@ -57,8 +56,8 @@ function Tab({
 }
 
 /**
- * The phone's floating bubble bar: Messages (with the Needs you count),
- * Contacts, Scheduled and Settings. It floats above the home indicator over a
+ * The phone's floating bubble bar: each workspace (home carries the Needs you
+ * count), then Scheduled and Settings. It floats above the home indicator over a
  * fade, and the lists scroll under it.
  */
 export function PhoneTabBar({ state, navigation, needsReply }: TabBarProps & { readonly needsReply: number }): React.JSX.Element {
@@ -75,8 +74,16 @@ export function PhoneTabBar({ state, navigation, needsReply }: TabBarProps & { r
   return (
     <View testID="phone-tab-bar" pointerEvents="box-none" style={[styles.host, { paddingBottom: bottom, paddingTop: 28 }, fade]}>
       <View role="tablist" style={[styles.bar, bar]}>
-        <Tab icon={Message01Icon} label="Messages" on={route === "index"} badge={needsReply} onPress={() => navigation.navigate("index")} />
-        <Tab icon={UserMultipleIcon} label="Contacts" on={route === "contacts"} onPress={() => navigation.navigate("contacts")} />
+        {WORKSPACES.map((workspace) => (
+          <Tab
+            key={workspace.id}
+            icon={workspace.icon}
+            label={workspace.label}
+            on={route === workspace.tab}
+            badge={workspace.id === HOME_WORKSPACE.id ? needsReply : 0}
+            onPress={() => navigation.navigate(workspace.tab)}
+          />
+        ))}
         <Tab icon={Clock01Icon} label="Scheduled" onPress={() => router.push("/scheduled")} />
         <Tab icon={Settings02Icon} label="Settings" onPress={() => router.push("/settings")} />
       </View>

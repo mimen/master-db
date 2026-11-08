@@ -39,7 +39,8 @@ import {
   INITIAL_DESKTOP_SHELL_STATE,
   reduceDesktopShell,
 } from "@/lib/desktop-coordinator/reducer";
-import { projectDesktopRoute, workspacePath } from "@/lib/desktop-coordinator/route";
+import { projectDesktopRoute } from "@/lib/desktop-coordinator/route";
+import { workspacePath, type WorkspaceId } from "@/lib/workspaces";
 import type {
   DesktopRouteParams,
   DesktopRouteProjection,
@@ -57,7 +58,7 @@ import { helpEntries } from "@/lib/keyboard/registry";
 function desktopProjection(
   pathname: string,
   params: DesktopRouteParams,
-  previousWorkspace?: "messages" | "contacts",
+  previousWorkspace?: WorkspaceId,
 ): DesktopRouteProjection | null {
   const result = projectDesktopRoute(pathname, params, previousWorkspace);
   return result.ok ? result.value : null;
@@ -76,7 +77,7 @@ function AgentToasts({ lookingAt }: { readonly lookingAt: string | null }): null
 }
 
 function utilityForPerson(
-  workspace: "messages" | "contacts",
+  workspace: WorkspaceId,
   target: { readonly address: string; readonly name?: string },
   backConversation?: ConversationId,
 ): DesktopUtility {

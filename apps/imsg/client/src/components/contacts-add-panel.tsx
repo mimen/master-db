@@ -4,13 +4,14 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { formatAddress } from "@shared/address";
 import type { ChatSummary } from "@shared/types";
 
-import { guessFromMessage, type HandleService } from "@/lib/contact-order";
+import { guessFromMessage } from "@/lib/contact-order";
 import { type ContactListRow, primaryHandle, useAddHandle, useCreatePerson, useListPeople, useWhoIs } from "@/lib/identity";
 import { showToast } from "@/lib/toast";
 import { PersonAvatar } from "./avatar";
 import { useTheme } from "@/hooks/use-theme";
-import { conversationService, dmAddress } from "@shared/imessage";
-import { ServiceDot } from "./contacts-theme";
+import { conversationRoute, dmAddress } from "@shared/imessage";
+import { platformBadge, type PlatformBadge } from "@shared/platform-profile";
+import { ServiceDot } from "./service-label";
 import { ContactsButton, IconAction } from "./contacts-ui";
 
 /**
@@ -18,10 +19,10 @@ import { ContactsButton, IconAction } from "./contacts-ui";
  * the message, and the number with its service. Below a divider, the closest
  * existing contact offers Add here instead.
  */
-export function ContactAddPanel({ handle, service = "iMessage", message, title = "New contact", onDone, onClose }: {
+export function ContactAddPanel({ handle, badge = platformBadge({ platform: "imessage", service: "iMessage" }), message, title = "New contact", onDone, onClose }: {
   /** Absent: the panel asks for the phone or email too. */
   readonly handle?: string;
-  readonly service?: HandleService;
+  readonly badge?: PlatformBadge;
   /** The sender's message, for the name and organization guess. */
   readonly message?: string;
   readonly title?: string;
@@ -112,8 +113,8 @@ export function ContactAddPanel({ handle, service = "iMessage", message, title =
             <Text style={[styles.label, { color: colors.textSecondary }]}>{handle.includes("@") ? "Email" : "Phone"}</Text>
             <View style={[styles.input, styles.fixed, { backgroundColor: colors.field, borderColor: colors.dividerStrong }]}>
               <Text style={[styles.flex, styles.fixedText, { color: colors.text }]}>{formatAddress(handle)}</Text>
-              <ServiceDot service={service} />
-              <Text style={[styles.svc, { color: colors.textSecondary }]}>{service}</Text>
+              <ServiceDot badge={badge} />
+              <Text style={[styles.svc, { color: colors.textSecondary }]}>{badge.label}</Text>
             </View>
           </View>
         ) : field("Phone or email", newHandle, setNewHandle)}
@@ -156,7 +157,6 @@ export function UnknownSenderBanner({ chat }: { readonly chat: ChatSummary }) {
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   if (!address || who?.found !== false || dismissed) return null;
-  const service: HandleService = conversationService(chat);
   const inbound = chat.lastMessage && !chat.lastMessage.isFromMe ? chat.lastMessage.text : undefined;
   return (
     <View pointerEvents="box-none" style={styles.overlay}>
@@ -174,7 +174,7 @@ export function UnknownSenderBanner({ chat }: { readonly chat: ChatSummary }) {
         <View style={styles.floating}>
           <ContactAddPanel
             handle={address}
-            service={service}
+            badge={platformBadge(conversationRoute(chat))}
             message={inbound}
             onClose={() => setOpen(false)}
             onDone={() => setOpen(false)}

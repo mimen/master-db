@@ -30,9 +30,11 @@ _Avoid_: filter logic, flag logic
 
 **Platform profile**:
 What a route can do, as data in `shared/platform-profile.ts`: per platform, each feature (reactions and which
-tapbacks, reply, edit, unsend, typing, mentions, scheduling, attachments, FaceTime links, group management,
+tapbacks, reply, edit, unsend, typing, mentions, scheduling, calls, attachments, FaceTime links, group management,
 deleting) lists the services that carry it, whether it exists only in a group, and whether BlueBubbles needs its
-Private API for it. Enqueue rejects a command its route can't run (`convex/comma/routeSupport.ts`), and the client
+Private API for it. The profile also holds how a route draws (`platformBadge`: the label and dot colour every
+service mark reads), the composer's per-route setup (`composerConfig`: placeholder, send colour, Enter-sends and the
+"Send with" options) and the edit and unsend windows. Enqueue rejects a command its route can't run (`convex/comma/routeSupport.ts`), and the client
 shows that control greyed with the same short reason ("SMS can't send reactions") instead of hiding it.
 _Avoid_: capability flags, service checks (`service === "SMS"`)
 

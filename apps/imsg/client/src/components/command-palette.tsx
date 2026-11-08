@@ -34,7 +34,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { useToday } from "@/hooks/use-today";
 
 import { addressesMatch, formatAddress } from "@shared/address";
-import { fromBridgeMessage, imessageChat } from "@shared/imessage";
+import { conversationRoute, fromBridgeMessage } from "@shared/imessage";
 import { composeSections, type ComposeRow } from "@/lib/palette/compose-rows";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { openAgentChat } from "@/hooks/use-agent-toasts";
@@ -52,6 +52,7 @@ import {
   paletteStyles,
   usePaletteCursor,
 } from "./palette/palette-list";
+import { workspacePath } from "@/lib/workspaces";
 
 const NO_AGENT_CHATS: readonly AgentChatSummary[] = [];
 
@@ -201,7 +202,7 @@ function PaletteRoot({
         router.navigate("/");
         return;
       case "tab":
-        router.navigate(id.value === "contacts" ? "/contacts" : "/");
+        router.navigate(workspacePath(id.value));
         return;
       case "action":
         if (id.value === "new-message") return onCompose();
@@ -561,7 +562,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
   useEffect(() => reset(), [needle, reset]);
 
   const [only] = recipients;
-  const existing = recipients.length === 1 && only ? directory?.find((chat) => !chat.isGroup && imessageChat.service(chat.route.imessage.chatGuid) === "iMessage" &&
+  const existing = recipients.length === 1 && only ? directory?.find((chat) => !chat.isGroup && conversationRoute(chat).service === "iMessage" &&
     chat.participants.length === 1 && addressesMatch(chat.participants[0]?.address ?? "", only.address)) : undefined;
   const send = (): void => {
     const body = text.trim();

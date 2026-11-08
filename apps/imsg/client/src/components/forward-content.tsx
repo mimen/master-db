@@ -9,7 +9,8 @@ import { pendingSends, SendCancelledError } from "@/lib/pending-sends";
 import { showToast } from "@/lib/toast";
 import { useForwardTargets } from "@/hooks/use-forward-targets";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
-import { conversationService } from "@shared/imessage";
+import { conversationRoute } from "@shared/imessage";
+import { platformBadge } from "@shared/platform-profile";
 
 import { ChatAvatar } from "./avatar";
 import { CenteredSpinner, EmptyState } from "./empty-state";
@@ -85,7 +86,7 @@ export function ForwardContent({ onClose, onOpenChat }: ForwardContentProps): Re
             >
               <ChatAvatar chat={item} size={28} />
               <Text numberOfLines={1} style={[styles.name, { color: theme.text }]}>{item.displayName}</Text>
-              <ServiceLabel service={conversationService(item)} size={12} />
+              <ServiceLabel badge={platformBadge(conversationRoute(item))} size={12} />
             </Pressable>
           )}
         />

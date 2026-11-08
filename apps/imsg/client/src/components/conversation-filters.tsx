@@ -20,7 +20,7 @@ import {
   PEOPLE_LABELS,
   PEOPLE_ORDER,
   PRIORITY_LABELS,
-  SERVICE_LABELS,
+  SERVICE_OPTIONS,
   TIME_LABELS,
   toggled,
   type FilterChip,
@@ -29,7 +29,6 @@ import {
   type OnlyKey,
   type PriorityLevel,
   type Refinements,
-  type Service,
   type TimeRange,
 } from "@/lib/inbox-model";
 import type { SavedView } from "@/lib/palette/saved-views";
@@ -280,7 +279,6 @@ const INCLUDE_ICONS: Record<IncludeKey, keyof typeof Ionicons.glyphMap> = {
 };
 const ONLY_KEYS: OnlyKey[] = ["attachments", "links", "pinned", "favorites"];
 const INCLUDE_KEYS: IncludeKey[] = ["settled", "scheduled"];
-const SERVICES: Service[] = ["any", "iMessage", "SMS"];
 const TIMES: TimeRange[] = ["any", "today", "week", "month"];
 const PRIORITIES: PriorityLevel[] = ["any", "high", "medium", "low"];
 const ANY_TAG = "";
@@ -330,7 +328,7 @@ export function ConversationFiltersPanel(props: FilterPanelProps) {
         options={PEOPLE_ORDER.map((value) => ({ value, label: PEOPLE_LABELS[value] }))}
         onChange={props.onTypeChange} />
       <Field label="Service" icon="chatbubble-outline" phone={phone} value={r.service}
-        options={SERVICES.map((value) => ({ value, label: SERVICE_LABELS[value], dot: value === "iMessage" ? theme.accent : value === "SMS" ? theme.sms : undefined }))}
+        options={SERVICE_OPTIONS.map(({ value, label, badge }) => ({ value, label, dot: badge ? theme[badge.color] : undefined }))}
         onChange={(service) => set({ service })} />
       <Field label="Time" icon="time-outline" phone={phone} value={r.time}
         options={TIMES.map((value) => ({ value, label: TIME_LABELS[value] }))}

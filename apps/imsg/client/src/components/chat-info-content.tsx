@@ -342,7 +342,7 @@ export function ChatInfoContent({
         {peer ? (
           <Section title={`Reach ${(peerName ?? "").split(" ")[0] || "them"} at`} divider={theme.divider} labelColor={theme.textSecondary}>
             {info.participants.map((p) => {
-              const service = contactService(p.address, chats);
+              const badge = contactService(p.address, chats);
               return (
                 <ContextMenuArea key={p.address} onMenu={(anchor) => showSheet({ title: p.name, anchor, actions: [copyHandleAction(p.address)] })}>
                 <Pressable
@@ -353,7 +353,7 @@ export function ChatInfoContent({
                 >
                   <Text style={[styles.handleKind, { color: theme.textTertiary, fontSize: type.caption }]}>{p.address.includes("@") ? "email" : "phone"}</Text>
                   <Text numberOfLines={1} style={[styles.handleValue, { color: theme.text, fontSize: type.body }]}>{formatAddress(p.address)}</Text>
-                  {service && <ServiceLabel service={service} size={type.caption} />}
+                  {badge && <ServiceLabel badge={badge} size={type.caption} />}
                 </Pressable>
                 </ContextMenuArea>
               );
@@ -367,7 +367,7 @@ export function ChatInfoContent({
             action={addingParticipant || !members ? undefined : { label: "Add person", unavailable: reasonOf(members), onPress: () => setAddingParticipant(true) }}
           >
             {info.participants.map((p) => {
-              const service = contactService(p.address, chats);
+              const badge = contactService(p.address, chats);
               return (
                 <ContextMenuArea key={p.address} onMenu={(anchor) => memberMenu(p, anchor)}>
                 <ListRow
@@ -380,7 +380,7 @@ export function ChatInfoContent({
                   leading={<PersonAvatar address={p.address} name={p.name ?? formatAddress(p.address)} size={36} />}
                   title={p.name ?? formatAddress(p.address)}
                   subtitle={p.name ? formatAddress(p.address) : undefined}
-                  trailing={service ? <ServiceLabel service={service} size={type.caption} /> : undefined}
+                  trailing={badge ? <ServiceLabel badge={badge} size={type.caption} /> : undefined}
                 />
                 </ContextMenuArea>
               );

@@ -1,6 +1,7 @@
 import type { ChatSummary } from "@shared/types";
 import { emailMatchKey, formatAddress, matchesAnyAddress, phoneMatchKey } from "@shared/address";
-import { conversationService } from "@shared/imessage";
+import { conversationRoute } from "@shared/imessage";
+import { platformBadge, UNREACHED_BADGE, type PlatformBadge } from "@shared/platform-profile";
 import type { ContactListRow } from "./identity";
 import type { NameOrder } from "./settings";
 
@@ -123,9 +124,6 @@ export function groupContacts<T extends FavoritableContact>(
 // ---------------------------------------------------------------- Signal Contacts
 
 
-/** The three service colors a handle can carry: blue, green, gray. */
-export type HandleService = "iMessage" | "SMS" | "Other";
-
 type Reachable = Pick<ContactListRow, "normalized_phones" | "normalized_emails">;
 
 function handlesOf(person: Reachable): string[] {
@@ -133,7 +131,7 @@ function handlesOf(person: Reachable): string[] {
 }
 
 /** Looks up the service Comma reaches a handle on. Build once per chat list. */
-export type ServiceLookup = (handle: string) => HandleService;
+export type ServiceLookup = (handle: string) => PlatformBadge;
 
 /**
  * Indexes one-to-one threads by handle: a handle reaches over whatever its
@@ -141,7 +139,7 @@ export type ServiceLookup = (handle: string) => HandleService;
  * service an email can use.
  */
 export function serviceIndex(chats: readonly ChatSummary[]): ServiceLookup {
-  const newest = new Map<string, { at: number; sms: boolean }>();
+  const newest = new Map<string, { at: number; badge: PlatformBadge }>();
   for (const chat of chats) {
     if (chat.isGroup) continue;
     const address = chat.participants[0]?.address;
@@ -149,12 +147,9 @@ export function serviceIndex(chats: readonly ChatSummary[]): ServiceLookup {
     if (!key) continue;
     const at = chat.lastMessage?.dateCreated ?? 0;
     const prior = newest.get(key);
-    if (!prior || at > prior.at) newest.set(key, { at, sms: conversationService(chat) === "SMS" });
+    if (!prior || at > prior.at) newest.set(key, { at, badge: platformBadge(conversationRoute(chat)) });
   }
-  return (handle) => {
-    const hit = newest.get(phoneMatchKey(handle) || emailMatchKey(handle));
-    return hit?.sms ? "SMS" : "iMessage";
-  };
+  return (handle) => newest.get(phoneMatchKey(handle) || emailMatchKey(handle))?.badge ?? platformBadge({ platform: "imessage", service: "iMessage" });
 }
 
 export type ContactRow<T> =
@@ -309,7 +304,7 @@ export interface HandleRow {
   readonly label: string;
   readonly value: string;
   readonly display: string;
-  readonly service: HandleService;
+  readonly badge: PlatformBadge;
   /** Comma can send here, so it can be primary. */
   readonly reachable: boolean;
   readonly primary: boolean;
@@ -341,13 +336,13 @@ export function handleRows(
   person.normalized_phones.forEach((phone, i) => {
     rows.push({
       key: phone, label: i === 0 ? "phone" : `phone ${i + 1}`, value: phone, display: formatAddress(phone),
-      service: serviceOf(phone), reachable: true, primary: phone === primary,
+      badge: serviceOf(phone), reachable: true, primary: phone === primary,
     });
   });
   person.normalized_emails.forEach((email, i) => {
     rows.push({
       key: email, label: i === 0 ? "email" : `email ${i + 1}`, value: email, display: email,
-      service: serviceOf(email), reachable: true, primary: email === primary,
+      badge: serviceOf(email), reachable: true, primary: email === primary,
     });
   });
   const known = new Set(handlesOf(person));
@@ -359,7 +354,7 @@ export function handleRows(
     known.add(identity.normalized);
     rows.push({
       key: `${network}:${identity.value}`, label, value: identity.value, display: identity.value,
-      service: "Other", reachable: false, primary: false,
+      badge: UNREACHED_BADGE, reachable: false, primary: false,
     });
   }
   return rows;

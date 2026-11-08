@@ -8,7 +8,6 @@ export {
 export {
   desktopSurfaceCloseTarget,
   projectDesktopRoute,
-  workspacePath,
 } from "./route";
 export {
   createInitialDesktopShellState,
@@ -26,7 +25,6 @@ export type {
   DesktopShellState,
   DesktopTransientOverlay,
   DesktopUtility,
-  DesktopWorkspaceId,
   DesktopWorkspaceProvenance,
   InboxFilters,
   Result,

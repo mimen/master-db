@@ -17,8 +17,17 @@ export interface ProfileRoute {
 
 export type Feature =
   | "react" | "emojiReact" | "reply" | "edit" | "unsend" | "deleteMessage" | "typing" | "mentions"
-  | "schedule" | "faceTimeLink" | "attachments" | "voiceMemo" | "contactCard"
+  | "schedule" | "call" | "faceTimeLink" | "attachments" | "voiceMemo" | "contactCard"
   | "rename" | "participants" | "leaveGroup" | "deleteChat";
+
+/** How a route draws beside a name: its label and the theme colour of its dot. */
+export interface PlatformBadge {
+  readonly label: string;
+  readonly color: "accent" | "sms" | "icon";
+}
+
+/** A handle no route reaches, such as an Instagram username. */
+export const UNREACHED_BADGE: PlatformBadge = { label: "Other", color: "icon" };
 
 interface FeatureRule {
   services: readonly RouteService[];
@@ -37,7 +46,23 @@ const IMESSAGE: readonly RouteService[] = ["iMessage"];
 /** Messages sends tapbacks and threaded replies over RCS; chat.db holds both from Milad's RCS chats. */
 const NOT_SMS: readonly RouteService[] = ["iMessage", "RCS"];
 
+const IMESSAGE_BADGE: PlatformBadge = { label: "iMessage", color: "accent" };
+// RCS draws as SMS: BlueBubbles reports its messages as SMS.
+const SMS_BADGE: PlatformBadge = { label: "SMS", color: "sms" };
+
 export const IMESSAGE_PROFILE = {
+  name: "iMessage",
+  badges: { iMessage: IMESSAGE_BADGE, SMS: SMS_BADGE, RCS: SMS_BADGE } satisfies Record<RouteService, PlatformBadge>,
+  /** How long after sending a message the platform still edits or unsends it. */
+  editWindowMs: 15 * 60_000,
+  unsendWindowMs: 2 * 60_000,
+  composer: {
+    placeholder: { iMessage: "iMessage", SMS: "Text Message", RCS: "Text Message" } satisfies Record<RouteService, string>,
+    /** On desktop, Enter sends and Shift+Enter starts a new line. */
+    enterSends: true,
+    /** What the "Send with" menu lists. Only the conversation's own service can be picked: the outbox has no per-message service. */
+    services: ["iMessage", "SMS"] satisfies RouteService[],
+  },
   /** The tapbacks a react command may send where "react" is supported. */
   reactions: ["love", "like", "dislike", "laugh", "emphasize", "question"] as const satisfies readonly TapbackType[],
   features: {
@@ -52,6 +77,8 @@ export const IMESSAGE_PROFILE = {
     typing: { services: IMESSAGE, privateApi: true, cant: "show typing" },
     mentions: { services: IMESSAGE, groupOnly: true, privateApi: true, cant: "mention people" },
     schedule: { services: EVERY, cant: "schedule messages" },
+    // A call opens FaceTime on this device, so it needs no Private API.
+    call: { services: EVERY, cant: "call" },
     faceTimeLink: { services: EVERY, privateApi: true, cant: "send FaceTime links" },
     attachments: { services: EVERY, cant: "send attachments" },
     voiceMemo: { services: EVERY, cant: "send voice messages" },
@@ -99,6 +126,37 @@ export function routeService(prefix: string): RouteService {
 /** The service a message sent through the route draws as: RCS draws green, as BlueBubbles reports its messages as SMS. */
 export function messageService(service: RouteService): "iMessage" | "SMS" {
   return service === "iMessage" ? "iMessage" : "SMS";
+}
+
+export function platformBadge(route: Pick<ProfileRoute, "platform" | "service">): PlatformBadge {
+  return PROFILES[route.platform].badges[route.service];
+}
+
+/** The badge of every service a platform sends on, once each, in profile order. */
+export function platformServiceBadges(platform: Platform): PlatformBadge[] {
+  return [...new Set(Object.values(PROFILES[platform].badges))];
+}
+
+export interface ComposerConfig {
+  readonly placeholder: string;
+  readonly badge: PlatformBadge;
+  readonly enterSends: boolean;
+  /** The "Send with" menu: the route's own service first, then the rest, which can't be picked yet. */
+  readonly serviceOptions: readonly PlatformBadge[];
+  readonly editWindowMs: number;
+}
+
+export function composerConfig(route: Pick<ProfileRoute, "platform" | "service">): ComposerConfig {
+  const profile = PROFILES[route.platform];
+  const badge = platformBadge(route);
+  const others = profile.composer.services.map((service) => profile.badges[service]).filter((option) => option !== badge);
+  return {
+    placeholder: profile.composer.placeholder[route.service],
+    badge,
+    enterSends: profile.composer.enterSends,
+    serviceOptions: [badge, ...others],
+    editWindowMs: profile.editWindowMs,
+  };
 }
 
 /** What the Mac can do right now, from its bridge state. */

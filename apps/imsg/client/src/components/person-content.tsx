@@ -24,7 +24,8 @@ import { ChatAvatar, PersonAvatar } from "./avatar";
 import { ContactAddPanel } from "./contacts-add-panel";
 import { TriageGeometry } from "@/constants/triage-theme";
 import { useTheme } from "@/hooks/use-theme";
-import { EnterFromBelow, HEADER_FONT, ServiceDot } from "./contacts-theme";
+import { EnterFromBelow, HEADER_FONT } from "./contacts-theme";
+import { ServiceDot } from "./service-label";
 import { Card, ContactsButton, ContactsTopBar, IconAction, rowDivider, SectionHeader, TextAction } from "./contacts-ui";
 import { PersonRelationship } from "./person-relationship";
 
@@ -434,8 +435,8 @@ function HandleLine({ row, first, grouped, onMakePrimary }: {
   const menuRef = useWebContextMenu<View>((anchor) => showSheet({ title: row.display, anchor, actions: [copyHandleAction(row.value)] }));
   const service = (
     <View style={styles.svc}>
-      <ServiceDot service={row.service} size={grouped ? 9 : 7} />
-      <Text style={[grouped ? styles.svcTextGrouped : styles.svcText, { color: colors.textSecondary }]}>{row.service}</Text>
+      <ServiceDot badge={row.badge} size={grouped ? 9 : 7} />
+      <Text style={[grouped ? styles.svcTextGrouped : styles.svcText, { color: colors.textSecondary }]}>{row.badge.label}</Text>
     </View>
   );
   const state = row.primary ? (

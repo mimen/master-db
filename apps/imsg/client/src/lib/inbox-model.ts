@@ -3,8 +3,9 @@ import { isSettled, matchesFilters } from "@shared/chat-state";
 import { liveThoughtLine } from "@/components/agent/vendor/live-thought-line";
 import type { AgentChatSummary } from "./agent-api";
 import type { TodayPlan, TodaySectionKey } from "./today";
-import { imessageChat } from "@shared/imessage";
-import type { ChatSummary, ConversationId, StateFilter, TypeFilter } from "@shared/types";
+import { conversationRoute } from "@shared/imessage";
+import { platformBadge, platformServiceBadges, PROFILES, type PlatformBadge } from "@shared/platform-profile";
+import type { ChatSummary, ConversationId, Platform, StateFilter, TypeFilter } from "@shared/types";
 
 /** The two lenses the workspace owns: which queue, and whose conversations. */
 export interface InboxFilters {
@@ -50,7 +51,8 @@ export function lensOf(state: StateFilter): Lens | null {
   return state === "settled" ? null : state;
 }
 
-export type Service = "any" | "iMessage" | "SMS";
+/** Any conversation, one platform's ("imessage"), or one of its services' ("imessage:SMS"). */
+export type ServiceFilter = "any" | Platform | `${Platform}:${string}`;
 export type TimeRange = "any" | "today" | "week" | "month";
 export type PriorityLevel = "any" | "high" | "medium" | "low";
 export type OnlyKey = "attachments" | "links" | "pinned" | "favorites";
@@ -58,7 +60,7 @@ export type IncludeKey = "settled" | "scheduled";
 
 /** Everything the filter popover narrows or widens, per lens. People rides InboxFilters.type. */
 export interface Refinements {
-  service: Service;
+  service: ServiceFilter;
   time: TimeRange;
   priority: PriorityLevel;
   tags: readonly string[];
@@ -80,7 +82,7 @@ export const DEFAULT_REFINEMENTS: Refinements = {
 export const PEOPLE_LABELS: Record<TypeFilter, string> = {
   all: "Anyone",
   known: "Known contacts",
-  unknown: "Unknown numbers",
+  unknown: "Unknown",
   group: "Groups",
   dm: "One-to-one",
 };
@@ -103,7 +105,32 @@ export function desktopInboxTitle(filters: InboxFilters): string {
 
 export const PEOPLE_ORDER: readonly TypeFilter[] = ["all", "known", "unknown", "group", "dm"];
 
-export const SERVICE_LABELS: Record<Service, string> = { any: "Any service", iMessage: "iMessage", SMS: "SMS" };
+export interface ServiceOption {
+  value: ServiceFilter;
+  label: string;
+  badge?: PlatformBadge;
+}
+
+const PLATFORMS = Object.keys(PROFILES) as Platform[];
+
+/** The Service dropdown: each platform, then its services. A lone platform lists only its services, as "Any service" already covers it. */
+export const SERVICE_OPTIONS: readonly ServiceOption[] = [
+  { value: "any", label: "Any service" },
+  ...PLATFORMS.flatMap((platform): ServiceOption[] => [
+    ...(PLATFORMS.length > 1 ? [{ value: platform, label: PROFILES[platform].name }] : []),
+    ...platformServiceBadges(platform).map((badge) => ({ value: `${platform}:${badge.label}` as const, label: badge.label, badge })),
+  ]),
+];
+
+export function serviceFilterLabel(value: ServiceFilter): string {
+  return SERVICE_OPTIONS.find((option) => option.value === value)?.label ?? value;
+}
+
+/** A stored Service filter. One saved before platforms names a bare iMessage service ("SMS"). */
+export function parseServiceFilter(raw: unknown): ServiceFilter {
+  if (raw === "iMessage" || raw === "SMS") return `imessage:${raw}`;
+  return SERVICE_OPTIONS.find((option) => option.value === raw)?.value ?? "any";
+}
 export const TIME_LABELS: Record<TimeRange, string> = {
   any: "Any time",
   today: "Today",
@@ -130,9 +157,11 @@ export const INCLUDE_LABELS: Record<IncludeKey, string> = {
 const DAY = 86_400_000;
 const LINK = /\bhttps?:\/\/|\bwww\.[a-z0-9-]+\.[a-z]/i;
 
-/** Service of the conversation's primary chat. RCS renders green, so it reads as SMS. */
-export function chatService(chat: Pick<ChatSummary, "route">): Exclude<Service, "any"> | null {
-  return imessageChat.service(chat.route.imessage.chatGuid);
+/** Whether the conversation's primary chat is on the filter's platform and service. RCS draws green, so it reads as SMS. */
+function matchesService(chat: ChatSummary, filter: ServiceFilter): boolean {
+  if (filter === "any") return true;
+  const route = conversationRoute(chat);
+  return filter === route.platform || filter === `${route.platform}:${platformBadge(route).label}`;
 }
 
 /** CRM priority is P1-P5 with one highest: P1-P2 high, P3 medium, P4-P5 low. */
@@ -182,7 +211,7 @@ function hasScheduled(chat: ChatSummary, scheduled: ReadonlySet<ConversationId>)
 
 /** The narrowing half: every control except Also include. */
 function narrows(chat: ChatSummary, r: Refinements, now: number): boolean {
-  if (r.service !== "any" && chatService(chat) !== r.service) return false;
+  if (!matchesService(chat, r.service)) return false;
   if (r.time !== "any" && !inTime(chat.lastMessage?.dateCreated ?? 0, r.time, now)) return false;
   if (r.priority !== "any" && priorityLevel(chat.crm?.priority) !== r.priority) return false;
   if (r.tags.length > 0 && !r.tags.some((tag) => chat.crm?.tags?.includes(tag))) return false;
@@ -212,7 +241,7 @@ export function activeChips(filters: InboxFilters, r: Refinements): FilterChip[]
   if (!isDefaultTypeLens(filters.type)) {
     chips.push({ key: "people", label: PEOPLE_LABELS[filters.type], remove: (f, cur) => ({ filters: { ...f, type: DEFAULT_INBOX_FILTERS.type }, refinements: cur }) });
   }
-  if (r.service !== "any") chips.push({ key: "service", label: SERVICE_LABELS[r.service], remove: keep({ service: "any" }) });
+  if (r.service !== "any") chips.push({ key: "service", label: serviceFilterLabel(r.service), remove: keep({ service: "any" }) });
   if (r.time !== "any") chips.push({ key: "time", label: TIME_LABELS[r.time], remove: keep({ time: "any" }) });
   if (r.priority !== "any") chips.push({ key: "priority", prefix: "Priority", label: PRIORITY_LABELS[r.priority], remove: keep({ priority: "any" }) });
   for (const tag of r.tags) {

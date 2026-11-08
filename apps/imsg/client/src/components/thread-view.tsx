@@ -62,8 +62,6 @@ import { TypingIndicator } from "./typing-indicator";
 import { useRouteSupport } from "@/hooks/use-route-support";
 import { gated, reasonOf } from "@/lib/route-support";
 
-const EDIT_WINDOW_MS = 15 * 60 * 1000;
-const UNSEND_WINDOW_MS = 2 * 60 * 1000;
 const GROUP_GAP_MS = 10 * 60 * 1000;
 const COLUMN_PAD = 32;
 const PHONE_PAD = 12;
@@ -454,6 +452,7 @@ export function ThreadView({
         : undefined;
       const edit = can("edit");
       const unsend = can("unsend");
+      const { editWindowMs, unsendWindowMs } = PROFILES[message.platform];
       const actions = [
         ...gated(can("reply"), { label: "Reply", onPress: () => setReplyTo(message) }),
         ...(message.text
@@ -498,15 +497,15 @@ export function ThreadView({
           ? [...gated(edit, { label: "Edit", disabled: true, separatorBefore: true, onPress: () => undefined }),
             ...gated(unsend, { label: "Undo send", disabled: true, note: "Available once it's sent", onPress: () => undefined })]
           : []),
-        ...(mine && message.text && age < EDIT_WINDOW_MS && !message.sendState
-          ? gated(edit, { label: "Edit", note: formatWindowRemaining(EDIT_WINDOW_MS, age), separatorBefore: true, onPress: () => setEditing(message) })
+        ...(mine && message.text && age < editWindowMs && !message.sendState
+          ? gated(edit, { label: "Edit", note: formatWindowRemaining(editWindowMs, age), separatorBefore: true, onPress: () => setEditing(message) })
           : []),
-        ...(mine && age < UNSEND_WINDOW_MS && !message.sendState
+        ...(mine && age < unsendWindowMs && !message.sendState
           ? gated(unsend, {
                 label: "Undo send",
-                note: formatWindowRemaining(UNSEND_WINDOW_MS, age),
+                note: formatWindowRemaining(unsendWindowMs, age),
                 // Edit is hidden past its window or on a text-less message, so this opens the block.
-                separatorBefore: !(message.text && age < EDIT_WINDOW_MS),
+                separatorBefore: !(message.text && age < editWindowMs),
                 destructive: true,
                 onPress: () => {
                   const rollback = pend(message.guid, { kind: "retract" });

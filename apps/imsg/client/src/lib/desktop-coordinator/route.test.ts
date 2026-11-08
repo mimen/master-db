@@ -3,8 +3,8 @@ import { describe, expect, test } from "bun:test";
 import {
   desktopSurfaceCloseTarget,
   projectDesktopRoute,
-  workspacePath,
 } from "./route";
+import { workspacePath } from "@/lib/workspaces";
 import type { DesktopRouteProjection, Result, DesktopRouteError } from "./types";
 import type { ConversationId } from "@shared/types";
 

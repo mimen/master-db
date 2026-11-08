@@ -1,23 +1,14 @@
-import { describe, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 
-import { conversationRoute, conversationService, dmAddress, fromBridgeMessage, imessageChat, serviceOf } from "./imessage";
+import { chatGuidRoute, conversationRoute, dmAddress, fromBridgeMessage, serviceOf } from "./imessage";
+import { platformBadge } from "./platform-profile";
 
-describe("imessageChat.service", () => {
-  test("RCS chats send as SMS, so their optimistic bubbles draw green", () => {
-    expect(imessageChat.service("RCS;-;+16199813959")).toBe("SMS");
-    expect(imessageChat.service("RCS;+;group-1")).toBe("SMS");
-    expect(imessageChat.service("SMS;-;+15550001111")).toBe("SMS");
-  });
-
-  test("iMessage chats are iMessage and anything else is unknown", () => {
-    expect(imessageChat.service("iMessage;+;chat123")).toBe("iMessage");
-    expect(imessageChat.service("any;-;x")).toBeNull();
-  });
-});
-
-test("a conversation of unknown service sends as iMessage", () => {
-  expect(conversationService({ route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "SMS;-;+15550001111" } } })).toBe("SMS");
-  expect(conversationService({ route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "any;-;x" } } })).toBe("iMessage");
+test("a chat GUID's badge: RCS draws green as SMS does, and an unknown service sends as iMessage", () => {
+  const badge = (chatGuid: string) => platformBadge(chatGuidRoute(chatGuid));
+  expect(badge("RCS;-;+16199813959")).toEqual({ label: "SMS", color: "sms" });
+  expect(badge("SMS;+;group-1")).toEqual({ label: "SMS", color: "sms" });
+  expect(badge("iMessage;+;chat123")).toEqual({ label: "iMessage", color: "accent" });
+  expect(badge("any;-;x")).toEqual({ label: "iMessage", color: "accent" });
 });
 
 test("a one-to-one conversation's handle comes from its participant, then its chat", () => {

@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { StateFilter, TypeFilter } from "@shared/types";
 
-import { DEFAULT_REFINEMENTS, type Refinements } from "@/lib/inbox-model";
+import { DEFAULT_REFINEMENTS, parseServiceFilter, type Refinements } from "@/lib/inbox-model";
 
 /** What one lens remembers: its People choice and every other refinement. */
 export interface LensFilters {
@@ -51,7 +51,9 @@ export async function hydrateInboxFilters(): Promise<void> {
     const raw = await AsyncStorage.getItem(KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw) as Partial<InboxFilterState>;
-    set({ ...state, byLens: parsed.byLens ?? {}, views: Array.isArray(parsed.views) ? parsed.views : [] }, false);
+    const stored = <T extends LensFilters>(filters: T): T => ({ ...filters, refinements: { ...filters.refinements, service: parseServiceFilter(filters.refinements?.service) } });
+    const byLens = Object.fromEntries(Object.entries(parsed.byLens ?? {}).map(([lens, filters]) => [lens, filters && stored(filters)]));
+    set({ ...state, byLens, views: Array.isArray(parsed.views) ? parsed.views.map(stored) : [] }, false);
   } catch {
     // storage unavailable or corrupt: filters start empty this session
   }

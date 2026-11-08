@@ -1,11 +1,10 @@
 import type { JumpTarget } from "@/hooks/use-messages";
 import type { ConversationId, StateFilter, TypeFilter } from "@shared/types";
+import type { WorkspaceId } from "@/lib/workspaces";
 
 export type Result<Value, Error> =
   | { readonly ok: true; readonly value: Value }
   | { readonly ok: false; readonly error: Error };
-
-export type DesktopWorkspaceId = "messages" | "contacts";
 
 export type DesktopWorkspaceProvenance =
   | { readonly kind: "path" }
@@ -42,18 +41,18 @@ export type DesktopUtility =
     }
   | {
       readonly kind: "person";
-      readonly workspace: DesktopWorkspaceId;
+      readonly workspace: WorkspaceId;
       readonly target: DesktopPersonSelection;
       /** The conversation the person pane was opened from, which its back button returns to. */
       readonly backConversation?: ConversationId;
     }
   | {
       readonly kind: "scheduled";
-      readonly workspace: DesktopWorkspaceId;
+      readonly workspace: WorkspaceId;
     }
   | {
       readonly kind: "settings";
-      readonly workspace: DesktopWorkspaceId;
+      readonly workspace: WorkspaceId;
     }
   /** Bound to whichever conversation is open, so it follows the selection instead of naming one. */
   | {
@@ -80,7 +79,7 @@ export type DesktopTransientOverlay =
 
 interface DesktopRouteBase {
   readonly pathname: string;
-  readonly workspace: DesktopWorkspaceId;
+  readonly workspace: WorkspaceId;
   readonly workspaceProvenance: DesktopWorkspaceProvenance;
 }
 
@@ -137,7 +136,7 @@ export type DesktopRouteError =
     };
 
 export interface DesktopShellState {
-  readonly activeWorkspace: DesktopWorkspaceId;
+  readonly activeWorkspace: WorkspaceId;
   readonly messages: {
     readonly filters: InboxFilters;
     readonly selection: DesktopChatSelection | null;
