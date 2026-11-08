@@ -654,6 +654,7 @@ export declare const api: {
             senderName: string | null;
             type?: string;
           }>;
+          replyCount?: number;
           replyToFromMe?: boolean;
           replyToGuid?: string;
           replyToPreview?: string;
@@ -678,6 +679,10 @@ export declare const api: {
           };
           tapbackTargetGuid?: string;
           text: string;
+          thread?: {
+            conversationId: Id<"comma_conversations">;
+            replyCount: number;
+          };
           threadRef?: string;
         }>
       >;
@@ -1912,7 +1917,7 @@ export declare const api: {
           hasGroupPhoto?: boolean;
           isGroup: boolean;
           isSpam: boolean;
-          kind: "dm" | "group" | "channel" | "emailThread";
+          kind: "dm" | "group" | "channel" | "thread" | "emailThread";
           known: boolean;
           lastMessage?: {
             dateCreated: number;
@@ -1933,7 +1938,8 @@ export declare const api: {
           primaryChatGuid?: string;
           rawDisplayName?: string;
           searchNames: Array<string>;
-          slack?: { channel: string; threadTs?: string };
+          slack?: { channel: string; following?: boolean; threadTs?: string };
+          thread?: { parentId?: Id<"comma_conversations">; replyCount: number };
           unread?: { count: number; firstAt: number };
           unreadCount: number;
           updatedAt: number;
@@ -2041,7 +2047,7 @@ export declare const api: {
             hasGroupPhoto?: boolean;
             isGroup: boolean;
             isSpam: boolean;
-            kind: "dm" | "group" | "channel" | "emailThread";
+            kind: "dm" | "group" | "channel" | "thread" | "emailThread";
             known: boolean;
             lastMessage?: {
               dateCreated: number;
@@ -2062,7 +2068,11 @@ export declare const api: {
             primaryChatGuid?: string;
             rawDisplayName?: string;
             searchNames: Array<string>;
-            slack?: { channel: string; threadTs?: string };
+            slack?: { channel: string; following?: boolean; threadTs?: string };
+            thread?: {
+              parentId?: Id<"comma_conversations">;
+              replyCount: number;
+            };
             unread?: { count: number; firstAt: number };
             unreadCount: number;
             updatedAt: number;
@@ -2188,6 +2198,7 @@ export declare const api: {
               senderName: string | null;
               type?: string;
             }>;
+            replyCount?: number;
             replyToFromMe?: boolean;
             replyToGuid?: string;
             replyToPreview?: string;
@@ -2212,6 +2223,10 @@ export declare const api: {
             };
             tapbackTargetGuid?: string;
             text: string;
+            thread?: {
+              conversationId: Id<"comma_conversations">;
+              replyCount: number;
+            };
             threadRef?: string;
           }>;
           pageStatus?: "SplitRecommended" | "SplitRequired" | null;
@@ -2274,7 +2289,7 @@ export declare const api: {
           hasGroupPhoto?: boolean;
           isGroup: boolean;
           isSpam: boolean;
-          kind: "dm" | "group" | "channel" | "emailThread";
+          kind: "dm" | "group" | "channel" | "thread" | "emailThread";
           known: boolean;
           lastMessage?: {
             dateCreated: number;
@@ -2295,7 +2310,8 @@ export declare const api: {
           primaryChatGuid?: string;
           rawDisplayName?: string;
           searchNames: Array<string>;
-          slack?: { channel: string; threadTs?: string };
+          slack?: { channel: string; following?: boolean; threadTs?: string };
+          thread?: { parentId?: Id<"comma_conversations">; replyCount: number };
           unread?: { count: number; firstAt: number };
           unreadCount: number;
           updatedAt: number;
@@ -2307,6 +2323,7 @@ export declare const api: {
         {
           conversationId?: Id<"comma_conversations">;
           from?: "me" | "them";
+          platform?: "imessage" | "slack";
           query: string;
         },
         Array<{
@@ -2355,6 +2372,7 @@ export declare const api: {
             senderName: string | null;
             type?: string;
           }>;
+          replyCount?: number;
           replyToFromMe?: boolean;
           replyToGuid?: string;
           replyToPreview?: string;
@@ -2407,6 +2425,30 @@ export declare const api: {
         null
       >;
       startSlackConnect: FunctionReference<"action", "public", {}, string>;
+    };
+    slackChannels: {
+      listSlackChannels: FunctionReference<
+        "action",
+        "public",
+        { accountId: Id<"comma_accounts"> },
+        Array<{
+          following: boolean;
+          id: string;
+          isPrivate: boolean;
+          name: string;
+        }>
+      >;
+      setSlackChannel: FunctionReference<
+        "mutation",
+        "public",
+        {
+          accountId: Id<"comma_accounts">;
+          channel: string;
+          following: boolean;
+          name: string;
+        },
+        null
+      >;
     };
     suggestions: {
       aiStatus: FunctionReference<
@@ -4897,6 +4939,7 @@ export declare const internal: {
                   start: number;
                 }>;
                 modelText?: string;
+                replyCount?: number;
                 replyToFromMe?: boolean;
                 replyToGuid?: string;
                 replyToPreview?: string;
@@ -4939,6 +4982,7 @@ export declare const internal: {
                   senderName: string | null;
                   type: string;
                 }>;
+                replyCount?: number;
                 replyToFromMe?: boolean;
                 replyToGuid?: string;
                 replyToPreview?: string;
@@ -5027,6 +5071,12 @@ export declare const internal: {
         { cursor: string | null; dryRun: boolean; limit?: number },
         { changed: number; cursor: string; isDone: boolean; scanned: number }
       >;
+      backfillSlackThreadsPage: FunctionReference<
+        "mutation",
+        "internal",
+        { cursor: string | null; dryRun: boolean; limit?: number },
+        { changed: number; cursor: string; isDone: boolean; scanned: number }
+      >;
       runAccountsBackfill: FunctionReference<
         "action",
         "internal",
@@ -5043,6 +5093,12 @@ export declare const internal: {
         }>
       >;
       runKindsBackfill: FunctionReference<
+        "action",
+        "internal",
+        { dryRun: boolean; limit?: number },
+        { changed: number; scanned: number }
+      >;
+      runSlackThreadsBackfill: FunctionReference<
         "action",
         "internal",
         { dryRun: boolean; limit?: number },
@@ -6169,6 +6225,14 @@ export declare const internal: {
         boolean
       >;
     };
+    slackChannels: {
+      followedChannels: FunctionReference<
+        "query",
+        "internal",
+        { accountId: Id<"comma_accounts"> },
+        Array<string>
+      >;
+    };
     slackEvents: {
       receive: FunctionReference<
         "mutation",
@@ -6192,6 +6256,15 @@ export declare const internal: {
             | {
                 kind: "user";
                 user: { email?: string; id: string; name: string };
+              }
+            | {
+                at: number;
+                channel: string;
+                kind: "reaction";
+                name: string;
+                removed: boolean;
+                ts: string;
+                user: string;
               }
             | null;
           eventId: string;
@@ -6798,13 +6871,13 @@ export declare const internal: {
       backfill: FunctionReference<
         "action",
         "internal",
-        { accountId: Id<"comma_accounts">; run: string },
+        { accountId: Id<"comma_accounts">; key?: string; run: string },
         null
       >;
       backfillState: FunctionReference<
         "query",
         "internal",
-        { accountId: Id<"comma_accounts"> },
+        { accountId: Id<"comma_accounts">; key?: string },
         string | null
       >;
       backstop: FunctionReference<"action", "internal", {}, null>;
@@ -6875,7 +6948,12 @@ export declare const internal: {
       saveBackfill: FunctionReference<
         "mutation",
         "internal",
-        { accountId: Id<"comma_accounts">; run: string; state: string },
+        {
+          accountId: Id<"comma_accounts">;
+          key?: string;
+          run: string;
+          state: string;
+        },
         boolean
       >;
       startBackfill: FunctionReference<
@@ -6976,7 +7054,7 @@ export declare const internal: {
               tags?: Array<string>;
             };
             isGroup: boolean;
-            kind: "dm" | "group" | "channel" | "emailThread";
+            kind: "dm" | "group" | "channel" | "thread" | "emailThread";
             lastMessageAt: number;
             platform: "imessage" | "slack";
             state: "needsYou" | "waiting";

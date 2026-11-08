@@ -71,7 +71,7 @@ export interface PlatformIdentity {
   reportsFromMe: boolean;
 }
 
-/** A Slack conversation as Slack names it: a DM, a group DM, a channel, or a thread inside a channel. */
+/** A Slack conversation as Slack names it: a DM, a group DM, a channel, or a thread inside any of them. */
 export type SlackConversationRef =
   | { type: "im" | "mpim" | "channel"; channel: string }
   | { type: "thread"; channel: string; threadTs: string };
@@ -85,8 +85,11 @@ export const slack = {
 
   kind(ref: SlackConversationRef): CommaConversationKind {
     if (ref.type === "im") return "dm";
-    return ref.type === "channel" ? "channel" : "group";
+    return ref.type === "channel" || ref.type === "thread" ? ref.type : "group";
   },
+
+  /** The keys of the conversation a thread belongs to, one per kind it can be: a DM, a group DM or a channel. */
+  parentKeys: (channel: string): string[] => [`im:${channel}`, `mpim:${channel}`, `ch:${channel}`],
 
   /** `im:D…`, `mpim:G…`, `ch:C…`, or `th:C…:<root ts>`. */
   conversationKey(ref: SlackConversationRef): string {
@@ -98,8 +101,14 @@ export const slack = {
 
 export const PLATFORM_IDENTITY = { imessage, slack } satisfies Record<CommaPlatform, PlatformIdentity>;
 
-/** A stored conversation's kind; rows from before kinds read theirs off `isGroup` until the kinds backfill stamps them. */
-export function conversationKind(conversation: { kind?: CommaConversationKind; isGroup: boolean }): CommaConversationKind {
+/**
+ * A stored conversation's kind. Rows from before kinds read theirs off `isGroup` until the kinds backfill stamps them,
+ * and Slack threads stored as groups before S3 read as threads until the threads backfill restamps them.
+ */
+export function conversationKind(conversation: {
+  kind?: CommaConversationKind; isGroup: boolean; slack?: { threadTs?: string };
+}): CommaConversationKind {
+  if (conversation.slack?.threadTs) return "thread";
   return conversation.kind ?? (conversation.isGroup ? "group" : "dm");
 }
 

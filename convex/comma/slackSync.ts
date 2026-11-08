@@ -1,5 +1,6 @@
 import { v, type Infer } from "convex/values";
 
+import { isPendingGuid } from "../../apps/imsg/shared/pending-send";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type ActionCtx, type MutationCtx, type QueryCtx } from "../_generated/server";
@@ -35,8 +36,19 @@ const tsMs = (ts: string) => Math.round(Number(ts) * 1000);
 const MENTION = /<@([UW][A-Z0-9]+)(?:\|[^>]*)?>/g;
 const mentionedIds = (text: string) => [...text.matchAll(MENTION)].map((match) => match[1]!);
 
-async function upsertConversation(ctx: MutationCtx, account: Doc<"comma_accounts">, self: string, batch: ConversationBatch) {
-  const { ref } = batch;
+type Conversation = Doc<"comma_conversations">;
+/** One conversation's share of a batch, and for a thread the DM, group DM or channel Comma holds it in. */
+type Home = ConversationBatch & { parent?: Conversation | null };
+
+/** A thread Milad follows: one in a DM or group DM, or one he wrote in or is mentioned in. */
+function follows(home: Home, self: string, existing: Conversation | null): boolean {
+  if (home.parent && home.parent.kind !== "channel") return true;
+  if (existing && existing.slack?.following !== false) return true;
+  return home.messages.some((message) => message.user === self || mentions(message.text, self));
+}
+
+async function upsertConversation(ctx: MutationCtx, account: Doc<"comma_accounts">, self: string, home: Home) {
+  const { ref, parent } = home;
   const scope = { platform: "slack" as const, accountId: account._id };
   const conversationKey = slack.conversationKey(ref);
   const kind = slack.kind(ref);
@@ -44,20 +56,67 @@ async function upsertConversation(ctx: MutationCtx, account: Doc<"comma_accounts
   const known = existing?.participants.map((participant) => participant.address.slice("slack:".length)) ?? [];
   // A channel is named by its #name, and every list read resolves each participant, so a busy channel keeps none.
   const ids = ref.type === "channel" ? []
-    : [...new Set(batch.members ?? [...known, ...batch.messages.map((message) => message.user)])].filter((id) => id !== self);
+    : [...new Set(home.members ?? [...known, ...home.messages.map((message) => message.user)])].filter((id) => id !== self);
   const participants = ids.map((id) => ({ address: `slack:${id}`, name: null }));
-  // A DM is named by its person at read time; a group DM lists its members; a channel or thread carries the channel's name.
-  const rawDisplayName = ref.type === "im" ? undefined : ref.type === "mpim" ? "" : batch.name ? `#${batch.name}` : existing?.rawDisplayName ?? "Slack thread";
+  // A DM is named by its person at read time; a group DM, and a thread in either, lists its members; a channel or a
+  // thread in one carries the channel's name.
+  const channelName = home.name ? `#${home.name}` : parent?.kind === "channel" ? parent.rawDisplayName : undefined;
+  const rawDisplayName = ref.type === "im" ? undefined : ref.type === "mpim" || (parent && parent.kind !== "channel") ? ""
+    : channelName ?? existing?.rawDisplayName ?? "Slack thread";
   const fields = {
     platform: "slack" as const, accountId: account._id, conversationKey, kind, isGroup: isGroupKind(kind),
-    slack: { channel: ref.channel, ...(ref.type === "thread" ? { threadTs: ref.threadTs } : {}) },
+    slack: { channel: ref.channel, ...(ref.type === "thread" ? { threadTs: ref.threadTs, following: follows(home, self, existing) } : {}) },
     displayName: rawDisplayName || "Slack", ...(rawDisplayName !== undefined ? { rawDisplayName } : {}), participants, isSpam: false,
   };
   if (!existing) return await ctx.db.insert("comma_conversations", { ...fields, lastMessageAt: 0, updatedAt: Date.now() });
-  const same = existing.displayName === fields.displayName && existing.rawDisplayName === fields.rawDisplayName &&
-    JSON.stringify(existing.participants) === JSON.stringify(participants);
+  const same = existing.displayName === fields.displayName && existing.rawDisplayName === fields.rawDisplayName && existing.kind === kind &&
+    JSON.stringify(existing.participants) === JSON.stringify(participants) && JSON.stringify(existing.slack) === JSON.stringify(fields.slack);
   if (!same) await ctx.db.patch(existing._id, { ...fields, updatedAt: Date.now() });
   return existing._id;
+}
+
+const isReply = (message: SlackMessage) => message.threadTs !== undefined && message.threadTs !== message.ts;
+
+/**
+ * Where each message lives, whichever read brought it: a reply in its thread's conversation, a thread's root in the
+ * DM, group DM or channel Comma holds it in (or in the thread when Comma holds none), anything else in its batch's.
+ */
+async function homesOf(ctx: MutationCtx, accountId: Id<"comma_accounts">, batches: ConversationBatch[]): Promise<Home[]> {
+  const scope = { platform: "slack" as const, accountId };
+  const parents = new Map<string, Promise<Conversation | null>>();
+  const parentOf = (channel: string) => {
+    if (!parents.has(channel)) {
+      parents.set(channel, Promise.all(slack.parentKeys(channel).map((key) => findByKey(ctx, scope, key)))
+        .then((rows) => rows.find((row) => row !== null) ?? null));
+    }
+    return parents.get(channel)!;
+  };
+  const homes = new Map<string, Home>();
+  const homeFor = async (ref: SlackConversationRef, from: ConversationBatch): Promise<Home> => {
+    const key = slack.conversationKey(ref);
+    const own = key === slack.conversationKey(from.ref);
+    if (!homes.has(key)) {
+      homes.set(key, {
+        ref, messages: [], ...(own && from.members ? { members: from.members } : {}),
+        // A channel's name names its threads, and a thread read names its channel.
+        ...(from.name && (own || ref.type === "thread" || from.ref.type === "thread") ? { name: from.name } : {}),
+        ...(ref.type === "thread" ? { parent: await parentOf(ref.channel) } : {}),
+      });
+    }
+    return homes.get(key)!;
+  };
+  for (const batch of batches) {
+    const { ref, messages } = batch;
+    // A DM or channel read with no messages still names its members; a thread exists only once it holds one.
+    if (ref.type !== "thread") await homeFor(ref, batch);
+    for (const message of messages) {
+      const root = ref.type === "thread" && message.ts === ref.threadTs ? await parentOf(ref.channel) : null;
+      const home: SlackConversationRef = isReply(message) ? { type: "thread", channel: ref.channel, threadTs: message.threadTs! }
+        : root?.slack ? slackRefOf(root) : ref;
+      (await homeFor(home, batch)).messages.push(message);
+    }
+  }
+  return [...homes.values()];
 }
 
 /** Writes users, conversations and messages. Idempotent: a message at or below its stored version is skipped. */
@@ -69,7 +128,8 @@ export const ingestBatch = internalMutation({
 
 /**
  * ingestBatch's write, which a confirmed send also lands through. Milad's own new message retires the pending send it
- * is the copy of, in the same write, so no frame shows both.
+ * is the copy of, in the same write, so no frame shows both. A message stored in another conversation than its home
+ * moves there, so a read never leaves a reply outside its thread or a root outside its channel.
  */
 export async function writeSlackBatch(ctx: MutationCtx, accountId: Id<"comma_accounts">, users: SlackUser[], conversations: ConversationBatch[]) {
   const account = await ctx.db.get(accountId);
@@ -83,12 +143,12 @@ export async function writeSlackBatch(ctx: MutationCtx, accountId: Id<"comma_acc
   let skipped = 0;
   const touched = new Set<Id<"comma_conversations">>();
   const real: Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe">[] = [];
-  for (const batch of conversations) {
-    const conversationId = await upsertConversation(ctx, account, self, batch);
-    for (const message of batch.messages) {
+  for (const home of await homesOf(ctx, accountId, conversations)) {
+    const conversationId = await upsertConversation(ctx, account, self, home);
+    for (const message of home.messages) {
       const display = slackDisplayText(message.text, (id) => names.get(id));
       const row = {
-        platform: "slack" as const, accountId, conversationId, guid: slack.messageGuid(batch.ref.channel, message.ts),
+        platform: "slack" as const, accountId, conversationId, guid: slack.messageGuid(home.ref.channel, message.ts),
         dateCreated: tsMs(message.ts), isFromMe: message.user === self, sender: { address: `slack:${message.user}`, name: null },
         text: display.text, mentions: display.mentions, mentionsMe: mentions(message.text, self),
         ...toModelText({ text: message.text, ts: message.ts, ...(message.threadTs ? { thread_ts: message.threadTs } : {}) }),
@@ -97,12 +157,15 @@ export async function writeSlackBatch(ctx: MutationCtx, accountId: Id<"comma_acc
         ...(message.clientKey ? { clientKey: message.clientKey } : {}),
       };
       const existing = await findMessage(ctx, scope, row.guid);
-      if (existing && existing.sourceVersion >= row.sourceVersion) {
+      const moved = existing !== null && existing.conversationId !== conversationId;
+      if (existing && (existing.retracted || (!moved && existing.sourceVersion >= row.sourceVersion))) {
         skipped++;
         continue;
       }
-      if (existing) await ctx.db.patch(existing._id, { ...MODEL_TEXT_UNSET, ...row });
-      else {
+      if (existing) {
+        await ctx.db.patch(existing._id, { ...MODEL_TEXT_UNSET, ...row });
+        touched.add(existing.conversationId);
+      } else {
         await ctx.db.insert("comma_messages", row);
         if (row.isFromMe) await landEcho(ctx, row);
       }
@@ -111,9 +174,25 @@ export async function writeSlackBatch(ctx: MutationCtx, accountId: Id<"comma_acc
       real.push(row);
     }
   }
-  for (const conversationId of touched) await refreshLastMessage(ctx, conversationId);
+  for (const conversationId of touched) {
+    await refreshLastMessage(ctx, conversationId);
+    await countReplies(ctx, accountId, conversationId);
+  }
   await logReplies(ctx, real);
   return { written, skipped };
+}
+
+/** Stamps the thread's reply count on its root, wherever the root lives. Nothing happens for a conversation that isn't a thread. */
+export async function countReplies(ctx: MutationCtx, accountId: Id<"comma_accounts">, conversationId: Id<"comma_conversations">): Promise<void> {
+  const thread = (await ctx.db.get(conversationId))?.slack;
+  if (!thread?.threadTs) return;
+  const rootGuid = slack.messageGuid(thread.channel, thread.threadTs);
+  let replyCount = 0;
+  for await (const message of ctx.db.query("comma_messages").withIndex("by_conversation_date", (q) => q.eq("conversationId", conversationId))) {
+    if (!message.retracted && message.guid !== rootGuid && !isPendingGuid(message.guid)) replyCount++;
+  }
+  const root = await findMessage(ctx, { platform: "slack", accountId }, rootGuid);
+  if (root && root.replyCount !== replyCount) await ctx.db.patch(root._id, { replyCount });
 }
 
 /** The Slack conversation a Comma conversation reads from. */
@@ -192,7 +271,8 @@ const STEP_MS = 1_500;
 const SEARCH_STEP_MS = 3_500;
 
 type Channel = { id: string; type: "im" | "mpim" | "channel"; name?: string; members?: string[] };
-type Thread = { channel: string; ts: string; into: "im" | "mpim" | "thread" };
+/** A thread to read whole, and the conversation its read lands through: its DM, group DM or channel, or the thread itself. */
+type Thread = { channel: string; ts: string; into: "im" | "mpim" | "channel" | "thread" };
 export type BackfillState = {
   run: string;
   step: "users" | "conversations" | "history" | "search" | "replies" | "done";
@@ -204,6 +284,8 @@ export type BackfillState = {
   threads: Thread[];
   query?: number;
   page?: number;
+  /** One channel opted in to: its history and its threads, with no search. */
+  channelOnly?: boolean;
 };
 
 async function syncRow(ctx: Pick<QueryCtx, "db">, accountId: Id<"comma_accounts">, key: string) {
@@ -216,6 +298,13 @@ async function writeSync(ctx: MutationCtx, accountId: Id<"comma_accounts">, key:
   else await ctx.db.insert("comma_sync_state", { accountId, key, ...fields, updatedAt: Date.now() });
 }
 
+async function startRun(ctx: MutationCtx, accountId: Id<"comma_accounts">, key: string, fields: Pick<BackfillState, "step" | "optedIn" | "channels" | "channelOnly">) {
+  const now = Date.now();
+  const state: BackfillState = { run: String(now), oldest: String(Math.floor((now - BACKFILL_DAYS * 86_400_000) / 1000)), threads: [], ...fields };
+  await writeSync(ctx, accountId, key, { cursor: JSON.stringify(state) });
+  await ctx.scheduler.runAfter(0, internal.comma.slackSync.backfill, { accountId, run: state.run, key });
+}
+
 /** Starts a fresh backfill; a run still going from before stops at its next step. Connecting Slack calls this. */
 export const startBackfill = internalMutation({
   args: { accountId: v.id("comma_accounts") },
@@ -223,40 +312,41 @@ export const startBackfill = internalMutation({
   handler: async (ctx, { accountId }) => {
     const account = await ctx.db.get(accountId);
     if (!account) return null;
-    const now = Date.now();
-    const state: BackfillState = {
-      run: String(now), step: "users", oldest: String(Math.floor((now - BACKFILL_DAYS * 86_400_000) / 1000)),
-      optedIn: account.slackChannels ?? [], channels: [], threads: [],
-    };
-    await writeSync(ctx, accountId, BACKFILL_KEY, { cursor: JSON.stringify(state) });
-    await ctx.scheduler.runAfter(0, internal.comma.slackSync.backfill, { accountId, run: state.run });
+    await startRun(ctx, accountId, BACKFILL_KEY, { step: "users", optedIn: account.slackChannels ?? [], channels: [] });
     return null;
   },
 });
 
+/** Reads 90 days of one channel just opted in to, and its threads, under its own sync row (`slack:backfill:<channel>`). */
+export async function startChannelBackfill(ctx: MutationCtx, accountId: Id<"comma_accounts">, channel: { id: string; name: string }) {
+  await startRun(ctx, accountId, `${BACKFILL_KEY}:${channel.id}`, {
+    step: "history", optedIn: [channel.id], channels: [{ id: channel.id, type: "channel", name: channel.name }], channelOnly: true,
+  });
+}
+
 export const backfillState = internalQuery({
-  args: { accountId: v.id("comma_accounts") },
+  args: { accountId: v.id("comma_accounts"), key: v.optional(v.string()) },
   returns: v.union(v.string(), v.null()),
-  handler: async (ctx, { accountId }) => (await syncRow(ctx, accountId, BACKFILL_KEY))?.cursor ?? null,
+  handler: async (ctx, { accountId, key }) => (await syncRow(ctx, accountId, key ?? BACKFILL_KEY))?.cursor ?? null,
 });
 
 export const saveBackfill = internalMutation({
-  args: { accountId: v.id("comma_accounts"), run: v.string(), state: v.string() },
+  args: { accountId: v.id("comma_accounts"), run: v.string(), state: v.string(), key: v.optional(v.string()) },
   returns: v.boolean(),
-  handler: async (ctx, { accountId, run, state }) => {
-    const current = (await syncRow(ctx, accountId, BACKFILL_KEY))?.cursor;
+  handler: async (ctx, { accountId, run, state, key = BACKFILL_KEY }) => {
+    const current = (await syncRow(ctx, accountId, key))?.cursor;
     if (!current || (JSON.parse(current) as BackfillState).run !== run) return false;
-    await writeSync(ctx, accountId, BACKFILL_KEY, { cursor: state });
+    await writeSync(ctx, accountId, key, { cursor: state });
     return true;
   },
 });
 
 /** Runs one step, saves where it got to, and schedules the next. A rate limit waits as long as Slack asks. */
 export const backfill = internalAction({
-  args: { accountId: v.id("comma_accounts"), run: v.string() },
+  args: { accountId: v.id("comma_accounts"), run: v.string(), key: v.optional(v.string()) },
   returns: v.null(),
-  handler: async (ctx, { accountId, run }) => {
-    const stored = await ctx.runQuery(internal.comma.slackSync.backfillState, { accountId });
+  handler: async (ctx, { accountId, run, key }) => {
+    const stored = await ctx.runQuery(internal.comma.slackSync.backfillState, { accountId, key });
     const state = stored ? (JSON.parse(stored) as BackfillState) : null;
     if (!state || state.run !== run || state.step === "done") return null;
     const token = await slackToken(ctx, accountId);
@@ -269,8 +359,8 @@ export const backfill = internalAction({
       if (!(error instanceof SlackApiError && error.code === "ratelimited")) throw error;
       delay = (error.retryAfterSeconds ?? 30) * 1000;
     }
-    if (!(await ctx.runMutation(internal.comma.slackSync.saveBackfill, { accountId, run, state: JSON.stringify(next) }))) return null;
-    if (next.step !== "done") await ctx.scheduler.runAfter(delay, internal.comma.slackSync.backfill, { accountId, run });
+    if (!(await ctx.runMutation(internal.comma.slackSync.saveBackfill, { accountId, run, state: JSON.stringify(next), key }))) return null;
+    if (next.step !== "done") await ctx.scheduler.runAfter(delay, internal.comma.slackSync.backfill, { accountId, run, key });
     return null;
   },
 });
@@ -309,17 +399,17 @@ export async function backfillStep(ctx: ActionCtx, token: string, accountId: Id<
     }
     case "history": {
       const [channel, ...rest] = state.channels;
-      if (!channel) return { ...state, step: "search", cursor: undefined, query: 0, page: 1 };
+      if (!channel) return state.channelOnly ? { ...state, step: "replies", cursor: undefined } : { ...state, step: "search", cursor: undefined, query: 0, page: 1 };
       const members = channel.type === "mpim" && !channel.members
         ? await orSkip(async () => (await channelInfo(token, channel.id)).members ?? [], []) : channel.members;
       const result = await orSkip(() => page("conversations.history", { channel: channel.id, oldest: state.oldest, cursor: state.cursor }, token),
         { messages: [], raw: [], cursor: undefined });
       const ref: SlackConversationRef = { type: channel.type, channel: channel.id };
       await ingest(ctx, token, accountId, [{ ref, ...(channel.name ? { name: channel.name } : {}), ...(members ? { members } : {}), messages: result.messages }]);
-      // A DM's threads belong to the DM; a channel's are kept only where search finds Milad in them.
-      const threads = channel.type === "channel" ? [] : result.raw.flatMap((raw): Thread[] => {
+      // Every thread in a DM, group DM or opted-in channel is read whole; elsewhere search finds the ones Milad is in.
+      const threads = result.raw.flatMap((raw): Thread[] => {
         const root = raw as { ts?: string; reply_count?: number };
-        return root.ts && root.reply_count ? [{ channel: channel.id, ts: root.ts, into: channel.type === "im" ? "im" : "mpim" }] : [];
+        return root.ts && root.reply_count ? [{ channel: channel.id, ts: root.ts, into: channel.type }] : [];
       });
       const updated = { ...channel, ...(members ? { members } : {}) };
       return result.cursor

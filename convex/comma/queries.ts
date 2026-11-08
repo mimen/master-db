@@ -1,4 +1,4 @@
-import { paginationOptsValidator, paginationResultValidator, type SearchFilterFinalizer } from "convex/server";
+import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v, type Infer } from "convex/values";
 
 import { formatAddress } from "../../apps/imsg/shared/address";
@@ -17,17 +17,19 @@ import {
   draftView,
   messageDoc,
   participant,
+  platform as platformValidator,
   reaction,
   scheduledDoc,
   suggestionDoc,
   syncStateDoc,
   type CommaConversationDoc,
   type CommaMessageDoc,
+  type CommaPlatform,
 } from "../schema/comma/validators";
 
 import { soleAccountScope } from "./accounts";
-import { conversationKind } from "./conversationIdentity";
-import { findByChatGuid, findMessage, shownInThread } from "./conversationLookup";
+import { conversationKind, slack } from "./conversationIdentity";
+import { findByChatGuid, findByKey, findMessage, shownInThread } from "./conversationLookup";
 import { attachmentRead, messageRead as readMessage, scopeOf } from "./messageShape";
 import { resolveConversationNames } from "./names";
 import { normalizedAddress, personForNormalized } from "./photos";
@@ -53,6 +55,8 @@ const conversationView = v.object({
   searchNames: v.array(v.string()),
   groupPhotoUrl: v.union(v.string(), v.null()),
   crm: v.optional(conversationCrmView),
+  /** A Slack thread's: the DM, group DM or channel Comma holds it in, and how many replies it has. */
+  thread: v.optional(v.object({ parentId: v.optional(v.id("comma_conversations")), replyCount: v.number() })),
 });
 
 /** Reads the same CRM ChatSummary.crm carries: groups own theirs, a DM inherits its person's. */
@@ -122,7 +126,7 @@ export async function withConversationState(
     .query("comma_conversation_state")
     .withIndex("by_conversationId", (q) => q.eq("conversationId", conversation._id))
     .unique();
-  const ruled = { platform: conversation.platform ?? "imessage", kind: conversationKind(conversation) };
+  const ruled = { platform: conversation.platform ?? "imessage", kind: conversationKind(conversation), following: conversation.slack?.following };
   // A mark-read in Comma lands here before chat.db catches up.
   const { flags, unreadCount } = conversationFlags(ruled, state ?? undefined, conversation.lastMessage ?? null,
     conversation.lastMessageAt, conversation.unread?.count ?? 0);
@@ -145,7 +149,30 @@ export async function withConversationState(
     known: names.known, contactsAvailable: await read.contactsAvailable(), searchNames: names.searchNames,
     ...(lastMessage ? { lastMessage: { ...lastMessage, senderName } } : {}),
     groupPhotoUrl: conversation.groupPhotoStorageId ? await read.storageUrl(conversation.groupPhotoStorageId) : null,
+    ...(ruled.kind === "thread" ? { thread: await threadSummary(ctx, conversation) } : {}),
   };
+}
+
+async function threadSummary(ctx: QueryCtx, conversation: CommaConversationDoc) {
+  const { channel, threadTs } = conversation.slack!;
+  const scope = scopeOf(conversation);
+  const parents = await Promise.all(slack.parentKeys(channel).map((key) => findByKey(ctx, scope, key)));
+  const parent = parents.find((row) => row !== null);
+  const root = await findMessage(ctx, scope, slack.messageGuid(channel, threadTs!));
+  return { ...(parent ? { parentId: parent._id } : {}), replyCount: root?.replyCount ?? 0 };
+}
+
+/**
+ * A Slack thread is part of its DM, group DM or channel, so the list shows it only while it wants Milad: owed a reply,
+ * marked unread, or pinned. Reads only its triage state to decide, so a busy channel's threads cost the list little.
+ */
+async function listed(ctx: QueryCtx, conversation: CommaConversationDoc): Promise<boolean> {
+  if (!conversation.slack?.threadTs) return true;
+  const state = await ctx.db.query("comma_conversation_state")
+    .withIndex("by_conversationId", (q) => q.eq("conversationId", conversation._id)).unique();
+  const { flags } = conversationFlags({ platform: "slack", kind: "thread", following: conversation.slack.following }, state ?? undefined,
+    conversation.lastMessage ?? null, conversation.lastMessageAt, conversation.unread?.count ?? 0);
+  return flags.unresponded || flags.unread || flags.pinned;
 }
 
 export const listConversations = query({
@@ -160,9 +187,11 @@ export const listConversations = query({
       .filter((q) => q.neq(q.field("lastMessage"), undefined))
       .paginate(args.paginationOpts);
     const read = listReader(ctx);
+    const shown = (await Promise.all(result.page.map(async (conversation) => (await listed(ctx, conversation) ? conversation : null))))
+      .filter((conversation) => conversation !== null);
     return {
       ...result,
-      page: await Promise.all(result.page.map((conversation) => withConversationState(ctx, conversation, read))),
+      page: await Promise.all(shown.map((conversation) => withConversationState(ctx, conversation, read))),
     };
   },
 });
@@ -195,6 +224,8 @@ export const messageRead = v.object({
 export const messageView = v.object({
   ...messageRead.fields,
   attachments: v.array(attachmentView),
+  /** A Slack message that starts a thread Comma holds: that thread's conversation. */
+  thread: v.optional(v.object({ conversationId: v.id("comma_conversations"), replyCount: v.number() })),
 });
 
 /** A message with its reactions, and sender and reaction names read from the identity graph, not the names stored on the row. */
@@ -238,8 +269,20 @@ export const listMessages = query({
       .order("desc")
       .filter(shownInThread)
       .paginate(args.paginationOpts);
+    const conversation = await ctx.db.get(args.conversationId);
+    const thread = conversation?.slack?.threadTs ? conversation.slack : null;
+    const rootGuid = thread ? slack.messageGuid(thread.channel, thread.threadTs!) : null;
+    // A thread's root lives in its channel or DM; the thread shows it first, under its replies' last page.
+    const root = result.isDone && conversation && rootGuid && !result.page.some((message) => message.guid === rootGuid)
+      ? await findMessage(ctx, scopeOf(conversation), rootGuid) : null;
     const read = listReader(ctx);
-    const page = await Promise.all(result.page.map((message) => withMessageAttachments(ctx, message, read)));
+    const page = await Promise.all([...result.page, ...(root && !root.retracted ? [root] : [])].map(async (message) => {
+      const view = await withMessageAttachments(ctx, message, read);
+      if (!message.replyCount || message.guid === rootGuid || !conversation) return view;
+      const threadConversation = await findByKey(ctx, scopeOf(conversation),
+        slack.conversationKey({ type: "thread", channel: conversation.slack!.channel, threadTs: message.guid.slice(conversation.slack!.channel.length + 1) }));
+      return threadConversation ? { ...view, thread: { conversationId: threadConversation._id, replyCount: message.replyCount } } : view;
+    }));
     return { ...result, page };
   },
 });
@@ -249,6 +292,7 @@ export const searchMessages = query({
     query: v.string(),
     conversationId: v.optional(v.id("comma_conversations")),
     from: v.optional(v.union(v.literal("me"), v.literal("them"))),
+    platform: v.optional(platformValidator),
   },
   returns: v.array(messageRead),
   handler: async (ctx, args) => {
@@ -260,24 +304,20 @@ export const searchMessages = query({
 
 /** Associated messages are filtered after the search: rows written since the side object carry no isTapback to match. */
 export async function searchMessageRows(ctx: QueryCtx, args: {
-  query: string; conversationId?: Id<"comma_conversations">; from?: "me" | "them";
+  query: string; conversationId?: Id<"comma_conversations">; from?: "me" | "them"; platform?: CommaPlatform;
 }): Promise<CommaMessageDoc[]> {
   return await ctx.db
     .query("comma_messages")
     .withSearchIndex("search_text", (q) => {
       let search = q.search("text", args.query).eq("retracted", false);
       if (args.conversationId) search = search.eq("conversationId", args.conversationId);
-      // The sibling schema branch adds isFromMe to search_text.filterFields.
-      if (args.from) {
-        const senderSearch = search as SearchFilterFinalizer<CommaMessageDoc, {
-          searchField: "text";
-          filterFields: "conversationId" | "isTapback" | "retracted" | "isFromMe";
-        }>;
-        return senderSearch.eq("isFromMe", args.from === "me");
-      }
+      if (args.from) search = search.eq("isFromMe", args.from === "me");
+      // Messages from before platforms carry none and are all iMessage's, so only Slack filters in the index.
+      if (args.platform === "slack") search = search.eq("platform", "slack");
       return search;
     })
-    .filter((q) => q.and(q.neq(q.field("isTapback"), true), q.neq(q.field("imessage.isAssociatedMessage"), true)))
+    .filter((q) => q.and(q.neq(q.field("isTapback"), true), q.neq(q.field("imessage.isAssociatedMessage"), true),
+      args.platform === "imessage" ? q.neq(q.field("platform"), "slack") : true))
     .take(50);
 }
 

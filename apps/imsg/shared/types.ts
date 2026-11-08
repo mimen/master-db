@@ -56,7 +56,7 @@ export type SpecialContent =
 export type Platform = "imessage" | "slack";
 
 /** A conversation's shape: one person, a group, a workspace channel, or an email thread. */
-export type ConversationKind = "dm" | "group" | "channel" | "emailThread";
+export type ConversationKind = "dm" | "group" | "channel" | "thread" | "emailThread";
 
 /** An account's Convex id: one signed-in identity on a platform. */
 export type AccountId = GenericId<"comma_accounts">;

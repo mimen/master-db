@@ -12,8 +12,12 @@ import { slack, type SlackConversationRef } from "./conversationIdentity";
 import { findByKey, findMessage } from "./conversationLookup";
 import { MODEL_TEXT_UNSET } from "./messageShape";
 import { refreshLastMessage } from "./pendingSends";
+import { messageKey } from "./reactions";
+import { applyReaction } from "./reactionStore";
 import { SLACK_TEAM_ID } from "./slackAuth";
+import { slackNameEmoji } from "./slackLane";
 import { upsertSlackUsers } from "./slackPeople";
+import { countReplies } from "./slackSync";
 
 /**
  * POST /comma/slack/events, Slack's Events API. The handler checks the signature, answers url_verification, and hands
@@ -31,6 +35,8 @@ const slackEventValue = v.union(
   v.object({ kind: v.literal("message"), channel: v.string(), channelType, message: slackMessage }),
   v.object({ kind: v.literal("deleted"), channel: v.string(), ts: v.string() }),
   v.object({ kind: v.literal("user"), user: slackUser }),
+  /** Someone's reaction added or removed, by Slack's emoji name. `at` is the event's time in ms. */
+  v.object({ kind: v.literal("reaction"), channel: v.string(), ts: v.string(), user: v.string(), name: v.string(), removed: v.boolean(), at: v.number() }),
 );
 type SlackEvent = Infer<typeof slackEventValue>;
 
@@ -101,6 +107,13 @@ function parseEvent(event: Json): SlackEvent | null {
     const user = parseSlackUser(event.user);
     return user ? { kind: "user", user } : null;
   }
+  if (event.type === "reaction_added" || event.type === "reaction_removed") {
+    const item = isObject(event.item) ? event.item : {};
+    const [channel, ts, user, name] = [text(item.channel), text(item.ts), text(event.user), text(event.reaction)];
+    const at = Math.round(Number(text(event.event_ts)) * 1000);
+    if (item.type !== "message" || !channel || !ts || !user || !name || !Number.isFinite(at)) return null;
+    return { kind: "reaction", channel, ts, user, name, removed: event.type === "reaction_removed", at };
+  }
   const channel = text(event.channel);
   if (event.type !== "message" || !channel) return null;
   if (event.subtype === "message_deleted") {
@@ -119,18 +132,18 @@ export function mentions(raw: string, userId: string): boolean {
 }
 
 /**
- * Which conversation a message belongs to, or null to drop it. Every DM and group DM message is kept. In a channel, a
- * thread Milad started, replied in or is mentioned in is its own conversation, and a top-level message is kept only in
- * a channel he opted in to. `threadKnown`: Comma already holds the thread this message starts or replies in.
+ * Which conversation a message belongs to, or null to drop it. A reply is its thread's own conversation; a top-level
+ * message is its DM's, group DM's or channel's. Every DM and group DM message is kept. In a channel opted in to,
+ * everything is kept; elsewhere only a thread Milad started, replied in or is mentioned in, whose root is then the
+ * thread's. `threadKnown`: Comma already holds the thread this message starts or replies in.
  */
 export function slackRef(
   channel: string, type: SlackChannelType, message: SlackMessage, rules: { self: string; optedIn: boolean; threadKnown: boolean },
 ): SlackConversationRef | null {
-  if (type === "im" || type === "mpim") return { type, channel };
+  const reply = message.threadTs !== undefined && message.threadTs !== message.ts;
+  if (type === "im" || type === "mpim") return reply ? { type: "thread", channel, threadTs: message.threadTs! } : { type, channel };
   const involved = rules.threadKnown || message.user === rules.self || mentions(message.text, rules.self);
-  if (message.threadTs !== undefined && message.threadTs !== message.ts) {
-    return involved ? { type: "thread", channel, threadTs: message.threadTs } : null;
-  }
+  if (reply) return involved || rules.optedIn ? { type: "thread", channel, threadTs: message.threadTs! } : null;
   if (rules.optedIn) return { type: "channel", channel };
   return involved ? { type: "thread", channel, threadTs: message.ts } : null;
 }
@@ -189,6 +202,19 @@ export async function retractSlackMessage(ctx: MutationCtx, accountId: Doc<"comm
   if (!message || message.retracted) return;
   await ctx.db.patch(message._id, { ...MODEL_TEXT_UNSET, retracted: true, text: "", mentions: [], dateRetracted: Date.now(), sourceVersion: Date.now() });
   await refreshLastMessage(ctx, message.conversationId);
+  if (message.threadRef) await countReplies(ctx, accountId, message.conversationId);
+}
+
+/** A reaction event on a message Comma keeps. Milad's own, made in Slack or echoed from Comma, is his. */
+async function applySlackReaction(ctx: MutationCtx, account: Doc<"comma_accounts">, event: Extract<SlackEvent, { kind: "reaction" }>) {
+  const message = await findMessage(ctx, { platform: "slack", accountId: account._id }, slack.messageGuid(event.channel, event.ts));
+  if (!message) return;
+  const emoji = slackNameEmoji(event.name);
+  const isFromMe = event.user === selfUserId(account);
+  await applyReaction(ctx, {
+    platform: "slack", conversationId: message.conversationId, targetKey: messageKey("slack", message.guid), key: `emoji:${emoji}`, emoji,
+    isFromMe, ...(isFromMe ? {} : { senderAddress: `slack:${event.user}` }), at: event.at, removed: event.removed,
+  });
 }
 
 const HEARTBEAT_MS = 60_000;
@@ -218,6 +244,10 @@ export const receive = internalMutation({
     }
     if (event.kind === "deleted") {
       await retractSlackMessage(ctx, account._id, slack.messageGuid(event.channel, event.ts));
+      return null;
+    }
+    if (event.kind === "reaction") {
+      await applySlackReaction(ctx, account, event);
       return null;
     }
     const kept = await qualify(ctx, account, event.channel, event.channelType, event.message);
