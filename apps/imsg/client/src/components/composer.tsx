@@ -344,7 +344,7 @@ export function Composer({
     setInputHeight(IOS_INPUT_MIN_HEIGHT);
   }, []);
   const draftSync = useComposerDraft(conversationId, editing !== null, loadRemoteDraft);
-  const replySuggestions = useReplySuggestions(conversationId, { ...suggestions, pend: onEdit });
+  const replySuggestions = useReplySuggestions(conversationId, { ...suggestions, enabled: suggestions.enabled && !sendBlocked, pend: onEdit });
   const ghost = replySuggestions.slots.kind === "ready" ? replySuggestions.slots.ghost : null;
   const [ghostTextHeight, setGhostHeight] = useState(0);
 

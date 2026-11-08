@@ -21,6 +21,8 @@ const routeFeature: Partial<Record<CommaOutboxPayload["kind"], Feature | null>> 
 function neededFeatures(payload: CommaOutboxPayload): Feature[] {
   if (payload.kind === "send") return ["send", ...(payload.replyToGuid ? ["reply" as const] : []), ...(payload.mentions?.length ? ["mentions" as const] : [])];
   if (payload.kind === "sendAttachment") return [payload.isAudioMessage ? "voiceMemo" : "attachments"];
+  // A reply nobody can send is not worth a model call.
+  if (payload.kind === "suggestions") return ["send"];
   const feature = routeFeature[payload.kind];
   return feature ? [feature] : [];
 }

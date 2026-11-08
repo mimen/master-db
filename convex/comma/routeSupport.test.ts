@@ -33,5 +33,7 @@ describe("a Slack route", () => {
     expect(unsupportedReason(slack, false, { kind: "send", text: "hi" })).toBe("Sending from Slack is coming");
     expect(unsupportedReason(slack, false, { kind: "react", messageGuid: "D1:1.0", reaction: "emoji:🔥", remove: false })).toBe("Sending from Slack is coming");
     expect(unsupportedReason(slack, false, { kind: "markRead" })).toBeNull();
+    expect(unsupportedReason(slack, false, { kind: "suggestions", model: "opus", refresh: false })).toBe("Sending from Slack is coming");
+    expect(unsupportedReason(imessage, false, { kind: "suggestions", model: "opus", refresh: false })).toBeNull();
   });
 });

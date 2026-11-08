@@ -330,3 +330,17 @@ describe("Slack's connection status", () => {
     expect((await as.query(api.comma.bridgeState.routeExecutorStatus, { platform: "slack", accountId }))!.lastSeenAt).toBeGreaterThan(firstSeen);
   });
 });
+
+describe("a Slack conversation on the per-conversation reads", () => {
+  test("details and the AI thread answer for it rather than throw", async () => {
+    const { t, as } = await connected();
+    slack.channel({ id: "D1", type: "im", user: SAM });
+    await post(t, eventCallback("Ev1", messageEvent("D1", "im", { user: SAM, text: "hi", ts: ago(1) })));
+    await settle(t);
+    const [conversation] = await conversations(t);
+    expect(await as.query(api.comma.conversationInfo.chatInfo, { conversationId: conversation!._id }))
+      .toMatchObject({ guid: conversation!._id, isGroup: false, participants: [{ address: `slack:${SAM}`, name: "Sam Lee" }] });
+    expect(await t.mutation(internal.comma.agentContext.aiThread, { conversationId: conversation!._id }))
+      .toMatchObject({ route: { platform: "slack", channel: "D1" }, messages: [{ text: "hi", chatGuid: "" }] });
+  });
+});
