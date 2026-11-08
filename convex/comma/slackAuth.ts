@@ -22,7 +22,7 @@ import { slackApi, SlackApiError } from "./slackApi";
 /** umbrellafriends (AUF). Comma reads one workspace; a token for any other is refused. */
 export const SLACK_TEAM_ID = "T066U9Q8F99";
 
-/** What Comma asks to read as Milad. The write scopes are for sending, which lands later, so one install covers both. */
+/** What Comma asks to read and write as Milad. `files:write` waits for attachments. */
 export const SLACK_USER_SCOPES = [
   "channels:history", "channels:read", "channels:write", "chat:write", "files:read", "files:write", "groups:history",
   "groups:read", "groups:write", "im:history", "im:read", "im:write", "mpim:history", "mpim:read", "mpim:write",

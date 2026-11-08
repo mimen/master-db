@@ -619,7 +619,7 @@ export function Composer({
       setSendStatus("idle");
       if (error instanceof SendCancelledError) return;
       hapticFailure();
-      if (sendFailureToast()) showToast(`Couldn't send. ${checkExecutor}`);
+      if (sendFailureToast()) showToast(messagingCommandError(error, `Couldn't send. ${checkExecutor}`));
     }
   };
 

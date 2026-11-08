@@ -55,7 +55,8 @@ message is dismissed. Its **screening** says known, stranger or spam, which the 
 for iMessage, junk is spam and a participant who resolves to a named person makes the conversation known. Slack's
 attention follows iMessage's in a DM, group DM or thread; a channel needs you only when its last message is someone
 else's and mentions you (`mentionsMe` on the last message), and never waits. Slack screens nothing: everyone in the
-workspace is known. Slack is read-only for now, so everything that writes greys with "Sending from Slack is coming". For routes,
+workspace is known. On Slack, Comma sends, replies in a thread, reacts (any number per sender), edits and deletes;
+mentions, scheduling and attachments grey with "Not in Comma's Slack yet". For routes,
 each feature (reactions and which
 tapbacks, reply, edit, unsend, typing, mentions, scheduling, calls, attachments, FaceTime links, group management,
 deleting) lists the services that carry it, whether it exists only in a group, and whether BlueBubbles needs its
@@ -146,14 +147,16 @@ _Avoid_: temp message, optimistic send, local send
 **Outbox lane**:
 The executor a queued command waits for, stamped on its `comma_outbox` row at enqueue from the route's
 platform and the command's kind: one lane per messaging platform (`imessage`, and `slack`, a convex lane that
-completes a read receipt without calling Slack and refuses the rest until sending lands), an `ai` lane
+calls Slack's Web API as Milad, `convex/comma/slackLane.ts`), an `ai` lane
 for suggestions, identify, suggestion feedback, clearing learning and transcription, and an `aiBackground`
 lane for suggestion precompute, which nobody waits on. The lane registry
 (`convex/comma/laneRegistry.ts`) says who runs each: a **pull** lane waits for an outside executor to
 claim it (the Mini's `comma:server` for `imessage`, its `comma:ai` for both model lanes); a **convex** lane runs in a
 Convex action that enqueue schedules, which claims under the same lease and whose lease expiry schedules
 the next drive. A convex lane's thrown error leaves its command `unknown`, because the platform may have acted;
-only a `NotSentError` (refused, or never sent) fails it. Every lane runs one command at a time, so a slow model
+only a `NotSentError` (refused, or never sent) fails it. A Slack send that ends unknown is looked for in Slack's history at
+20 seconds and 2 minutes, by the clientKey in its message metadata or by Milad's id and exact text, and lands as sent
+when found; it is never posted again. Every lane runs one command at a time, so a slow model
 call never holds back a send.
 What a confirmed command changes in Convex beyond its receipt is the lane's `onResult`. AI work reads the
 conversation from Convex by conversation id, never from BlueBubbles. Convex queues a reply-suggestion

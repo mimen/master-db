@@ -27,6 +27,7 @@ import type { BBMessage } from "../../server/bb-types";
 import { createAgentFixture } from "./agent";
 import { FixtureAi } from "./ai";
 import { createTodayFixture, type TodayMode } from "./today";
+import { createSlackFixture, SLACK_DM } from "./slack";
 import { createTriageFixture } from "./triage";
 import type { FixtureBlueBubbles } from "./fake-bluebubbles";
 import { AGENT_SEED, fixtureSeed, FIXTURE_NOW, type FixtureIdentity } from "./world";
@@ -159,7 +160,8 @@ export async function fixtureMessageWindow(bb: FixtureBlueBubbles, names: Fixtur
 
 export function registerConvexFixture(app: Hono, controls: FixtureRouteControls & { ai?: AiServiceLike }, bb: FixtureBlueBubbles, db: OverlayDb, names: FixtureIdentity, additionalHandlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {}) {
   const drafts = new Map<string, Infer<typeof draftView>>();
-  const receipts = new Map<string, { id: string; status: "pending" | "sent" | "failed"; clientKey: string; updatedAt: number; error?: string; result?: CommandResult; resultGuid?: string }>();
+  const receipts = new Map<string, { id: string; status: "pending" | "sent" | "failed" | "unknown"; clientKey: string; updatedAt: number; error?: string; result?: CommandResult; resultGuid?: string }>();
+  const slackWorld = createSlackFixture(receipts);
   /** Each send's conversation and payload, for a retry. */
   const sendPayloads = new Map<string, { chatGuid: string; payload: CommaOutboxPayload }>();
   /**
@@ -537,7 +539,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
         .filter((typing) => typing !== undefined).sort((a, b) => b.updatedAt - a.updatedAt)[0];
       return row ? { ...row, peerTyping: row.peerTyping && row.expiresAt > new Date().getTime() } : null;
     },
-    "comma/bridgeState:routeExecutorStatus": async () => {
+    "comma/bridgeState:routeExecutorStatus": async (args) => {
+      if ((args.route as { platform?: string } | undefined)?.platform === "slack") {
+        return { key: "slack:account-slack", connected: true, lastSeenAt: new Date().getTime(), capabilities: { executor: "slack" } };
+      }
       // On the wall clock the browser judges it by, once a minute like the bridge, so a poll is not a new state.
       // A Mini that is away last beat ten minutes ago.
       const now = new Date().getTime();
@@ -587,10 +592,12 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
         return [{ guid: a.guid, mimeType: a.mimeType ?? null, filename: a.filename ?? null, isImage, isVideo, dateCreated: message.dateCreated, thumbUrl: a.thumbUrl, originalUrl: a.originalUrl }];
       })).slice(0, cap);
     },
-    "comma/queries:listConversations": async (args) => paginate(await conversations(), args.paginationOpts as Pagination),
+    "comma/queries:listConversations": async (args) => paginate([...[slackWorld.conversation()].filter((row) => row !== null), ...await conversations()], args.paginationOpts as Pagination),
     "comma/queries:resolveChat": async (args) => (await conversations()).find((row) => row.primaryChatGuid === args.chatGuid) ?? null,
-    "comma/queries:getConversation": async (args) => (await conversations()).find((row) => row._id === args.conversationId) ?? null,
-    "comma/queries:listMessages": async (args) => paginate(await messages(String(args.conversationId)), args.paginationOpts as Pagination),
+    "comma/queries:getConversation": async (args) => slackWorld.owns(String(args.conversationId)) ? slackWorld.conversation()
+      : (await conversations()).find((row) => row._id === args.conversationId) ?? null,
+    "comma/queries:listMessages": async (args) => paginate(slackWorld.owns(String(args.conversationId)) ? slackWorld.messages()
+      : await messages(String(args.conversationId)), args.paginationOpts as Pagination),
     "comma/queries:searchMessages": async (args) => {
       const text = String(args.query).trim();
       if (text.length < 2) return [];
@@ -675,6 +682,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
       const execution = (async () => {
         const payload = args.payload as CommaOutboxPayload;
         const chatGuid = typeof args.conversationId === "string" ? args.conversationId : "";
+        if (slackWorld.owns(chatGuid)) return slackWorld.enqueue(clientKey, payload);
         const conversation = (await conversations()).find((row) => row._id === chatGuid);
         if (payload.kind === "createChat" || payload.kind === "clearSuggestionLearning") {
           if (chatGuid) throw new FixtureError(`${payload.kind} must be global`, 400);
@@ -777,6 +785,13 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     if (mini.online) releaseHeld();
     return c.json({ ok: true });
   });
+  // Seeds the Slack DM, and makes the next Slack send's answer get lost, so it ends unknown until the check finds it.
+  app.post("/__fixture/slack", async (c) => {
+    const body = await c.req.json<{ seed?: boolean; loseNextAnswerMs?: number }>();
+    if (body.seed) slackWorld.seed();
+    if (body.loseNextAnswerMs !== undefined) slackWorld.loseNextAnswer(body.loseNextAnswerMs);
+    return c.json({ ok: true, conversationId: fixtureConversationId(SLACK_DM) });
+  });
   app.post("/__fixture/latency", async (c) => {
     const { name, delayMs } = await c.req.json<{ name: string; delayMs: number | null }>();
     if (delayMs === null) latency.delete(name);
@@ -798,6 +813,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
   return () => {
     for (const { timer } of mini.held.values()) clearTimeout(timer);
     Object.assign(slackAccount, { connected: false, ever: false });
+    slackWorld.reset();
     mini.held.clear(); mini.online = true; mini.heartbeat = true; mini.beatAt = new Date().getTime(); mini.notSentAfterMs = NOT_SENT_AFTER_MS; sendPayloads.clear();
     turns.clear(); names.reset(); agent.reset(); today.reset(); triage.reset(); latency.clear(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
     for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };
