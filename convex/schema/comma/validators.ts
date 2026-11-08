@@ -24,7 +24,12 @@ export const accountFields = {
   createdAt: v.number(),
   /** Absent on the iMessage account, which needs none, and on an account that was disconnected. */
   credentials: v.optional(sealedCredentials),
+  /** Slack channels whose top-level messages Comma keeps. Elsewhere it keeps only DMs and Milad's threads. */
+  slackChannels: v.optional(v.array(v.string())),
 };
+
+/** A Slack event_id already received, so a retry is dropped. The backstop prunes old ones. */
+export const slackEventFields = { eventId: v.string(), receivedAt: v.number() };
 
 /** A single-use OAuth state: an authed client asked to connect, and the platform's callback must name it before it expires. */
 export const oauthStateFields = { state: v.string(), platform, expiresAt: v.number() };

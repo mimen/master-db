@@ -15,7 +15,11 @@ owns the identity in `convex/comma/conversationIdentity.ts`: the key, the primar
 activity, ties to iMessage, then RCS, then SMS), and lookups by chat GUID or handle. The chat fields
 (`primaryChatGuid`, `chatGuids`, `hasGroupPhoto`) are iMessage's and absent on another platform's row. A Slack
 conversation is a DM (`im:D…`), a group DM (`mpim:G…`), a channel (`ch:C…`) or one thread inside a channel
-(`th:C…:<root ts>`), and keeps its channel and thread root under `slack`. Group CRM
+(`th:C…:<root ts>`), and keeps its channel and thread root under `slack`. Convex reads Slack itself
+(`convex/comma/slackEvents.ts`, `slackSync.ts`): the Events webhook keeps every DM and group DM message, a thread Milad
+started, replied in or is mentioned in, and top-level messages in the channels on the account's `slackChannels`, and drops
+the rest before any write; a 90-day backfill and a 15-minute backstop cron write through the same idempotent ingest.
+Each Slack user is a `slack` identity that joins the person with exactly its email, or else a person of its own. Group CRM
 (`chat_crm`, chat `tags`, chat `event_links`) belongs to the conversation.
 Its **kind** is `dm`, `group`, `channel` or `emailThread` (`comma_conversations.kind`); iMessage ingest derives `dm` or
 `group`, and `isGroup` (every kind but `dm`) is derived from it for older readers. Rows from before kinds read theirs

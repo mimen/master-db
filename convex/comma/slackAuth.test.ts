@@ -20,10 +20,12 @@ const manifest = JSON.parse(readFileSync(new URL("../../apps/imsg/slack/manifest
 
 let slack: FakeSlack;
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"], now: Date.now() });
   stubSlackEnv();
   slack = new FakeSlack().install();
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -40,6 +42,8 @@ async function connect(t: Awaited<ReturnType<typeof setup>>["t"], as: Awaited<Re
   const state = install.searchParams.get("state")!;
   const redirect = await t.fetch(`${install.pathname}${install.search}`, { method: "GET" });
   const callback = await t.fetch(`/comma/oauth/slack/callback?code=${code}&state=${state}`, { method: "GET" });
+  // Connecting starts the backfill; let it finish inside the test.
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
   return { install, state, redirect, callback };
 }
 
@@ -92,7 +96,7 @@ describe("connecting Slack", () => {
       await ctx.db.query("comma_accounts").collect(), await ctx.db.query("comma_bridge_state").collect(), await ctx.db.query("comma_oauth_states").collect(),
     ]));
     expect(everything).not.toContain(TOKEN);
-    expect(slack.calls.map((call) => [call.method, call.token])).toEqual([["oauth.v2.access", null], ["auth.test", TOKEN]]);
+    expect(slack.calls.slice(0, 2).map((call) => [call.method, call.token])).toEqual([["oauth.v2.access", null], ["auth.test", TOKEN]]);
   });
 
   test("a state works once, and an expired or unknown one connects nothing", async () => {
@@ -102,9 +106,8 @@ describe("connecting Slack", () => {
     expect(replay.status).toBe(400);
     expect((await t.fetch("/comma/oauth/slack/install?state=nope", { method: "GET" })).status).toBe(400);
     const install = new URL(await as.action(api.comma.slackAuth.startSlackConnect, {}));
-    vi.useFakeTimers({ now: Date.now() + 11 * 60_000, toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + 11 * 60_000);
     const late = await t.fetch(`/comma/oauth/slack/callback?code=good-code&state=${install.searchParams.get("state")}`, { method: "GET" });
-    vi.useRealTimers();
     expect(late.status).toBe(400);
     expect(slack.calls.filter((call) => call.method === "oauth.v2.access")).toHaveLength(1);
   });

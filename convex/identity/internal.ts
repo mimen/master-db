@@ -297,7 +297,8 @@ export function personAggregatePatch(person: Doc<"people">, all: Doc<"identities
   let isSelf = false;
   for (const i of all) {
     if (i.normalized.includes("@")) emails.add(i.normalized);
-    else if (i.normalized) phones.add(i.normalized);
+    // A Slack identity's key is its user id, which is neither a phone nor an email.
+    else if (i.normalized && i.kind !== "slack") phones.add(i.normalized);
     messageCount += i.message_count;
     isSelf = isSelf || i.is_self;
   }

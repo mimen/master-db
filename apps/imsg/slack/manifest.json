@@ -1,12 +1,17 @@
 {
-  "_metadata": { "major_version": 2, "minor_version": 1 },
+  "_metadata": {
+    "major_version": 2,
+    "minor_version": 1
+  },
   "display_information": {
     "name": "Comma",
     "description": "Milad's messages client. Reads his DMs, group DMs, his threads and the channels he opts in to, as him.",
     "background_color": "#1c1c1e"
   },
   "oauth_config": {
-    "redirect_urls": ["https://shiny-gerbil-853.convex.site/comma/oauth/slack/callback"],
+    "redirect_urls": [
+      "https://shiny-gerbil-853.convex.site/comma/oauth/slack/callback"
+    ],
     "scopes": {
       "user": [
         "channels:history",
@@ -33,6 +38,16 @@
     }
   },
   "settings": {
+    "event_subscriptions": {
+      "request_url": "https://shiny-gerbil-853.convex.site/comma/slack/events",
+      "user_events": [
+        "message.channels",
+        "message.groups",
+        "message.im",
+        "message.mpim",
+        "user_change"
+      ]
+    },
     "org_deploy_enabled": false,
     "socket_mode_enabled": false,
     "token_rotation_enabled": false

@@ -152,6 +152,7 @@ export const connect = internalMutation({
     const { _id } = await ensureAccount(ctx, { platform: "slack", ...account, selfHandles: [selfHandle] });
     await ctx.db.patch(_id, { credentials, health: "ok" });
     await markConnection(ctx, _id, true);
+    await ctx.scheduler.runAfter(0, internal.comma.slackSync.startBackfill, { accountId: _id });
     return _id;
   },
 });

@@ -36,6 +36,14 @@ crons.daily(
   internal.identity.resolve.resolveIdentities
 );
 
+// Comma's Slack backstop: re-reads recent history of active Slack conversations, so a message the Events webhook
+// missed lands within 15 minutes. See convex/comma/slackSync.ts.
+crons.interval(
+  "comma-slack-backstop",
+  { minutes: 15 },
+  internal.comma.slackSync.backstop
+);
+
 // Run daily routine task generation at midnight (00:00)
 // crons.daily(
 //   "daily-routine-generation",

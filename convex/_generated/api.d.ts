@@ -6121,6 +6121,137 @@ export declare const internal: {
         boolean
       >;
     };
+    slackEvents: {
+      receive: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          event:
+            | {
+                channel: string;
+                channelType: "im" | "mpim" | "channel" | "group";
+                kind: "message";
+                message: {
+                  editedTs?: string;
+                  text: string;
+                  threadTs?: string;
+                  ts: string;
+                  user: string;
+                };
+              }
+            | { channel: string; kind: "deleted"; ts: string }
+            | {
+                kind: "user";
+                user: { email?: string; id: string; name: string };
+              }
+            | null;
+          eventId: string;
+          teamId: string;
+        },
+        null
+      >;
+    };
+    slackSync: {
+      accountSelf: FunctionReference<
+        "query",
+        "internal",
+        { accountId: Id<"comma_accounts"> },
+        string
+      >;
+      backfill: FunctionReference<
+        "action",
+        "internal",
+        { accountId: Id<"comma_accounts">; run: string },
+        null
+      >;
+      backfillState: FunctionReference<
+        "query",
+        "internal",
+        { accountId: Id<"comma_accounts"> },
+        string | null
+      >;
+      backstop: FunctionReference<"action", "internal", {}, null>;
+      backstopTargets: FunctionReference<
+        "query",
+        "internal",
+        {},
+        Array<{
+          accountId: Id<"comma_accounts">;
+          refs: Array<
+            | { channel: string; type: "im" | "mpim" | "channel" }
+            | { channel: string; threadTs: string; type: "thread" }
+          >;
+          since: number;
+        }>
+      >;
+      finishBackstop: FunctionReference<
+        "mutation",
+        "internal",
+        { accountId: Id<"comma_accounts">; at: number },
+        null
+      >;
+      ingestBatch: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          accountId: Id<"comma_accounts">;
+          conversations: Array<{
+            members?: Array<string>;
+            messages: Array<{
+              editedTs?: string;
+              text: string;
+              threadTs?: string;
+              ts: string;
+              user: string;
+            }>;
+            name?: string;
+            ref:
+              | { channel: string; type: "im" | "mpim" | "channel" }
+              | { channel: string; threadTs: string; type: "thread" };
+          }>;
+          users: Array<{ email?: string; id: string; name: string }>;
+        },
+        { skipped: number; written: number }
+      >;
+      ingestEvent: FunctionReference<
+        "action",
+        "internal",
+        {
+          accountId: Id<"comma_accounts">;
+          isNew: boolean;
+          message: {
+            editedTs?: string;
+            text: string;
+            threadTs?: string;
+            ts: string;
+            user: string;
+          };
+          ref:
+            | { channel: string; type: "im" | "mpim" | "channel" }
+            | { channel: string; threadTs: string; type: "thread" };
+        },
+        null
+      >;
+      pruneEvents: FunctionReference<"mutation", "internal", {}, null>;
+      saveBackfill: FunctionReference<
+        "mutation",
+        "internal",
+        { accountId: Id<"comma_accounts">; run: string; state: string },
+        boolean
+      >;
+      startBackfill: FunctionReference<
+        "mutation",
+        "internal",
+        { accountId: Id<"comma_accounts"> },
+        null
+      >;
+      unknownUsers: FunctionReference<
+        "query",
+        "internal",
+        { userIds: Array<string> },
+        Array<string>
+      >;
+    };
     suggestions: {
       precompute: FunctionReference<
         "mutation",

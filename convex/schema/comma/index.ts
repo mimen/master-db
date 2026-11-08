@@ -18,6 +18,7 @@ import {
   draftFields,
   messageRowFields,
   oauthStateFields,
+  slackEventFields,
   outboxFields,
   reactionFields,
   scheduledFields,
@@ -30,6 +31,7 @@ import {
 
 export const comma_accounts = defineTable(accountFields).index("by_platform_externalId", ["platform", "externalId"]);
 export const comma_oauth_states = defineTable(oauthStateFields).index("by_state", ["state"]);
+export const comma_slack_events = defineTable(slackEventFields).index("by_eventId", ["eventId"]).index("by_receivedAt", ["receivedAt"]);
 
 export const comma_conversations = defineTable(conversationFields)
   .index("by_platform_account_key", ["platform", "accountId", "conversationKey"])
