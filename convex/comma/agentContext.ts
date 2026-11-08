@@ -6,8 +6,8 @@ import { commandMessage } from "../schema/comma/validators";
 import { people } from "../schema/identity/people";
 
 import { conversationPeople } from "./conversationInfo";
-import { shownInThread } from "./conversationLookup";
-import { messageImessage } from "./messageShape";
+import { findAttachment, findMessage, shownInThread } from "./conversationLookup";
+import { attachmentName, messageImessage, scopeOf, type AccountScope } from "./messageShape";
 import { resolveConversationNames } from "./names";
 import { personContext, personContextResult } from "./personContext";
 import { normalizedAddress, personForAddress } from "./photos";
@@ -41,9 +41,8 @@ async function participantsOf(ctx: QueryCtx, conversation: Doc<"comma_conversati
   }));
 }
 
-async function attachmentFor(ctx: QueryCtx, guid: string) {
-  return await ctx.db.query("comma_attachments").withIndex("by_guid", (q) => q.eq("guid", guid)).unique();
-}
+/** The runner names an attachment by its iMessage guid alone. */
+const IMESSAGE_ANY: AccountScope = { platform: "imessage", accountId: null };
 
 async function messageViews(ctx: QueryCtx, participants: { address: string; name: string }[], rows: Doc<"comma_messages">[]): Promise<AgentMessage[]> {
   const names = new Map(participants.map(({ address, name }) => [address, name]));
@@ -51,8 +50,8 @@ async function messageViews(ctx: QueryCtx, participants: { address: string; name
     guid: message.guid, at: message.dateCreated, fromMe: message.isFromMe, text: message.text,
     sender: message.isFromMe ? "Me" : names.get(message.sender?.address ?? "") ?? message.sender?.name ?? message.sender?.address ?? "Unknown",
     attachments: await Promise.all(message.attachmentGuids.map(async (guid) => {
-      const attachment = await attachmentFor(ctx, guid);
-      return { guid, name: attachment?.transferName ?? attachment?.filename ?? null, mime: attachment?.mimeType ?? null };
+      const attachment = await findAttachment(ctx, scopeOf(message), guid);
+      return { guid, name: (attachment && attachmentName(attachment)) ?? null, mime: attachment?.mimeType ?? null };
     })),
     reactions: (await reactionsOf(ctx, message)).map((reaction) => ({
       reaction: reaction.emoji ?? reaction.key, fromMe: reaction.isFromMe,
@@ -124,8 +123,8 @@ export const aiThread = internalMutation({
         guid: row.guid, chatGuid: imessage?.chatGuid ?? conversation.primaryChatGuid, text: row.text, dateCreated: row.dateCreated,
         dateRead: row.dateRead ?? null, dateDelivered: row.dateDelivered ?? null, isFromMe: row.isFromMe, service: imessage?.service ?? "iMessage",
         sender: row.sender ? { address: row.sender.address, name: names.get(row.sender.address) ?? row.sender.name } : null,
-        attachments: (await Promise.all(row.attachmentGuids.map((guid) => attachmentFor(ctx, guid)))).flatMap((a) => a ? [{
-          guid: a.guid, mimeType: a.mimeType ?? null, filename: a.transferName ?? a.filename ?? null,
+        attachments: (await Promise.all(row.attachmentGuids.map((guid) => findAttachment(ctx, scopeOf(row), guid)))).flatMap((a) => a ? [{
+          guid: a.guid, mimeType: a.mimeType ?? null, filename: attachmentName(a) ?? null,
           width: a.width ?? null, height: a.height ?? null, totalBytes: a.totalBytes ?? null,
         }] : []),
         mentions: row.mentions, special: imessage?.special ?? null, sendEffect: imessage?.sendEffect ?? null,
@@ -213,13 +212,13 @@ export const agentAttachment = internalMutation({
   args: { conversationId: v.id("comma_conversations"), guid: v.string() },
   returns: v.union(v.null(), v.object({ url: nullableString, name: nullableString, mime: nullableString })),
   handler: async (ctx, { conversationId, guid }) => {
-    const attachment = await attachmentFor(ctx, guid);
+    const attachment = await findAttachment(ctx, IMESSAGE_ANY, guid);
     if (!attachment) return null;
-    const message = await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", attachment.messageGuid)).first();
+    const message = await findMessage(ctx, scopeOf(attachment), attachment.messageGuid);
     if (message?.conversationId !== conversationId) return null;
     return {
       url: attachment.originalStorageId ? await ctx.storage.getUrl(attachment.originalStorageId) : null,
-      name: attachment.transferName ?? attachment.filename ?? null,
+      name: attachmentName(attachment) ?? null,
       mime: attachment.mimeType ?? null,
     };
   },
