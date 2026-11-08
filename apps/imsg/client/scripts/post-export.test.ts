@@ -45,6 +45,9 @@ describe("postExport", () => {
     expect(html).toContain(`#root:empty{background:${Palette.light.background}}`);
     expect(html).toContain(`@media (prefers-color-scheme:dark){#root:empty{background:${Palette.dark.background}}`);
     expect(html).toContain("@media (prefers-reduced-motion:reduce){#root:empty::before{animation:none;opacity:.4}}");
+    // Three dots: the dot itself plus two box-shadow copies.
+    expect(html).toContain("transform:translateX(-11px)");
+    expect(html).toContain("22px 0 currentColor");
   });
 
   test("starts the Convex socket and token request ahead of the bundle", async () => {
