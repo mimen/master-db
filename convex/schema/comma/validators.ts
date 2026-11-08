@@ -120,6 +120,19 @@ export const chatAliasFields = {
 };
 
 /**
+ * What a platform adapter derives from a raw message for the models, at ingest (`ToModelText` in
+ * apps/imsg/shared/model-text.ts). Absent where the platform's `text` already reads cleanly, as on iMessage.
+ */
+export const modelTextFields = {
+  /** The body a model reads in place of `text`: the new content first, quoted history, signatures and markup gone. */
+  modelText: v.optional(v.string()),
+  /** An email's subject. */
+  subject: v.optional(v.string()),
+  /** The thread inside the conversation the message belongs to, as the platform names it. */
+  threadRef: v.optional(v.string()),
+};
+
+/**
  * What any platform's message has. `guid` is the platform's message id, unique within its account; other tables
  * name a message by `messageKey`. iMessage's own fields live in `imessage`.
  */
@@ -137,6 +150,7 @@ export const messageCoreFields = {
   dateRetracted: v.optional(v.number()),
   isFromMe: v.boolean(),
   text: v.string(),
+  ...modelTextFields,
   sender: v.optional(participant),
   edited: v.boolean(),
   retracted: v.boolean(),
@@ -361,7 +375,8 @@ export const commandReplySuggestion = v.object({
   ...replySuggestion.fields,
   strategy: v.union(v.literal("answer"), v.literal("clarify"), v.literal("advance"), v.literal("defer"), v.literal("decline"), v.literal("close"), v.literal("react")),
   vibe: v.union(v.literal("curious"), v.literal("affirmative"), v.literal("cautious"), v.literal("boundary"), v.literal("playful")),
-  reaction: v.union(v.literal("love"), v.literal("like"), v.literal("dislike"), v.literal("laugh"), v.literal("emphasize"), v.literal("question"), v.null()),
+  /** A reaction key from the route's platform profile. */
+  reaction: v.union(v.string(), v.null()),
 });
 
 export const suggestionFeedback = v.object({

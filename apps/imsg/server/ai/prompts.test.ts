@@ -1,41 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { identifyPrompt, replySuggestionPrompt } from "./prompts";
-
-describe("replySuggestionPrompt", () => {
-  test("includes the profile when present and omits the header when not", () => {
-    expect(replySuggestionPrompt("t", "Milad runs AUF.", "Sarah")).toContain("About Milad:");
-    expect(replySuggestionPrompt("t", "", "Sarah")).not.toContain("About Milad:");
-  });
-
-  test("names the peer when known", () => {
-    expect(replySuggestionPrompt("t", "", "Sarah")).toContain("to Sarah");
-    expect(replySuggestionPrompt("t", "", null)).toContain("Draft replies Milad could send.");
-  });
-
-  test("states the voice constraints", () => {
-    const prompt = replySuggestionPrompt("t", "", null);
-    expect(prompt).toContain("No exclamation marks");
-    expect(prompt).toContain("Never invent commitments");
-  });
-
-  test("asks for two variations of one reply, leading with the most specific", () => {
-    const prompt = replySuggestionPrompt("t", "", null);
-    expect(prompt).toContain("2 options");
-    expect(prompt).toContain("same intent, different tone or length");
-    expect(prompt).toContain("Lead with the most specific and committed phrasing");
-  });
-
-  test("bans dashes in drafts", () => {
-    const prompt = replySuggestionPrompt("t", "", null);
-    expect(prompt).toContain("em dashes");
-  });
-
-  test("treats delivered attachments and later praise as closed-loop evidence", () => {
-    const prompt = replySuggestionPrompt("t", "", null);
-    expect(prompt).toContain("Attachments are delivered work");
-    expect(prompt).toContain("already completed");
-  });
-});
+import { identifyPrompt } from "./prompts";
 
 describe("identifyPrompt", () => {
   test("renders candidates with their source", () => {
@@ -44,6 +8,12 @@ describe("identifyPrompt", () => {
     ]);
     expect(prompt).toContain("Sarah Chen (vault)");
     expect(prompt).toContain("+15551234567");
+  });
+
+  test("names no platform's kind of address, so an email handle reads as well as a number", () => {
+    const prompt = identifyPrompt("alex@example.com", "t", []);
+    expect(prompt).toContain("Identify who alex@example.com is.");
+    expect(prompt).not.toMatch(/number|address book|texting/i);
   });
 
   test("says so explicitly when no candidates were found", () => {

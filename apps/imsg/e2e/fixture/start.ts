@@ -205,7 +205,10 @@ const { app, dispose } = await createApp({
     });
 
     // The Anthropic messages route the live suggestion path calls; it answers after `/__fixture/model`'s delay.
+    let lastModelRequest: unknown = null;
+    fixtureApp.get("/__fixture/model/last", (c) => c.json(lastModelRequest));
     fixtureApp.post("/__fixture/model/v1/messages", async (c) => {
+      lastModelRequest = await c.req.json();
       const signal = c.req.raw.signal;
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, ai.modelDelayMs ?? 0);

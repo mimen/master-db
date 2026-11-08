@@ -4,9 +4,9 @@ import type { GenericId } from "convex/values";
 import type { internal } from "../../../../convex/_generated/api";
 import type { TodayGroup, TodayItem } from "../../../../convex/schema/comma/validators";
 import { TODAY_LIMITS, TODAY_SETTLE_GROUP, TODAY_TIME_ZONE } from "../../shared/today";
-import { formatMessages } from "../agent/context";
+import { personMessage } from "../agent/context";
 import type { PersonLine, ThreadMessage } from "../agent/convex-port";
-import { neutralize } from "../ai/context";
+import { formatMessages, neutralize } from "../ai/context";
 
 export type ConversationId = GenericId<"comma_conversations">;
 export type TodayCandidate = FunctionReturnType<typeof internal.comma.today.todayCandidates>["page"][number];
@@ -67,7 +67,6 @@ export const TODAY_SCHEMA: Anthropic.Messages.JSONOutputFormat["schema"] = {
 };
 
 const NOTE_CHARS = 400;
-const ATTACHMENT_CHARS = 120;
 const REDUCE_MESSAGE_CHARS = 300;
 /** The reduce prompt's hard cap, system included. Notes, events and attachment lists are otherwise unbounded. */
 export const REDUCE_PROMPT_CHARS = 400_000;
@@ -76,9 +75,9 @@ export const ELSEWHERE = { limit: 2, maxChars: 240, days: 7, lineChars: 120 } as
 /** Raw messages per thread in the reduce: a few beside a card, more when the card failed. */
 const REDUCE_TAIL = { carded: 3, uncarded: 5 } as const;
 
-/** Correspondent text can carry our own fence tags; it goes through neutralize, and so does `<thread>`. */
+/** Correspondent text can carry our own fence tags, `<thread>` among them; neutralize defuses them. */
 export function clean(text: string, max: number): string {
-  return neutralize(text).replace(/<\/?thread[^>]*>/gi, (tag) => tag.replace(/[<>]/g, "‹")).slice(0, max);
+  return neutralize(text).slice(0, max);
 }
 
 /** The full LA date and time, as the prompts state it. */
@@ -104,13 +103,7 @@ function crmLine(thread: TodayThread): string {
 }
 
 function messageLines(messages: ThreadMessage[], chars: number): string {
-  return formatMessages(messages.map((message) => ({
-    ...message, sender: clean(message.sender, 60), text: clean(message.text, chars),
-    attachments: message.attachments.map((file) => ({
-      ...file, name: file.name === null ? null : clean(file.name, ATTACHMENT_CHARS), mime: file.mime === null ? null : clean(file.mime, ATTACHMENT_CHARS),
-    })),
-    reactions: message.reactions.map((r) => ({ ...r, reaction: clean(r.reaction, ATTACHMENT_CHARS), sender: clean(r.sender, 60) })),
-  })), TODAY_TIME_ZONE);
+  return formatMessages(messages, { timeZone: TODAY_TIME_ZONE, maxChars: chars });
 }
 
 function threadHead(thread: TodayThread, now: number): string[] {
@@ -137,16 +130,14 @@ function cardLine(card: TodayCard | null): string {
   return bits.join(" · ");
 }
 
-function elsewhereLine(thread: TodayThread, now: number): string[] {
+function elsewhereLines(thread: TodayThread): string[] {
   if (!thread.elsewhere.length) return [];
-  const lines = thread.elsewhere.map((line) =>
-    `${age(now - line.at)} ago in ${line.kind} "${clean(line.conversation, 60)}" (${line.platform}): ${line.fromMe ? "Milad" : "they"}: ${clean(line.text, ELSEWHERE.lineChars)}`);
-  return [`elsewhere, newest first: ${lines.join(" | ")}`];
+  return ["elsewhere, newest first:", formatMessages(thread.elsewhere.map(personMessage), { timeZone: TODAY_TIME_ZONE, maxChars: ELSEWHERE.lineChars })];
 }
 
 function reduceBlock(thread: TodayCardedThread, now: number): string {
   const tail = thread.messages.slice(-(thread.card ? REDUCE_TAIL.carded : REDUCE_TAIL.uncarded));
-  return [...threadHead(thread, now), cardLine(thread.card), ...elsewhereLine(thread, now), messageLines(tail, REDUCE_MESSAGE_CHARS), "</thread>"].join("\n");
+  return [...threadHead(thread, now), cardLine(thread.card), ...elsewhereLines(thread), messageLines(tail, REDUCE_MESSAGE_CHARS), "</thread>"].join("\n");
 }
 
 /**
@@ -161,7 +152,7 @@ export function renderTodayPrompt(input: {
   const system = [
     "You plan Milad's messaging day so that every day makes a dent toward inbox zero. You read his open conversations, on every messaging platform he uses, and write a ranked queue for today.",
     "Each <thread> has a card, a smaller model's summary of the thread, followed by its last few raw messages. A card can be wrong; the raw messages are ground truth.",
-    "A one-to-one thread may carry an elsewhere line: that person's latest messages in Milad's other conversations, such as a group, where \"they\" is that person. Use it to judge the person's urgency, and to see when they were already answered elsewhere.",
+    "A one-to-one thread may carry elsewhere lines: that person's latest messages in Milad's other conversations, such as a group. Use them to judge the person's urgency, and to see when they were already answered elsewhere.",
     "Return JSON with:",
     "- brief: one or two sentences on what matters most today and how far today's queue gets toward inbox zero.",
     `- groups: up to ${TODAY_LIMITS.groups} groups in display order, counting the settle group, each with a short id, a title of a few words, and one line of context.`,

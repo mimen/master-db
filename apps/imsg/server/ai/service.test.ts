@@ -45,13 +45,16 @@ function makeMessage(overrides: Partial<BridgeMessage> = {}): BridgeMessage {
 }
 
 /** A Gateway whose network calls are replaced by canned completions. */
-function fakeGateway(reply: string, structured: object = suggestionSet("what time works?"), onGenerate?: () => void, prompts: string[] = []): Gateway {
+type StructuredCall = { prompt: string; schema: { properties: { suggestions: { items: { properties: { reaction: { enum: string[] } } } } } } };
+
+function fakeGateway(reply: string, structured: object = suggestionSet("what time works?"), onGenerate?: () => void, prompts: string[] = [], calls: StructuredCall[] = []): Gateway {
   const gateway = new Gateway(makeConfig());
   (gateway as unknown as { complete: unknown }).complete = async (prompt: string) => {
     prompts.push(prompt);
     return { ok: true, value: reply };
   };
-  (gateway as unknown as { completeStructured: unknown }).completeStructured = async () => {
+  (gateway as unknown as { completeStructured: unknown }).completeStructured = async (prompt: string, schema: StructuredCall["schema"]) => {
+    calls.push({ prompt, schema });
     onGenerate?.();
     return { ok: true, value: structured };
   };
@@ -86,22 +89,33 @@ function makeService(options: {
   contactEmails?: (address: string) => string[];
   onGenerate?: () => void;
   participants?: AiThread["participants"];
+  route?: AiThread["route"];
+  privateApi?: boolean;
+  sent?: string[];
 }) {
   const db = options.db ?? new OverlayDb(":memory:");
   const prompts: string[] = [];
+  const calls: StructuredCall[] = [];
+  const sentFor: AiThread["route"][] = [];
   const service = new AiService({
     config: makeConfig(),
     db,
-    gateway: fakeGateway(options.reply ?? "[]", options.structured, options.onGenerate, prompts),
+    gateway: fakeGateway(options.reply ?? "[]", options.structured, options.onGenerate, prompts, calls),
     fetchThread: async () => options.fetchError
       ? { ok: false, error: options.fetchError }
-      : { ok: true, value: { title: "Sarah", isGroup: false, participants: options.participants ?? [{ address: "+15551234567", name: "Sarah" }], messages: options.messages ?? [] } },
-    recentOutboundText: async () => [],
-    reactionSuggestions: () => true,
+      : { ok: true, value: {
+        title: "Sarah", isGroup: false, participants: options.participants ?? [{ address: "+15551234567", name: "Sarah" }],
+        route: options.route ?? { platform: "imessage", chatGuid: "iMessage;-;+15551234567" }, messages: options.messages ?? [],
+      } },
+    sentText: async (route) => {
+      sentFor.push(route);
+      return options.sent ?? [];
+    },
+    bridgeSupport: () => ({ privateApi: options.privateApi ?? true }),
     contactEmails: options.contactEmails ?? (() => []),
     searchVault: async () => [],
   });
-  return { service, db, prompts };
+  return { service, db, prompts, calls, sentFor };
 }
 
 describe("isStale", () => {
@@ -119,6 +133,31 @@ describe("isStale", () => {
 });
 
 describe("replySuggestions", () => {
+  test("offers the reactions the thread's route can send, and none over SMS or without the Private API", async () => {
+    const enumFor = async (overrides: Parameters<typeof makeService>[0]) => {
+      const { service, calls } = makeService({ messages: [makeMessage({ guid: "m5", text: "when works?" })], ...overrides });
+      await service.replySuggestions(CHAT_1, true, "opus");
+      return { reactions: calls[0]!.schema.properties.suggestions.items.properties.reaction.enum, prompt: calls[0]!.prompt };
+    };
+    const imessage = await enumFor({});
+    expect(imessage.reactions).toEqual(["none", "love", "like", "dislike", "laugh", "emphasize", "question"]);
+    expect(imessage.prompt).toContain("including a reaction when natural");
+    const sms = await enumFor({ route: { platform: "imessage", chatGuid: "SMS;-;+15551234567" } });
+    expect(sms.reactions).toEqual(["none"]);
+    expect(sms.prompt).not.toContain("including a reaction");
+    expect((await enumFor({ privateApi: false })).reactions).toEqual(["none"]);
+  });
+
+  test("derives the voice from the thread's account's sent messages", async () => {
+    const route = { platform: "imessage" as const, chatGuid: "iMessage;-;+15551234567" };
+    const { service, calls, sentFor } = makeService({
+      messages: [makeMessage({ guid: "m5", text: "when works?" })], route, sent: ["on it", "sounds right", "will do"],
+    });
+    await service.replySuggestions(CHAT_1, true, "opus");
+    expect(sentFor).toEqual([route]);
+    expect(calls[0]!.prompt).toContain("Derived profile of Milad's sent messages on this platform:\nTypical sent message length is about 7 characters.");
+  });
+
   test("generates a structured shelf and caches it by selected model", async () => {
     const { service, db } = makeService({
       messages: [makeMessage({ guid: "m5", text: "when works?" })],

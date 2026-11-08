@@ -43,6 +43,7 @@ const ROUTES = {
   agentPersonContext: internal.comma.agentContext.agentPersonContext,
   agentAttachment: internal.comma.agentContext.agentAttachment,
   aiThread: internal.comma.agentContext.aiThread,
+  aiSentText: internal.comma.agentContext.aiSentText,
   agentRecordUpload: internal.comma.drafts.recordUpload,
   todaySchedule: internal.comma.today.todaySchedule,
   todayClaim: internal.comma.today.todayClaim,

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { formatMessages, type ModelMessage } from "../ai/context";
 import type { PersonContext, PersonLine, ThreadContext, ThreadMessage } from "./convex-port";
 
 export const PACKET_MESSAGES = 40;
@@ -16,34 +17,19 @@ export function readAddendum(path: string, warn: (message: string) => void = con
   }
 }
 
-export function formatMessages(messages: ThreadMessage[], timeZone: string): string {
-  return messages.map((message) => {
-    const at = new Date(message.at).toLocaleString("en-US", { timeZone, dateStyle: "medium", timeStyle: "short" });
-    const sender = message.fromMe ? "Milad (me)" : message.sender;
-    const files = message.attachments.map((file) => ` [attachment ${file.name ?? "unnamed"}${file.mime ? ` (${file.mime})` : ""}, guid ${file.guid}]`).join("");
-    const reactions = message.reactions.length
-      ? ` [reactions: ${message.reactions.map((r) => `${r.reaction} from ${r.fromMe ? "Milad (me)" : r.sender}`).join(", ")}]`
-      : "";
-    return `[${at}] ${sender}: ${message.text}${files}${reactions}`;
-  }).join("\n");
-}
-
 function untrusted(messages: ThreadMessage[], timeZone: string): string {
-  return `<thread_messages>\n${formatMessages(messages, timeZone)}\n</thread_messages>`;
+  return `<thread_messages>\n${formatMessages(messages, { timeZone })}\n</thread_messages>`;
 }
 
-/** Newest first, each line naming the conversation it was said in. */
-export function formatPersonLines(lines: PersonLine[], timeZone: string): string {
-  return lines.map((line) => {
-    const at = new Date(line.at).toLocaleString("en-US", { timeZone, dateStyle: "medium", timeStyle: "short" });
-    return `[${at}] ${line.fromMe ? "Milad (me)" : line.sender} in ${line.kind} "${line.conversation}" (${line.platform}): ${line.text}`;
-  }).join("\n");
-}
+/** A person line as the formatter reads it, naming the conversation it was said in. */
+export const personMessage = (line: PersonLine): ModelMessage => ({
+  at: line.at, fromMe: line.fromMe, sender: line.sender, text: line.text, attachments: [], reactions: [],
+  conversation: { title: line.conversation, kind: line.kind, platform: line.platform },
+});
 
-/** A person's lines fenced as untrusted; a correspondent's text cannot close the fence. */
+/** A person's lines, newest first, fenced as untrusted. */
 export function personMessages(lines: PersonLine[], timeZone: string): string {
-  const body = formatPersonLines(lines, timeZone).replace(/<\/?person_messages[^>]*>/gi, (tag) => tag.replace(/[<>]/g, "‹"));
-  return `<person_messages>\n${body}\n</person_messages>`;
+  return `<person_messages>\n${formatMessages(lines.map(personMessage), { timeZone })}\n</person_messages>`;
 }
 
 function elsewhereSection(elsewhere: PersonContext | null | undefined, timeZone: string): string | null {

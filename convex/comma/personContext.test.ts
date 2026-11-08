@@ -86,6 +86,16 @@ describe("agentPersonContext", () => {
     });
   });
 
+  test("a line reads the adapter's model text, and the character budget counts it", async () => {
+    const { t, read, dm, crew } = await setup();
+    await t.run(async (ctx) => {
+      const row = (await ctx.db.query("comma_messages").withIndex("by_conversation_date", (q) => q.eq("conversationId", crew).eq("dateCreated", 120)).unique())!;
+      await ctx.db.patch(row._id, { text: `are you coming?\n> ${"quoted history ".repeat(100)}`, modelText: "are you coming?" });
+    });
+    const result = await read({ conversationId: dm, limit: 3, maxChars: 40 });
+    expect(texts(result)).toContain("are you coming?");
+  });
+
   test("pages by count, characters and time", async () => {
     const { read, dm } = await setup();
     expect(await read({ conversationId: dm, limit: 2 })).toMatchObject({ lines: [{ at: 140 }, { at: 125 }], more: true });

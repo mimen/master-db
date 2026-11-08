@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { IMESSAGE_PROFILE } from "../../shared/platform-profile";
 import type { BridgeMessage } from "../../shared/types";
-import { extractEventSuggestion, passesEchoGate, validateSuggestionSet } from "./suggestions";
+import { extractEventSuggestion, passesEchoGate, suggestionSchema, validateSuggestionSet } from "./suggestions";
 
 function message(overrides: Partial<BridgeMessage> = {}): BridgeMessage {
   return {
@@ -23,7 +24,7 @@ function raw(text: string, overrides: Record<string, object | string | boolean |
 const options = (messages: BridgeMessage[]) => ({
   messages,
   renderedGuids: new Set(messages.map((item) => item.guid)),
-  reactionSuggestions: true,
+  reactions: IMESSAGE_PROFILE.reactions,
 });
 
 describe("semantic suggestion validation", () => {
@@ -96,6 +97,28 @@ describe("semantic suggestion validation", () => {
       basisMessageGuids: [target.guid], decisionOption: false, introducesCommitment: false,
     }] }, options([target]));
     expect(result.ok).toBe(false);
+  });
+
+  test("takes reactions only from the set the thread's route can send", () => {
+    const target = message({ text: "doors at 9 then" });
+    const react = (reaction: string) => ({ noReply: false, suggestions: [{
+      kind: "reaction", strategy: "react", vibe: "affirmative", text: "thumbs up",
+      reaction, targetMessageGuid: target.guid, targetPartIndex: 0,
+      basisMessageGuids: [target.guid], decisionOption: false, introducesCommitment: false,
+    }] });
+    expect(validateSuggestionSet(react("like"), { ...options([target]), reactions: ["like"] }).ok).toBe(true);
+    expect(validateSuggestionSet(react("love"), { ...options([target]), reactions: ["like"] })).toEqual({
+      ok: false, error: "all generated suggestions failed semantic validation (reaction-type:1)",
+    });
+    expect(validateSuggestionSet(react("like"), { ...options([target]), reactions: [] })).toEqual({
+      ok: false, error: "all generated suggestions failed semantic validation (reaction-capability:1)",
+    });
+  });
+
+  test("the schema's reaction enum is the route's set, after none", () => {
+    const items = suggestionSchema(["love", "emoji:🔥"]).properties.suggestions.items;
+    expect(items.properties.reaction.enum).toEqual(["none", "love", "emoji:🔥"]);
+    expect(suggestionSchema([]).properties.suggestions.items.properties.reaction.enum).toEqual(["none"]);
   });
 });
 

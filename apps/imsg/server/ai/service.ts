@@ -1,26 +1,28 @@
 import type { GenericId } from "convex/values";
+import { profileRoute } from "../../../../convex/comma/routeSupport";
+import type { CommaRoute } from "../../../../convex/schema/comma/validators";
+import { PROFILES, reactionSupport, type BridgeSupport } from "../../shared/platform-profile";
 import type { Result } from "../bluebubbles";
 import type { AiConfig } from "../config";
 import type { OverlayDb, SuggestionFeedbackRow } from "../db";
 import type {
   ContactSuggestion,
   EventSuggestion,
-  BridgeMessage,
   ReplySuggestions,
   SuggestionFeedbackRequest,
   SuggestionModel,
 } from "../../shared/types";
-import { loadProfile, renderSuggestionContext, renderTranscript } from "./context";
+import { loadProfile, renderSuggestionContext, renderTranscript, type AiMessage } from "./context";
 import { Gateway, type GatewayFailure } from "./gateway";
 import { contactCandidate, mergeCandidates, vaultCandidates } from "./identify";
 import { identifyPrompt } from "./prompts";
 import {
   SUGGESTION_MODELS,
   SUGGESTION_RECIPE_VERSION,
-  SUGGESTION_SCHEMA,
   extractEventSuggestion,
   formatPromptNow,
   suggestionPrompt,
+  suggestionSchema,
   validateSuggestionSet,
 } from "./suggestions";
 import { loadVoiceState } from "./voice";
@@ -36,10 +38,10 @@ export interface AiDeps {
   gateway: Gateway;
   /** The conversation from Convex; read errors must remain distinguishable from an empty thread. */
   fetchThread: (conversationId: ConversationId) => Promise<Result<AiThread>>;
-  /** Recent global outbound text, reduced locally into aggregate style. */
-  recentOutboundText: () => Promise<string[]>;
-  /** BlueBubbles Private API supports outbound tapbacks. */
-  reactionSuggestions: () => boolean;
+  /** The route's account's recent sent text, reduced locally into aggregate style. */
+  sentText: (route: CommaRoute) => Promise<string[]>;
+  /** What the Mac can send right now. */
+  bridgeSupport: () => BridgeSupport;
   /** Contact emails for an iMessage address, [] when unknown. */
   contactEmails: (address: string) => string[];
   /** Vault grep, injected so tests never touch the filesystem. */
@@ -51,12 +53,19 @@ export type ConversationId = GenericId<"comma_conversations">;
 // Real threads take 8 to 10s through the Mini's gateway, so the deadline only catches a stuck call.
 const SUGGESTION_TIMEOUT_MS = 30_000;
 
-/** Newest-last messages with folded reactions, and the participants' names (null when unknown). */
+/** Newest-last messages with folded reactions, the participants' names (null when unknown), and the reply route. */
 export interface AiThread {
   title: string;
   isGroup: boolean;
   participants: Array<{ address: string; name: string | null }>;
-  messages: BridgeMessage[];
+  route: CommaRoute;
+  messages: AiMessage[];
+}
+
+/** The reaction keys a reply in this thread can send now, from its route's platform profile. */
+export function allowedReactions(thread: Pick<AiThread, "route" | "isGroup">, bridge: BridgeSupport): string[] {
+  const route = profileRoute(thread.route, thread.isGroup);
+  return PROFILES[route.platform].reactions.filter((reaction) => reactionSupport(route, reaction, bridge).ok);
 }
 
 /**
@@ -68,7 +77,7 @@ export function isStale(cachedGuid: string | null, currentGuid: string | null): 
   return cachedGuid !== currentGuid;
 }
 
-function lastGuid(messages: BridgeMessage[]): string | null {
+function lastGuid(messages: AiMessage[]): string | null {
   return messages[messages.length - 1]?.guid ?? null;
 }
 
@@ -139,7 +148,8 @@ export class AiService {
   ): Promise<Result<ReplySuggestions>> {
     const fetched = await this.deps.fetchThread(conversationId);
     if (!fetched.ok) return fetched;
-    const { messages } = fetched.value;
+    const thread = fetched.value;
+    const { messages } = thread;
     const peerName = fetched.value.isGroup ? null : fetched.value.title;
     const currentGuid = lastGuid(messages);
     if (!currentGuid) return { ok: false, error: "chat has no messages" };
@@ -149,7 +159,7 @@ export class AiService {
         value: emptySuggestions(selectedModel, currentGuid),
       };
     }
-    const voice = loadVoiceState(this.deps.db, await this.deps.recentOutboundText());
+    const voice = loadVoiceState(this.deps.db, await this.deps.sentText(thread.route));
     const cached = force ? null : await this.cachedReplySuggestions(conversationId, currentGuid, selectedModel, voice);
     if (cached) return { ok: true, value: cached };
 
@@ -167,7 +177,7 @@ export class AiService {
     const pending = this.generateReplySuggestions(
       conversationId,
       peerName,
-      messages,
+      thread,
       currentGuid,
       selectedModel,
       voice,
@@ -189,7 +199,12 @@ export class AiService {
   ): Promise<ReplySuggestions | null> {
     const cached = this.deps.db.getSuggestionCache(conversationId, selectedModel);
     if (!cached || cached.anchor_guid !== anchorGuid || cached.recipe_version !== SUGGESTION_RECIPE_VERSION) return null;
-    const currentVoice = voice ?? loadVoiceState(this.deps.db, await this.deps.recentOutboundText());
+    let currentVoice = voice;
+    if (!currentVoice) {
+      const thread = await this.deps.fetchThread(conversationId);
+      if (!thread.ok) return null;
+      currentVoice = loadVoiceState(this.deps.db, await this.deps.sentText(thread.value.route));
+    }
     if (cached.voice_revision !== currentVoice.voiceRevision || cached.edit_revision !== currentVoice.editRevision) return null;
     const parsed = parseSuggestionCache(cached.payload);
     return parsed && parsed.selectedModel === selectedModel ? {
@@ -200,12 +215,14 @@ export class AiService {
   private async generateReplySuggestions(
     conversationId: ConversationId,
     peerName: string | null,
-    messages: BridgeMessage[],
+    thread: AiThread,
     currentGuid: string,
     selectedModel: SuggestionModel,
     voice: ReturnType<typeof loadVoiceState>,
     learningEpoch: number,
   ): Promise<Result<ReplySuggestions>> {
+    const { messages } = thread;
+    const reactions = allowedReactions(thread, this.deps.bridgeSupport());
     const [profile, context] = await Promise.all([
       loadProfile(this.deps.config.vaultPath),
       Promise.resolve(renderSuggestionContext(messages, { limit: 60, peerName })),
@@ -216,10 +233,11 @@ export class AiService {
       profile,
       globalStyle: context.outboundExamples.length < 4 ? voice.globalStyle : "",
       editRules: voice.editRules,
-      reactionSuggestions: this.deps.reactionSuggestions(),
+      reactions,
       now: formatPromptNow(new Date()),
     });
-    let generated = await this.completeSuggestionWithFallback(prompt, selectedModel);
+    const schema = suggestionSchema(reactions);
+    let generated = await this.completeSuggestionWithFallback(prompt, schema, selectedModel);
     if (!generated.ok) {
       const { kind, status, message } = generated.error;
       console.warn(`suggestions ${conversationId} (${selectedModel}): ${kind}${status ? ` ${status}` : ""}: ${message}`);
@@ -227,7 +245,7 @@ export class AiService {
     }
 
     const validate = (value: object) => validateSuggestionSet(value, {
-      messages, renderedGuids: context.renderedGuids, reactionSuggestions: this.deps.reactionSuggestions(),
+      messages, renderedGuids: context.renderedGuids, reactions,
     });
     let validated = validate(generated.value.value);
     if (!validated.ok) {
@@ -237,7 +255,7 @@ export class AiService {
         `REPAIR: The previous candidates were rejected by local safety checks (${validated.error}).`,
         "Generate a fresh conservative set. Ask for missing information instead of adding any date, number, person, place, status, or commitment not explicitly present in the conversation.",
       ].join("\n");
-      const repaired = await this.completeSuggestionWithFallback(repairPrompt, selectedModel);
+      const repaired = await this.completeSuggestionWithFallback(repairPrompt, schema, selectedModel);
       if (repaired.ok) {
         generated = repaired;
         validated = validate(repaired.value.value);
@@ -283,7 +301,7 @@ export class AiService {
    * Everyone on the other side of the thread with a known contact email —
    * first listed email per contact, so one human gets one invitation.
    */
-  private inviteEmails(messages: BridgeMessage[]): string[] {
+  private inviteEmails(messages: AiMessage[]): string[] {
     const addresses = new Set<string>();
     for (const message of messages) {
       if (!message.isFromMe && message.sender?.address) addresses.add(message.sender.address);
@@ -298,6 +316,7 @@ export class AiService {
 
   private async completeSuggestionWithFallback(
     prompt: string,
+    schema: ReturnType<typeof suggestionSchema>,
     selectedModel: SuggestionModel,
   ): Promise<
     | { ok: true; value: { value: object; servedModel: SuggestionModel } }
@@ -307,14 +326,14 @@ export class AiService {
     const cooldowns = this.routeCooldowns();
     const now = Date.now();
     const first = (cooldowns[selectedModel] ?? 0) > now ? alternate : selectedModel;
-    const firstResult = await this.completeSuggestionRoute(prompt, first);
+    const firstResult = await this.completeSuggestionRoute(prompt, schema, first);
     if (firstResult.ok) return { ok: true, value: { value: firstResult.value, servedModel: first } };
     if (firstResult.error.kind !== "provider") return firstResult;
 
     this.setRouteCooldown(first, firstResult.error.retryAfterMs);
     const fallback = otherModel(first);
     if ((cooldowns[fallback] ?? 0) > now) return firstResult;
-    const fallbackResult = await this.completeSuggestionRoute(prompt, fallback);
+    const fallbackResult = await this.completeSuggestionRoute(prompt, schema, fallback);
     if (!fallbackResult.ok) {
       if (fallbackResult.error.kind === "provider") {
         this.setRouteCooldown(fallback, fallbackResult.error.retryAfterMs);
@@ -324,8 +343,8 @@ export class AiService {
     return { ok: true, value: { value: fallbackResult.value, servedModel: fallback } };
   }
 
-  private completeSuggestionRoute(prompt: string, model: SuggestionModel) {
-    return this.deps.gateway.completeStructured<object>(prompt, SUGGESTION_SCHEMA, {
+  private completeSuggestionRoute(prompt: string, schema: ReturnType<typeof suggestionSchema>, model: SuggestionModel) {
+    return this.deps.gateway.completeStructured<object>(prompt, schema, {
       model: SUGGESTION_MODELS[model],
       maxTokens: 1200,
       timeoutMs: SUGGESTION_TIMEOUT_MS,

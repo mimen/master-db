@@ -150,14 +150,6 @@ export interface BridgeMessage {
   clientKey?: string;
 }
 
-export interface LinkPreviewData {
-  url: string;
-  title: string | null;
-  description: string | null;
-  image: string | null;
-  siteName: string | null;
-}
-
 export interface ChatFlags {
   unresponded: boolean;
   waiting: boolean;
@@ -305,18 +297,6 @@ export interface ScheduledMessage {
   sentAt: number | null;
 }
 
-export interface NewChatRequest {
-  addresses: string[];
-  text: string;
-}
-
-export interface ReactRequest {
-  chatGuid: string;
-  reaction: string;
-  remove?: boolean;
-  partIndex?: number;
-}
-
 export type TranscriptState =
   | { state: "not-requested" }
   | { state: "working" }
@@ -354,7 +334,8 @@ export interface ReplySuggestion {
   strategy: SuggestionStrategy;
   vibe: SuggestionVibe;
   text: string;
-  reaction: TapbackType | null;
+  /** A reaction key from the route's platform profile. */
+  reaction: string | null;
   targetMessageGuid: string | null;
   targetMessagePreview: string | null;
   targetPartIndex: number | null;
@@ -404,16 +385,3 @@ export interface ContactSuggestion {
   confidence: "high" | "medium" | "low";
   reasoning: string;
 }
-
-export type ServerEvent =
-  | { kind: "new-message"; chatGuid: string; message: BridgeMessage }
-  | { kind: "updated-message"; chatGuid: string; message: BridgeMessage }
-  | { kind: "reaction"; chatGuid: string; targetGuid: string; reaction: Reaction; remove: boolean }
-  | { kind: "chats-changed" }
-  | { kind: "typing"; chatGuid: string; display: boolean }
-  /**
-   * The server's BlueBubbles event stream was down and has recovered.
-   * Anything that happened in the gap
-   * was silently missed. Consumers must refetch what they render.
-   */
-  | { kind: "resync" };
