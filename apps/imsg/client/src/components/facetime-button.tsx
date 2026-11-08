@@ -64,8 +64,8 @@ export function FaceTimeButton({
       actions: isGroup
         ? gated(can("faceTimeLink"), { label: "Create & Send FaceTime Link", onPress: () => void createGroupLink() })
         : [
-            { label: "FaceTime Audio", onPress: () => void openDirect("audio") },
-            { label: "FaceTime Video", onPress: () => void openDirect("video") },
+            ...gated(can("call"), { label: "FaceTime Audio", onPress: () => void openDirect("audio") }),
+            ...gated(can("call"), { label: "FaceTime Video", onPress: () => void openDirect("video") }),
           ],
     });
   };

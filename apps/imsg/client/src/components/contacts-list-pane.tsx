@@ -24,8 +24,8 @@ import { type AirtableHumanRow, type ContactListRow, primaryHandle } from "@/lib
 import { useNameOrder } from "@/lib/settings";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
 import { PersonAvatar } from "./avatar";
-import { ServiceDot } from "./contacts-theme";
 import { PHONE_TAB_BAR_CLEARANCE } from "./phone-tab-bar";
+import { ServiceDot } from "./service-label";
 import { ChromeIconButton } from "./sidebar/chrome-icon-button";
 import { SidebarChrome } from "./sidebar/sidebar-chrome";
 import { SidebarFooter } from "./sidebar/sidebar-footer";
@@ -155,8 +155,8 @@ export function ContactsListPane({ wide, selectedId, hasSelection = false, onSel
         secondary={contactSecondary(person)}
         avatar={<PersonAvatar address={primaryHandle(person)} name={person.display_name} size={wide ? 32 : 42} photoUrl={person.photoUrl} />}
         trailing={
-          <View style={styles.dots} accessibilityLabel={handles.map(serviceOf).join(", ")}>
-            {handles.slice(0, 3).map((h) => <ServiceDot key={h} service={serviceOf(h)} size={wide ? 7 : 9} />)}
+          <View style={styles.dots} accessibilityLabel={handles.map((h) => serviceOf(h).label).join(", ")}>
+            {handles.slice(0, 3).map((h) => <ServiceDot key={h} badge={serviceOf(h)} size={wide ? 7 : 9} />)}
           </View>
         }
         onPress={() => onSelectPerson(person)}

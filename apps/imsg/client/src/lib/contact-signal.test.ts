@@ -40,19 +40,19 @@ function person(_id: string, display_name: string, extra: Record<string, unknown
 describe("serviceIndex", () => {
   test("follows the newest one-to-one thread for the handle", () => {
     const chats = [chat("iMessage;-;+15550142298", ["+15550142298"], 300), chat("SMS;-;+15550142298", ["+15550142298"], 10)];
-    expect(serviceIndex(chats)("(555) 014-2298")).toBe("SMS");
+    expect(serviceIndex(chats)("(555) 014-2298").label).toBe("SMS");
   });
 
   test("an RCS thread is SMS, as the bubble color is", () => {
     const chats = [chat("iMessage;-;+15550142298", ["+15550142298"], 300), chat("RCS;-;+15550142298", ["+15550142298"], 10)];
-    expect(serviceIndex(chats)("(555) 014-2298")).toBe("SMS");
+    expect(serviceIndex(chats)("(555) 014-2298").label).toBe("SMS");
   });
 
   test("with no thread a handle defaults to iMessage", () => {
     const lookup = serviceIndex([chat("SMS;-;t@x.example", ["T@x.example"], 5)]);
-    expect(lookup("t@x.example")).toBe("SMS");
-    expect(lookup("+15550000000")).toBe("iMessage");
-    expect(lookup("nobody@x.example")).toBe("iMessage");
+    expect(lookup("t@x.example").label).toBe("SMS");
+    expect(lookup("+15550000000").label).toBe("iMessage");
+    expect(lookup("nobody@x.example").label).toBe("iMessage");
   });
 });
 
@@ -142,7 +142,7 @@ describe("handleRows", () => {
       [{ kind: "instagram", network: "instagram", value: "@tracy", normalized: "@tracy" }, { kind: "phone", value: "+15550142298", normalized: "+15550142298" }],
       serviceIndex([chat("SMS;-;+15550187731", ["+15550187731"], 5), chat("iMessage;-;t@x.example", ["t@x.example"], 9)]),
     );
-    expect(rows.map((r) => [r.label, r.display, r.service, r.primary, r.reachable])).toEqual([
+    expect(rows.map((r) => [r.label, r.display, r.badge.label, r.primary, r.reachable])).toEqual([
       ["phone", "(555) 014-2298", "iMessage", false, true],
       ["phone 2", "(555) 018-7731", "SMS", true, true],
       ["email", "t@x.example", "iMessage", false, true],

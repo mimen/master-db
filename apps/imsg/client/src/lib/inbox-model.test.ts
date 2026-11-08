@@ -18,6 +18,8 @@ import {
   viewName,
   type RefineContext,
   type Refinements,
+  parseServiceFilter,
+  SERVICE_OPTIONS,
 } from "./inbox-model";
 import type { TodayPlan } from "./today";
 
@@ -71,7 +73,7 @@ describe("desktopInboxTitle", () => {
   test("names the lens alone while People is at its default, and adds People otherwise", () => {
     expect(desktopInboxTitle({ state: "all", type: "known" })).toBe("All messages");
     expect(desktopInboxTitle({ state: "unresponded", type: "known" })).toBe("Needs you");
-    expect(desktopInboxTitle({ state: "all", type: "unknown" })).toBe("All messages · Unknown numbers");
+    expect(desktopInboxTitle({ state: "all", type: "unknown" })).toBe("All messages · Unknown");
     expect(desktopInboxTitle({ state: "settled", type: "dm" })).toBe("Settled · One-to-one");
   });
 });
@@ -249,8 +251,9 @@ describe("refinements", () => {
     deriveInboxModel(chats, needsReply, "", undefined, undefined, ctx(r, scheduled)).listChats.map((c) => c.conversationId);
 
   test("service, time, priority and tags narrow the lens", () => {
-    expect(guids({ service: "SMS" })).toEqual([sms.conversationId]);
-    expect(guids({ service: "iMessage" })).toEqual([imsg.conversationId, old.conversationId]);
+    expect(guids({ service: "imessage:SMS" })).toEqual([sms.conversationId]);
+    expect(guids({ service: "imessage:iMessage" })).toEqual([imsg.conversationId, old.conversationId]);
+    expect(guids({ service: "imessage" })).toEqual([imsg.conversationId, sms.conversationId, old.conversationId]);
     // Within an age group the lens order holds: CRM P1 ahead of a newer conversation.
     expect(guids({ time: "week" })).toEqual([imsg.conversationId, sms.conversationId]);
     expect(guids({ priority: "high" })).toEqual([imsg.conversationId]);
@@ -271,7 +274,7 @@ describe("refinements", () => {
   });
 
   test("search ignores refinements", () => {
-    const model = deriveInboxModel(chats, needsReply, "hello", undefined, undefined, ctx({ service: "SMS" }));
+    const model = deriveInboxModel(chats, needsReply, "hello", undefined, undefined, ctx({ service: "imessage:SMS" }));
     expect(model.listChats).toHaveLength(4);
   });
 
@@ -292,14 +295,14 @@ describe("refinements", () => {
 });
 
 describe("activeChips", () => {
-  const r: Refinements = { ...DEFAULT_REFINEMENTS, service: "SMS", time: "week", tags: ["showcase"] };
+  const r: Refinements = { ...DEFAULT_REFINEMENTS, service: "imessage:SMS", time: "week", tags: ["showcase"] };
   const filters = { state: "unresponded" as const, type: "known" as const };
 
   test("one chip per active value, the People lens off its default included", () => {
     expect(activeChips(filters, r).map((c) => [c.prefix, c.label])).toEqual([
       [undefined, "SMS"], [undefined, "Last 7 days"], ["Tag", "showcase"],
     ]);
-    expect(activeChips({ ...filters, type: "unknown" }, DEFAULT_REFINEMENTS).map((c) => c.label)).toEqual(["Unknown numbers"]);
+    expect(activeChips({ ...filters, type: "unknown" }, DEFAULT_REFINEMENTS).map((c) => c.label)).toEqual(["Unknown"]);
   });
 
   test("removing a chip clears only its own value", () => {
@@ -437,5 +440,29 @@ describe("Today lens", () => {
   test("search supersedes the plan", () => {
     const model = deriveInboxModel([pinned, low], { state: "today", type: "known" }, "low", undefined, undefined, refine, { plan, openFolds: new Set() });
     expect(model.rows.map((r) => (r.kind === "chat" ? r.chat.conversationId : r.label))).toEqual(["Conversations", "low"]);
+  });
+});
+
+describe("service filter", () => {
+  test("with only iMessage, the dropdown lists its services under Any service, dotted as they draw", () => {
+    expect(SERVICE_OPTIONS.map((option) => [option.value, option.label, option.badge?.color])).toEqual([
+      ["any", "Any service", undefined],
+      ["imessage:iMessage", "iMessage", "accent"],
+      ["imessage:SMS", "SMS", "sms"],
+    ]);
+  });
+
+  test("a filter stored before platforms reads as iMessage's service, and anything unknown as any", () => {
+    expect(parseServiceFilter("SMS")).toBe("imessage:SMS");
+    expect(parseServiceFilter("iMessage")).toBe("imessage:iMessage");
+    expect(parseServiceFilter("imessage:SMS")).toBe("imessage:SMS");
+    expect(parseServiceFilter("fax")).toBe("any");
+    expect(parseServiceFilter(undefined)).toBe("any");
+  });
+
+  test("an RCS conversation matches the SMS filter", () => {
+    const rcs = chatAt("rcs", 1, { route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "RCS;-;+1555" } }, flags: replyFlags });
+    const model = deriveInboxModel([rcs], needsReply, "", undefined, undefined, ctx({ service: "imessage:SMS" }));
+    expect(model.listChats.map((c) => c.conversationId)).toEqual([rcs.conversationId]);
   });
 });

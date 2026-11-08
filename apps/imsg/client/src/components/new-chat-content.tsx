@@ -184,7 +184,7 @@ export function NewChatContent({
               />
             );
           }
-          const service = contactService(item.contact.address, chats);
+          const badge = contactService(item.contact.address, chats);
           const handle = formatAddress(item.contact.address);
           return (
             <SuggestionRow
@@ -195,7 +195,7 @@ export function NewChatContent({
               name={item.contact.name}
               query={needle}
               handle={item.contact.name === handle ? undefined : handle}
-              trailing={service ? <ServiceLabel service={service} size={12} /> : undefined}
+              trailing={badge ? <ServiceLabel badge={badge} size={12} /> : undefined}
             />
           );
         }}
@@ -225,7 +225,7 @@ export function NewChatContent({
       <View style={[styles.toRow, { borderBottomColor: theme.divider }]}>
         <Text style={[styles.toLabel, { color: theme.textTertiary }]}>To</Text>
         {selected.map((contact) => {
-          const service = contactService(contact.address, chats);
+          const badge = contactService(contact.address, chats);
           return (
             <Pressable
               key={contact.address}
@@ -236,7 +236,7 @@ export function NewChatContent({
             >
               <PersonAvatar address={contact.address} name={contact.name} size={18} />
               <Text numberOfLines={1} style={[styles.tokenText, { color: theme.text }]}>{contact.name}</Text>
-              {service && <ServiceDot service={service} />}
+              {badge && <ServiceDot badge={badge} />}
             </Pressable>
           );
         })}

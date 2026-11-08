@@ -119,7 +119,7 @@ describe("buildPaletteSections", () => {
 
   test("each saved view is an Open command that matches its name", () => {
     const views = [{ id: "v1", name: "Showcase SMS", state: "unresponded" as const, type: "known" as const,
-      refinements: { service: "SMS" as const, time: "any" as const, priority: "any" as const, tags: [], only: [], include: [] } }];
+      refinements: { service: "imessage:SMS" as const, time: "any" as const, priority: "any" as const, tags: [], only: [], include: [] } }];
     const sections = buildPaletteSections({ query: "showc", chats: [], messages: [], contacts: [], views });
     const item = sections.find((s) => s.title === "Commands")!.items[0];
     expect(item?.kind === "command" ? item.command : null).toMatchObject({ id: { kind: "view", value: "v1" }, title: "Open Showcase SMS" });

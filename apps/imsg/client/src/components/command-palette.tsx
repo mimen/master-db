@@ -34,7 +34,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { useToday } from "@/hooks/use-today";
 
 import { addressesMatch, formatAddress } from "@shared/address";
-import { fromBridgeMessage, imessageChat } from "@shared/imessage";
+import { conversationRoute, fromBridgeMessage } from "@shared/imessage";
 import { composeSections, type ComposeRow } from "@/lib/palette/compose-rows";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { openAgentChat } from "@/hooks/use-agent-toasts";
@@ -562,7 +562,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
   useEffect(() => reset(), [needle, reset]);
 
   const [only] = recipients;
-  const existing = recipients.length === 1 && only ? directory?.find((chat) => !chat.isGroup && imessageChat.service(chat.route.imessage.chatGuid) === "iMessage" &&
+  const existing = recipients.length === 1 && only ? directory?.find((chat) => !chat.isGroup && conversationRoute(chat).service === "iMessage" &&
     chat.participants.length === 1 && addressesMatch(chat.participants[0]?.address ?? "", only.address)) : undefined;
   const send = (): void => {
     const body = text.trim();

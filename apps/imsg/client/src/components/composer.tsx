@@ -26,7 +26,7 @@ import { hapticFailure, hapticSend } from "@/lib/haptics";
 import { playSend } from "@/lib/sounds";
 import { useActionSheet } from "@/lib/action-sheet";
 import { api } from "@/lib/api";
-import { conversationService } from "@shared/imessage";
+import { conversationRoute } from "@shared/imessage";
 import { INPUT_BORDER_W, INPUT_PADDING_H, MIRROR_INSET_H } from "@/lib/composer-metrics";
 import { uploadAndSendAttachment } from "@/lib/attachment-upload";
 import { setTyping as sendTyping } from "@/lib/presence-api";
@@ -44,6 +44,7 @@ import type { PendingEdit } from "@/lib/pending-edits";
 import { runCommand } from "@/lib/convex-commands";
 import type { MentionAnnotation } from "@shared/mentions";
 import { mentionQueryAt, reconcileMentionAnnotations, trimMentionAnnotations } from "@shared/mentions";
+import { composerConfig } from "@shared/platform-profile";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
@@ -328,7 +329,8 @@ export function Composer({
   const [customScheduleAt, setCustomScheduleAt] = useState(Date.now() + 3_600_000);
   const [scheduleAnchor, setScheduleAnchor] = useState<{ right: number; bottom: number } | null>(null);
   const containerRef = useRef<View>(null);
-  const isSMS = conversationService(chat) === "SMS";
+  const config = composerConfig(conversationRoute({ route: chat.route, isGroup }));
+  const enterSends = config.enterSends;
   const can = useRouteSupport({ route: chat.route, isGroup });
   const loadRemoteDraft = useCallback((draft: string) => {
     setText(draft);
@@ -421,8 +423,8 @@ export function Composer({
   // glide-mode single keys, and its char-append was wrong for IME/dead-key/emoji input anyway.
   useEffect(() => registerFocusTarget("composer", () => inputRef.current), [conversationId]);
 
-  // Desktop web: Enter sends, Shift+Enter newlines (RN multiline swallows
-  // submit on web). Guards: IME composition, key repeat, in-flight send.
+  // Desktop web, where the platform sends on Enter: Enter sends, Shift+Enter newlines
+  // (RN multiline swallows submit on web). Guards: IME composition, key repeat, in-flight send.
   useEffect(() => {
     if (Platform.OS !== "web") return;
     const node = inputRef.current as unknown as HTMLTextAreaElement | null;
@@ -436,7 +438,7 @@ export function Composer({
         event.preventDefault();
         return;
       }
-      if (event.key === "Enter" && !event.shiftKey) {
+      if (enterSends && event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
         // Deliberately NOT gated on an in-flight send: each send gets its own
         // optimistic temp message and resolves independently, so waiting for
@@ -450,7 +452,7 @@ export function Composer({
     };
     node.addEventListener("keydown", onKeyDown);
     return () => node.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [enterSends]);
 
   const setTyping = (active: boolean) => {
     if (!can("typing")?.ok) return;
@@ -538,7 +540,7 @@ export function Composer({
       onClearEditing();
       runCommand(conversationId, { kind: "edit", messageGuid: editing.guid, text: trimmed }).catch(() => {
         rollback();
-        showToast("Couldn't edit. Messages can only be edited for 15 minutes.");
+        showToast(`Couldn't edit. Messages can only be edited for ${config.editWindowMs / 60_000} minutes.`);
       });
       return;
     }
@@ -963,8 +965,8 @@ ${url}` : url;
 
   const canSend = text.trim().length > 0 || pending.length > 0;
   const canSchedule = text.trim().length > 0 && pending.length === 0 && !editing;
-  const sendColor = isSMS ? theme.sms : theme.bubbleMine;
-  const serviceLabel = isSMS ? "SMS" : "iMessage";
+  const sendColor = theme[config.badge.color];
+  const serviceLabel = config.badge.label;
   const ghostShown = ghost !== null && text.length === 0 && !editing && pending.length === 0 && !recording;
   const ghostPadV = card ? CARD_PAD_TOP + CARD_PAD_BOTTOM : IOS_INPUT_CHROME_V;
   const ghostHeight = Math.min(ghostTextHeight + ghostPadV, card ? CARD_MAX_HEIGHT : IOS_INPUT_MAX_HEIGHT);
@@ -975,13 +977,11 @@ ${url}` : url;
   };
 
   // The conversation's service follows its chat: an SMS or RCS chat sends green. The outbox has no
-  // per-message service yet, so the other service shows but cannot be picked.
+  // per-message service yet, so the other services show but cannot be picked.
   const openServiceMenu = () => {
-    const other = isSMS ? "iMessage" : "SMS";
-    const actions = [
-      { label: serviceLabel, icon: "checkmark" as const, onPress: () => undefined },
-      { label: other, disabled: true, note: "Switching services isn't available yet", onPress: () => undefined },
-    ];
+    const actions = config.serviceOptions.map((option, index) => index === 0
+      ? { label: option.label, icon: "checkmark" as const, onPress: () => undefined }
+      : { label: option.label, disabled: true, note: "Switching services isn't available yet", onPress: () => undefined });
     if (Platform.OS === "web" && serviceBtnRef.current) {
       serviceBtnRef.current.measureInWindow((x, y) => showSheet({ title: "Send with", actions, anchor: { x, y } }));
     } else {
@@ -1105,16 +1105,16 @@ ${url}` : url;
         onFocus={() => { setListMode(false); draftSync.onFocus(); }}
         onBlur={draftSync.onBlur}
         onChangeText={onChangeText}
-        placeholder={editing ? "Edit message" : pending.length > 0 ? "Add a comment or Send" : isSMS ? "Text Message" : "iMessage"}
+        placeholder={editing ? "Edit message" : pending.length > 0 ? "Add a comment or Send" : config.placeholder}
         // The ghost suggestion takes the placeholder's place; the attribute stays for assistive tech.
         placeholderTextColor={ghostShown ? "transparent" : theme.textSecondary}
         multiline
         scrollEnabled={Platform.OS === "ios" ? inputHeight >= IOS_INPUT_MAX_HEIGHT : undefined}
-        // Desktop: Enter sends (handled by the keydown listener above).
+        // Desktop: Enter sends where the platform does (handled by the keydown listener above).
         // Mobile: Return inserts a newline; sending is the button only.
-        enterKeyHint={Platform.OS === "web" ? "send" : "enter"}
-        submitBehavior={Platform.OS === "web" ? "submit" : "newline"}
-        onSubmitEditing={Platform.OS === "web" ? () => void send() : undefined}
+        enterKeyHint={Platform.OS === "web" && enterSends ? "send" : "enter"}
+        submitBehavior={Platform.OS === "web" && enterSends ? "submit" : "newline"}
+        onSubmitEditing={Platform.OS === "web" && enterSends ? () => void send() : undefined}
         style={[
           styles.input,
           Platform.OS === "ios" && {

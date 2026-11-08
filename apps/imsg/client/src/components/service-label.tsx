@@ -1,25 +1,25 @@
+import type { PlatformBadge } from "@shared/platform-profile";
 import { StyleSheet, Text, View } from "react-native";
-import type { Service } from "@/lib/contact-service";
 import { useTheme } from "@/hooks/use-theme";
 
-/** The service dot and name shown beside a handle: blue iMessage, green SMS. */
-export function ServiceLabel({ service, size = 11.5 }: { service: Service; size?: number }): React.JSX.Element {
+/** The route's dot and name shown beside a handle: blue iMessage, green SMS. */
+export function ServiceLabel({ badge, size = 11.5 }: { readonly badge: PlatformBadge; readonly size?: number }): React.JSX.Element {
   const theme = useTheme();
   return (
     <View style={styles.row}>
-      <View style={[styles.dot, { backgroundColor: service === "SMS" ? theme.sms : theme.bubbleMine }]} />
-      <Text style={[styles.label, { color: theme.textSecondary, fontSize: size }]}>{service}</Text>
+      <ServiceDot badge={badge} />
+      <Text style={[styles.label, { color: theme.textSecondary, fontSize: size }]}>{badge.label}</Text>
     </View>
   );
 }
 
-export function ServiceDot({ service }: { service: Service }): React.JSX.Element {
+export function ServiceDot({ badge, size = 7 }: { readonly badge: PlatformBadge; readonly size?: number }): React.JSX.Element {
   const theme = useTheme();
-  return <View style={[styles.dot, { backgroundColor: service === "SMS" ? theme.sms : theme.bubbleMine }]} />;
+  return <View style={[styles.dot, { width: size, height: size, borderRadius: size / 2, backgroundColor: theme[badge.color] }]} />;
 }
 
 const styles = StyleSheet.create({
   row: { alignItems: "center", flexDirection: "row", gap: 5 },
-  dot: { borderRadius: 999, height: 7, width: 7 },
+  dot: { flexShrink: 0 },
   label: { fontWeight: "500" },
 });

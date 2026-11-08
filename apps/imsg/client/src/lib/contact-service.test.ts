@@ -7,14 +7,14 @@ const chat = (chatGuid: string, address: string, isGroup = false): ChatSummary =
 
 test("the service comes from the existing one-to-one chat with that handle", () => {
   const chats = [chat("SMS;-;+16195550103", "+16195550103"), chat("iMessage;-;+16195550101", "+16195550101")];
-  expect(contactService("(619) 555-0103", chats)).toBe("SMS");
-  expect(contactService("+16195550101", chats)).toBe("iMessage");
+  expect(contactService("(619) 555-0103", chats)?.label).toBe("SMS");
+  expect(contactService("+16195550101", chats)?.label).toBe("iMessage");
 });
 
 test("a group membership says nothing; an email is always iMessage; otherwise unknown", () => {
   const chats = [chat("SMS;+;group", "+16195550104", true)];
   expect(contactService("+16195550104", chats)).toBeNull();
-  expect(contactService("a@b.example", null)).toBe("iMessage");
+  expect(contactService("a@b.example", null)?.label).toBe("iMessage");
 });
 
 test("splitPrefix isolates the typed prefix, case-insensitively", () => {

@@ -6,16 +6,6 @@ import type { BridgeMessage, ChatSummary, Message } from "./types";
  * id; this is the one place it reads a GUID.
  */
 export const imessageChat = {
-  /**
-   * The service a chat sends through. RCS counts as SMS: BlueBubbles labels the chat "RCS;-;…" but
-   * reports its messages as SMS, so an optimistic send in an RCS chat must draw green too.
-   */
-  service(chatGuid: string): "iMessage" | "SMS" | null {
-    const prefix = chatGuid.split(";")[0];
-    if (prefix === "iMessage") return "iMessage";
-    if (prefix === "SMS" || prefix === "RCS") return "SMS";
-    return null;
-  },
   isGroup(chatGuid: string): boolean {
     return chatGuid.includes(";+;");
   },
@@ -25,14 +15,14 @@ export const imessageChat = {
   },
 };
 
-/** The service a conversation sends through; green when SMS. */
-export function conversationService(chat: Pick<ChatSummary, "route">): "iMessage" | "SMS" {
-  return imessageChat.service(chat.route.imessage.chatGuid) === "SMS" ? "SMS" : "iMessage";
+/** The platform and service a chat GUID sends through. */
+export function chatGuidRoute(chatGuid: string): Pick<ProfileRoute, "platform" | "service"> {
+  return { platform: "imessage", service: routeService(chatGuid.split(";")[0] ?? "") };
 }
 
 /** The route a conversation's commands take, as its platform profile reads it. */
 export function conversationRoute(chat: Pick<ChatSummary, "route" | "isGroup">): ProfileRoute {
-  return { platform: chat.route.platform, service: routeService(chat.route.imessage.chatGuid.split(";")[0] ?? ""), isGroup: chat.isGroup };
+  return { ...chatGuidRoute(chat.route.imessage.chatGuid), platform: chat.route.platform, isGroup: chat.isGroup };
 }
 
 /** The other person's handle in a one-to-one conversation, or null for a group. */

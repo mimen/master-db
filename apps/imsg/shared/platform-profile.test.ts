@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { IMESSAGE_PROFILE, reactionSupport, support, type Feature, type ProfileRoute } from "./platform-profile";
+import { composerConfig, IMESSAGE_PROFILE, platformServiceBadges, reactionSupport, support, type Feature, type ProfileRoute } from "./platform-profile";
 
 const dm = (service: ProfileRoute["service"]): ProfileRoute => ({ platform: "imessage", service, isGroup: false });
 const group = (service: ProfileRoute["service"]): ProfileRoute => ({ platform: "imessage", service, isGroup: true });
@@ -68,4 +68,24 @@ test("emoji reactions need the Mac to advertise them; named tapbacks don't", () 
   expect(reactionSupport(dm("iMessage"), "love", bridge)).toEqual({ ok: true });
   expect(support(dm("SMS"), "emojiReact", bridge)).toEqual({ ok: false, reason: "SMS can't send emoji reactions" });
   expect(support(dm("iMessage"), "emojiReact", { privateApi: true, emojiReactions: true })).toEqual({ ok: true });
+});
+
+describe("composerConfig", () => {
+  const labels = (route: ProfileRoute) => composerConfig(route).serviceOptions.map((option) => option.label);
+
+  test("an iMessage conversation sends blue as iMessage, with SMS listed second", () => {
+    expect(composerConfig(dm("iMessage"))).toMatchObject({ placeholder: "iMessage", badge: { label: "iMessage", color: "accent" }, enterSends: true, editWindowMs: 15 * 60_000 });
+    expect(labels(dm("iMessage"))).toEqual(["iMessage", "SMS"]);
+  });
+
+  test("SMS and RCS send green as Text Message, with iMessage listed second", () => {
+    for (const service of ["SMS", "RCS"] as const) {
+      expect(composerConfig(dm(service))).toMatchObject({ placeholder: "Text Message", badge: { label: "SMS", color: "sms" } });
+      expect(labels(dm(service))).toEqual(["SMS", "iMessage"]);
+    }
+  });
+});
+
+test("iMessage's filterable services are iMessage and SMS, RCS reading as SMS", () => {
+  expect(platformServiceBadges("imessage").map((badge) => badge.label)).toEqual(["iMessage", "SMS"]);
 });

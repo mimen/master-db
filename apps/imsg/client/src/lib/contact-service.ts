@@ -1,18 +1,17 @@
 import type { ChatSummary } from "@shared/types";
 import { addressesMatch } from "@shared/address";
-import { conversationService } from "@shared/imessage";
-
-export type Service = "iMessage" | "SMS";
+import { conversationRoute } from "@shared/imessage";
+import { platformBadge, type PlatformBadge } from "@shared/platform-profile";
 
 /**
  * The service a handle is reached on, read from the existing one-to-one
  * conversation with it. An email can only be iMessage. Null when nothing
  * already known says which.
  */
-export function contactService(address: string, chats: readonly ChatSummary[] | null): Service | null {
+export function contactService(address: string, chats: readonly ChatSummary[] | null): PlatformBadge | null {
   const dm = chats?.find((chat) => !chat.isGroup && chat.participants.some((p) => addressesMatch(p.address, address)));
-  if (dm) return conversationService(dm);
-  return address.includes("@") ? "iMessage" : null;
+  if (dm) return platformBadge(conversationRoute(dm));
+  return address.includes("@") ? platformBadge({ platform: "imessage", service: "iMessage" }) : null;
 }
 
 /** Splits `name` around a case-insensitive prefix match so the typed part can be bolded. */

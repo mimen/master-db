@@ -9,7 +9,8 @@ import { showToast } from "@/lib/toast";
 import { formatAddress } from "@shared/address";
 import { PersonAvatar } from "./avatar";
 import { useTheme } from "@/hooks/use-theme";
-import { HEADER_FONT, ServiceDot } from "./contacts-theme";
+import { HEADER_FONT } from "./contacts-theme";
+import { ServiceDot } from "./service-label";
 import { Card, ContactsButton, ContactsTopBar, IconAction, rowDivider, SectionHeader } from "./contacts-ui";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -119,8 +120,8 @@ export function ContactsMerge({ onExit, onMerged, wide }: {
             <View key={row.key} style={[styles.hrow, rowDivider(colors, i === 0)]}>
               <Text style={[styles.k, { color: colors.textSecondary }]}>{row.label}</Text>
               <Text style={[styles.v, { color: colors.text }]}>{row.display}</Text>
-              <ServiceDot service={row.service} />
-              <Text style={[styles.svc, { color: colors.textSecondary }]}>{row.service}</Text>
+              <ServiceDot badge={row.badge} />
+              <Text style={[styles.svc, { color: colors.textSecondary }]}>{row.badge.label}</Text>
               <View style={styles.stateSlot}>
                 {row.primary
                   ? <Text style={[styles.prim, { backgroundColor: colors.field, color: colors.text }]}>Primary</Text>
@@ -152,7 +153,7 @@ function MergeCard({ person, kept, onKeep, serviceOf }: {
   const colors = useTheme();
   const n = person.message_count ?? 0;
   const facts: Array<[string, string]> = [
-    ...person.normalized_phones.map((p, i): [string, string] => [i === 0 ? "phone" : `phone ${i + 1}`, `${formatAddress(p)}, ${serviceOf(p)}`]),
+    ...person.normalized_phones.map((p, i): [string, string] => [i === 0 ? "phone" : `phone ${i + 1}`, `${formatAddress(p)}, ${serviceOf(p).label}`]),
     ...person.normalized_emails.map((e, i): [string, string] => [i === 0 ? "email" : `email ${i + 1}`, e]),
   ];
   if (facts.length < 2 && person.created_at) {
