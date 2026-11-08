@@ -13,7 +13,7 @@ export interface Renders { commits: number; components: number; threadView: numb
  */
 export const renderCounter = (): void => {
   type Fiber = { tag: number; type: unknown; return: Fiber | null; flags: number; memoizedProps: Record<string, unknown> | null; child: Fiber | null; sibling: Fiber | null; alternate: Fiber | null };
-  const w = window as unknown as { __renders: Renders; __renderNames?: Record<string, number>; __renderRoots?: Record<string, number>; __REACT_DEVTOOLS_GLOBAL_HOOK__: unknown };
+  const w = window as unknown as { __renders: Renders; __renderNames?: Record<string, number>; __renderRoots?: Record<string, number>; __renderWhy?: { name: string; log: string[] }; __REACT_DEVTOOLS_GLOBAL_HOOK__: unknown };
   w.__renders = { commits: 0, components: 0, threadView: 0, cells: 0, rows: 0, bubbles: 0, composer: 0 };
   const COMPONENT_TAGS = new Set([0, 1, 11, 15]);
   const PERFORMED_WORK = 1;
@@ -43,6 +43,23 @@ export const renderCounter = (): void => {
     for (let up = fiber.return; up && path.length < 4; up = up.return) if (COMPONENT_TAGS.has(up.tag)) path.push(label(up));
     return path.join("<");
   };
+  /** Why a fiber re-rendered: changed props, changed hook slots by index, or (neither) its parent or a context. */
+  const why = (next: Fiber, prev: Fiber, inside: boolean): string => {
+    const props = Object.keys(next.memoizedProps ?? {}).filter((key) => next.memoizedProps?.[key] !== prev.memoizedProps?.[key]);
+    const hooks: Array<number | string> = [];
+    type Hook = { memoizedState: unknown; next: Hook | null } | null;
+    let a = (next as unknown as { memoizedState: Hook }).memoizedState;
+    let b = (prev as unknown as { memoizedState: Hook }).memoizedState;
+    for (let index = 0; a && b; index++, a = a.next, b = b.next) {
+      const state = a.memoizedState as { create?: unknown } | null;
+      // Effects and the compiler's memo cache change on every render; they are not why it ran.
+      if (a.memoizedState === b.memoizedState || (state && typeof state === "object" && "create" in state)) continue;
+      if (Array.isArray(a.memoizedState) && a.memoizedState.length === 2 && Array.isArray(a.memoizedState[1])) continue;
+      const value = a.memoizedState;
+      hooks.push(`${index}:${Array.isArray(value) ? `array${value.length}` : value === null ? "null" : typeof value === "object" ? Object.keys(value as object).slice(0, 3).join("/") : typeof value}`);
+    }
+    return `${inside ? "parent" : "self"} props[${props.join(",")}] hooks[${hooks.join(",")}]`;
+  };
   /**
    * `root`: the component an unbroken run of renders above this fiber began at, where the update began.
    * Each root is credited with every component rendered beneath it.
@@ -62,6 +79,7 @@ export const renderCounter = (): void => {
           root = `${prev === null ? "mount " : ""}${label(next)} < ${owners(next)}`;
         }
         w.__renderRoots![root!] = (w.__renderRoots![root!] ?? 0) + 1;
+        if (prev !== null && w.__renderWhy?.name === label(next)) w.__renderWhy.log.push(why(next, prev, inside));
       }
       const name = kind(next, next.memoizedProps);
       if (name) w.__renders[name]++;
