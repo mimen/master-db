@@ -29,8 +29,15 @@ export function laneOfRow(row: Doc<"comma_outbox">): LaneSpec {
 
 const driveRef = makeFunctionReference<"action", { lane: CommaOutboxLane }, null>("comma/lanes:drive");
 const claimRef = makeFunctionReference<"mutation", { now: number; leaseMs: number; limit: number; lane: CommaOutboxLane }, Doc<"comma_outbox">[]>("comma/outbox:claimOutbox");
-type Completion = { status: "sent"; result: CommandResult; resultGuid?: string } | { status: "failed"; error: string };
+type Completion = { status: "sent"; result: CommandResult; resultGuid?: string } | { status: "failed" | "unknown"; error: string };
 const completeRef = makeFunctionReference<"mutation", { clientKey: string; claimToken: string } & Completion, boolean>("comma/outbox:completeOutbox");
+
+/**
+ * What a convex lane's execute throws when the platform never took the command: it refused it, or the request never
+ * left. Only this fails a row, which the user may retry. Any other throw may come after the platform acted (a timeout
+ * on a send that landed), so the row ends unknown and is never replayed.
+ */
+export class NotSentError extends Error {}
 
 /** Starts a convex lane's executor at `at`. A pull lane's executor learns of work by its own subscription. */
 export async function wakeLane(ctx: Pick<MutationCtx, "scheduler">, lane: CommaOutboxLane, at = Date.now()): Promise<void> {
@@ -56,7 +63,7 @@ export const drive = internalAction({
         const result = await spec.execute(ctx, row);
         completion = { status: "sent", result, ...("message" in result ? { resultGuid: result.message.guid } : {}) };
       } catch (error) {
-        completion = { status: "failed", error: error instanceof Error ? error.message : String(error) };
+        completion = { status: error instanceof NotSentError ? "failed" : "unknown", error: error instanceof Error ? error.message : String(error) };
       }
       await ctx.runMutation(completeRef, { clientKey: row.clientKey, claimToken: row.claimToken, ...completion });
     }

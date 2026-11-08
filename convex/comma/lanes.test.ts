@@ -8,7 +8,7 @@ import schema from "../schema";
 import type { CommandResult } from "../schema/comma/validators";
 import { normalizeModules } from "../test-utils.vitest";
 
-import { CONVEX_LEASE_MS, laneOf } from "./lanes";
+import { CONVEX_LEASE_MS, laneOf, NotSentError } from "./lanes";
 
 // The fake platform lane: iMessage's route, executed in a Convex action instead of claimed by the Mini.
 const fake = vi.hoisted(() => ({
@@ -60,10 +60,10 @@ describe("a convex-executed lane", () => {
     expect(fake.onResult.mock.calls.map(([, row]) => row.clientKey)).toEqual(["r1", "r2"]);
   });
 
-  test("a failed execution fails only its row and the lane drains on", async () => {
+  test("a command the platform refused fails only its row and the lane drains on", async () => {
     const { t, as, c, rows } = await setup();
     fake.execute.mockImplementation(async (_ctx, row) => {
-      if (row.clientKey === "bad") throw new Error("platform refused");
+      if (row.clientKey === "bad") throw new NotSentError("platform refused");
       return sent(row);
     });
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "bad", conversationId: c, payload: { kind: "markRead" } });
@@ -73,6 +73,39 @@ describe("a convex-executed lane", () => {
       ["bad", "failed", "platform refused"], ["good", "sent", undefined],
     ]);
     expect(fake.onResult.mock.calls.map(([, row]) => row.clientKey)).toEqual(["good"]);
+  });
+
+  test("a send that threw after it may have reached the platform ends unknown and is never replayed", async () => {
+    const { t, as, c, rows } = await setup();
+    fake.execute.mockImplementation(async (_ctx, row) => {
+      if (row.payload.kind === "send") throw new Error("request timed out");
+      return sent(row);
+    });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "s1", conversationId: c, payload: { kind: "send", text: "hi" } });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "r1", conversationId: c, payload: { kind: "markRead" } });
+    // Drive before the send's Not-sent expiry, then let every later wake (the lease's, the expiry's) run.
+    vi.advanceTimersByTime(0);
+    await t.finishInProgressScheduledFunctions();
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    expect((await rows()).map((row) => [row.clientKey, row.status, row.error])).toEqual([
+      ["s1", "unknown", "request timed out"], ["r1", "sent", undefined],
+    ]);
+    expect(fake.execute.mock.calls.map(([, row]) => row.clientKey)).toEqual(["s1", "r1"]);
+    expect(fake.onResult.mock.calls.map(([, row]) => row.clientKey)).toEqual(["r1"]);
+    const bubbles = await t.run((ctx) => ctx.db.query("comma_messages").collect());
+    expect(bubbles.map((m) => m.sendState)).toEqual(["failed"]);
+    const receipt = await as.query(api.comma.outbox.getCommand, { commandId: (await rows())[0]._id });
+    expect(receipt?.status).toBe("unknown");
+  });
+
+  test("a send the platform refused before it went out fails, so the user may retry it", async () => {
+    const { t, as, c, rows } = await setup();
+    fake.execute.mockRejectedValue(new NotSentError("channel_not_found"));
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "s1", conversationId: c, payload: { kind: "send", text: "hi" } });
+    vi.advanceTimersByTime(0);
+    await t.finishInProgressScheduledFunctions();
+    expect((await rows()).map((row) => [row.clientKey, row.status, row.error])).toEqual([["s1", "failed", "channel_not_found"]]);
   });
 
   test("a claim whose action died is recovered at its lease's expiry by the retry policy", async () => {
