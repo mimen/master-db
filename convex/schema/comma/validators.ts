@@ -256,6 +256,17 @@ export const legacyMessageInput = v.object({ ...messageCoreFields, ...flatImessa
 export const pendingSendState = v.union(v.literal("queued"), v.literal("sending"), v.literal("notSent"), v.literal("failed"));
 export type CommaPendingSendState = Infer<typeof pendingSendState>;
 
+/** Gmail's own message fields: its addresses, whether it is bulk, and its HTML cleaned for the reader (emailHtml.ts). */
+export const gmailMessageFields = v.object({
+  from: participant,
+  to: v.array(participant),
+  cc: v.array(participant),
+  bulk: v.boolean(),
+  html: v.optional(v.string()),
+  /** Remote images the cleaned HTML holds back until the reader asks for them. */
+  blockedImages: v.optional(v.number()),
+});
+
 /**
  * A stored message: the core, its platform's side object, and, on rows the backfill has not reached, the flat
  * iMessage fields instead. Read iMessage fields through messageShape.ts. Only a pending send's own row carries `sendState`.
@@ -265,6 +276,7 @@ export const messageRowFields = {
   /** Computed at ingest: a mention names one of the account's selfHandles. Absent on rows written before it. */
   mentionsMe: v.optional(v.boolean()),
   imessage: v.optional(imessageMessage),
+  gmail: v.optional(gmailMessageFields),
   chatGuid: v.optional(flatImessageMessageFields.chatGuid),
   service: v.optional(flatImessageMessageFields.service),
   error: v.optional(flatImessageMessageFields.error),

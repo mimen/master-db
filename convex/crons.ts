@@ -44,6 +44,21 @@ crons.interval(
   internal.comma.slackSync.backstop
 );
 
+// Comma's Gmail backstop: a history sync of every connected mailbox, so mail a push missed lands within 5 minutes.
+// See convex/comma/gmailSync.ts.
+crons.interval(
+  "comma-gmail-backstop",
+  { minutes: 5 },
+  internal.comma.gmailSync.backstop
+);
+
+// Gmail's users.watch lapses after 7 days; renew every mailbox's daily.
+crons.daily(
+  "comma-gmail-watch",
+  { hourUTC: 11, minuteUTC: 40 },
+  internal.comma.gmailSync.renewWatches
+);
+
 // Run daily routine task generation at midnight (00:00)
 // crons.daily(
 //   "daily-routine-generation",

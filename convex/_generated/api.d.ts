@@ -633,6 +633,14 @@ export declare const api: {
           dateRetracted?: number;
           edited: boolean;
           error?: number;
+          gmail?: {
+            blockedImages?: number;
+            bulk: boolean;
+            cc: Array<{ address: string; name: string | null }>;
+            from: { address: string; name: string | null };
+            html?: string;
+            to: Array<{ address: string; name: string | null }>;
+          };
           guid: string;
           imessage?: {
             chatGuid: string;
@@ -2194,6 +2202,14 @@ export declare const api: {
             dateRetracted?: number;
             edited: boolean;
             error?: number;
+            gmail?: {
+              blockedImages?: number;
+              bulk: boolean;
+              cc: Array<{ address: string; name: string | null }>;
+              from: { address: string; name: string | null };
+              html?: string;
+              to: Array<{ address: string; name: string | null }>;
+            };
             guid: string;
             imessage?: {
               chatGuid: string;
@@ -2374,6 +2390,14 @@ export declare const api: {
           dateRetracted?: number;
           edited: boolean;
           error?: number;
+          gmail?: {
+            blockedImages?: number;
+            bulk: boolean;
+            cc: Array<{ address: string; name: string | null }>;
+            from: { address: string; name: string | null };
+            html?: string;
+            to: Array<{ address: string; name: string | null }>;
+          };
           guid: string;
           imessage?: {
             chatGuid: string;
@@ -4696,6 +4720,132 @@ export declare const internal: {
         "internal",
         { base64: string; filename: string; mimeType: string },
         { size: number; storageId: Id<"_storage"> }
+      >;
+    };
+    gmailPush: {
+      receivePush: FunctionReference<
+        "mutation",
+        "internal",
+        { emailAddress: string },
+        null
+      >;
+    };
+    gmailSync: {
+      backfill: FunctionReference<
+        "action",
+        "internal",
+        { accountId: Id<"comma_accounts">; run: string },
+        null
+      >;
+      backfillState: FunctionReference<
+        "query",
+        "internal",
+        { accountId: Id<"comma_accounts"> },
+        string | null
+      >;
+      backstop: FunctionReference<"action", "internal", {}, null>;
+      beginBackfill: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          accountId: Id<"comma_accounts">;
+          historyId: string;
+          steps: Array<"inbox" | "recent">;
+        },
+        null
+      >;
+      historyCursor: FunctionReference<
+        "query",
+        "internal",
+        { accountId: Id<"comma_accounts"> },
+        string | null
+      >;
+      ingestThread: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          accountId: Id<"comma_accounts">;
+          messages: Array<{
+            blockedImages?: number;
+            bulk: boolean;
+            cc: Array<{ address: string; name: string | null }>;
+            from: { address: string; name: string | null };
+            html?: string;
+            id: string;
+            internalDate: number;
+            labelIds: Array<string>;
+            model: { modelText?: string; subject?: string; threadRef?: string };
+            snippet: string;
+            subject: string;
+            text: string;
+            threadId: string;
+            to: Array<{ address: string; name: string | null }>;
+          }>;
+          quiet: boolean;
+          threadId: string;
+        },
+        { skipped: number; written: number }
+      >;
+      mailboxes: FunctionReference<
+        "query",
+        "internal",
+        {},
+        Array<Id<"comma_accounts">>
+      >;
+      renewWatches: FunctionReference<"action", "internal", {}, null>;
+      saveBackfill: FunctionReference<
+        "mutation",
+        "internal",
+        { accountId: Id<"comma_accounts">; run: string; state: string },
+        boolean
+      >;
+      saveHistory: FunctionReference<
+        "mutation",
+        "internal",
+        { accountId: Id<"comma_accounts">; historyId: string },
+        null
+      >;
+      saveWatch: FunctionReference<
+        "mutation",
+        "internal",
+        { accountId: Id<"comma_accounts">; expiration: string },
+        null
+      >;
+      selfHandles: FunctionReference<
+        "query",
+        "internal",
+        { accountId: Id<"comma_accounts"> },
+        Array<string>
+      >;
+      startBackfill: FunctionReference<
+        "action",
+        "internal",
+        { accountId: Id<"comma_accounts">; resync: boolean },
+        null
+      >;
+      sync: FunctionReference<
+        "action",
+        "internal",
+        { accountId: Id<"comma_accounts"> },
+        null
+      >;
+      watch: FunctionReference<
+        "action",
+        "internal",
+        { accountId: Id<"comma_accounts"> },
+        null
+      >;
+      worthKeeping: FunctionReference<
+        "query",
+        "internal",
+        {
+          accountId: Id<"comma_accounts">;
+          addresses: Array<string>;
+          fromMe: boolean;
+          inInbox: boolean;
+          threadId: string;
+        },
+        boolean
       >;
     };
     googleAuth: {

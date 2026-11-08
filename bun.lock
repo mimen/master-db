@@ -10,6 +10,7 @@
         "convex": "^1.39.1",
         "dotenv": "^17.2.2",
         "libphonenumber-js": "^1.13.14",
+        "parse5": "8.0.1",
         "zod": "^4.1.9",
       },
       "devDependencies": {

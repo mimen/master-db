@@ -108,6 +108,8 @@ export const connect = internalMutation({
     const { _id } = await ensureAccount(ctx, { platform: "gmail", externalId: email, label: email, selfHandles });
     await ctx.db.patch(_id, { credentials, health: "ok" });
     await markConnection("gmail", ctx, _id, true);
+    await ctx.scheduler.runAfter(0, internal.comma.gmailSync.startBackfill, { accountId: _id, resync: false });
+    await ctx.scheduler.runAfter(0, internal.comma.gmailSync.watch, { accountId: _id });
     return _id;
   },
 });
@@ -187,6 +189,8 @@ export const disconnectGmail = action({
   handler: async (ctx, { accountId }) => {
     await assertAllowed(ctx);
     const opened = await openGmail(ctx, accountId).catch(() => null);
+    const token = opened ? await gmailToken(ctx, accountId).catch(() => null) : null;
+    if (token) await googleApi(`${GMAIL_API}/stop`, { token, method: "POST", json: {} }).catch(() => undefined);
     if (opened) await googleApi("https://oauth2.googleapis.com/revoke", { form: { token: opened.credentials.refreshToken } }).catch(() => undefined);
     await ctx.runMutation(internal.comma.googleAuth.disconnect, { accountId });
     return null;

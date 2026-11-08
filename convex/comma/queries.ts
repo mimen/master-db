@@ -186,7 +186,8 @@ export const listConversations = query({
       .query("comma_conversations")
       .withIndex("by_lastMessageAt")
       .order("desc")
-      .filter((q) => q.neq(q.field("lastMessage"), undefined))
+      // Email threads list in the Mail workspace, not in Messages.
+      .filter((q) => q.and(q.neq(q.field("lastMessage"), undefined), q.neq(q.field("kind"), "emailThread")))
       .paginate(args.paginationOpts);
     const read = listReader(ctx);
     const shown = (await Promise.all(result.page.map(async (conversation) => (await listed(ctx, conversation) ? conversation : null))))

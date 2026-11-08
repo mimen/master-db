@@ -61,22 +61,35 @@ async function sameSend(ctx: MutationCtx, conversation: Doc<"comma_conversations
 }
 
 /**
+ * Who moved a conversation's triage state. A mailbox settles in Gmail, so only Gmail's own archive state moves an
+ * email thread (`mailbox`) until G2 writes Comma's settles back as archives. `quiet` leaves no clear in the log, for
+ * settles a backfill or resync finds rather than ones the user made, so Today's cleared count does not jump.
+ */
+export type TriageSource = { by: "user" } | { by: "mailbox"; quiet: boolean };
+const USER: TriageSource = { by: "user" };
+
+function assertTriageable(conversation: Doc<"comma_conversations">, source: TriageSource): void {
+  if (conversation.platform === "gmail" && source.by === "user") throw new ConvexError("Archiving from Comma is coming");
+}
+
+/**
  * Settles the conversation on its last message, the one every client shows and computeFlags compares. With an
  * anchor, a different last message rejects the settle, so a message the user has not seen is never dismissed.
  */
-export async function settleConversation(ctx: MutationCtx, conversationId: ConversationId, anchor?: string): Promise<void> {
+export async function settleConversation(ctx: MutationCtx, conversationId: ConversationId, anchor?: string, source = USER): Promise<void> {
   const conversation = await conversationOf(ctx, conversationId);
+  assertTriageable(conversation, source);
   const last = conversation.lastMessage;
   if (!last) throw new ConvexError("chat has no last message");
   if (anchor !== undefined && anchor !== last.guid && !(await sameSend(ctx, conversation, anchor, last.guid))) throw new ConvexError("latest message changed");
   await writeState(ctx, conversationId, last.isFromMe ? { dismissedWaitingGuid: last.guid } : { dismissedUnrespondedGuid: last.guid });
-  await logClear(ctx, conversationId, last.guid, "dismiss", Date.now());
+  if (source.by === "user" || !source.quiet) await logClear(ctx, conversationId, last.guid, "dismiss", Date.now());
   await settleConversationChats(ctx, conversationId);
 }
 
 /** Clears both anchors, since the opposite one can hold a stale dismissal, and takes back the settle's clear. */
-export async function unsettleConversation(ctx: MutationCtx, conversationId: ConversationId): Promise<void> {
-  await conversationOf(ctx, conversationId);
+export async function unsettleConversation(ctx: MutationCtx, conversationId: ConversationId, source = USER): Promise<void> {
+  assertTriageable(await conversationOf(ctx, conversationId), source);
   const row = await stateOf(ctx, conversationId);
   for (const anchor of [row?.dismissedUnrespondedGuid, row?.dismissedWaitingGuid]) {
     if (anchor === undefined) continue;

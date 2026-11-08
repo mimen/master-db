@@ -25,7 +25,14 @@ Convex reads Slack itself (`convex/comma/slackEvents.ts`, `slackSync.ts`): the E
 DM message, a thread Milad follows, and everything in the channels on the account's `slackChannels`, which Settings
 follows and unfollows (`convex/comma/slackChannels.ts`), and drops the rest before any write; a 90-day backfill (one
 per channel followed later) and a 15-minute backstop cron write through the same idempotent ingest.
-Each Slack user is a `slack` identity that joins the person with exactly its email, or else a person of its own. Group CRM
+Each Slack user is a `slack` identity that joins the person with exactly its email, or else a person of its own. A Gmail
+conversation is one thread (`t:<threadId>`, kind `emailThread`) with its subject, whether it is in the inbox, and whether
+it is bulk under `gmail`; Convex reads the mailbox itself (`convex/comma/gmailPush.ts`, `gmailSync.ts`): a Pub/Sub push,
+verified by Google's OIDC token, schedules a history sync from the stored historyId, a 5-minute backstop cron runs the same
+sync, and a paged backfill reads the inbox and 90 days of threads where Milad wrote or a participant resolves to a person.
+Each non-bulk sender is an `email` identity joined to the person who has exactly that address. Archived in Gmail is
+settled in Comma; a backfill or resync settles quietly, without a clear in the log. Email threads list in the Mail
+workspace, not in Messages or Today. Group CRM
 (`chat_crm`, chat `tags`, chat `event_links`) belongs to the conversation.
 Its **kind** is `dm`, `group`, `channel` or `emailThread` (`comma_conversations.kind`); iMessage ingest derives `dm` or
 `group`, and `isGroup` (every kind but `dm`) is derived from it for older readers. Rows from before kinds read theirs
@@ -43,7 +50,7 @@ _Avoid_: address type, raw handle (for the parsed form)
 
 **Route**:
 Where a command executes: a platform, an account, and that platform's thread id: for iMessage a chat GUID, for
-Slack a channel and, in a thread, its root.
+Slack a channel and, in a thread, its root, for Gmail a thread id.
 Enqueue stamps the conversation's primary chat on each outbox row; the bridge runs exactly the
 stamped route and never picks one.
 _Avoid_: send target, resolved chat
@@ -57,13 +64,17 @@ _Avoid_: filter logic, flag logic
 **Platform profile**:
 What a platform's rules are and what a route can do, as data in `shared/platform-profile.ts`. Its **attention** reads a
 conversation's last message as needs you, waiting or none, and Unresponded and Waiting are that attention until the
-message is dismissed. Its **screening** says known, stranger or spam, which the type lens and Today's candidates use;
+message is dismissed. Its **screening** says known, stranger, spam or bulk, which the type lens and Today's candidates use;
 for iMessage, junk is spam and a participant who resolves to a named person makes the conversation known. Slack's
 attention follows iMessage's in a DM, group DM or thread; a channel needs you only when its last message is someone
 else's and mentions you (`mentionsMe` on the last message), and never waits; a thread Milad doesn't follow wants
 nothing, and costs the list no read. Slack screens nothing: everyone in the
 workspace is known. On Slack, Comma sends, replies in a thread, reacts (any number per sender), edits and deletes;
-mentions, scheduling and attachments grey with "Not in Comma's Slack yet". For routes,
+mentions, scheduling and attachments grey with "Not in Comma's Slack yet". Gmail's attention follows iMessage's; its
+screening says bulk for mail sent to a list (a List-Unsubscribe or List-Id header, `Precedence: bulk`, `Auto-Submitted`,
+a Promotions, Social, Updates or Forums label, or a no-reply sender), which stays out of People and Today. Gmail is
+read-only until G2: sending, replying, attachments and scheduling grey with "Sending from Gmail is coming", and settling
+an email thread from Comma is refused with "Archiving from Comma is coming". For routes,
 each feature (reactions and which
 tapbacks, reply, edit, unsend, typing, mentions, scheduling, calls, attachments, FaceTime links, group management,
 deleting) lists the services that carry it, whether it exists only in a group, and whether BlueBubbles needs its
@@ -74,16 +85,17 @@ shows that control greyed with the same short reason ("SMS can't send reactions"
 _Avoid_: capability flags, service checks (`service === "SMS"`)
 
 **Account**:
-One signed-in identity on a platform (`comma_accounts`): the iMessage Mac today, later a Slack workspace or a
-mailbox. Conversations, chat aliases, messages, attachments, scheduled messages and sync cursors carry its `accountId`,
+One signed-in identity on a platform (`comma_accounts`): the iMessage Mac, a Slack workspace, or a Gmail mailbox. Conversations, chat aliases, messages, attachments, scheduled messages and sync cursors carry its `accountId`,
 so a conversation key or a message id only needs to be unique within its account. The bridge names its account at
 startup (`POST /comma/ingest/account`, seeded idempotently) and stamps it on every batch; a bridge that names none
 writes for iMessage's. A snapshot (unread, scheduled) replaces only its own account's state. Where a platform reports no
 from-me flag (`reportsFromMe` in `PLATFORM_IDENTITY`; iMessage reports one), a sender among the account's `selfHandles` is me. The
 iMessage bridge names its handles at startup from chat.db's `chat.account_login`, the phone and email Messages signs in
-with. An OAuth account (Slack's workspace) keeps its token on the row as `credentials`, AES-GCM sealed under the Convex
+with. An OAuth account (Slack's workspace, a Gmail mailbox) keeps its token on the row as `credentials`, AES-GCM sealed under the Convex
 env `COMMA_TOKEN_KEY` and bound to the account (`convex/comma/credentials.ts`); only internal actions open it, and Settings'
-`listAccounts` names its fields so the token never reaches a client. A message whose mention names one of them is **addressed to me** (`mentionsMe`, set at ingest). Rows from before accounts carry no `accountId` and count as
+`listAccounts` names its fields so the token never reaches a client. A mailbox seals Google's refresh token beside a
+one-hour access token, which `gmailToken` refreshes in Convex; a refused refresh sets the account's health to
+`needsAttention` and Settings shows Reconnect. Its `selfHandles` are the address and its send-as aliases. A message whose mention names one of them is **addressed to me** (`mentionsMe`, set at ingest). Rows from before accounts carry no `accountId` and count as
 their platform's only account's until the accounts backfill (`convex/comma/migrations.ts`) stamps them.
 _Avoid_: workspace, login (for the stored identity)
 
@@ -155,8 +167,9 @@ _Avoid_: temp message, optimistic send, local send
 
 **Outbox lane**:
 The executor a queued command waits for, stamped on its `comma_outbox` row at enqueue from the route's
-platform and the command's kind: one lane per messaging platform (`imessage`, and `slack`, a convex lane that
-calls Slack's Web API as Milad, `convex/comma/slackLane.ts`), an `ai` lane
+platform and the command's kind: one lane per messaging platform (`imessage`; `slack`, a convex lane that
+calls Slack's Web API as Milad, `convex/comma/slackLane.ts`; `gmail`, a convex lane that completes a read and refuses the
+rest until G2), an `ai` lane
 for suggestions, identify, suggestion feedback, clearing learning and transcription, and an `aiBackground`
 lane for suggestion precompute, which nobody waits on. The lane registry
 (`convex/comma/laneRegistry.ts`) says who runs each: a **pull** lane waits for an outside executor to
