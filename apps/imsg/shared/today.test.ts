@@ -56,6 +56,21 @@ describe("todayCandidateState", () => {
     expect(todayCandidateState({ ...base, known: false, flags: flags({ unresponded: true }) }, now)).toBeNull();
   });
 
+  test("email enters only as the People lens: a known sender owed a reply, never bulk, never Waiting", () => {
+    const mail = { ...base, platform: "gmail" as const };
+    expect(todayCandidateState({ ...mail, flags: flags({ unresponded: true }) }, now)).toBe("needsYou");
+    expect(todayCandidateState({ ...mail, bulk: true, flags: flags({ unresponded: true }) }, now)).toBeNull();
+    expect(todayCandidateState({ ...mail, known: false, flags: flags({ unresponded: true }) }, now)).toBeNull();
+    expect(todayCandidateState({ ...mail, flags: flags({ waiting: true }) }, now)).toBeNull();
+  });
+
+  test("every Slack conversation that needs Milad enters, never screened; one waiting on someone else does not", () => {
+    const slack = { ...base, platform: "slack" as const, known: false };
+    expect(todayCandidateState({ ...slack, flags: flags({ unresponded: true }) }, now)).toBe("needsYou");
+    expect(todayCandidateState({ ...slack, flags: flags({ waiting: true }) }, now)).toBeNull();
+    expect(todayCandidateState({ ...slack, flags: flags({}) }, now)).toBeNull();
+  });
+
   test("a conversation held only by an agent chat is not a candidate", () => {
     expect(todayCandidateState({ ...base, flags: flags({}) }, now)).toBeNull();
   });

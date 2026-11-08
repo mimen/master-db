@@ -29,16 +29,16 @@ test("the app opens on Today; a settle leaves a rank gap and moves progress; Upd
   const rows = page.getByTestId("conversation-row");
   const alex = rows.filter({ hasText: "Alex Rivera" });
   await expect(alex.getByTestId("today-reason")).toHaveText("The final arrival time unblocks the run of show.");
-  await expect(page.getByTestId("today-progress")).toHaveText("0 settled · 13 to go");
+  await expect(page.getByTestId("today-progress")).toHaveText("0 settled · 14 to go");
 
   await rows.filter({ hasText: "Priya Shah" }).click();
   await expect(page.getByTestId("strip-today")).toHaveText("#2 todayGuest list locks at 6 PM.");
   await page.getByTestId("thread-settle").click();
-  await expect.poll(() => todayCount(page)).toBe(12);
-  await expect(page.getByTestId("today-progress")).toHaveText("1 settled · 12 to go");
+  await expect.poll(() => todayCount(page)).toBe(13);
+  await expect(page.getByTestId("today-progress")).toHaveText("1 settled · 13 to go");
   await alex.click();
   await expect(rows.filter({ hasText: "Priya Shah" })).toHaveCount(0);
-  expect((await page.getByTestId("today-rank").allTextContents()).slice(0, 3)).toEqual(["", "1", "3"]);
+  expect((await page.getByTestId("today-rank").allTextContents()).filter(Boolean).slice(0, 2)).toEqual(["1", "3"]);
 
   await page.getByTestId("today-update").click();
   await expect(page.getByTestId("today-update")).toHaveText("Updating");
@@ -48,7 +48,23 @@ test("the app opens on Today; a settle leaves a rank gap and moves progress; Upd
   await expect(page.getByTestId("today-meta")).toHaveText(/^Updated \d+:\d\d [AP]M · session from Aug 19 · Opus 5\.5 · read \d+ of \d+ threads$/);
   await expect(page.getByText("New since 10:30 AM", { exact: true })).toHaveCount(0);
   await expect(rows.filter({ hasText: "Launch Crew" }).getByTestId("today-rank")).toHaveText("1");
-  await expect(page.getByTestId("today-progress")).toHaveText("1 settled · 13 to go");
+  await expect(page.getByTestId("today-progress")).toHaveText("1 settled · 14 to go");
+});
+
+test("Today ranks a People email beside Messages; it opens in the Mail reader, and the newsletter and the stranger stay out", async ({ desk }) => {
+  const { page } = desk;
+  await openToday(page);
+  const rows = page.getByTestId("conversation-row");
+  await expect(rows.filter({ hasText: "Club Weekly" })).toHaveCount(0);
+  await expect(rows.filter({ hasText: "Pat Moreno" })).toHaveCount(0);
+  const mail = rows.filter({ hasText: "Load-in is at 6 pm" });
+  await expect(mail.getByTestId("today-rank"), "arrived after the build: New since").toHaveText("");
+  await page.getByTestId("today-update").click();
+  await expect(page.getByTestId("today-update")).toHaveText("Update", { timeout: 10_000 });
+  await expect(mail.getByTestId("today-rank"), "the build ranks it").toHaveText(/^\d+$/);
+
+  await mail.click();
+  await expect(page.getByTestId("email-reader").getByRole("heading", { name: "Load-in for Saturday" })).toBeVisible();
 });
 
 test("Regenerate from scratch is one menu away and starts a new session", async ({ desk }) => {

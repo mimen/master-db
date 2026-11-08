@@ -504,6 +504,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     chats: chatSummaries,
     clears: triage.clears,
     canonical: async (chatGuid) => (await siblingsOf(chatGuid))[0]!,
+    others: () => [
+      ...slackWorld.listed().filter((row) => row.flags.unresponded),
+      ...mailWorld.threads().filter((row) => row.known && !row.gmail.bulk && row.flags.unresponded),
+    ],
   });
   // Drives switch the header between the seeded queue, before the morning build, and a failed build.
   app.post("/__fixture/today", async (c) => {

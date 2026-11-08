@@ -117,6 +117,9 @@ export function listReader(ctx: QueryCtx) {
 }
 type ListReader = ReturnType<typeof listReader>;
 
+/** chat.db's count for iMessage; Gmail's UNREAD labels for email. Slack reports no read state to Comma. */
+export const unreadOf = (conversation: CommaConversationDoc): number => conversation.unread?.count ?? conversation.gmail?.unread ?? 0;
+
 export async function withConversationState(
   ctx: QueryCtx,
   conversation: CommaConversationDoc,
@@ -129,7 +132,7 @@ export async function withConversationState(
   const ruled = { platform: conversation.platform ?? "imessage", kind: conversationKind(conversation), following: conversation.slack?.following };
   // A mark-read in Comma lands here before chat.db catches up.
   const { flags, unreadCount } = conversationFlags(ruled, state ?? undefined, conversation.lastMessage ?? null,
-    conversation.lastMessageAt, conversation.unread?.count ?? 0);
+    conversation.lastMessageAt, unreadOf(conversation));
   const people = await Promise.all(conversation.participants.map((participant) => read.person(participant.address)));
   const names = resolveConversationNames(conversation, people);
   const participants = await Promise.all(names.participants.map(async (participant, index) => {
@@ -173,7 +176,7 @@ async function listed(ctx: QueryCtx, conversation: CommaConversationDoc): Promis
   const state = await ctx.db.query("comma_conversation_state")
     .withIndex("by_conversationId", (q) => q.eq("conversationId", conversation._id)).unique();
   const { flags } = conversationFlags({ platform: "slack", kind: "thread", following: conversation.slack.following }, state ?? undefined,
-    conversation.lastMessage ?? null, conversation.lastMessageAt, conversation.unread?.count ?? 0);
+    conversation.lastMessage ?? null, conversation.lastMessageAt, unreadOf(conversation));
   return flags.unresponded || flags.unread || flags.pinned;
 }
 

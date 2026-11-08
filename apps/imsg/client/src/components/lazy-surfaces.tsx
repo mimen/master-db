@@ -44,6 +44,8 @@ export const CommandPalette = deferred(() => import("@/components/command-palett
 export const ContactsWorkspace = deferred(() => import("@/components/contacts-workspace").then((m) => m.ContactsWorkspace));
 /** Its own chunk: the Mail list and reader load on the first visit, off the first-visit bundle. */
 export const MailWorkspace = deferred(() => import("@/components/mail-workspace").then((m) => m.MailWorkspace));
+/** The Mail reader in the Messages pane, for an email row Today ranks. Same chunk as the Mail workspace. */
+export const EmailReader = deferred(() => import("@/components/mail-workspace").then((m) => m.EmailReader));
 export const ForwardContent = deferred(() => import("@/components/forward-content").then((m) => m.ForwardContent));
 export const NewChatContent = deferred(() => import("@/components/new-chat-content").then((m) => m.NewChatContent));
 export const PersonContent = deferred(() => import("@/components/person-content").then((m) => m.PersonContent));

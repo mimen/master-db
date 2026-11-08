@@ -1,7 +1,10 @@
-import { useConvex, useQuery } from "convex/react";
+import { useConvex, useConvexAuth, usePaginatedQuery, useQuery } from "convex/react";
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { todayWindow } from "@shared/today";
-import { todayApi } from "@/lib/convex-api";
+import type { ChatSummary } from "@shared/types";
+import { conversationToChat } from "@/lib/convex-adapters";
+import { commaApi, todayApi } from "@/lib/convex-api";
+import { inLens } from "@/lib/mail";
 import { toTodayView, type TodayMode, type TodayView } from "@/lib/today";
 
 interface TodayContextValue {
@@ -11,6 +14,8 @@ interface TodayContextValue {
   view: TodayView | null | undefined;
   /** Update continues the model session; fresh starts a new one. */
   request: (mode: TodayMode) => Promise<void>;
+  /** The Mail workspace's People lens, which Today ranks beside the Messages directory. */
+  mail: readonly ChatSummary[];
 }
 
 const TodayContext = createContext<TodayContextValue | null>(null);
@@ -34,11 +39,24 @@ export function TodayProvider({ children }: { readonly children: ReactNode }) {
   const convex = useConvex();
   // Idempotent while a build is queued or running, so a double press is harmless.
   const request = useCallback(async (mode: TodayMode) => { await convex.mutation(todayApi.requestBuild, { day, dayStart: start, mode }); }, [convex, day, start]);
-  const value = useMemo(() => ({ day, dayStart: start, view, request }), [day, start, view, request]);
+  const mail = useTodayMail();
+  const value = useMemo(() => ({ day, dayStart: start, view, request, mail }), [day, start, view, request, mail]);
   return createElement(TodayContext.Provider, { value }, children);
 }
 
-const OUTSIDE: TodayContextValue = { day: "", dayStart: 0, view: undefined, request: async () => undefined };
+const NO_MAIL: readonly ChatSummary[] = [];
+
+// ponytail: the newest 50 inbox threads, as the Mail list starts; a People thread past them stays in Mail until it is newer.
+function useTodayMail(): readonly ChatSummary[] {
+  const { isAuthenticated } = useConvexAuth();
+  const { results } = usePaginatedQuery(commaApi.listEmailThreads, isAuthenticated ? {} : "skip", { initialNumItems: 50 });
+  return useMemo(() => {
+    const people = results.filter((row) => inLens(row, "people"));
+    return people.length ? people.map(conversationToChat) : NO_MAIL;
+  }, [results]);
+}
+
+const OUTSIDE: TodayContextValue = { day: "", dayStart: 0, view: undefined, request: async () => undefined, mail: NO_MAIL };
 
 export function useToday(): TodayContextValue {
   return useContext(TodayContext) ?? OUTSIDE;

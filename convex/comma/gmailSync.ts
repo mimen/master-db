@@ -81,11 +81,12 @@ export async function writeGmailThread(ctx: MutationCtx, accountId: Id<"comma_ac
   const inInbox = messages.some((message) => message.labelIds.includes("INBOX"));
   // A reply is never bulk, so replying to a thread lifts it out.
   const bulk = messages.every((message) => message.bulk);
+  const unread = messages.filter((message) => message.labelIds.includes("UNREAD")).length;
   const conversationKey = gmail.conversationKey(threadId);
   const existing = await findByKey(ctx, scope, conversationKey);
   const fields = {
     platform: "gmail" as const, accountId, conversationKey, kind: gmail.kind(), isGroup: true,
-    gmail: { threadId, subject: messages[0]!.subject || "(no subject)", inInbox, bulk },
+    gmail: { threadId, subject: messages[0]!.subject || "(no subject)", inInbox, bulk, ...(unread ? { unread } : {}) },
     // An email thread is named by its people at read time; the Mail list shows the subject beside them.
     displayName: messages[0]!.subject || "(no subject)", rawDisplayName: "",
     participants: participantsOf(account, messages), isSpam: messages.some((message) => message.labelIds.includes("SPAM")),

@@ -47,12 +47,17 @@ export function todayWindow(now: number): { day: DayKey; start: number } {
   return { day: key as DayKey, start };
 }
 
-/** Build-input rule: screened known, message-based. Needs you at any age; Waiting under 30 days. */
+/**
+ * Build-input rule: screened known, message-based. Needs you at any age; Waiting under 30 days, for iMessage only.
+ * Slack and email join when they need Milad: a Slack thread he replied in last would otherwise take most of the
+ * Waiting reads, and email joins only as the Mail workspace's People lens, a known sender owed a reply.
+ */
 export function todayCandidateState(
-  c: { platform: Platform; flags: ChatFlags; known: boolean; isSpam: boolean; lastMessageAt: number },
+  c: { platform: Platform; flags: ChatFlags; known: boolean; isSpam: boolean; bulk?: boolean; lastMessageAt: number },
   now: number,
 ): "needsYou" | "waiting" | null {
   if (screeningOf(c) !== "known") return null;
   if (c.flags.unresponded) return "needsYou";
+  if (c.platform !== "imessage") return null;
   return c.flags.waiting && now - c.lastMessageAt < TODAY_LIMITS.waitingMaxAgeMs ? "waiting" : null;
 }

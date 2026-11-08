@@ -119,6 +119,8 @@ export const gmailThreadFields = v.object({
   threadId: v.string(), subject: v.string(), inInbox: v.boolean(), bulk: v.boolean(),
   /** Why Gmail refused Comma's last archive or unarchive, which Comma then took back. The thread's next sync clears it. */
   archiveError: v.optional(v.string()),
+  /** Messages carrying Gmail's UNREAD label; absent when none do. Gmail is the source, so reading there clears it. */
+  unread: v.optional(v.number()),
 });
 
 export const conversationFields = {

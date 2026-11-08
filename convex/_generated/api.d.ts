@@ -2006,6 +2006,7 @@ export declare const api: {
             inInbox: boolean;
             subject: string;
             threadId: string;
+            unread?: number;
           };
           groupPhotoGuid?: string;
           groupPhotoStorageId?: Id<"_storage">;
@@ -2143,6 +2144,7 @@ export declare const api: {
               inInbox: boolean;
               subject: string;
               threadId: string;
+              unread?: number;
             };
             groupPhotoGuid?: string;
             groupPhotoStorageId?: Id<"_storage">;
@@ -2239,6 +2241,7 @@ export declare const api: {
               inInbox: boolean;
               subject: string;
               threadId: string;
+              unread?: number;
             };
             groupPhotoGuid?: string;
             groupPhotoStorageId?: Id<"_storage">;
@@ -2483,6 +2486,7 @@ export declare const api: {
             inInbox: boolean;
             subject: string;
             threadId: string;
+            unread?: number;
           };
           groupPhotoGuid?: string;
           groupPhotoStorageId?: Id<"_storage">;

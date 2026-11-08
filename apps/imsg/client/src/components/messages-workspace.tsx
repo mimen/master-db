@@ -10,7 +10,7 @@ import { ConversationListPane } from "@/components/conversation-list-pane";
 import { useDesktopShellContext, useDesktopShellState } from "@/components/desktop-shell-context";
 import { DesktopSplit } from "@/components/desktop-split";
 import { EmptyState } from "@/components/empty-state";
-import { ThreadBeside, ThreadView } from "@/components/lazy-surfaces";
+import { EmailReader, ThreadBeside, ThreadView } from "@/components/lazy-surfaces";
 import { useAgentEnabled } from "@/hooks/use-agent";
 import { useConversation } from "@/hooks/use-chat-directory";
 import { useChats } from "@/hooks/use-chats";
@@ -374,7 +374,7 @@ export function MessagesWorkspace({
       detail={
         selected ? (
           <ThreadEnter key={selected.conversationId + (jumpTarget?.guid ?? "")} animate={selected.conversationId === advanced?.conversationId}>
-            {selected.thread?.parentId ? (
+            {selected.route.platform === "gmail" ? <EmailReader conversationId={selected.conversationId} /> : selected.thread?.parentId ? (
               <ThreadBeside
                 thread={selected}
                 parentId={selected.thread.parentId}
