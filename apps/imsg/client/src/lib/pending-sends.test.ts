@@ -217,7 +217,7 @@ describe("a send while Convex is out of reach", () => {
 
 describe("withPendingSends", () => {
   const chat = (id: string, lastAt: number): ChatSummary => ({
-    conversationId: id as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: `iMessage;-;${id}` } }, displayName: id, isGroup: false, isSpam: false, known: true, hasGroupPhoto: false,
+    conversationId: id as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: `iMessage;-;${id}` } }, displayName: id, kind: "dm", isGroup: false, isSpam: false, known: true, hasGroupPhoto: false,
     participants: [], unreadCount: 0, flags: { unresponded: true, waiting: false } as ChatSummary["flags"],
     lastMessage: { guid: `last-${id}`, text: "old", dateCreated: lastAt, isFromMe: false, senderName: null, hasAttachments: false },
   } as ChatSummary);

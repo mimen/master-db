@@ -1,6 +1,7 @@
 import type { OptimisticLocalStore, OptimisticUpdate } from "convex/browser";
 import { optimisticallyUpdateValueInPaginatedQuery } from "convex/react";
 import type { FunctionArgs, FunctionReference, FunctionReturnType } from "convex/server";
+import { attentionOf } from "@shared/platform-profile";
 import type { ConversationId } from "@shared/types";
 import { agentApi } from "./agent-api";
 import { commaApi, todayApi, triageApi } from "./convex-api";
@@ -23,8 +24,11 @@ export interface ConversationStateClient extends Pick<ResultCommandClient, "watc
 export const rowAfter = {
   settle: (row: Row, anchor: string | undefined): Row => !row.lastMessage || (anchor !== undefined && anchor !== row.lastMessage.guid)
     ? row : { ...row, flags: { ...row.flags, unresponded: false, waiting: false } },
-  unsettle: (row: Row): Row => !row.lastMessage
-    ? row : { ...row, flags: { ...row.flags, unresponded: !row.lastMessage.isFromMe, waiting: row.lastMessage.isFromMe } },
+  unsettle: (row: Row): Row => {
+    if (!row.lastMessage) return row;
+    const attention = attentionOf({ platform: row.platform ?? "imessage", kind: row.kind }, row.lastMessage);
+    return { ...row, flags: { ...row.flags, unresponded: attention === "needsYou", waiting: attention === "waiting" } };
+  },
   pin: (row: Row, pinned: boolean): Row => ({ ...row, flags: { ...row.flags, pinned } }),
   markUnread: (row: Row): Row => ({ ...row, flags: { ...row.flags, unread: true } }),
   read: (row: Row, at: number): Row => {

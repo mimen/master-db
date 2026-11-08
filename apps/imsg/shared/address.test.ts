@@ -3,11 +3,12 @@ import type { ConversationId } from "./types";
 import {
   addressesMatch,
   disambiguators,
-  emailMatchKey,
   formatAddress,
   formatPhone,
+  handleMatchKey,
   matchesAnyAddress,
-  phoneMatchKey,
+  normalizeHandle,
+  parseHandle,
   stripServiceSuffix,
 } from "./address";
 
@@ -32,25 +33,53 @@ test("formatAddress cleans and prettifies", () => {
   expect(formatAddress("jane@example.com")).toBe("jane@example.com");
 });
 
-test("phoneMatchKey is the last-10-digit suffix regardless of formatting", () => {
-  expect(phoneMatchKey("+16195551234")).toBe("6195551234");
-  expect(phoneMatchKey("(619) 555-1234")).toBe("6195551234");
-  expect(phoneMatchKey("6195551234")).toBe("6195551234");
+test("parseHandle decides each address's kind once", () => {
+  expect(parseHandle("+12693974034(smsfp)")).toEqual({ kind: "phone", address: "+12693974034" });
+  expect(parseHandle("24273")).toEqual({ kind: "phone", address: "24273" });
+  expect(parseHandle("Jane@Example.com")).toEqual({ kind: "email", address: "Jane@Example.com" });
+  expect(parseHandle("slack:U06195551234")).toEqual({ kind: "slack", address: "slack:U06195551234" });
+  expect(parseHandle("tel:+12693974034")).toBeNull();
+  expect(parseHandle("")).toBeNull();
 });
 
-test("phoneMatchKey returns empty for anything too short to be a confident match", () => {
-  expect(phoneMatchKey("12345")).toBe("");
-  expect(phoneMatchKey("24273(smsfp)")).toBe("");
+// The shapes production's participants, senders and identities carry (2026-11-07, read-only): E.164, bare 10 and 11
+// digits, formatted US numbers, international without a plus, short codes, suffixed SMS lines, RCS business ids,
+// emails. Each keeps the key it had before handle kinds.
+const REAL_SHAPES: [address: string, matchKey: string, normalized: string, display: string][] = [
+  ["+16195551234", "6195551234", "+16195551234", "(619) 555-1234"],
+  ["+16195551234(smsfp)", "6195551234", "+16195551234", "(619) 555-1234"],
+  ["6195551234", "6195551234", "+16195551234", "(619) 555-1234"],
+  ["16195551234", "6195551234", "+16195551234", "(619) 555-1234"],
+  ["(619) 555-1234", "6195551234", "+16195551234", "(619) 555-1234"],
+  ["+1 619-555-1234", "6195551234", "+16195551234", "(619) 555-1234"],
+  ["1 (619) 555-1234", "6195551234", "+16195551234", "(619) 555-1234"],
+  ["+447911123456", "7911123456", "+447911123456", "+447911123456"],
+  ["447911123456", "7911123456", "+447911123456", "447911123456"],
+  ["24273", "", "", "24273"],
+  ["24273(smsfp)", "", "", "24273"],
+  ["898287", "", "", "898287"],
+  ["Jane@Example.com", "jane@example.com", "jane@example.com", "Jane@Example.com"],
+  ["jane1990@icloud.com", "jane1990@icloud.com", "jane1990@icloud.com", "jane1990@icloud.com"],
+  ["store_brand_agent@rbm.goog(smsfp)", "store_brand_agent@rbm.goog", "store_brand_agent@rbm.goog", "store_brand_agent@rbm.goog"],
+];
+
+test.each(REAL_SHAPES)("%p keeps its match key, identity key and display", (address, matchKey, normalized, display) => {
+  expect(handleMatchKey(address)).toBe(matchKey);
+  expect(normalizeHandle(address)).toBe(normalized);
+  expect(formatAddress(address)).toBe(display);
 });
 
-test("phoneMatchKey never reads a scheme-prefixed handle as a phone number", () => {
-  expect(phoneMatchKey("slack:U06195551234")).toBe("");
+test("a Slack id is never a phone number, and shows as a placeholder until a name resolves", () => {
+  expect(handleMatchKey("slack:U06195551234")).toBe("slack:U06195551234");
+  expect(normalizeHandle("slack:U06195551234")).toBe("slack:U06195551234");
   expect(addressesMatch("slack:U06195551234", "+16195551234")).toBe(false);
+  expect(addressesMatch("slack:U06195551234", "slack:U06195551234")).toBe(true);
+  expect(formatAddress("slack:U06195551234")).toBe("Slack user");
 });
 
-test("emailMatchKey lowercases; empty for non-email addresses", () => {
-  expect(emailMatchKey("Jane@Example.com")).toBe("jane@example.com");
-  expect(emailMatchKey("+16195551234")).toBe("");
+test("an email whose name holds digits matches only that email, not a phone", () => {
+  expect(addressesMatch("jane6195551234@icloud.com", "+16195551234")).toBe(false);
+  expect(addressesMatch("Jane@Example.com", "jane@example.com")).toBe(true);
 });
 
 test("addressesMatch: same phone via different formatting", () => {

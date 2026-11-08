@@ -165,10 +165,11 @@ test("listConversations reads per page on a 100-conversation inbox, with byte-id
   }
 
   // Recorded when names moved to read time: the unmemoized e357f707 output, plus known, contactsAvailable
-  // and searchNames, with unknown handles named by their address instead of a stored Mini name.
+  // and searchNames, with unknown handles named by their address instead of a stored Mini name. Conversation kinds
+  // added `kind` to each row; without it the pages hash to b785ae64… and 905221a0…, as before.
   expect([digest(first.result), digest(rest.result)]).toEqual([
-    "b785ae641e34e80876a1cca6fab919e478149d75c1586902ad34da44761df42a",
-    "905221a0fb3de9f9c5a7be1ee242074a73f94d21a05322db3e757b66c43420ba",
+    "28716c1eafb0ac8dde72fe9abe9939e6c6149ee6f0cccff4d80e5ff888784d0c",
+    "b7ea9584c748eb08cb15384b750a423504d118230873e96011bed05380b28b5a",
   ]);
   // e357f707 made 110 identity lookups, 85 people gets, 95 tag reads and 98 getUrl calls here.
   // The 101st identities lookup is the once-per-query Apple-contacts check.

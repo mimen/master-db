@@ -14,7 +14,19 @@ its service siblings (the iMessage, SMS and RCS chats with one person or group) 
 owns the identity in `convex/comma/conversationIdentity.ts`: the key, the primary chat (newest
 activity, ties to iMessage, then RCS, then SMS), and lookups by chat GUID or handle. Group CRM
 (`chat_crm`, chat `tags`, chat `event_links`) belongs to the conversation.
+Its **kind** is `dm`, `group`, `channel` or `emailThread` (`comma_conversations.kind`); iMessage ingest derives `dm` or
+`group`, and `isGroup` (every kind but `dm`) is derived from it for older readers. Rows from before kinds read theirs
+off `isGroup` (`conversationKind`) until the kinds backfill (`convex/comma/migrations.ts`) stamps them.
 _Avoid_: chat (for the merged thread), chat GUID (as an app-level id)
+
+**Handle**:
+A participant's or sender's address, a bare string, and its kind: `phone`, `email` or `slack` (a `slack:` user id), named
+as `identities.kind` names them. `parseHandle` in `shared/address.ts` is the one place that decides the kind, and each
+kind's rules there say how it normalizes (the identity graph's `normalized`), how it matches another spelling (a phone's
+last ten digits, an email lowercased), and how it shows (a Slack id shows as "Slack user" until a name resolves).
+Identity lookup, conversation keys, person context, contact matching and display all go through it. Different kinds
+never match.
+_Avoid_: address type, raw handle (for the parsed form)
 
 **Route**:
 Where a command executes: a platform, an account, and that platform's thread id, for iMessage a chat GUID.
@@ -29,7 +41,11 @@ client filters with them.
 _Avoid_: filter logic, flag logic
 
 **Platform profile**:
-What a route can do, as data in `shared/platform-profile.ts`: per platform, each feature (reactions and which
+What a platform's rules are and what a route can do, as data in `shared/platform-profile.ts`. Its **attention** reads a
+conversation's last message as needs you, waiting or none, and Unresponded and Waiting are that attention until the
+message is dismissed. Its **screening** says known, stranger or spam, which the type lens and Today's candidates use;
+for iMessage, junk is spam and a participant who resolves to a named person makes the conversation known. For routes,
+each feature (reactions and which
 tapbacks, reply, edit, unsend, typing, mentions, scheduling, calls, attachments, FaceTime links, group management,
 deleting) lists the services that carry it, whether it exists only in a group, and whether BlueBubbles needs its
 Private API for it. The profile also holds how a route draws (`platformBadge`: the label and dot colour every
@@ -44,7 +60,9 @@ mailbox. Conversations, chat aliases, messages, attachments, scheduled messages 
 so a conversation key or a message id only needs to be unique within its account. The bridge names its account at
 startup (`POST /comma/ingest/account`, seeded idempotently) and stamps it on every batch; a bridge that names none
 writes for iMessage's. A snapshot (unread, scheduled) replaces only its own account's state. Where a platform reports no
-from-me flag, a sender among the account's `selfHandles` is me. Rows from before accounts carry no `accountId` and count as
+from-me flag (`reportsFromMe` in its profile; iMessage reports one), a sender among the account's `selfHandles` is me. The
+iMessage bridge names its handles at startup from chat.db's `chat.account_login`, the phone and email Messages signs in
+with. A message whose mention names one of them is **addressed to me** (`mentionsMe`, set at ingest). Rows from before accounts carry no `accountId` and count as
 their platform's only account's until the accounts backfill (`convex/comma/migrations.ts`) stamps them.
 _Avoid_: workspace, login (for the stored identity)
 
@@ -137,11 +155,11 @@ connection"). The single `mini` row from before is retired: a publish in that sh
 _Avoid_: bridge state (for the per-executor row), Mini status
 
 **Unresponded**:
-A chat whose last message is inbound — you owe a reply. Dismissable until the next
+A chat its platform's attention says needs you; for iMessage, its last message is inbound and you owe a reply. Dismissable until the next
 inbound message; mutable per chat.
 
 **Waiting**:
-A chat whose last message is yours — you're waiting on them. Dismissable until the
+A chat its platform's attention says is waiting; for iMessage, its last message is yours and you're waiting on them. Dismissable until the
 next message flips the state.
 
 **BlueBubbles seam**:

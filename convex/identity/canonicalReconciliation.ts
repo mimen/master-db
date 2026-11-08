@@ -1,12 +1,12 @@
 import { v } from "convex/values";
 
+import { normalizeEmail, normalizePhone } from "../../apps/imsg/shared/address";
 import type { Id } from "../_generated/dataModel";
 import { internalMutation, internalQuery } from "../_generated/server";
 
 import { cleanupPlan, fingerprint, semanticGuard, semanticStateProof, stateProof, stateProofSummary } from "./cleanupPlan";
 import { ingestOneCard } from "./ingestContacts";
 import { personAggregatePatch, recomputePersonAggregates } from "./internal";
-import { normalizeEmail, normalizePhone } from "./normalize";
 import { assertProtectedPlan, protectedDriftCount, protectedLegacy } from "./protectedLegacy";
 
 export const snapshotCard = v.object({

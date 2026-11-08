@@ -54,7 +54,7 @@ describe("IdentityMirror", () => {
     const mirror = new IdentityMirror({ convexCloudUrl: "https://x.convex.cloud", identityKey: "k" });
     await mirror.refresh();
     // Raw, differently-formatted address finds the entry stored from the
-    // normalized value — both sides run through phoneMatchKey/emailMatchKey.
+    // normalized value — both sides run through handleMatchKey.
     expect(mirror.lookup("(626) 652-2285")).toBe("Alex");
     expect(mirror.lookup("+16266522285")).toBe("Alex");
   });

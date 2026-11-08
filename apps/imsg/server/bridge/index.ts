@@ -17,6 +17,7 @@ import { PhotoMirror } from "./photos";
 import { OutboundTyping } from "./presence";
 import { ReconcileBridge } from "./reconcile";
 import { RetryWork } from "./retry";
+import { readSelfHandles } from "./self-handles";
 import { ScheduledMirror } from "./scheduled-mirror";
 import { StatusPublisher } from "./state";
 import { UnreadMirror } from "./unread";
@@ -58,7 +59,8 @@ export function startBridge(deps: {
     if (!deps.config.convexSiteUrl) throw new Error("CONVEX_SITE_URL is unset");
     const base = deps.ingest ?? new ConvexIngest(deps.config);
     // Every batch names the account it writes for; Convex seeds iMessage's on first use.
-    const accountId = await base.post("account", IMESSAGE_ACCOUNT);
+    const selfHandles = readSelfHandles(deps.chatDbPath);
+    const accountId = await base.post("account", { ...IMESSAGE_ACCOUNT, ...(selfHandles ? { selfHandles } : {}) });
     const ingest = withAccount(base, { platform: IMESSAGE_ACCOUNT.platform, accountId });
     const writer = new MessageWriter({ bb: deps.bb, db: deps.db, ingest });
     try {

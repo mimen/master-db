@@ -5,7 +5,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalMutation, type MutationCtx } from "../_generated/server";
 
 import { ensureAccount } from "./accounts";
-import { IMESSAGE_ACCOUNT } from "./conversationIdentity";
+import { conversationKind, IMESSAGE_ACCOUNT } from "./conversationIdentity";
 import { attachmentBackfill, messageBackfill } from "./messageShape";
 
 /**
@@ -74,5 +74,51 @@ export const runAccountsBackfill = internalAction({
       report.push(totals);
     }
     return report;
+  },
+});
+
+/**
+ * The kinds backfill: stamps `kind` on every conversation from before kinds, read off its `isGroup`. Idempotent and
+ * paged. Run the dry run first:
+ *
+ *   bunx convex run comma/migrations:runKindsBackfill '{"dryRun":true}'
+ *   bunx convex run comma/migrations:runKindsBackfill '{"dryRun":false}'
+ *
+ * Once a real run reports zero changes, `kind` can be required and `conversationKind`'s fallback can go.
+ */
+export const backfillKindsPage = internalMutation({
+  args: { cursor: v.union(v.string(), v.null()), limit: v.optional(v.number()), dryRun: v.boolean() },
+  returns: pageResult,
+  handler: async (ctx, { cursor, limit, dryRun }) => {
+    const page = await ctx.db.query("comma_conversations").paginate({ cursor, numItems: Math.min(limit ?? 200, 500) });
+    let changed = 0;
+    for (const row of page.page) {
+      if (row.kind !== undefined) continue;
+      changed++;
+      if (!dryRun) await ctx.db.patch(row._id, { kind: conversationKind(row) });
+    }
+    return { scanned: page.page.length, changed, cursor: page.continueCursor, isDone: page.isDone };
+  },
+});
+
+const kindsPageRef = makeFunctionReference<"mutation", { cursor: string | null; limit?: number; dryRun: boolean }, {
+  scanned: number; changed: number; cursor: string; isDone: boolean;
+}>("comma/migrations:backfillKindsPage");
+
+/** Runs every page and reports what changed, or with dryRun what would. */
+export const runKindsBackfill = internalAction({
+  args: { dryRun: v.boolean(), limit: v.optional(v.number()) },
+  returns: v.object({ scanned: v.number(), changed: v.number() }),
+  handler: async (ctx, { dryRun, limit }) => {
+    const totals = { scanned: 0, changed: 0 };
+    let cursor: string | null = null;
+    for (;;) {
+      const page: { scanned: number; changed: number; cursor: string; isDone: boolean } =
+        await ctx.runMutation(kindsPageRef, { cursor, limit, dryRun });
+      totals.scanned += page.scanned;
+      totals.changed += page.changed;
+      if (page.isDone) return totals;
+      cursor = page.cursor;
+    }
   },
 });

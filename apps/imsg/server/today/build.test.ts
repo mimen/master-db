@@ -10,7 +10,7 @@ const NOW = 400 * DAY;
 const claim = { day: "2026-10-27", attempt: 1, startedAt: 1_000, mode: "fresh" as const, basis: null };
 
 function candidate(n: number, state: TodayCandidate["state"], ageDays = n / 1000): TodayCandidate {
-  return { conversationId: `conv${n}` as ConversationId, title: `Person ${n}`, isGroup: false, platform: "imessage", state, lastMessageAt: NOW - ageDays * DAY, unreadCount: 0 };
+  return { conversationId: `conv${n}` as ConversationId, title: `Person ${n}`, isGroup: false, kind: "dm", platform: "imessage", state, lastMessageAt: NOW - ageDays * DAY, unreadCount: 0 };
 }
 
 const card = { summary: "Wants an answer.", ask: "Answer", due: "", stakes: "medium", settle: false, needsMore: false };

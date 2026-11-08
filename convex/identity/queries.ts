@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 
+import { normalizeEmail, normalizePhone } from "../../apps/imsg/shared/address";
 import type { Doc, Id } from "../_generated/dataModel";
 import { query, type QueryCtx } from "../_generated/server";
 import { findConversation } from "../comma/conversationLookup";
@@ -7,7 +8,6 @@ import { findConversation } from "../comma/conversationLookup";
 import { groupCrm } from "./groupCrm";
 import { requireIdentityAccess } from "./key";
 import { nameTerms } from "./names";
-import { normalizeEmail, normalizePhone } from "./normalize";
 
 /** A single event association, projected for the client — see
  * schema/identity/event_links.ts's docstring for the storage shape.

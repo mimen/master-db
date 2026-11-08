@@ -1,13 +1,12 @@
 import { v } from "convex/values";
 
-import { stripServiceSuffix } from "../../apps/imsg/shared/address";
+import { normalizeHandle, stripServiceSuffix } from "../../apps/imsg/shared/address";
 import type { Id } from "../_generated/dataModel";
 import { internalMutation, type QueryCtx } from "../_generated/server";
-import { normalizeEmail, normalizePhone } from "../identity/normalize";
 
+/** The `identities.normalized` an address looks up, by its handle kind; an address with no key looks up as written. */
 export function normalizedAddress(address: string) {
-  const raw = stripServiceSuffix(address);
-  return normalizeEmail(raw) || normalizePhone(raw) || raw;
+  return normalizeHandle(address) || stripServiceSuffix(address);
 }
 
 export function personForAddress(ctx: Pick<QueryCtx, "db">, address: string) {

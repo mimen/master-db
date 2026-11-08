@@ -1,5 +1,5 @@
 import type { ChatSummary } from "@shared/types";
-import { emailMatchKey, formatAddress, matchesAnyAddress, phoneMatchKey } from "@shared/address";
+import { formatAddress, handleMatchKey, matchesAnyAddress } from "@shared/address";
 import { conversationRoute } from "@shared/imessage";
 import { platformBadge, UNREACHED_BADGE, type PlatformBadge } from "@shared/platform-profile";
 import type { ContactListRow } from "./identity";
@@ -143,13 +143,13 @@ export function serviceIndex(chats: readonly ChatSummary[]): ServiceLookup {
   for (const chat of chats) {
     if (chat.isGroup) continue;
     const address = chat.participants[0]?.address;
-    const key = address ? phoneMatchKey(address) || emailMatchKey(address) : "";
+    const key = address ? handleMatchKey(address) : "";
     if (!key) continue;
     const at = chat.lastMessage?.dateCreated ?? 0;
     const prior = newest.get(key);
     if (!prior || at > prior.at) newest.set(key, { at, badge: platformBadge(conversationRoute(chat)) });
   }
-  return (handle) => newest.get(phoneMatchKey(handle) || emailMatchKey(handle))?.badge ?? platformBadge({ platform: "imessage", service: "iMessage" });
+  return (handle) => newest.get(handleMatchKey(handle))?.badge ?? platformBadge({ platform: "imessage", service: "iMessage" });
 }
 
 export type ContactRow<T> =

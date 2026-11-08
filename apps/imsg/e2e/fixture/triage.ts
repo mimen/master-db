@@ -1,3 +1,4 @@
+import { imessage } from "../../../../convex/comma/conversationIdentity";
 import { conversationFlags, type ChatState } from "../../shared/chat-state";
 import type { ChatSummary } from "../../shared/types";
 import type { MappedChat } from "../../server/map";
@@ -74,8 +75,10 @@ export function createTriageFixture(deps: {
 
   /** A directory row as listConversations shows it, with the flags and unread count Convex derives. */
   function flagged(chat: MappedChat): ChatSummary {
-    const { flags, unreadCount } = conversationFlags(states.get(chat.guid), chat.lastMessage, chat.lastMessage?.dateCreated ?? 0, chat.unreadCount);
-    return { ...chat, flags, unreadCount };
+    const kind = imessage.kind(chat);
+    const { flags, unreadCount } = conversationFlags({ platform: imessage.platform, kind }, states.get(chat.guid), chat.lastMessage,
+      chat.lastMessage?.dateCreated ?? 0, chat.unreadCount);
+    return { ...chat, route: { platform: imessage.platform, accountId: null, imessage: { chatGuid: chat.guid } }, kind, flags, unreadCount };
   }
 
   const id = (args: Record<string, unknown>) => String(args.conversationId);

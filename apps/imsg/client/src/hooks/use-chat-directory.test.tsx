@@ -10,7 +10,7 @@ import { ChatDirectoryContext, useConversation } from "./use-chat-directory";
 
 const known = {
   conversationId: "conv-known" as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;-;+1555" } }, displayName: "Known",
-  isGroup: false, known: true, isSpam: false, participants: [], unreadCount: 0, firstUnreadAt: null,
+  kind: "dm", isGroup: false, known: true, isSpam: false, participants: [], unreadCount: 0, firstUnreadAt: null,
   lastMessage: { guid: "m1", text: "hi", dateCreated: 1234, isFromMe: false, senderName: null, hasAttachments: false },
   flags: { unresponded: true, waiting: false, unread: false, mutedUnresponded: false, pinned: false },
 } satisfies ChatSummary;

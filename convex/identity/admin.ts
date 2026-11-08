@@ -1,9 +1,9 @@
 import { v } from "convex/values";
 
+import { normalizeEmail, normalizePhone } from "../../apps/imsg/shared/address";
 import { internalMutation } from "../_generated/server";
 
 import { pickPrimaryNameIdentity, recomputePersonAggregates } from "./internal";
-import { normalizeEmail, normalizePhone } from "./normalize";
 
 /**
  * Hard-delete a person and every identity pointing at them, resolved by one of

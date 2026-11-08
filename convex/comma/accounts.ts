@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 
-import { stripServiceSuffix } from "../../apps/imsg/shared/address";
+import { addressesMatch, stripServiceSuffix } from "../../apps/imsg/shared/address";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { platform, type CommaPlatform } from "../schema/comma/validators";
@@ -65,11 +65,11 @@ export async function soleAccountScope(ctx: QueryCtx, platform: CommaPlatform): 
   return { platform, accountId: accounts.length === 1 ? accounts[0]!._id : null };
 }
 
-/** Whether `address` is the user on this account. Where a platform reports its own from-me flag, that flag wins. */
+/** Whether `address` is one of the user's handles on this account: the same handle, or the same text where it has no match key. */
 export function isSelf(account: Pick<Account, "selfHandles">, address: string | undefined): boolean {
   if (!address) return false;
   const handle = stripServiceSuffix(address).toLowerCase();
-  return account.selfHandles.some((self) => self.toLowerCase() === handle);
+  return account.selfHandles.some((self) => addressesMatch(self, address) || stripServiceSuffix(self).toLowerCase() === handle);
 }
 
 /** POST /comma/ingest/account: a bridge names its account at startup and posts the id with every batch. */

@@ -624,6 +624,7 @@ export declare const api: {
           isSpam?: boolean;
           isTapback?: boolean;
           mentions: Array<{ address: string; length: number; start: number }>;
+          mentionsMe?: boolean;
           modelText?: string;
           platform?: "imessage";
           reactions: Array<{
@@ -1858,6 +1859,7 @@ export declare const api: {
           hasGroupPhoto: boolean;
           isGroup: boolean;
           isSpam: boolean;
+          kind: "dm" | "group" | "channel" | "emailThread";
           known: boolean;
           lastMessage?: {
             dateCreated: number;
@@ -1984,6 +1986,7 @@ export declare const api: {
             hasGroupPhoto: boolean;
             isGroup: boolean;
             isSpam: boolean;
+            kind: "dm" | "group" | "channel" | "emailThread";
             known: boolean;
             lastMessage?: {
               dateCreated: number;
@@ -2117,6 +2120,7 @@ export declare const api: {
             isSpam?: boolean;
             isTapback?: boolean;
             mentions: Array<{ address: string; length: number; start: number }>;
+            mentionsMe?: boolean;
             modelText?: string;
             platform?: "imessage";
             reactions: Array<{
@@ -2213,6 +2217,7 @@ export declare const api: {
           hasGroupPhoto: boolean;
           isGroup: boolean;
           isSpam: boolean;
+          kind: "dm" | "group" | "channel" | "emailThread";
           known: boolean;
           lastMessage?: {
             dateCreated: number;
@@ -2280,6 +2285,7 @@ export declare const api: {
           isSpam?: boolean;
           isTapback?: boolean;
           mentions: Array<{ address: string; length: number; start: number }>;
+          mentionsMe?: boolean;
           modelText?: string;
           platform?: "imessage";
           reactions: Array<{
@@ -4939,6 +4945,12 @@ export declare const internal: {
         },
         { changed: number; cursor: string; isDone: boolean; scanned: number }
       >;
+      backfillKindsPage: FunctionReference<
+        "mutation",
+        "internal",
+        { cursor: string | null; dryRun: boolean; limit?: number },
+        { changed: number; cursor: string; isDone: boolean; scanned: number }
+      >;
       runAccountsBackfill: FunctionReference<
         "action",
         "internal",
@@ -4953,6 +4965,12 @@ export declare const internal: {
             | "comma_attachments"
             | "comma_scheduled";
         }>
+      >;
+      runKindsBackfill: FunctionReference<
+        "action",
+        "internal",
+        { dryRun: boolean; limit?: number },
+        { changed: number; scanned: number }
       >;
     };
     outbox: {
@@ -6082,6 +6100,7 @@ export declare const internal: {
               tags?: Array<string>;
             };
             isGroup: boolean;
+            kind: "dm" | "group" | "channel" | "emailThread";
             lastMessageAt: number;
             platform: "imessage";
             state: "needsYou" | "waiting";

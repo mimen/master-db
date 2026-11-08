@@ -1,10 +1,9 @@
 import { v, type Infer } from "convex/values";
 
-import { formatAddress } from "../../apps/imsg/shared/address";
+import { formatAddress, normalizeHandle } from "../../apps/imsg/shared/address";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { personName } from "../identity/names";
-import { normalizeEmail, normalizePhone } from "../identity/normalize";
 import { platform } from "../schema/comma/validators";
 
 import { soleAccountScope } from "./accounts";
@@ -109,7 +108,7 @@ async function handlesOf(ctx: QueryCtx, person: Doc<"people"> | null, address?: 
     ...person?.normalized_phones ?? [], ...person?.normalized_emails ?? [],
     ...identities.flatMap(({ value, normalized }) => [value, normalized]),
   ].filter(Boolean));
-  const direct = [...addresses].filter((handle) => normalizeEmail(handle) || normalizePhone(handle));
+  const direct = [...addresses].filter((handle) => normalizeHandle(handle));
   return { senders: [...addresses].slice(0, MAX_HANDLES), dmKeys: [...new Set(direct.map(handleKey))].slice(0, MAX_HANDLES) };
 }
 

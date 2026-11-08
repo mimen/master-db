@@ -1,9 +1,8 @@
 import { isValidPhoneNumber } from "libphonenumber-js";
 
-import { stripServiceSuffix } from "../../apps/imsg/shared/address";
+import { normalizePhone, parseHandle, stripServiceSuffix } from "../../apps/imsg/shared/address";
 import type { Participant } from "../../apps/imsg/shared/types";
-import { normalizePhone } from "../identity/normalize";
-import type { CommaPlatform, CommaRoute } from "../schema/comma/validators";
+import type { CommaConversationKind, CommaPlatform, CommaRoute } from "../schema/comma/validators";
 
 /**
  * What makes two platform threads one Comma conversation, and which thread a command goes through.
@@ -13,10 +12,11 @@ import type { CommaPlatform, CommaRoute } from "../schema/comma/validators";
  */
 
 /** The key a one-to-one conversation with this handle has, on any platform keyed by address. */
-export function handleKey(handle: string): string {
-  const address = stripServiceSuffix(handle);
-  if (address.includes("@")) return `dm:${address.toLowerCase()}`;
-  const phone = address.replace(/\D/g, "").length > 8 && isValidPhoneNumber(address, "US")
+export function handleKey(raw: string): string {
+  const handle = parseHandle(raw);
+  const address = handle?.address ?? stripServiceSuffix(raw);
+  // Stored keys predate handle kinds: only a phone libphonenumber accepts is keyed by E.164; the rest lowercase.
+  const phone = handle?.kind === "phone" && address.replace(/\D/g, "").length > 8 && isValidPhoneNumber(address, "US")
     ? normalizePhone(address)
     : "";
   return `dm:${phone || address.toLowerCase()}`;
@@ -43,6 +43,9 @@ export const imessage = {
   /** Newest activity wins; ties prefer iMessage, then RCS, then SMS. */
   choosePrimary: (chats: { chatGuid: string; lastMessageAt: number }[]) => choosePrimary(chats),
 
+  /** BlueBubbles reports only whether a chat is a group. */
+  kind: (input: { isGroup: boolean }): CommaConversationKind => (input.isGroup ? "group" : "dm"),
+
   /** Service siblings (the iMessage, SMS and RCS chats with one person, or one group) share a key. */
   conversationKey(input: { isGroup: boolean; primaryChatGuid: string; participants: Participant[] }): string {
     if (!input.isGroup && input.participants.length === 1) return handleKey(input.participants[0].address);
@@ -57,12 +60,23 @@ export const imessage = {
 /** What ingest asks a platform when it mirrors a conversation: its key, its primary thread, and an alias's service. */
 export interface PlatformIdentity {
   platform: CommaPlatform;
+  kind(input: { isGroup: boolean }): CommaConversationKind;
   conversationKey(input: { isGroup: boolean; primaryChatGuid: string; participants: Participant[] }): string;
   choosePrimary(chats: { chatGuid: string; lastMessageAt: number }[]): string;
   service(chatGuid: string): string;
 }
 
 export const PLATFORM_IDENTITY = { imessage } satisfies Record<CommaPlatform, PlatformIdentity>;
+
+/** A stored conversation's kind; rows from before kinds read theirs off `isGroup` until the kinds backfill stamps them. */
+export function conversationKind(conversation: { kind?: CommaConversationKind; isGroup: boolean }): CommaConversationKind {
+  return conversation.kind ?? (conversation.isGroup ? "group" : "dm");
+}
+
+/** `isGroup` as kinds define it: every kind but a dm has more than one other side. */
+export function isGroupKind(kind: CommaConversationKind): boolean {
+  return kind !== "dm";
+}
 
 const SERVICE_RANK: Record<string, number> = { iMessage: 0, RCS: 1, SMS: 2 };
 

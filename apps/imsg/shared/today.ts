@@ -1,4 +1,5 @@
-import type { ChatFlags } from "./types";
+import { screeningOf } from "./platform-profile";
+import type { ChatFlags, Platform } from "./types";
 
 /** The Today queue's rules shared by Convex, the Mini and the client. See docs/today-queue.md. */
 
@@ -46,12 +47,12 @@ export function todayWindow(now: number): { day: DayKey; start: number } {
   return { day: key as DayKey, start };
 }
 
-/** Build-input rule: known, not spam, message-based. Needs you at any age; Waiting under 30 days. */
+/** Build-input rule: screened known, message-based. Needs you at any age; Waiting under 30 days. */
 export function todayCandidateState(
-  c: { flags: ChatFlags; known: boolean; isSpam: boolean; lastMessageAt: number },
+  c: { platform: Platform; flags: ChatFlags; known: boolean; isSpam: boolean; lastMessageAt: number },
   now: number,
 ): "needsYou" | "waiting" | null {
-  if (!c.known || c.isSpam) return null;
+  if (screeningOf(c) !== "known") return null;
   if (c.flags.unresponded) return "needsYou";
   return c.flags.waiting && now - c.lastMessageAt < TODAY_LIMITS.waitingMaxAgeMs ? "waiting" : null;
 }

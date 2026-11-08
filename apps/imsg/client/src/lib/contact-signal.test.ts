@@ -22,6 +22,7 @@ function chat(guid: string, addresses: string[], minutesAgo: number, extra: Part
     conversationId: guid as ConversationId,
     route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: guid } },
     displayName: guid,
+    kind: guid.includes(";+;") ? "group" : "dm",
     isGroup: guid.includes(";+;"),
     known: true,
     isSpam: false,

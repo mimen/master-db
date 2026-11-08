@@ -1,11 +1,11 @@
 import { v } from "convex/values";
 
+import { normalizeEmail, normalizePhone } from "../../apps/imsg/shared/address";
 import { mutation } from "../_generated/server";
 
 import { ingestOneCard } from "./ingestContacts";
 import { recomputePersonAggregates } from "./internal";
 import { requireIdentityAccess } from "./key";
-import { normalizeEmail, normalizePhone } from "./normalize";
 
 /** Trims a string arg; an all-whitespace or empty result becomes `undefined`
  * so it reads (and patches) the same as "not provided". */

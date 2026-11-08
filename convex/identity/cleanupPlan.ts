@@ -1,9 +1,9 @@
 import { v } from "convex/values";
 
+import { normalizeEmail, normalizePhone } from "../../apps/imsg/shared/address";
 import type { Doc } from "../_generated/dataModel";
 
 import { personAggregatePatch } from "./internal";
-import { normalizeEmail, normalizePhone } from "./normalize";
 
 export const semanticGuard = v.object({
   scope: v.optional(v.literal("touched")),

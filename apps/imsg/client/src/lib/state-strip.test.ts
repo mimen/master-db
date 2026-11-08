@@ -8,7 +8,7 @@ const NOW = new Date(2027, 0, 16, 12).getTime();
 
 function chat(flags: Partial<ChatSummary["flags"]>, last: { at: number; fromMe: boolean } | null, extra: Partial<ChatSummary> = {}): ChatSummary {
   return {
-    conversationId: "c" as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;-;c" } }, displayName: "Tracy Mesina", isGroup: false, known: true, isSpam: false, participants: [], unreadCount: 0,
+    conversationId: "c" as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;-;c" } }, displayName: "Tracy Mesina", kind: "dm", isGroup: false, known: true, isSpam: false, participants: [], unreadCount: 0,
     lastMessage: last && { guid: "m", text: "", dateCreated: last.at, isFromMe: last.fromMe, senderName: null, hasAttachments: false },
     flags: { unresponded: false, waiting: false, unread: false, mutedUnresponded: false, pinned: false, ...flags },
     ...extra,

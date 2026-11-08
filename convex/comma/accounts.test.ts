@@ -7,6 +7,7 @@ import { ALLOWED_EMAIL } from "../_lib/authed";
 import schema from "../schema";
 
 import { isSelf } from "./accounts";
+import { IMESSAGE_ACCOUNT } from "./conversationIdentity";
 import { commaModules } from "./testModules.vitest";
 
 type T = TestConvex<typeof schema>;
@@ -96,10 +97,38 @@ describe("accounts", () => {
     expect(rows[0]?.accountId).toBeDefined();
   });
 
-  test("a self handle makes a message from me where the platform says nothing", () => {
-    expect(isSelf({ selfHandles: ["U123", "me@example.com"] }, "ME@example.com")).toBe(true);
-    expect(isSelf({ selfHandles: ["U123"] }, "U999")).toBe(false);
+  test("a self handle is the same handle by kind, or the same text where it has no match key", () => {
+    expect(isSelf({ selfHandles: ["slack:U123", "me@example.com"] }, "ME@example.com")).toBe(true);
+    expect(isSelf({ selfHandles: ["+15550009999"] }, "(555) 000-9999(smsfp)")).toBe(true);
+    expect(isSelf({ selfHandles: ["slack:U123"] }, "slack:U123")).toBe(true);
+    expect(isSelf({ selfHandles: ["slack:U123"] }, "slack:U999")).toBe(false);
+    expect(isSelf({ selfHandles: ["24273"] }, "24273(smsfp)")).toBe(true);
     expect(isSelf({ selfHandles: [] }, undefined)).toBe(false);
+  });
+
+  test("iMessage reports its own from-me flag, so a self handle never turns an inbound copy into mine", async () => {
+    const t = convexTest(schema, commaModules);
+    await t.mutation(internal.comma.accounts.ensure, { ...IMESSAGE_ACCOUNT, selfHandles: ["+15550001111"] });
+    const conversationId = await conversationIn(t);
+    await t.mutation(internal.comma.internal.upsertMessages, { messages: [posted(conversationId, "note-to-self")] });
+    const [message] = await t.run((ctx) => ctx.db.query("comma_messages").collect());
+    expect(message).toMatchObject({ guid: "note-to-self", isFromMe: false });
+  });
+
+  test("a mention of one of the account's handles is addressed to me; anyone else's is not", async () => {
+    const t = convexTest(schema, commaModules);
+    await t.mutation(internal.comma.accounts.ensure, { ...IMESSAGE_ACCOUNT, selfHandles: ["+15550009999", "me@example.com"] });
+    const conversationId = await conversationIn(t);
+    await t.mutation(internal.comma.internal.upsertMessages, { messages: [
+      posted(conversationId, "to-me", { mentions: [{ start: 0, length: 3, address: "(555) 000-9999" }] }),
+      posted(conversationId, "to-me-by-email", { mentions: [{ start: 0, length: 3, address: "+15550002222" }, { start: 4, length: 2, address: "Me@Example.com" }] }),
+      posted(conversationId, "to-them", { mentions: [{ start: 0, length: 3, address: "+15550002222" }] }),
+      posted(conversationId, "plain"),
+    ] });
+    const rows = await t.run((ctx) => ctx.db.query("comma_messages").collect());
+    expect(Object.fromEntries(rows.map((row) => [row.guid, row.mentionsMe]))).toEqual({
+      "to-me": true, "to-me-by-email": true, "to-them": false, plain: false,
+    });
   });
 });
 

@@ -45,7 +45,7 @@ export function conversationRow(chat: ChatSummary): Conversation {
     _id: id(chat.guid), _creationTime: FIXTURE_NOW,
     platform: imessage.platform, conversationKey: imessage.conversationKey({ isGroup: chat.isGroup, primaryChatGuid: chat.guid, participants: chat.participants }),
     primaryChatGuid: chat.guid, chatGuids: [chat.guid],
-    displayName: chat.displayName, isGroup: chat.isGroup, participants: chat.participants,
+    displayName: chat.displayName, kind: imessage.kind(chat), isGroup: chat.isGroup, participants: chat.participants,
     ...(chat.lastMessage ? { lastMessage: chat.lastMessage } : {}),
     lastMessageAt: chat.lastMessage?.dateCreated ?? 0, isSpam: chat.isSpam,
     hasGroupPhoto: chat.hasGroupPhoto ?? false, groupPhotoUrl: chat.groupPhotoUrl ?? null, updatedAt: FIXTURE_NOW,

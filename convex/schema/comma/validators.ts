@@ -69,6 +69,10 @@ export const specialContent = v.union(
   v.object({ kind: v.literal("unknown"), label: v.string() }),
 );
 
+/** A conversation's shape. iMessage has dms and groups; Slack channels and email threads are their own kinds. */
+export const conversationKind = v.union(v.literal("dm"), v.literal("group"), v.literal("channel"), v.literal("emailThread"));
+export type CommaConversationKind = Infer<typeof conversationKind>;
+
 export const lastMessageSummary = v.object({
   guid: v.string(),
   text: v.string(),
@@ -99,6 +103,9 @@ export const conversationFields = {
   rawDisplayName: v.optional(v.string()),
   groupPhotoGuid: v.optional(v.string()),
   groupPhotoStorageId: v.optional(v.id("_storage")),
+  /** Absent on rows written before kinds until the kinds backfill stamps them; read it through `conversationKind`. */
+  kind: v.optional(conversationKind),
+  /** Derived from `kind` at ingest: anything but a dm. Kept for readers and clients built before kinds. */
   isGroup: v.boolean(),
   participants: v.array(participant),
   lastMessage: v.optional(lastMessageSummary),
@@ -217,6 +224,8 @@ export type CommaPendingSendState = Infer<typeof pendingSendState>;
  */
 export const messageRowFields = {
   ...messageCoreFields,
+  /** Computed at ingest: a mention names one of the account's selfHandles. Absent on rows written before it. */
+  mentionsMe: v.optional(v.boolean()),
   imessage: v.optional(imessageMessage),
   chatGuid: v.optional(flatImessageMessageFields.chatGuid),
   service: v.optional(flatImessageMessageFields.service),
@@ -935,6 +944,7 @@ export const todayCandidate = v.object({
   conversationId: v.id("comma_conversations"),
   title: v.string(),
   isGroup: v.boolean(),
+  kind: conversationKind,
   platform,
   state: v.union(v.literal("needsYou"), v.literal("waiting")),
   lastMessageAt: v.number(),

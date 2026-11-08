@@ -16,7 +16,7 @@ export type ExecutorStatus = Infer<typeof executorStatusValue>;
 export type EphemeralState = ({ kind: "presence" } & Infer<typeof presenceValue>) | ({ kind: "executorStatus" } & ExecutorStatus) | { kind: "typingCurrent"; clientKey: string; claimToken: string };
 
 type Fields<T> = Omit<T, "_id" | "_creationTime">;
-export type ConversationInput = Omit<Fields<CommaConversationDoc>, "primaryChatGuid" | "chatGuids" | "updatedAt" | "platform" | "accountId"> & {
+export type ConversationInput = Omit<Fields<CommaConversationDoc>, "primaryChatGuid" | "chatGuids" | "updatedAt" | "platform" | "accountId" | "kind"> & {
   chats: { chatGuid: string; lastMessageAt: number }[];
 };
 export type MessageRow = CommaMessageInput;

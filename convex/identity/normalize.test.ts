@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 
-import { deriveNormalized, kindForNetwork, normalizeEmail, normalizePhone } from "./normalize";
+import { normalizeEmail, normalizePhone } from "../../apps/imsg/shared/address";
+
+import { deriveNormalized, kindForNetwork } from "./normalize";
 
 describe("normalizeEmail", () => {
   test("lowercases and trims", () => {
