@@ -8,7 +8,7 @@ function memory(): Pick<Storage, "getItem" | "setItem"> {
 }
 
 const chat = (i: number): ChatSummary => ({
-  conversationId: `conv-${i}` as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: `iMessage;-;+1555000${String(i).padStart(4, "0")}` } }, displayName: `Person ${i}`, isGroup: false, known: true,
+  conversationId: `conv-${i}` as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: `iMessage;-;+1555000${String(i).padStart(4, "0")}` } }, displayName: `Person ${i}`, kind: "dm", isGroup: false, known: true,
   isSpam: false, participants: [{ address: `+1555000${i}`, name: `Person ${i}` }], unreadCount: 0,
   lastMessage: { guid: `m${i}`, text: "hi", dateCreated: 1000 - i, isFromMe: false, senderName: null, hasAttachments: false },
   flags: { unresponded: true, waiting: false, unread: false, mutedUnresponded: false, pinned: false },

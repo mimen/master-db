@@ -1,4 +1,4 @@
-import { emailMatchKey, phoneMatchKey } from "../shared/address";
+import { handleMatchKey } from "../shared/address";
 import type { Config } from "./config";
 import type { CrmData } from "./name-resolver";
 
@@ -11,7 +11,7 @@ interface NameDirectoryEntry {
   crm: CrmData;
 }
 
-/** One person's mirror record, keyed by phoneMatchKey/emailMatchKey. */
+/** One person's mirror record, keyed by handleMatchKey. */
 interface MirrorEntry {
   name: string;
   terms: string[];
@@ -71,17 +71,8 @@ export class IdentityMirror {
    * Returns null on a miss; never throws.
    */
   private entry(address: string): MirrorEntry | null {
-    const emailKey = emailMatchKey(address);
-    if (emailKey) {
-      const hit = this.byKey.get(emailKey);
-      if (hit) return hit;
-    }
-    const phoneKey = phoneMatchKey(address);
-    if (phoneKey) {
-      const hit = this.byKey.get(phoneKey);
-      if (hit) return hit;
-    }
-    return null;
+    const key = handleMatchKey(address);
+    return key ? this.byKey.get(key) ?? null : null;
   }
 
   /** Resolves a RAW participant address to a display name. Null on a miss. */
@@ -182,11 +173,8 @@ export class IdentityMirror {
       }
       const next = new Map<string, MirrorEntry>();
       for (const entry of body.value) {
-        const emailKey = emailMatchKey(entry.normalized);
-        const phoneKey = phoneMatchKey(entry.normalized);
-        const value: MirrorEntry = { name: entry.display_name, terms: entry.terms ?? [], crm: entry.crm ?? {} };
-        if (emailKey) next.set(emailKey, value);
-        else if (phoneKey) next.set(phoneKey, value);
+        const key = handleMatchKey(entry.normalized);
+        if (key) next.set(key, { name: entry.display_name, terms: entry.terms ?? [], crm: entry.crm ?? {} });
       }
       this.byKey = next;
     } catch (err) {

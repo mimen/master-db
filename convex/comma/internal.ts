@@ -16,7 +16,7 @@ import {
 } from "../schema/comma/validators";
 
 import { ingestAccount, isSelf } from "./accounts";
-import { PLATFORM_IDENTITY } from "./conversationIdentity";
+import { isGroupKind, PLATFORM_IDENTITY } from "./conversationIdentity";
 import { findAlias, findAttachment, findByChatGuid, findByKey, findMessage } from "./conversationLookup";
 import { FLAT_ATTACHMENT_UNSET, FLAT_MESSAGE_UNSET, inScope, MODEL_TEXT_UNSET, postedAttachment, postedMessage, type AccountScope } from "./messageShape";
 import { landEcho, refreshLastMessage } from "./pendingSends";
@@ -97,6 +97,7 @@ export const upsertConversations = internalMutation({
           }
         }
       }
+      const kind = identity.kind(input);
       const fields = {
         platform: account.platform,
         accountId: account._id,
@@ -105,7 +106,8 @@ export const upsertConversations = internalMutation({
         chatGuids,
         displayName: input.displayName,
         rawDisplayName: input.rawDisplayName,
-        isGroup: input.isGroup,
+        kind,
+        isGroup: isGroupKind(kind),
         participants: input.participants,
         isSpam: input.isSpam,
         hasGroupPhoto: input.hasGroupPhoto,
@@ -150,7 +152,8 @@ export const upsertMessages = internalMutation({
       const { imessage: { tapback, ...imessage }, ...core } = postedMessage(posted);
       const message = {
         ...core, platform: account.platform, accountId: account._id, imessage,
-        isFromMe: core.isFromMe || isSelf(account, core.sender?.address),
+        isFromMe: core.isFromMe || (!PLATFORM_IDENTITY[account.platform].reportsFromMe && isSelf(account, core.sender?.address)),
+        mentionsMe: core.mentions.some((mention) => isSelf(account, mention.address)),
       };
       const existing = await findMessage(ctx, scope, message.guid);
       if (existing && existing.sourceVersion >= message.sourceVersion) {

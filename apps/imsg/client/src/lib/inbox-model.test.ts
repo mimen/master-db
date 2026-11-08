@@ -32,7 +32,7 @@ function makeChat(overrides: Partial<ChatSummary> = {}): ChatSummary {
     conversationId: cid("chat-1"),
     route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;-;chat-1" } },
     displayName: "Chat 1",
-    isGroup: false,
+    kind: "dm", isGroup: false,
     known: true,
     isSpam: false,
     participants: [],

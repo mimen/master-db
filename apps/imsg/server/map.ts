@@ -369,7 +369,7 @@ function chatCrmField(
 
 /** A conversation as the Mini sees it in BlueBubbles. Triage flags are Convex's, so it carries none. */
 /** A BlueBubbles chat as the bridge maps it, keyed by its own GUID. */
-export type MappedChat = Omit<ChatSummary, "flags" | "conversationId" | "route"> & { guid: string };
+export type MappedChat = Omit<ChatSummary, "flags" | "conversationId" | "route" | "kind"> & { guid: string };
 
 export function mapChat(
   chat: BBChat,

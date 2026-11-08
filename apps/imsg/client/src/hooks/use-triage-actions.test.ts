@@ -101,7 +101,7 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
   /** A conversation as the directory lists it, registered on the server side. */
   const chat = (overrides: Partial<ChatSummary>): ChatSummary => {
     const summary: ChatSummary = {
-      conversationId: "conv-marcus" as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;-;+16195550206" } }, displayName: "Marcus Reed", isGroup: false, known: true,
+      conversationId: "conv-marcus" as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;-;+16195550206" } }, displayName: "Marcus Reed", kind: "dm", isGroup: false, known: true,
       isSpam: false, participants: [], unreadCount: 0,
       lastMessage: { guid: "m1", text: "Ninety minutes works", dateCreated: 1, isFromMe: true, senderName: null, hasAttachments: false },
       flags: flags(), agent,

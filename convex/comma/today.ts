@@ -164,10 +164,11 @@ export const todayCandidates = internalMutation({
     const page: TodayCandidate[] = [];
     for (const conversation of result.page) {
       const view = await withConversationState(ctx, conversation, read);
-      const state = todayCandidateState(view, now);
+      const platform = view.platform ?? "imessage";
+      const state = todayCandidateState({ ...view, platform }, now);
       if (!state) continue;
       page.push({
-        conversationId: view._id, title: view.displayName, isGroup: view.isGroup, platform: view.platform ?? "imessage", state,
+        conversationId: view._id, title: view.displayName, isGroup: view.isGroup, kind: view.kind, platform, state,
         lastMessageAt: view.lastMessageAt, unreadCount: view.unreadCount, ...(view.crm ? { crm: view.crm } : {}),
       });
     }

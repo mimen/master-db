@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { composeSections, looksLikeAddress } from "./compose-rows";
 
 const dm = (address: string, name: string): ChatSummary => ({
-  conversationId: `conv-${address}` as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: `iMessage;-;${address}` } }, displayName: name, isGroup: false, known: true, isSpam: false,
+  conversationId: `conv-${address}` as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: `iMessage;-;${address}` } }, displayName: name, kind: "dm", isGroup: false, known: true, isSpam: false,
   participants: [{ address, name }], lastMessage: null, unreadCount: 0,
   flags: { unresponded: false, waiting: false, unread: false, mutedUnresponded: false, pinned: false },
 });

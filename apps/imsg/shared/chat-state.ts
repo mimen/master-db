@@ -1,5 +1,6 @@
 import { WANTS_YOU } from "./agent-attention";
-import type { ChatFlags, ChatSummary, StateCounts, StateFilter, TypeFilter } from "./types";
+import { attentionOf, screeningOf } from "./platform-profile";
+import type { ChatFlags, ChatSummary, ConversationKind, Platform, StateCounts, StateFilter, TypeFilter } from "./types";
 
 /**
  * Chat State — the pure rules for a chat's flags: how Unresponded / Waiting /
@@ -30,14 +31,22 @@ interface LastMessageLike {
   isFromMe: boolean;
 }
 
+/** What core logic knows of a conversation to ask its platform's rules. */
+export interface RuledConversation {
+  platform: Platform;
+  kind: ConversationKind;
+}
+
+/** Unresponded and Waiting are the platform's attention for the last message, until that message is dismissed. */
 export function computeFlags(
+  conversation: RuledConversation,
   state: ChatState | undefined,
   last: LastMessageLike | null,
   unreadCount: number,
 ): ChatFlags {
-  const unresponded =
-    last !== null && !last.isFromMe && state?.dismissedUnrespondedGuid !== last.guid;
-  const waiting = last !== null && last.isFromMe && state?.dismissedWaitingGuid !== last.guid;
+  const attention = attentionOf(conversation, last);
+  const unresponded = last !== null && attention === "needsYou" && state?.dismissedUnrespondedGuid !== last.guid;
+  const waiting = last !== null && attention === "waiting" && state?.dismissedWaitingGuid !== last.guid;
   return {
     unresponded,
     waiting,
@@ -49,21 +58,23 @@ export function computeFlags(
 
 /** A conversation's flags and unread count as Convex lists it. A read at or after the last message zeroes the count. */
 export function conversationFlags(
+  conversation: RuledConversation,
   state: ChatState | undefined,
   last: LastMessageLike | null,
   lastMessageAt: number,
   unread: number,
 ): { flags: ChatFlags; unreadCount: number } {
   const unreadCount = (state?.readAt ?? 0) >= lastMessageAt ? 0 : unread;
-  return { flags: computeFlags(state, last, unreadCount), unreadCount };
+  return { flags: computeFlags(conversation, state, last, unreadCount), unreadCount };
 }
 
 /**
- * A screened conversation is junk, or from someone no contact matches.
- * Contact failures fail open instead of making the whole inbox disappear.
+ * A screened conversation is junk, or from a stranger. Contact failures fail open for strangers instead of making
+ * the whole inbox disappear.
  */
 function isScreened(chat: ChatSummary): boolean {
-  return chat.isSpam || (chat.contactsAvailable !== false && !chat.known);
+  const screening = screeningOf({ ...chat, platform: chat.route.platform });
+  return screening === "spam" || (screening === "stranger" && chat.contactsAvailable !== false);
 }
 
 /**

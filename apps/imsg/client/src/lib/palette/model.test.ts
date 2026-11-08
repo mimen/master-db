@@ -11,7 +11,7 @@ const chat = (over: Partial<ChatSummary>): ChatSummary => ({
   conversationId: cid("g"),
   route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;-;+15550000000" } },
   displayName: over.displayName ?? "Someone",
-  isGroup: false,
+  kind: "dm", isGroup: false,
   known: true,
   isSpam: false,
   participants: [],

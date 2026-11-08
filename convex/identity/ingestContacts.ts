@@ -1,10 +1,10 @@
 import { v } from "convex/values";
 
+import { normalizeEmail, normalizePhone } from "../../apps/imsg/shared/address";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, type MutationCtx } from "../_generated/server";
 
 import { recomputePersonAggregates } from "./internal";
-import { normalizeEmail, normalizePhone } from "./normalize";
 
 /**
  * Ingest for any source that natively groups multiple handles into one

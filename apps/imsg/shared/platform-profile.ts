@@ -1,4 +1,4 @@
-import type { Platform, TapbackType } from "./types";
+import type { ConversationKind, Platform, TapbackType } from "./types";
 
 /**
  * What a conversation's route can do, as data. Convex rejects a command its route's profile does not
@@ -41,6 +41,18 @@ interface FeatureRule {
   cant: string;
 }
 
+/** What a conversation wants from the user, read off its last message: a reply, their reply, or nothing. */
+export type Attention = "needsYou" | "waiting" | "none";
+
+/** Where a conversation sits against the screening boundary of the type lens and Today. */
+export type Screening = "known" | "stranger" | "spam";
+
+/** The rules core logic asks a platform, beyond what its routes can do. */
+export interface PlatformRules {
+  attention(conversation: { kind: ConversationKind }, last: { isFromMe: boolean } | null): Attention;
+  screening(conversation: { isSpam: boolean; known: boolean }): Screening;
+}
+
 const EVERY: readonly RouteService[] = ["iMessage", "SMS", "RCS"];
 const IMESSAGE: readonly RouteService[] = ["iMessage"];
 /** Messages sends tapbacks and threaded replies over RCS; chat.db holds both from Milad's RCS chats. */
@@ -63,6 +75,12 @@ export const IMESSAGE_PROFILE = {
     /** What the "Send with" menu lists. Only the conversation's own service can be picked: the outbox has no per-message service. */
     services: ["iMessage", "SMS"] satisfies RouteService[],
   },
+  /** Every inbound last message is owed a reply, and every outbound one waits on theirs, in a dm or a group alike. */
+  attention: (_conversation: { kind: ConversationKind }, last: { isFromMe: boolean } | null): Attention =>
+    last === null ? "none" : last.isFromMe ? "waiting" : "needsYou",
+  /** Apple's junk flag screens; otherwise a participant who resolves to a named person makes the conversation known. */
+  screening: (conversation: { isSpam: boolean; known: boolean }): Screening =>
+    conversation.isSpam ? "spam" : conversation.known ? "known" : "stranger",
   /** The tapbacks a react command may send where "react" is supported. */
   reactions: ["love", "like", "dislike", "laugh", "emphasize", "question"] as const satisfies readonly TapbackType[],
   features: {
@@ -112,7 +130,17 @@ export function keyEmoji(key: string): string | null {
   return key.startsWith("emoji:") ? key.slice("emoji:".length) || null : null;
 }
 
-export const PROFILES = { imessage: IMESSAGE_PROFILE } satisfies Record<Platform, unknown>;
+export const PROFILES = { imessage: IMESSAGE_PROFILE } satisfies Record<Platform, PlatformRules>;
+
+/** What the conversation's platform says it wants from the user. */
+export function attentionOf(conversation: { platform: Platform; kind: ConversationKind }, last: { isFromMe: boolean } | null): Attention {
+  return PROFILES[conversation.platform].attention(conversation, last);
+}
+
+/** The conversation's platform's screening verdict. */
+export function screeningOf(conversation: { platform: Platform; isSpam: boolean; known: boolean }): Screening {
+  return PROFILES[conversation.platform].screening(conversation);
+}
 
 export type Support = { ok: true } | { ok: false; reason: string };
 

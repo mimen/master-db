@@ -1,6 +1,6 @@
 import type { BBContact } from "./bb-types";
 import type { BlueBubbles } from "./bluebubbles";
-import { phoneMatchKey } from "../shared/address";
+import { handleMatchKey } from "../shared/address";
 import type { Contact } from "../shared/types";
 
 const REFRESH_MS = 10 * 60 * 1000;
@@ -59,7 +59,7 @@ export class ContactBook {
       }
       for (const phone of contact.phoneNumbers ?? []) {
         if (!phone.address) continue;
-        const key = phoneMatchKey(phone.address);
+        const key = handleMatchKey(phone.address);
         if (key) this.byDigitSuffix.set(key, name);
         this.byExact.set(phone.address, name);
         if (avatar) {
@@ -78,14 +78,14 @@ export class ContactBook {
     const exact =
       this.avatarByExact.get(address) ?? this.avatarByExact.get(address.toLowerCase());
     if (exact) return exact;
-    const key = phoneMatchKey(address);
+    const key = handleMatchKey(address);
     return key ? (this.avatarByDigitSuffix.get(key) ?? null) : null;
   }
 
   lookup(address: string): string | null {
     const exact = this.byExact.get(address) ?? this.byExact.get(address.toLowerCase());
     if (exact) return exact;
-    const key = phoneMatchKey(address);
+    const key = handleMatchKey(address);
     if (key) {
       const suffix = this.byDigitSuffix.get(key);
       if (suffix) return suffix;

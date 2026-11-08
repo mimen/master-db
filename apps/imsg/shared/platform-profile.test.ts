@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { composerConfig, IMESSAGE_PROFILE, platformServiceBadges, reactionSupport, support, type Feature, type ProfileRoute } from "./platform-profile";
+import { attentionOf, composerConfig, IMESSAGE_PROFILE, platformServiceBadges, reactionSupport, screeningOf, support, type Feature, type ProfileRoute } from "./platform-profile";
 
 const dm = (service: ProfileRoute["service"]): ProfileRoute => ({ platform: "imessage", service, isGroup: false });
 const group = (service: ProfileRoute["service"]): ProfileRoute => ({ platform: "imessage", service, isGroup: true });
@@ -88,4 +88,20 @@ describe("composerConfig", () => {
 
 test("iMessage's filterable services are iMessage and SMS, RCS reading as SMS", () => {
   expect(platformServiceBadges("imessage").map((badge) => badge.label)).toEqual(["iMessage", "SMS"]);
+});
+
+describe("iMessage's attention and screening", () => {
+  test("an inbound last message needs you and an outbound one waits, in a dm or a group", () => {
+    for (const kind of ["dm", "group"] as const) {
+      expect(attentionOf({ platform: "imessage", kind }, { isFromMe: false })).toBe("needsYou");
+      expect(attentionOf({ platform: "imessage", kind }, { isFromMe: true })).toBe("waiting");
+      expect(attentionOf({ platform: "imessage", kind }, null)).toBe("none");
+    }
+  });
+
+  test("junk screens before names do, and a named participant makes the conversation known", () => {
+    expect(screeningOf({ platform: "imessage", isSpam: true, known: true })).toBe("spam");
+    expect(screeningOf({ platform: "imessage", isSpam: false, known: true })).toBe("known");
+    expect(screeningOf({ platform: "imessage", isSpam: false, known: false })).toBe("stranger");
+  });
 });

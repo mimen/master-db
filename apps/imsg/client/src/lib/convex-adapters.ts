@@ -19,6 +19,7 @@ export function conversationToChat(
     conversationId: row._id,
     route: { platform: row.platform ?? "imessage", accountId: row.accountId ?? null, imessage: { chatGuid: row.primaryChatGuid } },
     displayName: row.displayName,
+    kind: row.kind,
     isGroup: row.isGroup,
     hasGroupPhoto: row.hasGroupPhoto,
     groupPhotoUrl: row.groupPhotoUrl,

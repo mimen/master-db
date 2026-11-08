@@ -43,11 +43,14 @@ function makeFlags(overrides: Partial<ChatFlags> = {}): ChatFlags {
   };
 }
 
+const IMESSAGE_DM = { platform: "imessage", kind: "dm" } as const;
+
 function makeChat(overrides: Partial<ChatSummary> = {}): ChatSummary {
   return {
     conversationId: "chat-1" as ConversationId,
     route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;-;chat-1" } },
     displayName: "Chat 1",
+    kind: "dm",
     isGroup: false,
     known: true,
     isSpam: false,
@@ -71,25 +74,25 @@ function makeChat(overrides: Partial<ChatSummary> = {}): ChatSummary {
 
 describe("computeFlags", () => {
   test("no state: inbound last is unresponded, not waiting", () => {
-    const flags = computeFlags(undefined, makeLast({ isFromMe: false }), 0);
+    const flags = computeFlags(IMESSAGE_DM, undefined, makeLast({ isFromMe: false }), 0);
     expect(flags).toEqual(
       makeFlags({ unresponded: true }),
     );
   });
 
   test("no state: outbound last is waiting, not unresponded", () => {
-    const flags = computeFlags(undefined, makeLast({ isFromMe: true }), 0);
+    const flags = computeFlags(IMESSAGE_DM, undefined, makeLast({ isFromMe: true }), 0);
     expect(flags).toEqual(makeFlags({ waiting: true }));
   });
 
   test("no last message: neither unresponded nor waiting", () => {
-    const flags = computeFlags(undefined, null, 0);
+    const flags = computeFlags(IMESSAGE_DM, undefined, null, 0);
     expect(flags.unresponded).toBe(false);
     expect(flags.waiting).toBe(false);
   });
 
   test("dismissed unresponded guid matching last clears unresponded", () => {
-    const flags = computeFlags(
+    const flags = computeFlags(IMESSAGE_DM,
       makeState({ dismissedUnrespondedGuid: "m1" }),
       makeLast({ guid: "m1", isFromMe: false }),
       0,
@@ -98,7 +101,7 @@ describe("computeFlags", () => {
   });
 
   test("dismissed unresponded guid for a different message leaves unresponded set", () => {
-    const flags = computeFlags(
+    const flags = computeFlags(IMESSAGE_DM,
       makeState({ dismissedUnrespondedGuid: "old" }),
       makeLast({ guid: "m1", isFromMe: false }),
       0,
@@ -107,7 +110,7 @@ describe("computeFlags", () => {
   });
 
   test("dismissed waiting guid matching last clears waiting", () => {
-    const flags = computeFlags(
+    const flags = computeFlags(IMESSAGE_DM,
       makeState({ dismissedWaitingGuid: "m1" }),
       makeLast({ guid: "m1", isFromMe: true }),
       0,
@@ -116,7 +119,7 @@ describe("computeFlags", () => {
   });
 
   test("dismissed waiting guid for a different message leaves waiting set", () => {
-    const flags = computeFlags(
+    const flags = computeFlags(IMESSAGE_DM,
       makeState({ dismissedWaitingGuid: "old" }),
       makeLast({ guid: "m1", isFromMe: true }),
       0,
@@ -125,23 +128,23 @@ describe("computeFlags", () => {
   });
 
   test("legacy mutedUnresponded values no longer suppress inbound triage", () => {
-    const flags = computeFlags(makeState({ mutedUnresponded: true }), makeLast({ isFromMe: false }), 0);
+    const flags = computeFlags(IMESSAGE_DM, makeState({ mutedUnresponded: true }), makeLast({ isFromMe: false }), 0);
     expect(flags.unresponded).toBe(true);
     expect(flags.mutedUnresponded).toBe(false);
   });
 
   test("markedUnread sets unread even with zero unread count", () => {
-    const flags = computeFlags(makeState({ markedUnread: true }), makeLast({ isFromMe: true }), 0);
+    const flags = computeFlags(IMESSAGE_DM, makeState({ markedUnread: true }), makeLast({ isFromMe: true }), 0);
     expect(flags.unread).toBe(true);
   });
 
   test("unread count drives unread without markedUnread", () => {
-    const flags = computeFlags(undefined, makeLast({ isFromMe: true }), 3);
+    const flags = computeFlags(IMESSAGE_DM, undefined, makeLast({ isFromMe: true }), 3);
     expect(flags.unread).toBe(true);
   });
 
   test("pinned state sets the pinned flag", () => {
-    const flags = computeFlags(makeState({ pinned: true }), makeLast(), 0);
+    const flags = computeFlags(IMESSAGE_DM, makeState({ pinned: true }), makeLast(), 0);
     expect(flags.pinned).toBe(true);
   });
 
@@ -200,11 +203,11 @@ describe("matchesFilters — state lenses", () => {
     };
     const open = makeChat({
       lastMessage,
-      flags: computeFlags(makeState(), makeLast({ guid: "m9" }), 0),
+      flags: computeFlags(IMESSAGE_DM, makeState(), makeLast({ guid: "m9" }), 0),
     });
     const settled = makeChat({
       lastMessage,
-      flags: computeFlags(makeState({ dismissedUnrespondedGuid: "m9" }), makeLast({ guid: "m9" }), 0),
+      flags: computeFlags(IMESSAGE_DM, makeState({ dismissedUnrespondedGuid: "m9" }), makeLast({ guid: "m9" }), 0),
     });
 
     expect(matchesFilters(open, "unresponded", "all")).toBe(true);
@@ -224,11 +227,11 @@ describe("matchesFilters — state lenses", () => {
     };
     const open = makeChat({
       lastMessage,
-      flags: computeFlags(makeState(), makeLast({ guid: "m9", isFromMe: true }), 0),
+      flags: computeFlags(IMESSAGE_DM, makeState(), makeLast({ guid: "m9", isFromMe: true }), 0),
     });
     const settled = makeChat({
       lastMessage,
-      flags: computeFlags(
+      flags: computeFlags(IMESSAGE_DM,
         makeState({ dismissedWaitingGuid: "m9" }),
         makeLast({ guid: "m9", isFromMe: true }),
         0,

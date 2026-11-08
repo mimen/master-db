@@ -12,6 +12,7 @@ import {
   attachmentDoc,
   conversationCrmView,
   conversationDoc,
+  conversationKind as conversationKindValidator,
   draftListItem,
   draftView,
   messageDoc,
@@ -25,6 +26,7 @@ import {
 } from "../schema/comma/validators";
 
 import { soleAccountScope } from "./accounts";
+import { conversationKind } from "./conversationIdentity";
 import { findByChatGuid, findMessage, shownInThread } from "./conversationLookup";
 import { attachmentRead, messageRead as readMessage, scopeOf } from "./messageShape";
 import { resolveConversationNames } from "./names";
@@ -33,6 +35,7 @@ import { reactionsOf } from "./reactionStore";
 
 const conversationView = v.object({
   ...conversationDoc.fields,
+  kind: conversationKindValidator,
   participants: v.array(v.object({ ...participant.fields, photoUrl: v.optional(v.union(v.string(), v.null())) })),
   flags: v.object({
     unresponded: v.boolean(),
@@ -119,8 +122,9 @@ export async function withConversationState(
     .query("comma_conversation_state")
     .withIndex("by_conversationId", (q) => q.eq("conversationId", conversation._id))
     .unique();
+  const ruled = { platform: conversation.platform ?? "imessage", kind: conversationKind(conversation) };
   // A mark-read in Comma lands here before chat.db catches up.
-  const { flags, unreadCount } = conversationFlags(state ?? undefined, conversation.lastMessage ?? null,
+  const { flags, unreadCount } = conversationFlags(ruled, state ?? undefined, conversation.lastMessage ?? null,
     conversation.lastMessageAt, conversation.unread?.count ?? 0);
   const people = await Promise.all(conversation.participants.map((participant) => read.person(participant.address)));
   const names = resolveConversationNames(conversation, people);
@@ -137,7 +141,7 @@ export async function withConversationState(
       : (await findMessage(ctx, scopeOf(conversation), lastMessage.guid))?.sender?.address;
     if (senderAddress) senderName = personName(await read.person(senderAddress)) ?? formatAddress(senderAddress);
   }
-  return { ...conversation, displayName: names.displayName, participants, flags, unreadCount, ...(crm ? { crm } : {}),
+  return { ...conversation, kind: ruled.kind, displayName: names.displayName, participants, flags, unreadCount, ...(crm ? { crm } : {}),
     known: names.known, contactsAvailable: await read.contactsAvailable(), searchNames: names.searchNames,
     ...(lastMessage ? { lastMessage: { ...lastMessage, senderName } } : {}),
     groupPhotoUrl: conversation.groupPhotoStorageId ? await read.storageUrl(conversation.groupPhotoStorageId) : null,

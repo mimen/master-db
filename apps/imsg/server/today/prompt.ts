@@ -108,7 +108,7 @@ function messageLines(messages: ThreadMessage[], chars: number): string {
 
 function threadHead(thread: TodayThread, now: number): string[] {
   const { candidate } = thread;
-  const attrs = `ref="${thread.ref}" state="${candidate.state === "needsYou" ? "needs_you" : "waiting"}" since="${age(now - candidate.lastMessageAt)}" unread="${candidate.unreadCount}" kind="${candidate.isGroup ? "group" : "dm"}" platform="${candidate.platform}"`;
+  const attrs = `ref="${thread.ref}" state="${candidate.state === "needsYou" ? "needs_you" : "waiting"}" since="${age(now - candidate.lastMessageAt)}" unread="${candidate.unreadCount}" kind="${candidate.kind}" platform="${candidate.platform}"`;
   const notes = thread.people.filter((person) => person.notes?.trim())
     .map((person) => `notes${thread.people.length > 1 ? ` on ${clean(person.name, 60)}` : ""}: ${clean(person.notes ?? "", NOTE_CHARS)}`);
   return [`<thread ${attrs}>`, crmLine(thread), ...notes];

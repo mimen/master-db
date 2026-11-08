@@ -8,7 +8,7 @@ import { compactSession, planUpdate, type TodaySession } from "./session";
 const SNAPSHOT = 10_000_000;
 
 function candidate(n: number, state: TodayCandidate["state"], lastMessageAt: number): TodayCandidate {
-  return { conversationId: `conv${n}` as ConversationId, title: `Person ${n}`, isGroup: false, platform: "imessage", state, lastMessageAt, unreadCount: 0 };
+  return { conversationId: `conv${n}` as ConversationId, title: `Person ${n}`, isGroup: false, kind: "dm", platform: "imessage", state, lastMessageAt, unreadCount: 0 };
 }
 
 function session(over: Partial<TodaySession> = {}): TodaySession {

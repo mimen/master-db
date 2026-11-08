@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { normalizeEmail, normalizePhone } from "./normalize";
+import { normalizeEmail, normalizePhone } from "../../apps/imsg/shared/address";
 
 const humanId = z.string().regex(/^rec[A-Za-z0-9]{14}$/);
 const contactSchema = z.object({

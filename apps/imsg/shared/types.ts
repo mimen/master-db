@@ -55,6 +55,9 @@ export type SpecialContent =
 /** The platforms Comma mirrors. */
 export type Platform = "imessage";
 
+/** A conversation's shape: one person, a group, a workspace channel, or an email thread. */
+export type ConversationKind = "dm" | "group" | "channel" | "emailThread";
+
 /** An account's Convex id: one signed-in identity on a platform. */
 export type AccountId = GenericId<"comma_accounts">;
 
@@ -177,6 +180,8 @@ export interface ChatSummary {
   conversationId: ConversationId;
   route: ChatRoute;
   displayName: string;
+  kind: ConversationKind;
+  /** Derived from `kind`: every kind but a dm. */
   isGroup: boolean;
   /** Whether BlueBubbles reports an uploaded group photo for this chat. */
   hasGroupPhoto?: boolean;
