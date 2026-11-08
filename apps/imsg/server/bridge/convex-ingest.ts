@@ -47,6 +47,7 @@ export interface Bodies {
   groupPhoto: FunctionArgs<typeof internal.comma.groupPhotos.setGroupPhoto>;
   mediaBacklog: FunctionArgs<typeof internal.comma.internal.mediaBacklog>;
   aiThread: FunctionArgs<typeof internal.comma.agentContext.aiThread>;
+  aiSentText: FunctionArgs<typeof internal.comma.agentContext.aiSentText>;
 }
 export interface Results {
   account: BridgeAccount["accountId"];
@@ -67,6 +68,7 @@ export interface Results {
   transcript: boolean;
   mediaBacklog: FunctionReturnType<typeof internal.comma.internal.mediaBacklog>;
   aiThread: FunctionReturnType<typeof internal.comma.agentContext.aiThread>;
+  aiSentText: FunctionReturnType<typeof internal.comma.agentContext.aiSentText>;
 }
 
 /** The kinds whose batches write for one account. */

@@ -64,6 +64,18 @@ export const FLAT_MESSAGE_UNSET = {
   sendEffect: undefined, isTapback: undefined, tapback: undefined,
 } as const;
 
+/** A write that omits a model-text field clears it, as an edit can drop what an adapter derived before. */
+export const MODEL_TEXT_UNSET = { modelText: undefined, subject: undefined, threadRef: undefined } as const;
+
+/** A message's model-text fields that are set, to copy onto a model's view of it. */
+export function modelTextFieldsOf(row: Pick<CommaMessageDoc, keyof typeof MODEL_TEXT_UNSET>): { modelText?: string; subject?: string; threadRef?: string } {
+  return {
+    ...(row.modelText !== undefined ? { modelText: row.modelText } : {}),
+    ...(row.subject !== undefined ? { subject: row.subject } : {}),
+    ...(row.threadRef !== undefined ? { threadRef: row.threadRef } : {}),
+  };
+}
+
 /** A posted message in the current form. An old bridge's flat row is converted. */
 export function postedMessage(input: CommaMessageInput | CommaLegacyMessageInput): CommaMessageInput {
   if ("imessage" in input) return input;

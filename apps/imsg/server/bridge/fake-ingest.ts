@@ -12,7 +12,8 @@ export class FakeIngest extends ConvexIngest {
   constructor() { super({ convexSiteUrl: "http://test.invalid", commaBridgeSecret: "test" }); }
 
   readonly backlog: Results["mediaBacklog"]["items"] = [];
-  thread: Results["aiThread"] = { title: "", isGroup: false, participants: [], messages: [] };
+  thread: Results["aiThread"] = { title: "", isGroup: false, participants: [], route: { platform: "imessage", chatGuid: "iMessage;-;+15550000000" }, messages: [] };
+  sent: Results["aiSentText"] = [];
   readonly uploads: Array<{ bytes: number; contentType: string }> = [];
 
   override async upload(bytes: Uint8Array, contentType: string): Promise<string> {
@@ -43,6 +44,7 @@ export class FakeIngest extends ConvexIngest {
       transcript: true,
       mediaBacklog: { items: this.backlog.splice(0), cursor: "done", isDone: true },
       aiThread: this.thread,
+      aiSentText: this.sent,
     };
     return results[kind];
   }

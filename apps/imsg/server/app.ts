@@ -95,13 +95,8 @@ const ai = deps.ai ?? new AiService({
     try { return { ok: true, value: await convexReads.post("aiThread", { conversationId }) }; }
     catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
   },
-  recentOutboundText: async () => {
-    const result = await bb.queryMessages({ limit: 200, offset: 0, from: "me" });
-    return result.ok
-      ? result.value.map((message) => (message.text ?? "").trim()).filter((text) => text.length >= 2 && text.length <= 500)
-      : [];
-  },
-  reactionSuggestions: () => bb.hasPrivateApi,
+  sentText: async ({ platform, accountId }) => await convexReads.post("aiSentText", { platform, ...(accountId ? { accountId } : {}) }),
+  bridgeSupport: () => ({ privateApi: bb.hasPrivateApi, emojiReactions: bb.hasEmojiReactions }),
   contactEmails: (address) => contacts.emails(address),
   searchVault: makeVaultSearch(config.ai.vaultPath),
 });

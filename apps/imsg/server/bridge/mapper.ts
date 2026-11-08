@@ -1,4 +1,5 @@
 import { choosePrimary, imessage } from "../../../../convex/comma/conversationIdentity";
+import type { ToModelText } from "../../shared/model-text";
 import type { BBChat, BBMessage } from "../bb-types";
 import { mapChat, mapMessage, parseTapback } from "../map";
 import type { NameSource } from "../name-resolver";
@@ -56,6 +57,9 @@ export function sourceVersion(message: BBMessage, editSequence = 0): number {
   return version;
 }
 
+/** iMessage text is already plain, so iMessage derives no model text. */
+export const imessageModelText: ToModelText<BBMessage> = () => ({});
+
 export function toMessageRow(
   bbMessage: BBMessage,
   conversationId: MessageRow["conversationId"],
@@ -76,6 +80,7 @@ export function toMessageRow(
     dateRetracted: bbMessage.dateRetracted ?? undefined,
     isFromMe: mapped.isFromMe,
     text: mapped.isAssociatedMessage ? "" : mapped.text,
+    ...imessageModelText(bbMessage),
     sender: mapped.sender ?? undefined,
     edited: mapped.edited,
     retracted: mapped.retracted,

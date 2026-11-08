@@ -2,7 +2,8 @@ import { mkdir } from "node:fs/promises";
 import { basename, join, relative, resolve, isAbsolute } from "node:path";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { formatMessages, personMessages } from "./context";
+import { formatMessages } from "../ai/context";
+import { personMessages } from "./context";
 import type { ChatId, ConversationId, Port, Routes, StorageId } from "./convex-port";
 
 type ToolResult = Awaited<ReturnType<Parameters<typeof tool>[3]>>;
@@ -51,12 +52,12 @@ export function commaTools(deps: ToolDeps) {
     }, (args) => guarded(async () => {
       const context = await port.post("agentContext", { conversationId, beforeMessageAt: args.beforeMessageAt, limit: args.limit });
       const oldest = context.messages[0]?.at;
-      return text(`${formatMessages(context.messages, deps.timeZone)}${oldest ? `\n\n(oldest shown: ${oldest})` : "\n\n(no messages)"}`);
+      return text(`${formatMessages(context.messages, { timeZone: deps.timeZone })}${oldest ? `\n\n(oldest shown: ${oldest})` : "\n\n(no messages)"}`);
     })),
     tool("search_thread", "Search this conversation's full history.", { query: z.string().min(1) },
       (args) => guarded(async () => {
         const messages = await port.post("agentSearch", { conversationId, query: args.query });
-        return text(messages.length ? formatMessages(messages, deps.timeZone) : "(no matches)");
+        return text(messages.length ? formatMessages(messages, { timeZone: deps.timeZone }) : "(no matches)");
       })),
     tool("read_person", "Read one person's messages in Milad's other conversations (their other DMs and handles, groups, every platform), newest first, each naming its conversation. Name them with a handle from Participants or a personId from get_people; in a one-to-one thread omit both. Page back with the oldest timestamp shown.", {
       handle: z.string().optional(),

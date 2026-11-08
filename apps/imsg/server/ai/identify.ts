@@ -70,10 +70,10 @@ function shortPath(path: string): string {
   return parts.slice(-2).join("/");
 }
 
-/** Contact-book hit, when BlueBubbles already knows the name. */
+/** The name Convex already knows them by. */
 export function contactCandidate(name: string | null): IdentityCandidate[] {
   if (!name) return [];
-  return [{ source: "contacts", name, detail: "already in the macOS address book" }];
+  return [{ source: "contacts", name, detail: "already named in Milad's contacts" }];
 }
 
 /** Merges sources, preferring earlier ones, and caps what reaches the prompt. */

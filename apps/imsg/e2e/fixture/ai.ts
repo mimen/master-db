@@ -27,10 +27,10 @@ export class FixtureAi implements AiServiceLike {
       fetchThread: async (conversationId) => {
         const raw = await model.bb.chatMessages(conversationId, { limit: Number.MAX_SAFE_INTEGER });
         if (!raw.ok) return raw;
-        return { ok: true, value: { title: "Fixture", isGroup: false, participants: [], messages: buildThread(raw.value, conversationId, names) } };
+        return { ok: true, value: { title: "Fixture", isGroup: false, participants: [], route: { platform: "imessage", chatGuid: conversationId }, messages: buildThread(raw.value, conversationId, names) } };
       },
-      recentOutboundText: async () => [],
-      reactionSuggestions: () => false,
+      sentText: async () => [],
+      bridgeSupport: () => ({ privateApi: model.bb.hasPrivateApi }),
       contactEmails: () => [],
       searchVault: async () => [],
     }) : null;

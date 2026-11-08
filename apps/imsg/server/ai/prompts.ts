@@ -1,48 +1,5 @@
 import { UNTRUSTED_NOTICE } from "./context";
 
-/**
- * Prompt construction for the fast lane. Kept as pure string builders so the
- * shape of every prompt is unit-testable without touching the network.
- */
-
-const VOICE = [
-  "You are helping Milad, who runs Afternoon Umbrella Friends (AUF), an events and music brand.",
-  "He texts dry, lowercase-ish, brief. No exclamation marks, no corporate warmth, no emoji unless he used one first.",
-  "Never use em dashes or en dashes in anything you draft for him; plain sentences and commas only.",
-].join(" ");
-
-export function replySuggestionPrompt(
-  transcript: string,
-  profile: string,
-  peerName: string | null,
-): string {
-  return [
-    VOICE,
-    "",
-    profile ? `About Milad:\n${profile}\n` : "",
-    `Draft replies Milad could send${peerName ? ` to ${peerName}` : ""}.`,
-    "",
-    "Conversation:",
-    transcript || "(no messages yet)",
-    "",
-    UNTRUSTED_NOTICE,
-    "",
-    "Rules:",
-    "- 2 options, each a complete message he could send as-is.",
-    "- Each under 200 characters unless the thread clearly warrants more.",
-    "- The two options are variations of the same reply: same intent, different tone or length. Never manufacture disagreement; if there is one obviously right answer, both options say it.",
-    "- Lead with the most specific and committed phrasing. He sees the first one first.",
-    "- Resolve the current state before drafting. Attachments are delivered work, and later reactions or praise may close an earlier request. Never answer a request that the subsequent messages show is already completed.",
-    "- Match his voice. Never invent commitments, dates, or facts he has not stated.",
-    "- A reaction can be an option when that is what the moment calls for (e.g. a short playful jab at what they said).",
-    "- If the last message needs no reply, still offer the most natural thing to say.",
-    "",
-    'Reply with ONLY a JSON array of strings, e.g. ["first", "second"].',
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
 export interface IdentityCandidate {
   /** Where the hit came from, e.g. "vault" or "airtable". */
   source: string;
@@ -66,7 +23,7 @@ export function identifyPrompt(
     "Candidate matches found by searching his notes and records:",
     rendered,
     "",
-    "Conversation with this number:",
+    "Conversation with them:",
     transcript || "(no messages)",
     "",
     UNTRUSTED_NOTICE,

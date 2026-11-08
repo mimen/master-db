@@ -50,7 +50,7 @@ _Avoid_: workspace, login (for the stored identity)
 
 **Message core**:
 What every platform's message has (`messageCoreFields` in `convex/schema/comma/validators.ts`): platform, account, id,
-conversation, sender, from-me, time, text, attachments, reply-to, edited and retracted. iMessage's own fields (chat GUID,
+conversation, sender, from-me, time, text, model text, attachments, reply-to, edited and retracted. iMessage's own fields (chat GUID,
 service, send error, send effect, special content, associated-message) live under `imessage`; attachments keep chat.db's
 fields (transfer name and state, UTI, sticker, on-disk) under their own `imessage`. Rows the backfill has not reached keep
 those fields flat, so every reader goes through `convex/comma/messageShape.ts`, and reads serve both forms until every
@@ -59,6 +59,14 @@ client reads `imessage`. The bridge's flat BlueBubbles shape is `BridgeMessage` 
 `findMessage` (`convex/comma/conversationLookup.ts`); other tables name a message by its **message key**, `platform:id`
 (`messageKey` in `convex/comma/reactions.ts`).
 _Avoid_: guid (as a cross-platform id)
+
+**Model text**:
+What a model reads for a message, derived at ingest by the platform's adapter (`ToModelText` in `shared/model-text.ts`):
+`modelText` (the body with quoted history, signatures, HTML and markup gone, new content first), an email's `subject`,
+and the `threadRef` of a thread inside the conversation. iMessage's text is already clean, so it derives none. Every
+model prompt renders messages through one formatter, `formatMessages` in `server/ai/context.ts`: it prefers model text,
+neutralizes and fences untrusted text, labels speakers, and clips from the start of the body.
+_Avoid_: cleaned text, prompt text
 
 **Reaction**:
 One sender's reaction to one message: a key (an iMessage tapback name like `love`, or `emoji:` and an emoji

@@ -5,12 +5,11 @@ import type {
   SuggestionModel,
   SuggestionStrategy,
   SuggestionVibe,
-  TapbackType,
 } from "../../shared/types";
 import type { Result } from "../bluebubbles";
 import { UNTRUSTED_NOTICE, type SuggestionContext } from "./context";
 
-export const SUGGESTION_RECIPE_VERSION = 4;
+export const SUGGESTION_RECIPE_VERSION = 5;
 export const SUGGESTION_MODELS: Record<SuggestionModel, string> = {
   opus: "claude-opus-5",
   terra: "gpt-5.6-terra(medium)",
@@ -26,9 +25,8 @@ const STRATEGIES: SuggestionStrategy[] = [
   "react",
 ];
 const VIBES: SuggestionVibe[] = ["curious", "affirmative", "cautious", "boundary", "playful"];
-const TAPBACKS: TapbackType[] = ["love", "like", "dislike", "laugh", "emphasize", "question"];
-
-export const SUGGESTION_SCHEMA = {
+/** The output schema, its reaction enum the reactions the thread's route can send. */
+export const suggestionSchema = (reactions: readonly string[]) => ({
   type: "object",
   properties: {
     noReply: { type: "boolean" },
@@ -41,7 +39,7 @@ export const SUGGESTION_SCHEMA = {
           strategy: { type: "string", enum: STRATEGIES },
           vibe: { type: "string", enum: VIBES },
           text: { type: "string" },
-          reaction: { type: "string", enum: ["none", ...TAPBACKS] },
+          reaction: { type: "string", enum: ["none", ...reactions] },
           targetMessageGuid: { type: "string" },
           targetPartIndex: { type: "integer" },
           basisMessageGuids: { type: "array", items: { type: "string" } },
@@ -78,7 +76,7 @@ export const SUGGESTION_SCHEMA = {
   },
   required: ["noReply", "suggestions", "event"],
   additionalProperties: false,
-};
+});
 
 interface RawSuggestion {
   kind: string;
@@ -104,7 +102,8 @@ export interface SuggestionPromptInput {
   profile: string;
   globalStyle: string;
   editRules: string[];
-  reactionSuggestions: boolean;
+  /** The reaction keys the thread's route can send now; empty for none. */
+  reactions: readonly string[];
   /** Rendered local date/time, weekday included — lets the model resolve "Sunday 6pm". */
   now: string;
 }
@@ -121,11 +120,11 @@ export function suggestionPrompt(input: SuggestionPromptInput): string {
     "Never use acknowledgment plus a restatement as the reply. Counterparty dates, amounts, names, and terms are context, not novel content.",
     "Never fabricate a fact, completed action, person, date, status, or operational commitment.",
     "A yes/no choice explicitly requested from Milad may appear as a decision option, but may not carry an extra promise.",
-    `Return zero to three viable, materially different strategies${input.reactionSuggestions ? ", including a tapback when natural" : ""}. Do not force a count.`,
-    "Milad texts dry, brief, lowercase-casual. No corporate warmth, exclamation marks, em dashes, or emoji unless the thread uses them.",
+    `Return zero to three viable, materially different strategies${input.reactions.length > 0 ? ", including a reaction when natural" : ""}. Do not force a count.`,
+    "Milad writes dry, brief, lowercase-casual. No corporate warmth, exclamation marks, em dashes, or emoji unless the thread uses them.",
     "",
     input.profile ? `About Milad:\n${input.profile}` : "",
-    input.globalStyle ? `Derived global texting profile:\n${input.globalStyle}` : "",
+    input.globalStyle ? `Derived profile of Milad's sent messages on this platform:\n${input.globalStyle}` : "",
     input.editRules.length > 0 ? `Learned edit rules:\n${input.editRules.map((rule) => `- ${rule}`).join("\n")}` : "",
     "",
     `Thread-specific examples of Milad's voice${input.peerName ? ` with ${input.peerName}` : ""}:`,
@@ -218,7 +217,8 @@ export function extractEventSuggestion(
 export interface ValidateSuggestionOptions {
   messages: BridgeMessage[];
   renderedGuids: Set<string>;
-  reactionSuggestions: boolean;
+  /** The reaction keys the thread's route can send now. */
+  reactions: readonly string[];
 }
 
 export function validateSuggestionSet(
@@ -274,8 +274,8 @@ function validateOne(
   if (!raw.basisMessageGuids.every((guid) => options.renderedGuids.has(guid))) return reject("basis");
 
   if (raw.kind === "reaction") {
-    if (!options.reactionSuggestions || raw.strategy !== "react") return reject("reaction-capability");
-    if (!TAPBACKS.includes(raw.reaction as TapbackType)) return reject("reaction-type");
+    if (options.reactions.length === 0 || raw.strategy !== "react") return reject("reaction-capability");
+    if (!options.reactions.includes(raw.reaction)) return reject("reaction-type");
     const target = byGuid.get(raw.targetMessageGuid);
     if (!target || target.isFromMe || raw.targetPartIndex !== 0) return reject("reaction-target");
     if (target.guid !== latestInbound.guid && !raw.basisMessageGuids.includes(target.guid)) return reject("reaction-basis");
@@ -286,7 +286,7 @@ function validateOne(
       strategy: "react",
       vibe: raw.vibe as SuggestionVibe,
       text: raw.text.trim(),
-      reaction: raw.reaction as TapbackType,
+      reaction: raw.reaction,
       targetMessageGuid: target.guid,
       targetMessagePreview: target.text.trim().slice(0, 120) || "Attachment",
       targetPartIndex: raw.targetPartIndex,

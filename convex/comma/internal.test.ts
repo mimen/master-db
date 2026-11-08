@@ -157,6 +157,20 @@ describe("upsertMessages", () => {
     expect(row?.text).toBe("m1");
   });
 
+  test("stores an adapter's model text, and a newer version without it clears it", async () => {
+    const t = convexTest(schema, modules);
+    const c = await seedDm(t, "+15550001111", [{ chatGuid: "iMessage;-;+15550001111", lastMessageAt: 1000 }]);
+    const row = () => t.run((ctx) => ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "m1")).unique());
+    await t.mutation(internal.comma.internal.upsertMessages, {
+      messages: [message(c, "m1", { text: "hi\n> quoted", modelText: "hi", subject: "Friday", threadRef: "t1" })],
+    });
+    expect(await row()).toMatchObject({ text: "hi\n> quoted", modelText: "hi", subject: "Friday", threadRef: "t1" });
+    await t.mutation(internal.comma.internal.upsertMessages, { messages: [message(c, "m1", { text: "hi, edited", sourceVersion: 2 })] });
+    const edited = await row();
+    expect(edited?.text).toBe("hi, edited");
+    expect([edited?.modelText, edited?.subject, edited?.threadRef]).toEqual([undefined, undefined, undefined]);
+  });
+
   test("a tapback lands as a reaction, not a message row, and shows on its target once that arrives", async () => {
     const t = convexTest(schema, modules);
     const c = await seedDm(t, "+15550001111", [{ chatGuid: "iMessage;-;+15550001111", lastMessageAt: 1000 }]);

@@ -153,4 +153,58 @@ describe("aiThread", () => {
       { key: "like", emoji: "👍", isFromMe: false, senderName: "Alex Rivera", senderAddress: ALEX, type: "like" },
     ]);
   });
+
+  test("returns the route a reply takes, and each message's model text where an adapter derived one", async () => {
+    const { t, conversationId } = await setup();
+    await t.run(async (ctx) => {
+      const row = await ctx.db.query("comma_messages").withIndex("by_conversation_date", (q) => q.eq("conversationId", conversationId).eq("dateCreated", 40)).unique();
+      await ctx.db.patch(row!._id, { modelText: "doors at 9 works", subject: "Friday", threadRef: "lineup" });
+    });
+    const thread = await t.mutation(internal.comma.agentContext.aiThread, { conversationId });
+    expect(thread.route).toEqual({ platform: "imessage", chatGuid: "chat" });
+    expect(thread.messages[3]).toMatchObject({ text: "m4", modelText: "doors at 9 works", subject: "Friday", threadRef: "lineup" });
+    expect(Object.keys(thread.messages[0]!)).not.toContain("modelText");
+  });
+});
+
+test("the agent's view carries model text, the replied-to preview and a placeholder for a body-less payload", async () => {
+  const { t, conversationId } = await setup();
+  await t.run(async (ctx) => {
+    await ctx.db.insert("comma_messages", message(conversationId, "m5", 50, { text: "raw > quoted", modelText: "raw", replyToPreview: "door code?" }));
+    await ctx.db.insert("comma_messages", message(conversationId, "m6", 60, { text: "", special: { kind: "location" } }));
+  });
+  const context = await t.mutation(internal.comma.agentContext.agentContext, { conversationId, limit: 2 });
+  expect(context.messages).toEqual([
+    { guid: "m5", at: 50, fromMe: false, sender: "Alex Rivera", text: "raw > quoted", modelText: "raw", replyTo: "door code?", attachments: [], reactions: [] },
+    { guid: "m6", at: 60, fromMe: false, sender: "Alex Rivera", text: "", placeholder: "[location]", attachments: [], reactions: [] },
+  ]);
+});
+
+test("aiSentText reads the account's own sent texts newest first, counting rows from before accounts as its own", async () => {
+  const { t, conversationId } = await setup();
+  const accountId = await t.run(async (ctx) => {
+    const account = (externalId: string) => ctx.db.insert("comma_accounts", {
+      platform: "imessage", externalId, label: externalId, selfHandles: [], health: "ok", createdAt: 0,
+    });
+    const mine = await account("mac");
+    const other = await account("other-mac");
+    const sent = (guid: string, at: number, fields: Partial<Doc<"comma_messages">>) =>
+      ctx.db.insert("comma_messages", message(conversationId, guid, at, { isFromMe: true, sender: undefined, ...fields }));
+    await sent("s1", 100, { platform: "imessage", accountId: mine, text: "on it, doors at 9" });
+    await sent("s2", 90, { platform: "imessage", accountId: mine, text: "> quoted", modelText: "see you there" });
+    await sent("s3", 80, { platform: "imessage", text: "stamped before accounts" });
+    await sent("s4", 300, { platform: "imessage", accountId: other, text: "another account's" });
+    await sent("s5", 110, { platform: "imessage", accountId: mine, text: "unsent", retracted: true });
+    await sent("s6", 120, { platform: "imessage", accountId: mine, text: "still queued", sendState: "queued" });
+    await sent("s7", 130, { platform: "imessage", accountId: mine, text: "k" });
+    return mine;
+  });
+  expect(await t.mutation(internal.comma.agentContext.aiSentText, { platform: "imessage", accountId }))
+    .toEqual(["on it, doors at 9", "see you there", "stamped before accounts", "m3"]);
+  await t.run(async (ctx) => {
+    const other = await ctx.db.query("comma_accounts").withIndex("by_platform_externalId", (q) => q.eq("platform", "imessage").eq("externalId", "other-mac")).unique();
+    await ctx.db.delete(other!._id);
+  });
+  expect(await t.mutation(internal.comma.agentContext.aiSentText, { platform: "imessage" }), "a route without an account reads the only one's")
+    .toEqual(["on it, doors at 9", "see you there", "stamped before accounts", "m3"]);
 });

@@ -57,6 +57,12 @@ test("message fields preserve dates, errors, replies, edits and RCS", () => {
     imessage: { chatGuid: "RCS;-;+15550001111", service: "SMS", error: 12, sendEffect: "confetti", isAssociatedMessage: false } });
 });
 
+test("an iMessage row carries its text as the model reads it, with no derived model text", () => {
+  const row = toMessageRow(message({ text: "doors at 9" }), id, 1000);
+  expect(row.text).toBe("doors at 9");
+  expect(["modelText", "subject", "threadRef"].filter((key) => key in row)).toEqual([]);
+});
+
 for (const [code, reaction, remove, text, emoji] of [
   [2001, "like", false, "Liked hello", undefined],
   ["-love", "love", true, "Removed heart", undefined],

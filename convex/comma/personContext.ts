@@ -65,7 +65,7 @@ const SCAN = 400;
 type Row = Doc<"comma_messages">;
 
 const shown = (row: Row) =>
-  !isAssociated(row) && !row.retracted && !row.isGroupEvent && (row.text.trim() !== "" || row.attachmentGuids.length > 0);
+  !isAssociated(row) && !row.retracted && !row.isGroupEvent && ((row.modelText ?? row.text).trim() !== "" || row.attachmentGuids.length > 0);
 
 /** One index range read newest first, a row at a time, holding its newest unread line. */
 type Source = { rows: AsyncIterator<Row>; keep: (row: Row) => boolean; read: number; head: Row | null };
@@ -159,7 +159,7 @@ export async function personContext(ctx: QueryCtx, input: PersonContextInput) {
   const picked: Row[] = [];
   let chars = 0;
   for (const row of rows.slice(0, limit)) {
-    const length = Math.min(row.text.trim().length, LINE_CHARS);
+    const length = Math.min((row.modelText ?? row.text).trim().length, LINE_CHARS);
     if (picked.length > 0 && chars + length > maxChars) break;
     picked.push(row);
     chars += length;
@@ -179,7 +179,7 @@ export async function personContext(ctx: QueryCtx, input: PersonContextInput) {
   const lines = (await Promise.all(picked.map(async (row): Promise<PersonLine | null> => {
     const conversation = await conversationOf(row.conversationId);
     if (!conversation) return null;
-    const text = row.text.trim();
+    const text = (row.modelText ?? row.text).trim();
     return {
       at: row.dateCreated, conversationId: row.conversationId, conversation: conversation.title,
       kind: conversation.isGroup ? "group" : "dm", platform: conversation.platform, fromMe: row.isFromMe,

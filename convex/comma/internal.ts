@@ -18,7 +18,7 @@ import {
 import { ingestAccount, isSelf } from "./accounts";
 import { PLATFORM_IDENTITY } from "./conversationIdentity";
 import { findAlias, findAttachment, findByChatGuid, findByKey, findMessage } from "./conversationLookup";
-import { FLAT_ATTACHMENT_UNSET, FLAT_MESSAGE_UNSET, inScope, postedAttachment, postedMessage, type AccountScope } from "./messageShape";
+import { FLAT_ATTACHMENT_UNSET, FLAT_MESSAGE_UNSET, inScope, MODEL_TEXT_UNSET, postedAttachment, postedMessage, type AccountScope } from "./messageShape";
 import { landEcho, refreshLastMessage } from "./pendingSends";
 import { fromTapback } from "./reactions";
 import { applyReaction } from "./reactionStore";
@@ -162,7 +162,7 @@ export const upsertMessages = internalMutation({
         else skipped++;
         continue;
       }
-      if (existing) await ctx.db.patch(existing._id, { ...message, ...FLAT_MESSAGE_UNSET });
+      if (existing) await ctx.db.patch(existing._id, { ...MODEL_TEXT_UNSET, ...message, ...FLAT_MESSAGE_UNSET });
       else await ctx.db.insert("comma_messages", message);
       await landEcho(ctx, message);
       written++;

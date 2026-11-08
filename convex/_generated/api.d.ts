@@ -601,6 +601,7 @@ export declare const api: {
           isSpam?: boolean;
           isTapback?: boolean;
           mentions: Array<{ address: string; length: number; start: number }>;
+          modelText?: string;
           platform?: "imessage";
           reactions: Array<{
             emoji?: string;
@@ -625,6 +626,7 @@ export declare const api: {
             | { kind: "apple-cash" }
             | { kind: "poll" }
             | { kind: "unknown"; label: string };
+          subject?: string;
           tapback?: {
             emoji?: string;
             reaction: string;
@@ -633,6 +635,7 @@ export declare const api: {
           };
           tapbackTargetGuid?: string;
           text: string;
+          threadRef?: string;
         }>
       >;
     };
@@ -770,14 +773,7 @@ export declare const api: {
                   suggestion: {
                     id: string;
                     kind: "text" | "reaction";
-                    reaction:
-                      | "love"
-                      | "like"
-                      | "dislike"
-                      | "laugh"
-                      | "emphasize"
-                      | "question"
-                      | null;
+                    reaction: string | null;
                     strategy:
                       | "answer"
                       | "clarify"
@@ -1178,14 +1174,7 @@ export declare const api: {
                   suggestions: Array<{
                     id: string;
                     kind: "text" | "reaction";
-                    reaction:
-                      | "love"
-                      | "like"
-                      | "dislike"
-                      | "laugh"
-                      | "emphasize"
-                      | "question"
-                      | null;
+                    reaction: string | null;
                     strategy:
                       | "answer"
                       | "clarify"
@@ -1333,14 +1322,7 @@ export declare const api: {
                   suggestion: {
                     id: string;
                     kind: "text" | "reaction";
-                    reaction:
-                      | "love"
-                      | "like"
-                      | "dislike"
-                      | "laugh"
-                      | "emphasize"
-                      | "question"
-                      | null;
+                    reaction: string | null;
                     strategy:
                       | "answer"
                       | "clarify"
@@ -1730,14 +1712,7 @@ export declare const api: {
                   suggestions: Array<{
                     id: string;
                     kind: "text" | "reaction";
-                    reaction:
-                      | "love"
-                      | "like"
-                      | "dislike"
-                      | "laugh"
-                      | "emphasize"
-                      | "question"
-                      | null;
+                    reaction: string | null;
                     strategy:
                       | "answer"
                       | "clarify"
@@ -2109,6 +2084,7 @@ export declare const api: {
             isSpam?: boolean;
             isTapback?: boolean;
             mentions: Array<{ address: string; length: number; start: number }>;
+            modelText?: string;
             platform?: "imessage";
             reactions: Array<{
               emoji?: string;
@@ -2133,6 +2109,7 @@ export declare const api: {
               | { kind: "apple-cash" }
               | { kind: "poll" }
               | { kind: "unknown"; label: string };
+            subject?: string;
             tapback?: {
               emoji?: string;
               reaction: string;
@@ -2141,6 +2118,7 @@ export declare const api: {
             };
             tapbackTargetGuid?: string;
             text: string;
+            threadRef?: string;
           }>;
           pageStatus?: "SplitRecommended" | "SplitRequired" | null;
           splitCursor?: string | null;
@@ -2269,6 +2247,7 @@ export declare const api: {
           isSpam?: boolean;
           isTapback?: boolean;
           mentions: Array<{ address: string; length: number; start: number }>;
+          modelText?: string;
           platform?: "imessage";
           reactions: Array<{
             emoji?: string;
@@ -2293,6 +2272,7 @@ export declare const api: {
             | { kind: "apple-cash" }
             | { kind: "poll" }
             | { kind: "unknown"; label: string };
+          subject?: string;
           tapback?: {
             emoji?: string;
             reaction: string;
@@ -2301,6 +2281,7 @@ export declare const api: {
           };
           tapbackTargetGuid?: string;
           text: string;
+          threadRef?: string;
         }>
       >;
       syncStatus: FunctionReference<
@@ -4256,13 +4237,18 @@ export declare const internal: {
             }>;
             fromMe: boolean;
             guid: string;
+            modelText?: string;
+            placeholder?: string;
             reactions: Array<{
               fromMe: boolean;
               reaction: string;
               sender: string;
             }>;
+            replyTo?: string;
             sender: string;
+            subject?: string;
             text: string;
+            threadRef?: string;
           }>;
           participants: Array<{ handles: Array<string>; name: string }>;
           title: string;
@@ -4329,14 +4315,25 @@ export declare const internal: {
           }>;
           fromMe: boolean;
           guid: string;
+          modelText?: string;
+          placeholder?: string;
           reactions: Array<{
             fromMe: boolean;
             reaction: string;
             sender: string;
           }>;
+          replyTo?: string;
           sender: string;
+          subject?: string;
           text: string;
+          threadRef?: string;
         }>
+      >;
+      aiSentText: FunctionReference<
+        "mutation",
+        "internal",
+        { accountId?: Id<"comma_accounts">; platform: "imessage" },
+        Array<string>
       >;
       aiThread: FunctionReference<
         "mutation",
@@ -4373,6 +4370,7 @@ export declare const internal: {
               length: number;
               start: number;
             }>;
+            modelText?: string;
             pending?: boolean;
             reactions: Array<{
               emoji?: string;
@@ -4396,9 +4394,16 @@ export declare const internal: {
               | { kind: "poll" }
               | { kind: "unknown"; label: string }
               | null;
+            subject?: string;
             text: string;
+            threadRef?: string;
           }>;
           participants: Array<{ address: string; name: string | null }>;
+          route: {
+            accountId?: Id<"comma_accounts">;
+            chatGuid: string;
+            platform: "imessage";
+          };
           title: string;
         }
       >;
@@ -4771,13 +4776,16 @@ export declare const internal: {
                   length: number;
                   start: number;
                 }>;
+                modelText?: string;
                 replyToFromMe?: boolean;
                 replyToGuid?: string;
                 replyToPreview?: string;
                 retracted: boolean;
                 sender?: { address: string; name: string | null };
                 sourceVersion: number;
+                subject?: string;
                 text: string;
+                threadRef?: string;
               }
             | {
                 accountId?: Id<"comma_accounts">;
@@ -4802,6 +4810,7 @@ export declare const internal: {
                   length: number;
                   start: number;
                 }>;
+                modelText?: string;
                 platform?: "imessage";
                 reactions?: Array<{
                   emoji?: string;
@@ -4824,6 +4833,7 @@ export declare const internal: {
                   | { kind: "apple-cash" }
                   | { kind: "poll" }
                   | { kind: "unknown"; label: string };
+                subject?: string;
                 tapback?: {
                   emoji?: string;
                   reaction: string;
@@ -4832,6 +4842,7 @@ export declare const internal: {
                 };
                 tapbackTargetGuid?: string;
                 text: string;
+                threadRef?: string;
               }
           >;
           platform?: "imessage";
@@ -4989,14 +5000,7 @@ export declare const internal: {
                   suggestion: {
                     id: string;
                     kind: "text" | "reaction";
-                    reaction:
-                      | "love"
-                      | "like"
-                      | "dislike"
-                      | "laugh"
-                      | "emphasize"
-                      | "question"
-                      | null;
+                    reaction: string | null;
                     strategy:
                       | "answer"
                       | "clarify"
@@ -5386,14 +5390,7 @@ export declare const internal: {
                   suggestions: Array<{
                     id: string;
                     kind: "text" | "reaction";
-                    reaction:
-                      | "love"
-                      | "like"
-                      | "dislike"
-                      | "laugh"
-                      | "emphasize"
-                      | "question"
-                      | null;
+                    reaction: string | null;
                     strategy:
                       | "answer"
                       | "clarify"
@@ -5818,14 +5815,7 @@ export declare const internal: {
                   suggestions: Array<{
                     id: string;
                     kind: "text" | "reaction";
-                    reaction:
-                      | "love"
-                      | "like"
-                      | "dislike"
-                      | "laugh"
-                      | "emphasize"
-                      | "question"
-                      | null;
+                    reaction: string | null;
                     strategy:
                       | "answer"
                       | "clarify"
@@ -5967,14 +5957,7 @@ export declare const internal: {
                   suggestions: Array<{
                     id: string;
                     kind: "text" | "reaction";
-                    reaction:
-                      | "love"
-                      | "like"
-                      | "dislike"
-                      | "laugh"
-                      | "emphasize"
-                      | "question"
-                      | null;
+                    reaction: string | null;
                     strategy:
                       | "answer"
                       | "clarify"

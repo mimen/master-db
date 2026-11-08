@@ -123,7 +123,7 @@ describe("buildToday", () => {
     const { deps, reduces, cardCalls, personReads } = fakes([candidate(1, "needsYou"), group], firstItem);
     await buildToday(deps, claim);
     expect(personReads).toEqual([{ conversationId: "conv1" as ConversationId, sinceAt: NOW - 7 * DAY, limit: 2, maxChars: 240 }]);
-    expect(reduces[0]?.prompt).toContain('elsewhere, newest first: 1h ago in group "Launch Crew" (imessage): they: also pinged from conv1');
+    expect(reduces[0]?.prompt).toMatch(/elsewhere, newest first:\n\[[^\]]+\] .+ in group "Launch Crew" \(imessage\): also pinged from conv1/);
     expect(reduces[0]?.prompt.match(/elsewhere, newest first/g)).toHaveLength(1);
     expect(cardCalls.join("\n")).not.toContain("also pinged");
   });
