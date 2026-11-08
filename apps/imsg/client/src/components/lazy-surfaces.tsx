@@ -50,6 +50,7 @@ export const SearchContent = deferred(() => import("@/components/search-content"
 /** A conversation opens right after the list paints, so its chunk starts loading at boot. */
 export const ThreadView = deferred(() => import("@/components/thread-view").then((m) => m.ThreadView));
 ThreadView.preload().catch(() => undefined);
+export const ThreadBeside = deferred(() => import("@/components/thread-view").then((m) => m.ThreadBeside));
 export const SettingsContent = deferred(() => import("@/components/settings-content").then((m) => m.SettingsContent));
 /** Until the gesture chunk lands a phone row renders still, so the list never waits on swiping. */
 export const RowPan = deferred(

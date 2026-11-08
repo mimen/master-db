@@ -6,7 +6,8 @@ import { formatListTimestamp } from "@/lib/format";
 import { conversationRoute, selectChat } from "@/lib/selection";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { addressesMatch } from "@shared/address";
-import type { Contact, ConversationId } from "@shared/types";
+import { PROFILES } from "@shared/platform-profile";
+import type { Contact, ConversationId, Platform } from "@shared/types";
 import { ListRow } from "./list-row";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -37,6 +38,10 @@ export function SearchContent({
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [messages, setMessages] = useState<SearchHit[]>([]);
   const [searching, setSearching] = useState(false);
+  const directory = useChatDirectory();
+  // Offered only once the inbox holds a second platform, and never inside one conversation.
+  const platforms = scopeConversation ? [] : [...new Set((directory ?? []).map((chat) => chat.route.platform))];
+  const [platform, setPlatform] = useState<Platform | null>(null);
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -47,8 +52,8 @@ export function SearchContent({
     const handle = setTimeout(() => {
       setSearching(true);
       Promise.all([
-        api.search(query.trim(), scopeConversation ? { conversationId: scopeConversation } : {}).catch(() => []),
-        scopeConversation ? Promise.resolve([]) : api.contacts(query.trim()).catch(() => []),
+        api.search(query.trim(), scopeConversation ? { conversationId: scopeConversation } : platform ? { platform } : {}).catch(() => []),
+        scopeConversation || platform ? Promise.resolve([]) : api.contacts(query.trim()).catch(() => []),
       ])
         .then(([messageResults, contactResults]) => {
           setMessages(messageResults);
@@ -57,9 +62,8 @@ export function SearchContent({
         .finally(() => setSearching(false));
     }, 350);
     return () => clearTimeout(handle);
-  }, [query, scopeConversation]);
+  }, [query, scopeConversation, platform]);
 
-  const directory = useChatDirectory();
   const open = (conversationId: ConversationId, name: string) => {
     onClose();
     if (!selectChat({ conversationId, name })) router.push(conversationRoute(conversationId));
@@ -109,6 +113,26 @@ export function SearchContent({
         autoFocus
         style={[styles.input, { color: theme.text, backgroundColor: theme.field }]}
       />
+      {platforms.length > 1 && (
+        <View accessibilityRole="radiogroup" accessibilityLabel="Search in" style={styles.platforms}>
+          {[null, ...platforms].map((value) => {
+            const selected = platform === value;
+            return (
+              <Pressable
+                key={value ?? "all"}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                onPress={() => setPlatform(value)}
+                style={[styles.platform, { borderColor: theme.divider }, selected && { backgroundColor: theme.accent, borderColor: theme.accent }]}
+              >
+                <Text style={[styles.platformLabel, { color: selected ? theme.onAccent : theme.textSecondary }]}>
+                  {value ? PROFILES[value].name : "Everywhere"}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
       <FlatList
         data={rows}
         keyExtractor={(row) => row.key}
@@ -174,6 +198,9 @@ export function SearchContent({
 }
 
 const styles = StyleSheet.create({
+  platforms: { flexDirection: "row", gap: 6, marginHorizontal: 16, marginBottom: 6 },
+  platform: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 10, paddingVertical: 4 },
+  platformLabel: { fontSize: 12.5, fontWeight: "600" },
   input: {
     margin: 12,
     borderRadius: 8,

@@ -10,7 +10,7 @@ import { ConversationListPane } from "@/components/conversation-list-pane";
 import { useDesktopShellContext, useDesktopShellState } from "@/components/desktop-shell-context";
 import { DesktopSplit } from "@/components/desktop-split";
 import { EmptyState } from "@/components/empty-state";
-import { ThreadView } from "@/components/lazy-surfaces";
+import { ThreadBeside, ThreadView } from "@/components/lazy-surfaces";
 import { useAgentEnabled } from "@/hooks/use-agent";
 import { useConversation } from "@/hooks/use-chat-directory";
 import { useChats } from "@/hooks/use-chats";
@@ -374,7 +374,17 @@ export function MessagesWorkspace({
       detail={
         selected ? (
           <ThreadEnter key={selected.conversationId + (jumpTarget?.guid ?? "")} animate={selected.conversationId === advanced?.conversationId}>
-            <ThreadView
+            {selected.thread?.parentId ? (
+              <ThreadBeside
+                thread={selected}
+                parentId={selected.thread.parentId}
+                jumpTarget={jumpTarget}
+                lensLabel={desktopInboxTitle({ state, type })}
+                previewOnly={selectionIntent === "preview"}
+                toastActive={active}
+                onClose={openChat}
+              />
+            ) : <ThreadView
               conversationId={selected.conversationId}
               isGroup={selected.isGroup}
               jumpTarget={jumpTarget}
@@ -383,7 +393,7 @@ export function MessagesWorkspace({
               previewOnly={selectionIntent === "preview"}
               advancedFrom={selected.conversationId === advanced?.conversationId ? advanced.from : undefined}
               toastActive={active}
-            />
+            />}
             <UnknownSenderBanner key={selected.conversationId} chat={selected} />
           </ThreadEnter>
         ) : (

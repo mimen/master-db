@@ -30,6 +30,7 @@ import { useConversation } from "@/hooks/use-chat-directory";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { openAgentPane } from "@/lib/agent-pane";
 import { openChatInfo } from "@/lib/chat-info";
+import { conversationRoute as threadRoute, selectChat } from "@/lib/selection";
 import { openPersonPane } from "@/lib/person-pane";
 import { conversationRoute, hasSendError } from "@shared/imessage";
 import { keyEmoji, PROFILES } from "@shared/platform-profile";
@@ -123,6 +124,10 @@ interface ThreadViewProps {
   /** Auto-advance: the name this conversation replaced, which the breadcrumb blur-swaps out. */
   advancedFrom?: string;
   toastActive?: boolean;
+  /** A Slack thread beside its channel or DM: the header closes it, and keeps only search beside the close. */
+  onClose?: () => void;
+  /** The channel or DM a thread panel sits beside. Triage belongs to the thread, so it shows no strip. */
+  besideThread?: boolean;
 }
 
 export function ThreadView({
@@ -134,6 +139,8 @@ export function ThreadView({
   previewOnly = false,
   advancedFrom,
   toastActive = true,
+  onClose,
+  besideThread = false,
 }: ThreadViewProps) {
   const theme = useTheme();
   const type = useType();
@@ -593,13 +600,23 @@ export function ThreadView({
               </>
             ) : null}
             <ThreadTitle name={headerChat.displayName} from={advancedFrom} color={theme.text} />
-            {headerChat.isGroup && headerChat.participants.length > 0 && (
+            {headerChat.isGroup && headerChat.participants.length > 0 && !onClose && (
               <Text numberOfLines={1} style={[styles.peopleCount, { color: theme.textTertiary }]}>
                 {headerChat.participants.length + 1} people
               </Text>
             )}
           </Pressable>
           <View style={styles.paneHeaderActions}>
+            {onClose ? (
+              <>
+                <IconButton label="Search conversation" onPress={() => setSearchOpen(true)} style={styles.headerIconButton}>
+                  {({ active }) => <HugeiconsIcon icon={Search01Icon} size={18} color={active ? theme.text : theme.icon} strokeWidth={1.6} />}
+                </IconButton>
+                <IconButton label="Close thread" onPress={onClose} style={styles.headerIconButton}>
+                  {({ active }) => <Ionicons name="close" size={18} color={active ? theme.text : theme.icon} />}
+                </IconButton>
+              </>
+            ) : <>
             <QueuePosition />
             <View style={[styles.vsep, { backgroundColor: theme.divider }]} />
             <FaceTimeButton
@@ -623,6 +640,7 @@ export function ThreadView({
             <IconButton label="Conversation info" onPress={() => openChatInfo(conversationId)} style={styles.headerIconButton}>
               {({ active }) => <HugeiconsIcon icon={SidebarRightIcon} size={18} color={active ? theme.text : theme.icon} strokeWidth={1.6} />}
             </IconButton>
+            </>}
           </View>
         </View>
       )}
@@ -758,7 +776,7 @@ export function ThreadView({
             reactionUnavailable: reasonOf(can("react")),
             reactionPreview,
           }}
-          strip={<StateStrip conversationId={conversationId} messages={messages} historyComplete={!hasMore} />}
+          strip={besideThread ? undefined : <StateStrip conversationId={conversationId} messages={messages} historyComplete={!hasMore} />}
           chat={conversation}
           isGroup={isGroup}
           participants={participants}
@@ -858,6 +876,22 @@ const ThreadRow = memo(function ThreadRow({
       onShowReactions={onShowReactions}
     />
   );
+  const thread = message.thread;
+  const withThread = thread ? (
+    <View>
+      {body}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Open thread, ${replies(thread.replyCount)}`}
+        onPress={() => openThread(thread.conversationId)}
+        style={({ hovered, pressed }) => [styles.threadChip, message.isFromMe ? styles.threadChipMine : styles.threadChipTheirs,
+          { borderColor: theme.divider }, (hovered || pressed) && { backgroundColor: theme.backgroundElement }]}
+      >
+        <Ionicons name="chatbubbles-outline" size={13} color={theme.accent} />
+        <Text style={[styles.threadChipText, { color: theme.accent }]}>{replies(thread.replyCount)}</Text>
+      </Pressable>
+    </View>
+  ) : body;
   return (
     <Reanimated.View
       entering={
@@ -900,12 +934,57 @@ const ThreadRow = memo(function ThreadRow({
               </Text>
             </View>
           )}
-          {body}
+          {withThread}
         </View>
-      ) : body}
+      ) : withThread}
     </Reanimated.View>
   );
 });
+
+const replies = (count: number) => `${count} ${count === 1 ? "reply" : "replies"}`;
+
+const THREAD_PANEL_WIDTH = 420;
+
+/**
+ * A Slack thread on desk: its channel or DM, read without marking it read, with the thread in a panel beside it. The
+ * thread is the selection, so settling and auto-advance act on it; closing the panel opens the channel or DM.
+ */
+export function ThreadBeside({ thread, parentId, jumpTarget, lensLabel, previewOnly, toastActive, onClose }: {
+  thread: ChatSummary;
+  parentId: ConversationId;
+  jumpTarget?: JumpTarget | null;
+  lensLabel?: string;
+  previewOnly?: boolean;
+  toastActive?: boolean;
+  onClose: (parent: ChatSummary) => void;
+}) {
+  const theme = useTheme();
+  const parent = useConversation(parentId);
+  return (
+    <View style={styles.beside}>
+      <View style={styles.besideParent}>
+        {parent ? <ThreadView conversationId={parentId} isGroup={parent.isGroup} headerChat={parent} lensLabel={lensLabel} previewOnly toastActive={false} besideThread /> : null}
+      </View>
+      <View style={[styles.besidePanel, { borderLeftColor: theme.divider }]}>
+        <ThreadView
+          conversationId={thread.conversationId}
+          isGroup
+          jumpTarget={jumpTarget}
+          headerChat={thread}
+          lensLabel="Thread"
+          previewOnly={previewOnly}
+          toastActive={toastActive}
+          onClose={parent ? () => onClose(parent) : undefined}
+        />
+      </View>
+    </View>
+  );
+}
+
+/** A Slack thread opens beside its channel or DM on desk, where the workspace takes the selection, and as its own screen on phone. */
+function openThread(conversationId: ConversationId): void {
+  if (!selectChat({ conversationId })) router.push(threadRoute(conversationId));
+}
 
 /** The breadcrumb name. After an auto-advance it mounts on the previous name, then blur-swaps to this one. */
 function ThreadTitle({ name, from, color }: { name: string; from: string | undefined; color: string }) {
@@ -919,6 +998,23 @@ function ThreadTitle({ name, from, color }: { name: string; from: string | undef
 }
 
 const styles = StyleSheet.create({
+  beside: { flex: 1, flexDirection: "row" },
+  besideParent: { flex: 1, minWidth: 0 },
+  besidePanel: { borderLeftWidth: StyleSheet.hairlineWidth, width: THREAD_PANEL_WIDTH },
+  threadChip: {
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 5,
+    marginBottom: 4,
+    marginTop: 2,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+  },
+  threadChipMine: { alignSelf: "flex-end", marginRight: 12 },
+  threadChipTheirs: { alignSelf: "flex-start", marginLeft: 50 },
+  threadChipText: { fontSize: 12.5, fontWeight: "600" },
   paneHeader: {
     alignItems: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,
