@@ -29,3 +29,51 @@ export function emailDocument(html: string, { images }: { images: boolean }): st
 
 /** The sandbox the iframe runs in: same origin so the reader can size it, popups for links, and never scripts. */
 export const EMAIL_SANDBOX = "allow-same-origin allow-popups allow-popups-to-escape-sandbox";
+
+export interface MailAddress {
+  address: string;
+  name: string | null;
+}
+
+/** The message a reply answers, as the reader holds it. */
+export interface ReplySource {
+  isFromMe: boolean;
+  from: MailAddress;
+  to: readonly MailAddress[];
+  cc: readonly MailAddress[];
+}
+
+export type ReplyMode = "reply" | "replyAll";
+
+export interface EmailFields {
+  to: string;
+  cc: string;
+  subject: string;
+}
+
+/** An address as a person types it into To: `Name <a@b.c>`, the name quoted when it holds a separator. */
+export function formatAddress({ address, name }: MailAddress): string {
+  if (!name) return address;
+  return /[,;<>"]/.test(name) ? `"${name.replace(/["\\]/g, "\\$&")}" <${address}>` : `${name} <${address}>`;
+}
+
+/**
+ * The To, Cc and subject a reply starts with, as Gmail fills them. Reply answers the sender, or, on the user's own
+ * message, its recipients. Reply all adds everyone else on it, never the user.
+ */
+export function replyFields(source: ReplySource, mode: ReplyMode, subject: string, self: ReadonlySet<string>): EmailFields {
+  const seen = new Set(self);
+  const keep = (addresses: readonly MailAddress[]) => addresses.filter(({ address }) => {
+    const key = address.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const first = source.isFromMe ? source.to : [source.from];
+  const to = keep(mode === "replyAll" ? [...first, ...(source.isFromMe ? [] : source.to)] : first);
+  const cc = mode === "replyAll" ? keep(source.cc) : [];
+  return { to: to.map(formatAddress).join(", "), cc: cc.map(formatAddress).join(", "), subject: /^re:/i.test(subject.trim()) ? subject.trim() : `Re: ${subject.trim()}` };
+}
+
+/** Whether a To or Cc field names at least one address. Convex reads the addresses out of the text. */
+export const hasRecipient = (fields: Pick<EmailFields, "to" | "cc">) => /@/.test(fields.to) || /@/.test(fields.cc);

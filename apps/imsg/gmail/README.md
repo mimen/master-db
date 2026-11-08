@@ -2,7 +2,9 @@
 
 Comma reads Milad's Google Workspace mailbox, `milad@afternoonumbrellafriends.com`, through an internal OAuth app in a Google Cloud project owned by the `afternoonumbrellafriends.com` organization. An internal app serves only that Workspace's users. Google does not review it, and its refresh tokens do not expire on a timer. A gmail.com mailbox cannot use an internal app; that is milestone G4.
 
-The scopes are `openid email https://www.googleapis.com/auth/gmail.modify`, listed once in `GMAIL_SCOPES` (`convex/comma/googleAuth.ts`). The consent screen must list the same scopes. `gmail.modify` reads mail and labels now, and will send and archive in G2.
+The scopes are `openid email https://www.googleapis.com/auth/gmail.modify`, listed once in `GMAIL_SCOPES` (`convex/comma/googleAuth.ts`). The consent screen must list the same scopes. `gmail.modify` reads mail and labels, sends, and archives.
+
+Comma's Gmail lane (`convex/comma/gmailLane.ts`) sends a reply as RFC 822 with the replied message's Message-ID in In-Reply-To and References and the thread's id, so it threads in Gmail. Its own Message-ID is `<comma.<clientKey>@<mailbox domain>>`. When a send's answer is lost, Comma searches for that Message-ID at 20 seconds and 2 minutes, then for a Sent message in the thread with the same subject and text, so the send lands without going out twice. Settling a thread in Comma removes its Inbox label; unsettling adds it back. If Gmail refuses, Comma takes the settle back and shows Gmail's error above the thread.
 
 How the mailbox reaches Comma:
 
@@ -66,6 +68,8 @@ Run these in order. Comma's production is the Convex deployment `dev:shiny-gerbi
 9. Check the result:
    - Send the mailbox a message from another account. It shows in Mail within a minute.
    - Archive a thread in Gmail. Comma settles it.
+   - Reply to that message from Comma's Mail reader. The reply shows in Gmail's own thread, not as a new conversation, and its headers (Gmail's **Show original**) carry `In-Reply-To` and a `Message-ID` starting `<comma.`.
+   - Archive a thread from Comma. It leaves Gmail's Inbox, and Comma's cleared count rises by one, not two.
    - Open Mail. A newsletter shows only under All inbox, never under People.
    - Send the mailbox an HTML message with a `<script>` and a 1×1 remote image. The reader shows neither, and holds other remote images until **Load images**.
 
