@@ -441,6 +441,28 @@ function todayRows(plan: TodayPlan, openFolds: ReadonlySet<TodaySectionKey>): In
   });
 }
 
+/** The last row built per key. Bounded by the conversations and sections there are. */
+const lastRows = new Map<string, InboxRow>();
+
+function sameRow(left: InboxRow, right: InboxRow): boolean {
+  const a = left as Record<string, unknown>;
+  const b = right as Record<string, unknown>;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key] ||
+    (key !== "chat" && typeof a[key] === "object" && a[key] !== null && JSON.stringify(a[key]) === JSON.stringify(b[key])));
+}
+
+/**
+ * The previous object for a row that has not changed. Every directory update (a read, a send) rebuilds the
+ * model, and a new row object re-rendered its list cell even when the conversation in it was the same.
+ */
+function keepRow(row: InboxRow): InboxRow {
+  const last = lastRows.get(row.key);
+  if (last && sameRow(last, row)) return last;
+  lastRows.set(row.key, row);
+  return row;
+}
+
 /** The complete presentation model: filtering, age grouping, and keyboard order in one pure pass. */
 export function deriveInboxModel(
   chats: readonly ChatSummary[],
@@ -462,8 +484,9 @@ export function deriveInboxModel(
       .map((chat): InboxRow => ({ kind: "chat", key: chat.conversationId, chat }))
     : filters.state === "agents" ? groupByAttention(filtered, now, oldestFirst)
     : groupByAge(filtered, now, oldestFirst);
-  const navigationEntries = rows.flatMap((row, index) => (row.kind === "chat" ? [{ chat: row.chat, index }] : []));
-  return { listChats: navigationEntries.map((e) => e.chat), rows, navigationEntries };
+  const kept = rows.map(keepRow);
+  const navigationEntries = kept.flatMap((row, index) => (row.kind === "chat" ? [{ chat: row.chat, index }] : []));
+  return { listChats: navigationEntries.map((e) => e.chat), rows: kept, navigationEntries };
 }
 
 /** How many conversations each Only show / Also include box would leave showing, if it were on. */

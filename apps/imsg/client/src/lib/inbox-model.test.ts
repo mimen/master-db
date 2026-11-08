@@ -79,6 +79,19 @@ describe("desktopInboxTitle", () => {
 });
 
 describe("deriveInboxModel", () => {
+  test("a rebuild keeps the row object of every conversation that did not change", () => {
+    const a = makeChat({ conversationId: cid("keep-a") });
+    const b = makeChat({ conversationId: cid("keep-b") });
+    const filters = { ...DEFAULT_INBOX_FILTERS, state: "all" as const };
+    const first = deriveInboxModel([a, b], filters, "").rows;
+    const changed = { ...b, unreadCount: 3 };
+    const second = deriveInboxModel([a, changed], filters, "").rows;
+    const row = (rows: typeof first, id: string) => rows.find((r) => r.kind === "chat" && r.chat.conversationId === id);
+    expect(row(second, "keep-a")).toBe(row(first, "keep-a"));
+    expect(row(second, "keep-b")).not.toBe(row(first, "keep-b"));
+    expect(second.find((r) => r.kind === "section")).toBe(first.find((r) => r.kind === "section"));
+  });
+
   test("the default All view lists every conversation, pinned first", () => {
     const chats = Array.from({ length: 14 }, (_, i) =>
       makeChat({ conversationId: cid(`unread-${i}`), firstUnreadAt: i, flags: { ...makeChat().flags, unread: true } }),

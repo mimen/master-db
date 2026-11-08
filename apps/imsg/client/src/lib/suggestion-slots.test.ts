@@ -37,8 +37,14 @@ describe("suggestionSlots", () => {
   test("on demand offers a request until one runs, then reports failure or placeholders", () => {
     expect(suggestionSlots({ ...base, mode: "on-demand", resolved: false })).toEqual({ kind: "offer" });
     expect(suggestionSlots({ ...base, mode: "on-demand", resolved: false, failed: true })).toEqual({ kind: "failed" });
-    expect(suggestionSlots({ ...base, loading: true })).toEqual({ kind: "hidden" });
+    expect(suggestionSlots({ ...base, loading: true })).toEqual({ kind: "pending" });
     expect(suggestionSlots({ ...base, loading: true, showSkeleton: true })).toEqual({ kind: "loading" });
+  });
+
+  test("the row holds its height until the first answer is in", () => {
+    expect(suggestionSlots({ ...base, resolved: false })).toEqual({ kind: "pending" });
+    expect(suggestionSlots({ ...base, resolved: false, loading: true })).toEqual({ kind: "pending" });
+    expect(suggestionSlots({ ...base, resolved: false, awaitingReply: false })).toEqual({ kind: "hidden" });
   });
 
   test("an empty answer hides the slots unless a calendar event came with it", () => {

@@ -1,9 +1,10 @@
 import { router, useGlobalSearchParams, usePathname } from "expo-router";
 import type { JSX, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import {
+  createDesktopShellStore,
   DesktopShellContext,
   type MessagesRailState,
   type MessagesWorkspaceActions,
@@ -15,6 +16,7 @@ import {
   CommandPalette,
   ContactsWorkspace,
   ForwardContent,
+  KeyboardHelp,
   NewChatContent,
   PersonContent,
   preloadSurfaces,
@@ -24,7 +26,6 @@ import {
 } from "@/components/lazy-surfaces";
 import { MessagesWorkspace } from "@/components/messages-workspace";
 import { OverlayShell } from "@/components/overlay-shell";
-import { Type } from "@/constants/theme";
 import { useAgentEnabled } from "@/hooks/use-agent";
 import { useAgentToasts } from "@/hooks/use-agent-toasts";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
@@ -37,7 +38,6 @@ import type { ConversationId } from "@shared/types";
 import {
   createInitialDesktopShellState,
   INITIAL_DESKTOP_SHELL_STATE,
-  reduceDesktopShell,
 } from "@/lib/desktop-coordinator/reducer";
 import { projectDesktopRoute } from "@/lib/desktop-coordinator/route";
 import { workspacePath, type WorkspaceId } from "@/lib/workspaces";
@@ -53,7 +53,6 @@ import { onOpenSettingsPane } from "@/lib/settings-pane";
 import { installNativeMenuBridge } from "@/lib/desktop-shell";
 import { setKeyboardRuntime } from "@/lib/keyboard/controller";
 import { installKeyboardDispatcher } from "@/lib/keyboard/dispatcher";
-import { helpEntries } from "@/lib/keyboard/registry";
 
 function desktopProjection(
   pathname: string,
@@ -64,7 +63,6 @@ function desktopProjection(
   return result.ok ? result.value : null;
 }
 
-const HELP_ENTRIES = helpEntries();
 /** Room for round4 desk-settings: label and dropdown on one line in a 576px column. */
 const SETTINGS_PANE_WIDTH = 640;
 /** A transcript with question cards reads poorly at the 312 minimum. */
@@ -97,16 +95,18 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteCompose, setPaletteCompose] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const initialProjection = desktopProjection(pathname, params);
-  const [state, dispatch] = useReducer(
-    reduceDesktopShell,
-    initialProjection ?? INITIAL_DESKTOP_SHELL_STATE,
-    (initial) => ("kind" in initial ? createInitialDesktopShellState(initial) : initial),
-  );
-  const routeKey = `${pathname}:${JSON.stringify(params)}`;
+  const [store] = useState(() => {
+    const initialProjection = desktopProjection(pathname, params);
+    return createDesktopShellStore(initialProjection ? createInitialDesktopShellState(initialProjection) : INITIAL_DESKTOP_SHELL_STATE);
+  });
+  const state = useSyncExternalStore(store.subscribe, store.getState);
+  const dispatch = store.dispatch;
+  // Keyed by content, so the projection changes only when the route does.
+  const paramsKey = JSON.stringify(params);
+  const routeParams = useMemo(() => JSON.parse(paramsKey) as DesktopRouteParams, [paramsKey]);
   const projection = useMemo(
-    () => desktopProjection(pathname, params, state.activeWorkspace),
-    [routeKey, state.activeWorkspace],
+    () => desktopProjection(pathname, routeParams, state.activeWorkspace),
+    [pathname, routeParams, state.activeWorkspace],
   );
   const [messagesRail, setMessagesRail] = useState<MessagesRailState>({
     allChats: [],
@@ -123,9 +123,8 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   const shellOwnsRoute = wide && projection !== null;
   const agentEnabled = useAgentEnabled();
   const agentOpen = useRef(false);
-  agentOpen.current = state.utility?.kind === "agent";
   // A pane hidden by a stale runner or the setting closes for real, so Esc and ⌘W are not spent on it.
-  const agentHidden = agentOpen.current && !agentEnabled;
+  const agentHidden = state.utility?.kind === "agent" && !agentEnabled;
   useEffect(() => {
     if (agentHidden) dispatch({ type: "utility/closed" });
   }, [agentHidden]);
@@ -135,7 +134,12 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   // included, stays put.
   const selectedId = state.messages.selection?.conversationId;
   const autoOpen = useRef({ wide: false, agentEnabled, rail: messagesRail, utilityOpen: false });
-  autoOpen.current = { wide: wide && projection !== null, agentEnabled, rail: messagesRail, utilityOpen: state.utility !== null };
+  // Synced in an effect, not during render: a render-phase ref write makes the React Compiler skip this
+  // provider, and then every shell render re-renders both workspaces. Declared first, so it runs first.
+  useEffect(() => {
+    agentOpen.current = state.utility?.kind === "agent";
+    autoOpen.current = { wide: wide && projection !== null, agentEnabled, rail: messagesRail, utilityOpen: state.utility !== null };
+  });
   useEffect(() => {
     const { wide: shellWide, agentEnabled: enabled, rail, utilityOpen } = autoOpen.current;
     if (!shellWide || !enabled || !selectedId || utilityOpen) return;
@@ -226,30 +230,34 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
     setPaletteOpen(true);
   }, []);
   const openHelp = useCallback((): void => setHelpOpen(true), []);
+  // The callbacks below read this, so they stay stable and the context never changes.
+  const latest = useRef({ activeWorkspace, helpOpen, paletteOpen, projectionKind: projection?.kind });
+  useEffect(() => {
+    latest.current = { activeWorkspace, helpOpen, paletteOpen, projectionKind: projection?.kind };
+  });
+  const closeProjectedRoute = useCallback((): void => {
+    if (router.canGoBack()) router.back();
+    else router.replace(workspacePath(latest.current.activeWorkspace));
+  }, []);
   const closeTopSurface = useCallback((): boolean => {
-    if (helpOpen) {
+    if (latest.current.helpOpen) {
       setHelpOpen(false);
       return true;
     }
-    if (paletteOpen) {
+    if (latest.current.paletteOpen) {
       setPaletteOpen(false);
       return true;
     }
-    if (state.routeOverlay) {
-      if (router.canGoBack()) router.back();
-      else router.replace(workspacePath(activeWorkspace));
+    if (store.getState().routeOverlay) {
+      closeProjectedRoute();
       return true;
     }
     return false;
-  }, [activeWorkspace, helpOpen, paletteOpen, state.routeOverlay]);
-  const closeProjectedRoute = useCallback((): void => {
-    if (router.canGoBack()) router.back();
-    else router.replace(workspacePath(activeWorkspace));
-  }, [activeWorkspace]);
+  }, [closeProjectedRoute, store]);
   const closeUtility = useCallback((): void => {
     dispatch({ type: "utility/closed" });
-    if (projection?.kind === "utility") closeProjectedRoute();
-  }, [closeProjectedRoute, projection?.kind]);
+    if (latest.current.projectionKind === "utility") closeProjectedRoute();
+  }, [closeProjectedRoute, dispatch]);
 
   useEffect(() => {
     if (!shellOwnsRoute || activeWorkspace !== "contacts") return;
@@ -281,7 +289,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
 
   const context = useMemo(
     () => ({
-      activeWorkspace,
+      store,
       closeTopSurface,
       closeUtility,
       dispatch,
@@ -289,9 +297,8 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
       openPalette,
       registerMessagesActions,
       reportMessagesRail,
-      state,
     }),
-    [activeWorkspace, closeTopSurface, closeUtility, openHelp, openPalette, registerMessagesActions, reportMessagesRail, state],
+    [store, closeTopSurface, closeUtility, dispatch, openHelp, openPalette, registerMessagesActions, reportMessagesRail],
   );
   const utilityIsGlobal = state.utility?.kind === "scheduled" || state.utility?.kind === "settings";
   const agentConversation = agentEnabled ? state.messages.selection?.conversationId : undefined;
@@ -465,22 +472,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
               backdropStyle={[styles.paletteBackdrop, styles.helpBackdrop]}
               cardStyle={[styles.helpCard, { borderColor: theme.cardBorder }]}
             >
-              <Text style={[styles.helpTitle, { color: theme.text }]}>Keyboard Shortcuts</Text>
-              {HELP_ENTRIES.map(({ title, keys }) => (
-                <View key={title} style={styles.helpRow}>
-                  <Text style={[styles.helpLabel, { color: theme.textSecondary }]}>{title}</Text>
-                  <View style={styles.helpKeys}>
-                    {keys.map((key) => (
-                      <View
-                        key={key}
-                        style={[styles.kbd, { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder }]}
-                      >
-                        <Text style={[styles.kbdText, { color: theme.text }]}>{key}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              ))}
+              <KeyboardHelp />
             </OverlayShell>
           </View>
         ) : null}
@@ -512,36 +504,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingVertical: 20,
     width: 360,
-  },
-  helpKeys: {
-    flexDirection: "row",
-    gap: 5,
-  },
-  helpLabel: {
-    flex: 1,
-    fontSize: Type.secondary,
-  },
-  helpRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    marginBottom: 10,
-  },
-  helpTitle: {
-    fontSize: Type.title,
-    fontWeight: "700",
-    marginBottom: 14,
-  },
-  kbd: {
-    borderRadius: 5,
-    borderWidth: StyleSheet.hairlineWidth,
-    minWidth: 24,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-  },
-  kbdText: {
-    fontSize: 11,
-    fontWeight: "600",
-    textAlign: "center",
   },
   // No color here: OverlayShell's default is the scheme's scrim (tokens `backdrop`).
   paletteBackdrop: {

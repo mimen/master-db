@@ -7,7 +7,7 @@ import { Platform, Text, View } from "react-native";
 
 import { UnknownSenderBanner } from "@/components/contacts-add-panel";
 import { ConversationListPane } from "@/components/conversation-list-pane";
-import { useDesktopShellContext } from "@/components/desktop-shell-context";
+import { useDesktopShellContext, useDesktopShellState } from "@/components/desktop-shell-context";
 import { DesktopSplit } from "@/components/desktop-split";
 import { EmptyState } from "@/components/empty-state";
 import { ThreadView } from "@/components/lazy-surfaces";
@@ -54,7 +54,9 @@ export function MessagesWorkspace({
   const theme = useTheme();
   const visual = useTriageTheme();
   const shell = useDesktopShellContext();
-  const utilityOpen = shell.state.utility?.workspace === "messages";
+  const { closeTopSurface, closeUtility, dispatch, openHelp, openPalette, registerMessagesActions, reportMessagesRail } = shell;
+  const utilityOpen = useDesktopShellState((state) => state.utility?.workspace === "messages");
+  const shellSelection = useDesktopShellState((state) => state.messages.selection);
   // Today is the working view: the inbox opens on the day's ranked queue.
   const [state, setState] = useState<StateFilter>("today");
   const [type, setType] = useState<TypeFilter>(DEFAULT_INBOX_FILTERS.type);
@@ -86,7 +88,7 @@ export function MessagesWorkspace({
     setJumpTarget(target);
     setSelectionIntent(intent);
     setSelectedId(selection.conversationId);
-    shell.dispatch({
+    dispatch({
       type: "messages/chat-selected",
       selection: {
         conversationId: selection.conversationId,
@@ -96,7 +98,7 @@ export function MessagesWorkspace({
         intent,
       },
     });
-  }, [shell.dispatch]);
+  }, [dispatch]);
 
   useReceiveSound(loading ? null : allChats, playReceive);
 
@@ -112,30 +114,30 @@ export function MessagesWorkspace({
 
   useEffect(() => {
     if (!wide) return;
-    const selection = shell.state.messages.selection;
+    const selection = shellSelection;
     if (!selection) return;
     if (selection.conversationId === selectedId) return;
     setJumpTarget(selection.jumpTarget ?? null);
     setSelectionIntent(selection.intent);
     setSelectedId(selection.conversationId);
-  }, [selectedId, shell.state.messages.selection, wide]);
+  }, [selectedId, shellSelection, wide]);
 
   // The shell owns the one rail and the one utility surface. Messages keeps
   // its filters and selection local so they survive workspace switches, then
   // reports only the chrome state/actions the shell needs.
   useEffect(() => {
     if (!wide) return;
-    shell.reportMessagesRail({ allChats, counts, state, type });
-  }, [allChats, counts, shell.reportMessagesRail, state, type, wide]);
+    reportMessagesRail({ allChats, counts, state, type });
+  }, [allChats, counts, reportMessagesRail, state, type, wide]);
   useEffect(() => {
     if (!wide) return;
-    shell.registerMessagesActions({
+    registerMessagesActions({
       applyState: setState,
       applyType: setType,
       clearSelection: () => {
         traceTriage({ kind: "clear", via: "clearSelection" });
         setSelectedId(null);
-        shell.dispatch({ type: "messages/chat-settled" });
+        dispatch({ type: "messages/chat-settled" });
         router.replace("/");
       },
       openChat: (chat) => {
@@ -144,8 +146,8 @@ export function MessagesWorkspace({
       },
       refresh,
     });
-    return () => shell.registerMessagesActions(null);
-  }, [commitChatSelection, refresh, shell.registerMessagesActions, wide]);
+    return () => registerMessagesActions(null);
+  }, [commitChatSelection, refresh, registerMessagesActions, wide]);
 
   const openChat = (chat: ChatSummary): void => {
     if (wide) {
@@ -176,12 +178,13 @@ export function MessagesWorkspace({
     if (selected && order.some((chat) => chat.conversationId === selected.conversationId)) nextRef.current = advanceTarget(order, selected.conversationId);
   }, [order, rendered, selected]);
   // A phone thread is a pushed route, not a selection: settling the one on screen replaces it with the next.
-  const pathname = usePathname();
-  const routeConversation = useGlobalSearchParams<{ conversationId?: ConversationId }>().conversationId;
+  // PhoneThread reads the route, so a desk route change does not re-render this workspace.
   const phoneThreadRef = useRef<ConversationId | null>(null);
-  phoneThreadRef.current = pathname.startsWith("/c/") ? routeConversation ?? null : null;
+  const setPhoneThread = useCallback((id: ConversationId | null) => { phoneThreadRef.current = id; }, []);
   const orderRef = useRef(order);
-  orderRef.current = order;
+  useEffect(() => {
+    orderRef.current = order;
+  });
   const advanceFrom = useCallback((conversationId: ConversationId): void => {
     if (!ADVANCING.has(stateRef.current)) return traceTriage({ kind: "advance", from: conversationId, to: null, reason: `lens ${stateRef.current}` });
     if (!wide) {
@@ -221,7 +224,7 @@ export function MessagesWorkspace({
 
   const openNewMessage = (): void => {
     if (wide) {
-      shell.openPalette(true);
+      openPalette(true);
     } else {
       router.push("/new-chat");
     }
@@ -245,9 +248,9 @@ export function MessagesWorkspace({
   useEffect(() => {
     if (Platform.OS !== "web" || !wide || !active) return;
     setKeyboardRuntime({
-      openPalette: () => shell.openPalette(false),
-      openNewMessage: () => shell.openPalette(true),
-      openHelp: shell.openHelp,
+      openPalette: () => openPalette(false),
+      openNewMessage: () => openPalette(true),
+      openHelp: openHelp,
       moveSelection: (delta) => {
         setListMode(true);
         getListAdapter()?.move(delta);
@@ -283,7 +286,7 @@ export function MessagesWorkspace({
       toggleDetails: () => {
         const sel = selectedRef.current;
         if (!sel) return;
-        shell.dispatch({
+        dispatch({
           type: "utility/toggled",
           utility: { kind: "chat-info", workspace: "messages", conversationId: sel.conversationId },
         });
@@ -296,7 +299,7 @@ export function MessagesWorkspace({
       undoLast: () => showToast(undoLastAction() ? "Undone" : "Nothing to undo"),
       // Esc precedence ladder — first applicable step only.
       escape: () => {
-        if (shell.closeTopSurface()) return;
+        if (closeTopSurface()) return;
         const o = overlaysRef.current;
         const focused = globalThis.document.activeElement;
         if (focused instanceof HTMLElement && focused.closest("[data-agent-pane]")) {
@@ -312,21 +315,21 @@ export function MessagesWorkspace({
           setListMode(true);
           return;
         }
-        if (o.utilityOpen) return shell.closeUtility();
+        if (o.utilityOpen) return closeUtility();
         // Already gliding with nothing to close — stay.
       },
       closePanel: () => {
-        if (shell.closeTopSurface()) return true;
+        if (closeTopSurface()) return true;
         const o = overlaysRef.current;
         if (getListAdapter()?.clearSearch()) return true;
         if (o.utilityOpen) {
-          shell.closeUtility();
+          closeUtility();
           return true;
         }
         if (selectedRef.current) {
           traceTriage({ kind: "clear", via: "closePanel" });
           setSelectedId(null);
-          shell.dispatch({ type: "messages/chat-settled" });
+          dispatch({ type: "messages/chat-settled" });
           router.replace("/");
           return true;
         }
@@ -337,7 +340,7 @@ export function MessagesWorkspace({
       setKeyboardRuntime(null);
       setListMode(false);
     };
-  }, [active, wide, refresh, shell.closeTopSurface, shell.closeUtility, shell.dispatch, shell.openHelp, shell.openPalette]);
+  }, [active, wide, refresh, closeTopSurface, closeUtility, dispatch, openHelp, openPalette]);
 
   const list = (
     <ConversationListPane
@@ -362,7 +365,7 @@ export function MessagesWorkspace({
   );
 
   if (!wide) {
-    return <View style={{ flex: 1, backgroundColor: theme.background }}>{list}</View>;
+    return <View style={{ flex: 1, backgroundColor: theme.background }}><PhoneThread onChange={setPhoneThread} />{list}</View>;
   }
 
   return (
@@ -397,6 +400,16 @@ export function MessagesWorkspace({
   );
 }
 
+
+/** Reports the conversation the phone route shows, if any. */
+function PhoneThread({ onChange }: { readonly onChange: (conversationId: ConversationId | null) => void }): null {
+  const pathname = usePathname();
+  const routeConversation = useGlobalSearchParams<{ conversationId?: ConversationId }>().conversationId;
+  useEffect(() => {
+    onChange(pathname.startsWith("/c/") ? routeConversation ?? null : null);
+  }, [onChange, pathname, routeConversation]);
+  return null;
+}
 
 /**
  * The next thread entering from 14px below on smooth (round4 motion.md, auto-advance).

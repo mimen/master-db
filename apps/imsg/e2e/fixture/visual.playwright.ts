@@ -153,10 +153,15 @@ test("row actions follow conversation state across queue lenses and keep More mi
   await row.hover();
   await expect(row.getByRole("button", { name: "Settle Alex Rivera", exact: true })).toBeVisible();
   await page.keyboard.press("Meta+e");
-  await expect(row.getByRole("button", { name: "Un-settle Alex Rivera", exact: true })).toBeVisible();
+  const unsettle = row.getByRole("button", { name: "Un-settle Alex Rivera", exact: true });
+  await expect(unsettle).toBeVisible();
   await expect(page.getByText("Settled", { exact: true })).toBeVisible();
-  await page.keyboard.press("Meta+e");
-  await expect(row.getByRole("button", { name: "Settle Alex Rivera", exact: true })).toBeVisible();
+  // The row shows the settle at once, but its write is out until every live query has refreshed, and a press
+  // inside that window is turned away by design (triage-writes.ts). Press again, as the user would, until it takes.
+  await expect(async () => {
+    if (await unsettle.isVisible()) await page.keyboard.press("Meta+e");
+    await expect(row.getByRole("button", { name: "Settle Alex Rivera", exact: true })).toBeVisible({ timeout: 300 });
+  }).toPass();
   await expect(page.getByText("Un-settled — back in Needs you", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "All messages" })).toBeVisible();
   await row.hover();

@@ -21,14 +21,16 @@ async function continueHeld(route: Route): Promise<void> {
   });
 }
 
-/**
- * Waits until the open conversation has painted the server's messages. A right-click or a tap on the thread before
- * then is lost on a slow runner (it is at 43c15e78 too, under a 6x CPU throttle), and that is not what these measure.
- */
-async function threadSettled(page: Page): Promise<void> {
-  await page.waitForFunction(() =>
-    (window as unknown as { __commaTimings: Array<{ freshMs: number | null }> }).__commaTimings.at(-1)?.freshMs != null);
-}
+test("the desk tears down while a route still holds a request and another handler finishes", async ({ desk }) => {
+  const page = desk.page;
+  await page.goto("/__fixture/teardown-probe");
+  await page.route("**/__fixture/teardown-probe?*", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, route.request().url().endsWith("held") ? 300 : 50));
+    await continueHeld(route);
+  });
+  await page.evaluate(() => { void fetch("/__fixture/teardown-probe?held"); void fetch("/__fixture/teardown-probe?quick"); });
+  await page.waitForTimeout(20);
+});
 
 test("Contacts and its people list wait for the first visit, then stay mounted", async ({ desk }) => {
   const page = desk.page;
@@ -55,13 +57,37 @@ function likeBadgeShown(): boolean {
 async function openTray(page: Page) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
-  await threadSettled(page);
   await page.getByTestId("thread-view").getByRole("button", { name: `Alex Rivera: ${INBOUND}` }).click({ button: "right" });
   const like = page.getByRole("toolbar", { name: "Tapbacks" }).getByRole("button", { name: "Like", exact: true });
   // The tray first opens slowly on a cold runner; that wait must not count against the badge's.
   await expect(like).toBeVisible();
   return like;
 }
+
+/** Opening a thread used to drop a right-click: the suggestion row arrived 30 px tall and moved the bubble off the pointer. */
+test("an open thread holds still while its suggestions load, so a right-click at once opens the tray", async ({ desk }) => {
+  const page = desk.page;
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  const row = page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" });
+  await expect(row).toBeVisible();
+  await page.evaluate((label) => {
+    const tops: number[] = ((window as unknown as { __tops: number[] }).__tops = []);
+    const sample = () => {
+      const bubble = document.querySelector(`[data-testid="thread-view"] [aria-label="${label}"]`);
+      const top = bubble ? Math.round(bubble.getBoundingClientRect().top) : null;
+      if (top !== null && tops.at(-1) !== top) tops.push(top);
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  }, `Alex Rivera: ${INBOUND}`);
+  // A slow machine widens the gap between the bubble painting and the suggestions arriving.
+  await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: 6 });
+  await row.click();
+  await page.getByTestId("thread-view").getByRole("button", { name: `Alex Rivera: ${INBOUND}` }).click({ button: "right" });
+  await expect(page.getByRole("toolbar", { name: "Tapbacks" })).toBeVisible();
+  await expect(page.getByTestId("suggestion-alternates").getByRole("button").first()).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { __tops: number[] }).__tops), "the bubble's top, each time it moved").toHaveLength(1);
+});
 
 test("a tapback shows at once and rolls back with a toast when the bridge fails it", async ({ desk }) => {
   const fault = await desk.request.post("/__fixture/fault", { data: { method: "react" } });
@@ -165,7 +191,6 @@ test("ratchet: settling the open conversation moves the Needs you count within 5
   const page = desk.page;
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
-  await threadSettled(page);
   await page.getByPlaceholder("iMessage").blur();
   const label = await page.locator('[aria-label^="Needs you, "]').getAttribute("aria-label");
   const before = Number(label?.slice("Needs you, ".length));
@@ -209,7 +234,6 @@ async function recordVoice(page: Page) {
   await page.context().grantPermissions(["microphone"]);
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
-  await threadSettled(page);
   await page.getByRole("button", { name: "Record voice message" }).click();
   await expect(page.getByText("0:01", { exact: true })).toBeVisible();
   return page.getByRole("button", { name: "Send voice message" });
@@ -245,7 +269,6 @@ test("a voice message shows at once, then leaves with a toast and stays staged w
 async function forwardToJordan(page: Page) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
-  await threadSettled(page);
   await page.getByTestId("thread-view").getByRole("button", { name: `Alex Rivera: ${INBOUND}` }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Forward" }).click();
   await page.getByPlaceholder("Forward to…").fill("Jordan");
@@ -263,10 +286,11 @@ async function settleDelayedSend(page: Page) {
 /**
  * Forward also closes the picker and opens another thread, the heaviest frame of these ratchets. On GitHub's
  * macos-latest runner, 43c15e78 (before #61) measured 45 to 107 ms, median 67, over 9 runs (run 42419120618), where
- * a laptop measures 24 to 30 ms, so the runner alone breaks 50 ms. 150 ms still fails a forward that waits for
- * the 300 ms held send instead of showing on the click.
+ * a laptop measures 24 to 30 ms, so the runner alone breaks 50 ms. Since opening a thread stopped re-rendering the
+ * shell (#80) the runner measures 28.5 ms (run 42428954629) and a laptop a median of 25 ms over 9 runs, from 41 ms
+ * at f3857b7b. 100 ms keeps room for a slow runner and still fails a forward that waits for the 300 ms held send.
  */
-const FORWARD_LIMIT_MS = process.env.CI ? 150 : 50;
+const FORWARD_LIMIT_MS = process.env.CI ? 100 : 50;
 
 test("ratchet: a forwarded message is in the destination thread within 50 ms of the click", async ({ desk }) => {
   // A real bridge takes longer than a frame; the bare fixture can answer inside 50 ms.
@@ -341,7 +365,6 @@ async function sendAgainMenuItem(page: Page) {
   await page.getByTestId("conversation-row").filter({ hasText: "Avery Brooks" }).click();
   const own = page.getByTestId("thread-view").getByRole("button", { name: AVERY_SEND });
   await expect(own).toHaveCount(1);
-  await threadSettled(page);
   await own.click({ button: "right" });
   return page.getByRole("menuitem", { name: "Send again" });
 }
@@ -496,6 +519,45 @@ test("ratchet: an arriving message renders only its row and its neighbour, not t
   expect(renders.rows).toBeLessThanOrEqual(ROW_RENDERS_PER_ARRIVAL);
 });
 
+/**
+ * Opening a conversation from the list, then switching to another, from the click to 600 ms after the server's
+ * messages painted. Before #80 an open cost 26 commits and 8,136 component renders and a switch 7,109: every shell
+ * state change and route change re-rendered both workspaces, and every directory update re-rendered every sidebar
+ * cell. Now a laptop measures an open at 25 commits and 3,908 renders and a switch at 2,736 to 3,537. On the CI
+ * runner a 500 ms fixture poll can land inside the window and add a commit and a row pass (27 and 4,326 on
+ * 05e70b05), so the ceilings sit about 10% above the runner's reading, still half the old cost.
+ */
+const OPEN_COMMITS = 30;
+const OPEN_COMPONENTS = 4_800;
+const SWITCH_COMPONENTS = 3_900;
+
+async function openFromList(page: Page, name: string): Promise<Renders> {
+  const before = await page.evaluate(() => (window as unknown as { __commaTimings: unknown[] }).__commaTimings.length);
+  await takeRenders(page);
+  await page.getByTestId("conversation-row").filter({ hasText: name }).first().click();
+  await page.waitForFunction((count) => {
+    const timings = (window as unknown as { __commaTimings: Array<{ freshMs: number | null }> }).__commaTimings;
+    return timings.length > count && timings.at(-1)?.freshMs != null;
+  }, before);
+  await page.waitForTimeout(600);
+  return takeRenders(page);
+}
+
+test("ratchet: opening a conversation, then switching to another, renders the shell only where it changed", async ({ desk }) => {
+  const page = desk.page;
+  await page.addInitScript(renderCounter);
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await expect(page.getByTestId("conversation-row").filter({ hasText: "Jordan Lee" })).toBeVisible();
+  await page.waitForTimeout(600);
+  const open = await openFromList(page, "Alex Rivera");
+  const switched = await openFromList(page, "Jordan Lee");
+  console.log(`navigation renders: open ${JSON.stringify(open)} switch ${JSON.stringify(switched)}`);
+  expect(open.commits, "commits after opening a thread").toBeLessThanOrEqual(OPEN_COMMITS);
+  expect(open.components, "components rendered opening a thread").toBeLessThanOrEqual(OPEN_COMPONENTS);
+  expect(switched.components, "components rendered switching threads").toBeLessThanOrEqual(SWITCH_COMPONENTS);
+});
+
 const TYPED = "See you at the venue around eight thirty";
 
 test("ratchet: each keystroke renders the composer once", async ({ desk }) => {
@@ -591,7 +653,6 @@ test("Details paints the conversation's people from the list before chatInfo ans
   await expect(page.getByText("Details", { exact: true })).toBeVisible();
   await expect(page.getByText("Reach Alex at", { exact: true })).toBeVisible({ timeout: 2_000 });
   release();
-  await page.unrouteAll({ behavior: "wait" });
 });
 
 test("a contact search hit for a listed conversation opens it without waiting on findChat", async ({ desk }) => {

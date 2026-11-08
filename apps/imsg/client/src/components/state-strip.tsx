@@ -1,11 +1,11 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { mostUrgent } from "@shared/agent-attention";
 import type { ConversationId, Message } from "@shared/types";
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 
-import { DesktopShellContext } from "@/components/desktop-shell-context";
+import { useDesktopShellState } from "@/components/desktop-shell-context";
 import { useAgentChats, useAgentEnabled } from "@/hooks/use-agent";
 import { useConversation } from "@/hooks/use-chat-directory";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
@@ -55,8 +55,7 @@ interface AgentStrip { readonly state: AgentStripState; readonly chatId: string 
 /** While the Agent pane is closed, what the conversation's most urgent open chat wants. */
 function useAgentStrip(conversationId: ConversationId): AgentStrip | null {
   const enabled = useAgentEnabled();
-  const shell = useContext(DesktopShellContext);
-  const paneOpen = shell?.state.utility?.kind === "agent";
+  const paneOpen = useDesktopShellState((state) => state.utility?.kind === "agent");
   // Subscribed while the pane is open too (the pane holds the same query), so closing it shows the chip at once.
   const chat = mostUrgent(useAgentChats(conversationId, enabled) ?? []);
   const state = enabled && !paneOpen ? agentStripState(chat) : null;
