@@ -36,6 +36,8 @@ describe("ingestKind", () => {
     expect(ingestKind("/comma/ingest/messages")).toBe("messages");
     expect(ingestKind("/comma/ingest/renew")).toBe("renew");
     expect(ingestKind("/comma/ingest/photo")).toBe("photo");
+    // The bridge posts its account at startup and exits if this route is missing.
+    expect(ingestKind("/comma/ingest/account")).toBe("account");
     expect(ingestKind("/comma/ingest/toString")).toBeNull();
     expect(ingestKind("/comma/ingest/nope")).toBeNull();
   });
