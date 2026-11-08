@@ -70,7 +70,7 @@ async function upsertConversation(ctx: MutationCtx, account: Doc<"comma_accounts
   };
   if (!existing) return await ctx.db.insert("comma_conversations", { ...fields, lastMessageAt: 0, updatedAt: Date.now() });
   const same = existing.displayName === fields.displayName && existing.rawDisplayName === fields.rawDisplayName && existing.kind === kind &&
-    JSON.stringify(existing.participants) === JSON.stringify(participants) && JSON.stringify(existing.slack) === JSON.stringify(fields.slack);
+    JSON.stringify(existing.participants) === JSON.stringify(participants) && existing.slack?.following === fields.slack.following;
   if (!same) await ctx.db.patch(existing._id, { ...fields, updatedAt: Date.now() });
   return existing._id;
 }
@@ -98,7 +98,7 @@ async function homesOf(ctx: MutationCtx, accountId: Id<"comma_accounts">, batche
     if (!homes.has(key)) {
       homes.set(key, {
         ref, messages: [], ...(own && from.members ? { members: from.members } : {}),
-        // A channel's name names its threads, and a thread read names its channel.
+        // A batch's channel name names every conversation of that channel it lands in.
         ...(from.name && (own || ref.type === "thread" || from.ref.type === "thread") ? { name: from.name } : {}),
         ...(ref.type === "thread" ? { parent: await parentOf(ref.channel) } : {}),
       });

@@ -11,7 +11,7 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { ALLOWED_EMAIL } from "../_lib/authed";
 import schema from "../schema";
 
-import { listConversations } from "./queries";
+import { listConversations, listReader, withConversationState } from "./queries";
 import { commaModules } from "./testModules.vitest";
 
 type Args = FunctionArgs<typeof api.comma.queries.listConversations>;
@@ -177,4 +177,85 @@ test("listConversations reads per page on a 100-conversation inbox, with byte-id
     chat_crm: 20, comma_conversation_state: 100, comma_conversations: 1, comma_messages: 20,
     identities: 101, "people.get": 60, "storage.getUrl": 40, tags: 80,
   });
+});
+
+// The same inbox, plus an opted-in busy Slack channel: the channel, 300 threads Milad isn't in, 20 he answered, and
+// one that mentions him, every one newer than the inbox so they fill the first pages.
+async function seedBusyChannel(ctx: MutationCtx & { storage: StorageActionWriter }) {
+  await seed(ctx);
+  const accountId = await ctx.db.insert("comma_accounts", {
+    platform: "slack", externalId: "T1", label: "AUF", selfHandles: ["slack:UME"], health: "ok", createdAt: 1, slackChannels: ["C1"],
+  });
+  let at = 2_000_000;
+  const row = (conversationKey: string, kind: "channel" | "thread", slack: { channel: string; threadTs?: string; following?: boolean }, isFromMe: boolean, mentionsMe = false) => {
+    at += 1000;
+    return {
+      platform: "slack" as const, accountId, conversationKey, kind, isGroup: true, slack, displayName: "#ops", rawDisplayName: "#ops",
+      participants: kind === "channel" ? [] : [{ address: "slack:USAM", name: null }, { address: "slack:UDANA", name: null }],
+      lastMessage: { guid: `C1:${at}`, text: "update", dateCreated: at, isFromMe, senderName: null, hasAttachments: false, ...(mentionsMe ? { mentionsMe } : {}) },
+      lastMessageAt: at, isSpam: false, updatedAt: at,
+    };
+  };
+  await ctx.db.insert("comma_conversations", row("ch:C1", "channel", { channel: "C1" }, false));
+  for (let i = 0; i < 300; i++) await ctx.db.insert("comma_conversations", row(`th:C1:${i}`, "thread", { channel: "C1", threadTs: `${i}`, following: false }, false));
+  for (let i = 300; i < 320; i++) await ctx.db.insert("comma_conversations", row(`th:C1:${i}`, "thread", { channel: "C1", threadTs: `${i}`, following: true }, true));
+  await ctx.db.insert("comma_conversations", row("th:C1:320", "thread", { channel: "C1", threadTs: "320", following: true }, false, true));
+}
+
+/** Loads every page the way the client does, 25 rows then 100 at a time. */
+const inbox = () => convexTest(schema, commaModules).withIdentity({ email: ALLOWED_EMAIL });
+const loadDirectory = (t: ReturnType<typeof inbox>) => t.run(async (ctx) => {
+    const lookups: Tally = {};
+    const docs: Tally = {};
+    const started = performance.now();
+    const rows: Result["page"] = [];
+    let cursor: string | null = null;
+    for (let numItems = 25; ; numItems = 100) {
+      const result: Result = await handler(counting(ctx, lookups, docs), { paginationOpts: { numItems, cursor } });
+      rows.push(...result.page);
+      if (result.isDone) break;
+      cursor = result.continueCursor;
+    }
+    return { rows, lookups, ms: performance.now() - started };
+});
+const median = async (run: () => Promise<{ ms: number }>) => {
+  const timings: number[] = [];
+  for (let i = 0; i < 9; i++) timings.push((await run()).ms);
+  return timings.sort((a, b) => a - b)[4];
+};
+
+test("an opted-in busy Slack channel's threads Milad doesn't follow cost the list no reads and never reach the page", async () => {
+  const t = inbox();
+  await t.run(seedBusyChannel);
+  const directory = () => loadDirectory(t);
+  const first = await directory();
+  expect(first.rows).toHaveLength(102);
+  expect(first.rows.filter((row) => row.kind === "thread").map((row) => row.conversationKey)).toEqual(["th:C1:320"]);
+  // A thread Milad doesn't follow costs no read. Each he follows reads its state to decide (21), and the one shown reads
+  // it again with its row. The rest is the inbox's own reads over five pages instead of two, and the shown thread's
+  // parent and root.
+  expect(first.lookups).toEqual({
+    chat_crm: 22, comma_conversation_state: 100 + 1 + 21 + 1, comma_conversations: 10, comma_messages: 26,
+    identities: 120, "people.get": 75, "storage.getUrl": 48, tags: 82,
+  });
+
+  if (process.env.COMMA_READS_REPORT) {
+    // Before S3 each thread was a listed group row: its full read, sent to the client to render and filter.
+    const listedAll = () => t.run(async (ctx) => {
+      const lookups: Tally = {};
+      const started = performance.now();
+      const threads = (await ctx.db.query("comma_conversations").collect()).filter((row) => row.slack?.threadTs);
+      const read = listReader(counting(ctx, lookups, {}));
+      for (const row of threads) await withConversationState(counting(ctx, lookups, {}), { ...row, kind: "group", slack: { channel: row.slack!.channel } }, read);
+      return { lookups, ms: performance.now() - started };
+    });
+    const report = {
+      withBusyChannelMs: await median(directory), withBusyChannel: first.lookups,
+      threadsAsRowsBeforeS3Ms: await median(listedAll), threadsAsRowsBeforeS3: (await listedAll()).lookups,
+    };
+    // convex-test keeps one store per test, so the plain inbox is measured last.
+    const plain = inbox();
+    await plain.run(seed);
+    console.warn(JSON.stringify({ inboxAloneMs: await median(() => loadDirectory(plain)), ...report }, null, 2));
+  }
 });

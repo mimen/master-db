@@ -164,10 +164,12 @@ async function threadSummary(ctx: QueryCtx, conversation: CommaConversationDoc) 
 
 /**
  * A Slack thread is part of its DM, group DM or channel, so the list shows it only while it wants Milad: owed a reply,
- * marked unread, or pinned. Reads only its triage state to decide, so a busy channel's threads cost the list little.
+ * marked unread, or pinned. A thread he doesn't follow is its channel's alone and costs the list no read; one he
+ * follows reads only its triage state to decide.
  */
 async function listed(ctx: QueryCtx, conversation: CommaConversationDoc): Promise<boolean> {
   if (!conversation.slack?.threadTs) return true;
+  if (conversation.slack.following === false) return false;
   const state = await ctx.db.query("comma_conversation_state")
     .withIndex("by_conversationId", (q) => q.eq("conversationId", conversation._id)).unique();
   const { flags } = conversationFlags({ platform: "slack", kind: "thread", following: conversation.slack.following }, state ?? undefined,
