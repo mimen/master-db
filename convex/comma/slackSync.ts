@@ -41,7 +41,9 @@ async function upsertConversation(ctx: MutationCtx, account: Doc<"comma_accounts
   const kind = slack.kind(ref);
   const existing = await findByKey(ctx, scope, conversationKey);
   const known = existing?.participants.map((participant) => participant.address.slice("slack:".length)) ?? [];
-  const ids = [...new Set(batch.members ?? [...known, ...batch.messages.map((message) => message.user)])].filter((id) => id !== self);
+  // A channel is named by its #name, and every list read resolves each participant, so a busy channel keeps none.
+  const ids = ref.type === "channel" ? []
+    : [...new Set(batch.members ?? [...known, ...batch.messages.map((message) => message.user)])].filter((id) => id !== self);
   const participants = ids.map((id) => ({ address: `slack:${id}`, name: null }));
   // A DM is named by its person at read time; a group DM lists its members; a channel or thread carries the channel's name.
   const rawDisplayName = ref.type === "im" ? undefined : ref.type === "mpim" ? "" : batch.name ? `#${batch.name}` : existing?.rawDisplayName ?? "Slack thread";

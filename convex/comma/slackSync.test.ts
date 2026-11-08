@@ -142,7 +142,7 @@ describe("the Events webhook", () => {
     }
     await settle(t);
     const list = async () => (await as.query(api.comma.queries.listConversations, { paginationOpts })).page;
-    expect(await list()).toEqual([expect.objectContaining({ kind: "channel", displayName: "#ops", flags: expect.objectContaining({ unresponded: false, waiting: false }) })]);
+    expect(await list()).toEqual([expect.objectContaining({ kind: "channel", displayName: "#ops", participants: [], flags: expect.objectContaining({ unresponded: false, waiting: false }) })]);
     await post(t, eventCallback("EvMention", messageEvent("C2", "channel", { user: SAM, text: "<@U066UCP4FS6> sign off?", ts: ago(1) })));
     await settle(t);
     expect((await list())[0]!.flags).toMatchObject({ unresponded: true });
