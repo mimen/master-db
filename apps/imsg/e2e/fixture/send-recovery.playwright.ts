@@ -151,13 +151,14 @@ test("send-recovery: the alternates stand aside while the field holds text, so a
 
 test("send-recovery: Send later stays live while an attachment uploads", async ({ desk }) => {
   const page = desk.page;
-  await desk.request.post("/__fixture/latency", { data: { name: "outbox:sendAttachment", delayMs: 4_000 } });
+  await desk.request.post("/__fixture/latency", { data: { name: "outbox:sendAttachment", delayMs: 20_000 } });
   const thread = await openAlex(page);
   await drop(thread, ["slow.txt"]);
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await page.getByPlaceholder("iMessage").fill("and one more thing");
-  await expect(page.getByRole("button", { name: "Send later" })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  // Well inside the upload's 20 seconds.
+  await expect(page.getByRole("button", { name: "Send later" })).toBeEnabled({ timeout: 2_000 });
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled({ timeout: 2_000 });
   await desk.request.post("/__fixture/latency", { data: { name: "outbox:sendAttachment", delayMs: null } });
 });
 

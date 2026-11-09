@@ -914,8 +914,9 @@ ${url}` : url;
   };
 
   // ------------------------------------------------------- scheduled send
-  const scheduleLater = (scheduledText: string, at: number) => {
-    const outgoing = trimMentionAnnotations(scheduledText, mentions);
+  /** The field as it stands, with its reply target and mentions. */
+  const scheduleLater = (at: number) => {
+    const outgoing = trimMentionAnnotations(text, mentions);
     return api.schedule(chat, {
       text: outgoing.text,
       ...(replyTo ? { replyToGuid: replyTo.guid } : {}),
@@ -941,7 +942,7 @@ ${url}` : url;
         onPress: () => {
           // Clears and confirms on the tap; a failure puts the text back with the error.
           const restore = { text, mentions };
-          void scheduleLater(trimmed, option.at).catch((error: unknown) => {
+          void scheduleLater(option.at).catch((error: unknown) => {
             setText(restore.text);
             setMentions(restore.mentions);
             setDraft(conversationId, restore.text);
@@ -1210,8 +1211,8 @@ ${url}` : url;
         textEditable={false}
         anchor={scheduleAnchor}
         onClose={() => setCustomScheduleOpen(false)}
-        onSubmit={async (scheduledText, sendAt) => {
-          await scheduleLater(scheduledText, sendAt);
+        onSubmit={async (_scheduledText, sendAt) => {
+          await scheduleLater(sendAt);
           clearText();
           setDraft(conversationId, "");
           onClearReply();
