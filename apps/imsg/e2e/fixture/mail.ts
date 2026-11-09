@@ -182,6 +182,10 @@ export function createMailFixture(receipts: Map<string, Receipt>) {
   let loseNextAnswer: number | null = null;
   /** Gmail refuses the next archive or unarchive with this error. */
   let refuseNextArchive: string | null = null;
+  /** Gmail refuses the next send (a reply, a new email or a forward) with this error. */
+  let refuseNextSend: string | null = null;
+  /** Replies Gmail refused, by clientKey, so Retry can send them again and Discard can drop them. */
+  const failedSends = new Map<string, { key: string; payload: Extract<CommaOutboxPayload, { kind: "send" }> }>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
 
   const find = (key: string) => threads.find((thread) => guidOf(thread) === key);
@@ -231,6 +235,13 @@ export function createMailFixture(receipts: Map<string, Receipt>) {
     if (payload.kind === "markRead") return receipt(clientKey, { status: "sent", result: { kind: "markRead", ok: true } });
     if (payload.kind !== "send") throw new Error(`The fixture's Gmail runs no ${payload.kind}`);
     thread.mail = [...thread.mail, { id: clientKey, from: MILAD, fromMe: true, at: Date.now(), text: payload.text, clientKey, sendState: "sending" }];
+    if (refuseNextSend !== null) {
+      const error = refuseNextSend;
+      refuseNextSend = null;
+      failedSends.set(clientKey, { key, payload });
+      thread.mail = thread.mail.map((mail) => (mail.clientKey === clientKey ? { ...mail, sendState: "failed" } : mail));
+      return receipt(clientKey, { status: "failed", error });
+    }
     if (loseNextAnswer === null) {
       const { id, result } = land(thread, clientKey, payload);
       return receipt(clientKey, { status: "sent", result, resultGuid: id });
@@ -250,6 +261,11 @@ export function createMailFixture(receipts: Map<string, Receipt>) {
   /** A new email or a forward: Gmail starts a thread, which lands outside the inbox, as sent mail does. */
   const sendEmail = (clientKey: string, payload: Extract<CommaOutboxPayload, { kind: "sendEmail" }>): string => {
     if (!payload.email.to.length && !payload.email.cc.length) throw new Error("An email needs someone to send it to");
+    if (refuseNextSend !== null) {
+      const error = refuseNextSend;
+      refuseNextSend = null;
+      return receipt(clientKey, { status: "failed", error });
+    }
     const recipient = parseAddresses(payload.email.to.join(", "))[0] ?? parseAddresses(payload.email.cc.join(", "))[0]!;
     const thread: Thread = { key: `t-new-${sent + 1}`, subject: payload.email.subject, known: true, bulk: false, participant: recipient, inInbox: false, state: undefined, mail: [] };
     threads = [...threads, thread];
@@ -265,6 +281,29 @@ export function createMailFixture(receipts: Map<string, Receipt>) {
     sent = 0;
     loseNextAnswer = null;
     refuseNextArchive = null;
+    refuseNextSend = null;
+    failedSends.clear();
+  };
+
+  /** pendingSends.retrySend for a refused reply: the failed card goes, and the reply queues again under `retryKey`. */
+  const retry = (clientKey: string, retryKey: string): string | null => {
+    const failed = failedSends.get(clientKey);
+    if (!failed) return null;
+    failedSends.delete(clientKey);
+    const thread = find(failed.key)!;
+    thread.mail = thread.mail.filter((mail) => mail.clientKey !== clientKey);
+    return enqueue(failed.key, retryKey, failed.payload);
+  };
+
+  /** pendingSends.cancelSend for a refused reply: its card goes. Null when the send is not one of this world's. */
+  const discard = (clientKey: string): boolean | null => {
+    const failed = failedSends.get(clientKey);
+    if (!failed) return null;
+    failedSends.delete(clientKey);
+    receipts.delete(clientKey);
+    const thread = find(failed.key)!;
+    thread.mail = thread.mail.filter((mail) => mail.clientKey !== clientKey);
+    return true;
   };
 
   return {
@@ -302,6 +341,11 @@ export function createMailFixture(receipts: Map<string, Receipt>) {
     refuseNextArchive: (error: string) => {
       refuseNextArchive = error;
     },
+    refuseNextSend: (error: string) => {
+      refuseNextSend = error;
+    },
+    retry,
+    discard,
     sendEmail,
     attachment: (guid: string) => threads.flatMap((thread) => thread.mail.flatMap((mail) => (mail.files ?? []).map((file, index) => attachmentOf(thread, mail, file, index))))
       .find((row) => row.guid === guid) ?? null,

@@ -7,7 +7,7 @@ import { assertAllowed } from "../_lib/authed";
 import type { CommaPendingSendState } from "../schema/comma/validators";
 
 import { findMessage } from "./conversationLookup";
-import { enqueueCommand } from "./enqueue";
+import { EXPIRING_KINDS, enqueueCommand } from "./enqueue";
 import { FLAT_MESSAGE_UNSET, isAssociated, messageImessage, scopeOf } from "./messageShape";
 import { carryTempAnchor } from "./triage";
 
@@ -49,11 +49,14 @@ export async function strandPendingSend(ctx: MutationCtx, clientKey: string, sen
   await ctx.db.patch(row._id, { dateCreated: Date.now(), sendState, ...(imessage ? { imessage: { ...imessage, error: 1 }, ...FLAT_MESSAGE_UNSET } : {}) });
 }
 
-/** A queued send nothing took in time never goes out: it fails as Not sent, and the user decides whether to retry. */
+/**
+ * A queued send, attachment or new chat nothing took in time never goes out: it fails as Not sent, and the user
+ * decides whether to retry.
+ */
 export async function expireIfStale(ctx: MutationCtx, row: Doc<"comma_outbox">, now: number): Promise<boolean> {
-  if (row.payload.kind !== "send" || row.status !== "pending" || now - row.createdAt < NOT_SENT_AFTER_MS) return false;
+  if (!EXPIRING_KINDS.has(row.payload.kind) || row.status !== "pending" || now - row.createdAt < NOT_SENT_AFTER_MS) return false;
   await ctx.db.patch(row._id, { status: "failed", error: NOT_SENT_ERROR, updatedAt: now });
-  await strandPendingSend(ctx, row.clientKey, "notSent");
+  if (row.payload.kind === "send") await strandPendingSend(ctx, row.clientKey, "notSent");
   return true;
 }
 
@@ -61,7 +64,7 @@ export const expire = internalMutation({
   args: { clientKey: v.string() },
   returns: v.null(),
   handler: async (ctx, { clientKey }) => {
-    const row = await sendRow(ctx, clientKey);
+    const row = await ctx.db.query("comma_outbox").withIndex("by_clientKey", (q) => q.eq("clientKey", clientKey)).unique();
     if (row) await expireIfStale(ctx, row, Date.now());
     return null;
   },
@@ -142,7 +145,10 @@ export async function newestInFlight(ctx: MutationCtx, conversationId: Conversat
   return newest ? await pendingRow(ctx, newest.clientKey) : null;
 }
 
-/** Removes a send nothing has taken yet, so it never goes out. False once the executor has it. */
+/**
+ * Removes a send nothing has taken yet, so it never goes out, or discards one that did not go out. False while the
+ * executor has it or once it went.
+ */
 export const cancelSend = mutation({
   args: { clientKey: v.string() },
   returns: v.boolean(),
@@ -150,7 +156,7 @@ export const cancelSend = mutation({
     await assertAllowed(ctx);
     const row = await sendRow(ctx, clientKey);
     if (!row) return true;
-    if (row.status !== "pending") return false;
+    if (row.status === "claimed" || row.status === "sent") return false;
     await ctx.db.delete(row._id);
     const pending = await pendingRow(ctx, clientKey);
     if (pending) {

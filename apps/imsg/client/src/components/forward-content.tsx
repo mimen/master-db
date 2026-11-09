@@ -1,12 +1,10 @@
-import { messagingCommandError } from "@/lib/messaging-api";
 import type { ChatSummary } from "@shared/types";
 import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { takeForwardText } from "@/lib/forward";
-import { pendingSends, SendCancelledError } from "@/lib/pending-sends";
-import { showToast } from "@/lib/toast";
+import { pendingSends } from "@/lib/pending-sends";
 import { useForwardTargets } from "@/hooks/use-forward-targets";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { conversationRoute } from "@shared/imessage";
@@ -35,9 +33,8 @@ export function ForwardContent({ onClose, onOpenChat }: ForwardContentProps): Re
     const landed = pendingSends.send(chat, { text });
     onClose();
     onOpenChat(chat);
-    landed.catch((error: unknown) => {
-      if (!(error instanceof SendCancelledError)) showToast(messagingCommandError(error, "Forward failed"));
-    });
+    // A send that did not go out toasts from pendingSends, with Retry and Open.
+    landed.catch(() => undefined);
   };
 
   // Forward only opens from a message. Reached any other way (a reload, a

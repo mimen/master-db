@@ -11,6 +11,7 @@ import { chatGuidRoute } from "@shared/imessage";
 import { PROFILES, platformBadge } from "@shared/platform-profile";
 import type { ScheduledItem } from "@/lib/scheduled";
 import { groupScheduled, isNotSent } from "@/lib/scheduled-groups";
+import { convexReason } from "@/lib/messaging-api";
 import { showToast } from "@/lib/toast";
 import { ChatAvatar, PersonAvatar } from "./avatar";
 import { TriageGeometry } from "@/constants/triage-theme";
@@ -23,12 +24,7 @@ export interface ScheduledContentProps {
   onClose?: () => void;
 }
 
-/**
- * Convex says why it refused in a ConvexError's data. Read without importing ConvexError: that import alone moves
- * convex/values into the first-visit common chunk (2 KB brotli), since the mail surface imports it too.
- */
-const failure = (error: unknown, fallback: string): string =>
-  error instanceof Error && "data" in error && typeof error.data === "string" ? error.data : fallback;
+const failure = (error: unknown, fallback: string): string => convexReason(error) ?? fallback;
 
 const timeOf = (ms: number): string => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
@@ -155,6 +151,7 @@ function ScheduledRow({
   const failedButtons = (
     <>
       {button("Edit", `Edit scheduled message to ${item.chatName}`, () => actions.edit(item))}
+      {button("Cancel", `Cancel scheduled message to ${item.chatName}`, () => actions.cancel(item))}
       {button("Send now", `Send scheduled message to ${item.chatName} now`, () => actions.sendNow(item), true, "arrow-up")}
     </>
   );

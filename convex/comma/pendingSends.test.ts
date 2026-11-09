@@ -101,6 +101,29 @@ describe("Not sent", () => {
   });
 });
 
+describe("Not sent, for the sends that draw no pending row", () => {
+  const attachment = (t: T) => t.run((ctx) => ctx.storage.store(new Blob(["photo"], { type: "image/jpeg" })));
+
+  test("an attachment nothing took in time fails as Not sent instead of going out when the Mini comes back", async () => {
+    vi.useFakeTimers();
+    const { t, as, c } = await setup();
+    const storageId = await attachment(t);
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "a", conversationId: c, payload: { kind: "sendAttachment", storageId, filename: "photo.jpg", mimeType: "image/jpeg", isAudioMessage: false } });
+    vi.advanceTimersByTime(NOT_SENT_AFTER_MS);
+    await t.finishInProgressScheduledFunctions();
+    expect((await state(t)).outbox).toEqual([["a", "failed"]]);
+    expect(await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10, lane: "imessage" })).toEqual([]);
+  });
+
+  test("a new chat claimed after the window is expired, not created", async () => {
+    const { t, as } = await setup();
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "n", payload: { kind: "createChat", addresses: ["+15550002222"], text: "hi" } });
+    expect(await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now() + NOT_SENT_AFTER_MS, leaseMs: 1000, limit: 10, lane: "imessage" })).toEqual([]);
+    const row = await t.run((ctx) => ctx.db.query("comma_outbox").withIndex("by_clientKey", (q) => q.eq("clientKey", "n")).unique());
+    expect(row).toMatchObject({ status: "failed", error: NOT_SENT_ERROR });
+  });
+});
+
 describe("cancelSend", () => {
   test("removes a queued send's bubble and outbox row and gives the preview back", async () => {
     const { t, as, c } = await setup();
@@ -116,6 +139,15 @@ describe("cancelSend", () => {
     await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10, lane: "imessage" });
     expect(await as.mutation(api.comma.pendingSends.cancelSend, { clientKey: "k" })).toBe(false);
     expect((await state(t)).outbox).toEqual([["k", "claimed"]]);
+  });
+
+  test("discards a send that did not go out: its bubble goes and the preview comes back", async () => {
+    const { t, as, c } = await setup();
+    await send(as, c);
+    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: Date.now(), leaseMs: 1000, limit: 10, lane: "imessage" });
+    await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "k", claimToken: claim!.claimToken!, status: "failed", error: "offline" });
+    expect(await as.mutation(api.comma.pendingSends.cancelSend, { clientKey: "k" })).toBe(true);
+    expect(await state(t)).toEqual({ bubbles: [], outbox: [], last: "earlier" });
   });
 
   test("a send that never reached Convex has nothing to cancel", async () => {
