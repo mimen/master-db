@@ -51,12 +51,13 @@ type T = Awaited<ReturnType<typeof setup>>["t"];
 type As = Awaited<ReturnType<typeof setup>>["as"];
 
 /**
- * convex-test counts only jobs already marked in progress, and a job whose timer just fired stays pending until its
- * callback marks it. On a loaded runner that let settle return before an attachment download started.
+ * Runs scheduled functions one at a time. convex-test 0.0.38 lets an action's storage.store write into whichever
+ * transaction another concurrently running function holds, so two at once (a backfill and a file download) can
+ * drop a download. Ends once no job is pending: a job whose timer fired stays pending until its callback starts.
  */
 async function settle(t: T): Promise<void> {
-  for (let round = 0; round < 20; round++) {
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
+  for (let round = 0; round < 200; round++) {
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersToNextTimer());
     const jobs = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
     if (!jobs.some((job) => job.state.kind === "pending" || job.state.kind === "inProgress")) return;
   }
