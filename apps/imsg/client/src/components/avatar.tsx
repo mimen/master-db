@@ -5,9 +5,11 @@ import { StyleSheet, Text, View } from "react-native";
 import { avatarUrl, groupPhotoUrl } from "@/lib/api";
 import { initials } from "@/lib/format";
 import { useWhoIs, type Person } from "@/lib/identity";
+import type { PlatformBadge } from "@shared/platform-profile";
 import type { ChatSummary, ConversationId } from "@shared/types";
 import { useConversation } from "@/hooks/use-chat-directory";
 import { useTheme } from "@/hooks/use-theme";
+import { SourceIcon } from "./service-label";
 
 
 /**
@@ -73,7 +75,29 @@ export function avatarSlot(key: string, slots: number): number {
   return h % slots;
 }
 
-export function ChatAvatar({ chat, size }: { chat: ChatSummary; size: number }) {
+/** Where a conversation comes from, drawn on the avatar's bottom-right corner. */
+export interface AvatarSource {
+  readonly badge: PlatformBadge;
+  /** The personal mailbox rather than the work one. */
+  readonly personal?: boolean;
+}
+
+/** A conversation's avatar, with its source mark on the corner when `source` is given. */
+export function ChatAvatar({ chat, size, source }: { chat: ChatSummary; size: number; source?: AvatarSource }) {
+  const theme = useTheme();
+  if (!source) return <ChatFace chat={chat} size={size} />;
+  const corner = Math.max(13, Math.min(18, Math.round(size * 0.47)));
+  return (
+    <View style={{ width: size, height: size }}>
+      <ChatFace chat={chat} size={size} />
+      <View testID="avatar-source" style={[styles.corner, { width: corner, height: corner, borderRadius: corner / 2, backgroundColor: theme.background }]}>
+        <SourceIcon badge={source.badge} personal={source.personal} size={corner - 2} />
+      </View>
+    </View>
+  );
+}
+
+function ChatFace({ chat, size }: { chat: ChatSummary; size: number }) {
   const theme = useTheme();
   const ringColor = theme.background;
   const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
@@ -222,6 +246,8 @@ export function GroupPhotoAvatar({
 
 const styles = StyleSheet.create({
   ring: { borderRadius: 999, borderWidth: 2 },
+  // The fill is the page colour, so the mark reads as cut out of the avatar in either scheme.
+  corner: { alignItems: "center", bottom: -2, justifyContent: "center", position: "absolute", right: -2 },
   circle: {
     alignItems: "center",
     justifyContent: "center",

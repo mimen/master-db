@@ -25,7 +25,7 @@ export function deferOptions(kind: DeferKind, now = new Date()): { label: string
   ];
 }
 
-const day = (ms: number) => new Date(ms).toLocaleDateString([], { month: "short", day: "numeric" });
+export const shortDay = (ms: number) => new Date(ms).toLocaleDateString([], { month: "short", day: "numeric" });
 
 /** What Details says about a conversation's deferrals, one line each. */
 export function laterLines(later: ChatLater | undefined, now = new Date()): string[] {
@@ -33,7 +33,7 @@ export function laterLines(later: ChatLater | undefined, now = new Date()): stri
   const lines: string[] = [];
   if (later.snoozedUntil !== undefined) lines.push(`Snoozed until ${formatScheduledWhen(later.snoozedUntil, now)}`);
   if (later.returned) lines.push(later.returned.reason === "message" ? "Back: new reply" : `Snoozed until ${formatScheduledWhen(later.returned.until, now)}`);
-  if (later.followUp?.due) lines.push(`No reply since ${day(later.followUp.since)}`);
+  if (later.followUp?.due) lines.push(`No reply since ${shortDay(later.followUp.since)}`);
   else if (later.followUp) lines.push(`Follow up ${formatScheduledWhen(later.followUp.at, now)} if no reply`);
   return lines;
 }

@@ -12,14 +12,26 @@ export type Scheme = "light" | "dark";
 export type ThemeColors = (typeof Colors)[Scheme];
 
 let keyboardModality = false;
+const modalityListeners = new Set<() => void>();
+function setModality(keyboard: boolean): void {
+  if (keyboardModality === keyboard) return;
+  keyboardModality = keyboard;
+  for (const listener of modalityListeners) listener();
+}
 if (Platform.OS === "web" && typeof globalThis.document !== "undefined") {
   const doc = globalThis.document;
   doc.addEventListener("keydown", (event) => {
-    if (!event.metaKey && !event.ctrlKey && !event.altKey) keyboardModality = true;
+    if (!event.metaKey && !event.ctrlKey && !event.altKey) setModality(true);
   }, true);
-  doc.addEventListener("pointerdown", () => {
-    keyboardModality = false;
-  }, true);
+  doc.addEventListener("pointerdown", () => setModality(false), true);
+}
+
+/** True while the keyboard, not the pointer, last moved things: the `:focus-visible` rule. */
+export const keyboardDriven = (): boolean => keyboardModality;
+
+export function subscribeKeyboardDriven(listener: () => void): () => void {
+  modalityListeners.add(listener);
+  return () => void modalityListeners.delete(listener);
 }
 
 /**

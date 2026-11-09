@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { mostUrgent } from "@shared/agent-attention";
 import type { ConversationId, Message } from "@shared/types";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 
@@ -14,10 +14,13 @@ import { useToday } from "@/hooks/use-today";
 import { toggleSettleChat } from "@/hooks/use-triage-actions";
 import { openAgentPane } from "@/lib/agent-pane";
 import { agentStripState, type AgentStripState } from "@/lib/agent-strip";
+import { laterLines } from "@/lib/later-times";
+import { showToast } from "@/lib/toast";
 import { stripCopy, type StripTone } from "@/lib/state-strip";
 import { classifyToday } from "@/lib/today";
 
 import { BlurSwap } from "./motion/blur-swap";
+import { useDomTitle } from "./today-header";
 
 const MINUTE = 60_000;
 
@@ -62,35 +65,39 @@ function useAgentStrip(conversationId: ConversationId): AgentStrip | null {
   return state && chat ? { state, chatId: chat._id } : null;
 }
 
-function AgentChip({ conversationId, agent, colors }: { readonly conversationId: ConversationId; readonly agent: AgentStrip; readonly colors: ReturnType<typeof useTheme> }) {
+/** The agent's state as one icon; its words are the tooltip and the spoken label. */
+function AgentButton({ conversationId, agent, colors }: { readonly conversationId: ConversationId; readonly agent: AgentStrip; readonly colors: ReturnType<typeof useTheme> }) {
   const { copy, icon } = AGENT_CHIP[agent.state];
+  const tooltip = useDomTitle(copy);
   return (
     <Pressable
+      ref={tooltip}
       testID="agent-strip"
       accessibilityRole="button"
       accessibilityLabel={`${copy}. Open the agent`}
       onPress={() => openAgentPane(conversationId, agent.chatId)}
       hitSlop={4}
-      style={({ hovered, pressed }) => [styles.action, (hovered || pressed) && { backgroundColor: colors.rowHover }]}
+      style={({ hovered, pressed }) => [styles.iconAction, (hovered || pressed) && { backgroundColor: colors.rowHover }]}
     >
-      <Ionicons name={icon} size={14} color={agent.state === "failed" ? colors.destructive : colors.accent} />
-      <Text numberOfLines={1} style={[styles.actionText, { color: colors.text }]}>{copy}</Text>
+      <Ionicons name={icon} size={15} color={agent.state === "failed" ? colors.destructive : colors.accent} />
     </Pressable>
   );
 }
 
 /**
- * The triage state of the open conversation, sitting on top of the composer card:
- * whose turn it is and for how long, with Settle or Un-settle beside it.
+ * The one line on top of the composer: whose turn it is and for how long, Later's state, the reply alternates, and
+ * Settle or Un-settle. Why it is your turn, Today's rank and reason stay in the lead's tooltip, or a tap on touch.
  */
 export function StateStrip({
   conversationId,
   messages,
   historyComplete,
+  shelf = null,
 }: {
   readonly conversationId: ConversationId;
   readonly messages: readonly Message[];
   readonly historyComplete: boolean;
+  readonly shelf?: ReactNode;
 }) {
   const chat = useConversation(conversationId);
   const colors = useTheme();
@@ -99,46 +106,48 @@ export function StateStrip({
   const [actionHovered, setActionHovered] = useState(false);
   const agent = useAgentStrip(conversationId);
   const { view } = useToday();
-  if (!chat) return null;
-  const place = classifyToday(view, chat);
-  const today = place.at === "ranked" ? { rank: place.rank, reason: place.reason } : null;
-  const copy = stripCopy({ chat, messages, historyComplete, now, compact: !wide, today });
-  if (!copy && !agent) return null;
-  const agentChip = agent ? <AgentChip conversationId={conversationId} agent={agent} colors={colors} /> : null;
-  if (!copy) {
-    return (
-      <View testID="state-strip" style={[styles.strip, { backgroundColor: colors.strip, borderColor: colors.divider }]}>
-        {agentChip}
-      </View>
-    );
-  }
+  const place = chat ? classifyToday(view, chat) : null;
+  const today = place?.at === "ranked" ? { rank: place.rank, reason: place.reason } : null;
+  const copy = chat ? stripCopy({ chat, messages, historyComplete, now, compact: !wide, today }) : null;
+  const later = laterLines(chat?.later, new Date(now))[0] ?? null;
+  const details = [copy?.detail, copy?.today ? `#${copy.today.rank} today · ${copy.today.reason}` : null].filter((line): line is string => !!line);
+  const tooltip = useDomTitle(details.length > 0 ? details.join("\n") : null);
+  if (!chat || (!copy && !agent && !later && !shelf)) return null;
 
-  const actionLabel = copy.action === "unsettle" ? "Un-settle" : "Settle";
+  const actionLabel = copy?.action === "unsettle" ? "Un-settle" : "Settle";
   const actionName = wide ? `${actionLabel} (⌘E)` : actionLabel;
-  return (
-    <View testID="state-strip" style={[styles.strip, { backgroundColor: colors.strip, borderColor: colors.divider }]}>
+  const lead = copy || later ? (
+    <Pressable
+      ref={tooltip}
+      testID="strip-lead"
+      accessibilityRole={details.length > 0 ? "button" : "text"}
+      accessibilityLabel={[copy?.lead, later, ...details].filter(Boolean).join(". ")}
+      disabled={details.length === 0}
+      onPress={() => showToast(details.join(" · "))}
+      style={styles.leadHost}
+    >
       {/* Keyed on the state, so a settle or a new message swaps the lead in rather than cutting. */}
-      <BlurSwap swapKey={`${copy.tone}:${copy.lead}`} style={styles.swapHost}>
+      <BlurSwap swapKey={`${copy?.tone}:${copy?.lead}:${later}`}>
         <View style={styles.swap}>
-          <ToneIcon tone={copy.tone} colors={colors} />
-          <Text numberOfLines={1} style={[styles.lead, { color: copy.tone === "turn" ? colors.turn : colors.text }]}>
-            {copy.lead}
-          </Text>
-          {copy.today ? (
-            <View testID="strip-today" style={styles.today}>
-              <View style={[styles.pill, { backgroundColor: colors.backgroundElement, borderColor: colors.divider }]}>
-                <Text style={[styles.pillText, { color: colors.text }]}>#{copy.today.rank} today</Text>
-              </View>
-              <Text numberOfLines={1} style={[styles.detail, { color: colors.textSecondary }]}>{copy.today.reason}</Text>
-            </View>
-          ) : copy.detail ? (
-            <Text numberOfLines={1} style={[styles.detail, { color: colors.textSecondary }]}>{copy.detail}</Text>
+          {copy ? <ToneIcon tone={copy.tone} colors={colors} /> : <Ionicons name="time-outline" size={16} color={colors.icon} />}
+          {copy ? (
+            <Text numberOfLines={1} style={[styles.lead, { color: copy.tone === "turn" ? colors.turn : colors.text }]}>{copy.lead}</Text>
+          ) : null}
+          {later ? (
+            <Text testID="strip-later" numberOfLines={1} style={[styles.detail, { color: copy ? colors.textSecondary : colors.text }]}>{copy ? `· ${later}` : later}</Text>
           ) : null}
         </View>
       </BlurSwap>
-      {agentChip}
+    </Pressable>
+  ) : null;
+
+  return (
+    <View testID="state-strip" style={[styles.strip, { backgroundColor: colors.strip, borderColor: colors.divider }]}>
+      {lead}
+      <View style={styles.shelf}>{shelf}</View>
+      {agent ? <AgentButton conversationId={conversationId} agent={agent} colors={colors} /> : null}
       {/* Waiting has a settle action too, but the strip only offers it where it is the next step. */}
-      {copy.tone !== "waiting" && copy.action && (
+      {copy && copy.tone !== "waiting" && copy.action && (
         <Pressable
           ref={(node) => { if (Platform.OS === "web") (node as unknown as HTMLElement | null)?.setAttribute("title", actionName); }}
           testID="thread-settle"
@@ -152,7 +161,6 @@ export function StateStrip({
         >
           <Ionicons name={copy.action === "unsettle" ? "arrow-undo-outline" : "checkmark"} size={14} color={colors.text} />
           <Text style={[styles.actionText, { color: colors.text }]}>{actionLabel}</Text>
-          {wide && <Text style={[styles.kbd, { color: colors.textTertiary }]}>⌘E</Text>}
         </Pressable>
       )}
     </View>
@@ -173,7 +181,8 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
     paddingRight: 6,
   },
-  swapHost: { flex: 1, minWidth: 0 },
+  leadHost: { flexShrink: 1, minWidth: 0 },
+  shelf: { flex: 1, minWidth: 0 },
   swap: {
     alignItems: "center",
     flexDirection: "row",
@@ -182,9 +191,6 @@ const styles = StyleSheet.create({
   },
   lead: { flexShrink: 0, fontSize: 12.5, fontWeight: "600" },
   detail: { flexShrink: 1, fontSize: 12.5 },
-  today: { alignItems: "center", flexDirection: "row", flexShrink: 1, gap: 6, minWidth: 0 },
-  pill: { borderRadius: 6, borderWidth: 1, flexShrink: 0, paddingHorizontal: 6, paddingVertical: 1 },
-  pillText: { fontSize: 11, fontVariant: ["tabular-nums"], fontWeight: "600" },
   action: {
     alignItems: "center",
     borderRadius: 7,
@@ -194,5 +200,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   actionText: { fontSize: 12.5, fontWeight: "600" },
-  kbd: { fontSize: 11, fontWeight: "500" },
+  iconAction: { alignItems: "center", borderRadius: 7, height: 26, justifyContent: "center", width: 26 },
 });

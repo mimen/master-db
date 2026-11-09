@@ -33,7 +33,8 @@ test("the app opens on Today; a settle leaves a rank gap and moves progress; Upd
   await expect(page.getByTestId("today-progress")).toHaveText("0 settled · 14 to go");
 
   await rows.filter({ hasText: "Priya Shah" }).click();
-  await expect(page.getByTestId("strip-today")).toHaveText("#2 todayGuest list locks at 6 PM.");
+  // The rank and reason live in the lead's tooltip, not on the line.
+  await expect(page.getByTestId("strip-lead")).toHaveAttribute("title", /#2 today · Guest list locks at 6 PM\./);
   await page.getByTestId("thread-settle").click();
   await expect.poll(() => todayCount(page)).toBe(13);
   await expect(page.getByTestId("today-progress")).toHaveText("1 settled · 13 to go");

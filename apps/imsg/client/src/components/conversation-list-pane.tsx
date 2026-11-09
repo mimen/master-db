@@ -75,6 +75,7 @@ import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
 import { planToday, settleAllTargets, todayHeader, type TodaySectionKey } from "@/lib/today";
 import { InfoTip, TodayHeaderCard } from "./today-header";
 import { isListMode, requestFocus, subscribeListMode } from "@/lib/keyboard/controller";
+import { keyboardDriven, subscribeKeyboardDriven } from "@/components/ui/interaction";
 import { shortcutFor } from "@/lib/keyboard/registry";
 import { nextLeaving, withLeaving, type LeavingRow } from "@/lib/leaving-rows";
 import { useSyncExternalStore } from "react";
@@ -302,6 +303,8 @@ export function ConversationListPane({
     if (next.filters.type !== filters.type) onFiltersChange(next.filters);
   }, [filters, refinements, onFiltersChange]);
   const glide = useSyncExternalStore(subscribeListMode, isListMode, () => false);
+  // Glide follows the keyboard; a pointer click inside it must not leave the ring behind.
+  const keyboardNav = useSyncExternalStore(subscribeKeyboardDriven, keyboardDriven, () => false);
 
   // A row that leaves the view (settle, swipe, a reply landing) stays in its slot and collapses
   // on smooth while the rows below close the gap. Switching lens or query cuts as before.
@@ -377,14 +380,15 @@ export function ConversationListPane({
         handle={row.kind === "chat" ? handles.get(row.chat.conversationId) : undefined}
         personal={row.kind === "chat" && row.chat.route.accountId !== null && personalMail.has(row.chat.route.accountId)}
         selected={row.kind === "chat" && wide && selectedId === row.chat.conversationId}
-        keyboardFocused={row.kind === "chat" && wide && glide && selectedId === row.chat.conversationId}
+        keyboardFocused={row.kind === "chat" && wide && glide && keyboardNav && selectedId === row.chat.conversationId}
         onOpen={openRow}
         agentLens={filters.state === "agents"}
+        boldUnread={filters.state === "unresponded" || filters.state === "unread"}
         onToggleFold={toggleFold}
         onSettleAll={settleSection}
       />
     ),
-    [theme.textTertiary, leaving, dropLeaving, handles, personalMail, wide, glide, selectedId, openRow, filters.state, toggleFold, settleSection],
+    [theme.textTertiary, leaving, dropLeaving, handles, personalMail, wide, glide, keyboardNav, selectedId, openRow, filters.state, toggleFold, settleSection],
   );
   // Needs you and Unread show what happened and the next step once they empty; other lenses
   // and searches keep the plain line.
@@ -597,7 +601,7 @@ export function ConversationListPane({
  * One list cell. Memoized with primitive props so a click or a lens switch re-renders only the
  * cells whose row, selection or leave state changed, not all ~700 mounted ones.
  */
-const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, handle, personal, selected, keyboardFocused, onOpen, agentLens, onToggleFold, onSettleAll }: {
+const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, handle, personal, selected, keyboardFocused, onOpen, agentLens, boldUnread, onToggleFold, onSettleAll }: {
   readonly row: InboxRow;
   readonly gone: boolean;
   readonly onCollapsed: (key: string) => void;
@@ -608,6 +612,7 @@ const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, 
   readonly keyboardFocused: boolean;
   readonly onOpen: (chat: ChatSummary) => void;
   readonly agentLens: boolean;
+  readonly boldUnread: boolean;
   readonly onToggleFold: (key: TodaySectionKey) => void;
   readonly onSettleAll: (key: TodaySectionKey) => void;
 }) {
@@ -623,7 +628,7 @@ const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, 
             </View>
           )
         ) : (
-          <ChatRow chat={row.chat} handle={handle} personal={personal} selected={selected} keyboardFocused={keyboardFocused} onOpen={onOpen} agentLens={agentLens} today={row.today} leaving={gone} />
+          <ChatRow chat={row.chat} handle={handle} personal={personal} selected={selected} keyboardFocused={keyboardFocused} onOpen={onOpen} agentLens={agentLens} boldUnread={boldUnread} today={row.today} leaving={gone} />
         )}
       </Collapse>
     </View>

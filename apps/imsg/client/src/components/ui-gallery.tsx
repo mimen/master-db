@@ -151,7 +151,7 @@ function MotionGallery(): React.JSX.Element {
         <Button label={settled ? "Undo" : "Settle"} onPress={() => setSettled((s) => !s)} />
         <BlurSwap swapKey={settled ? "settled" : "turn"}>
           <Text style={[styles.strong, { color: settled ? theme.textSecondary : theme.text }]}>
-            {settled ? "Settled" : "Your turn for 5h"}
+            {settled ? "Settled" : "Your turn · 5h"}
           </Text>
         </BlurSwap>
       </View>

@@ -32,6 +32,7 @@ if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
     Text: ({ children }: { children: React.ReactNode }) => createElement("span", null, children),
     StyleSheet: { absoluteFill: {}, create: <T,>(styles: T) => styles },
   }));
+  mock.module("./service-label", () => ({ SourceIcon: () => null }));
   mock.module("@/lib/config", () => ({ BASE_URL: "http://photos.test" }));
   mock.module("@/lib/identity", () => ({
     convexClient: {},

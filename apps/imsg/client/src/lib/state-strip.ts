@@ -68,7 +68,7 @@ export function stripCopy({ chat, messages, historyComplete, now, compact, today
   if (!chat.flags.unresponded && !chat.flags.waiting) return { tone: "settled", lead: "Agent chat open", detail: null, action, today };
   const last = chat.lastMessage;
   if (chat.flags.waiting && last) {
-    return { tone: "waiting", lead: `Waiting on ${firstName(chat)} ${compactAge(now - last.dateCreated)}`, detail: null, action, today };
+    return { tone: "waiting", lead: `Waiting on ${firstName(chat)} · ${compactAge(now - last.dateCreated)}`, detail: null, action, today };
   }
 
   // Your turn began with the first inbound message after your newest reply.
@@ -80,5 +80,5 @@ export function stripCopy({ chat, messages, historyComplete, now, compact, today
     : historyComplete && messages.length > 0
       ? "You haven't replied yet"
       : null;
-  return { tone: "turn", lead: `Your turn for ${compactAge(now - since)}`, detail: replied, action, today };
+  return { tone: "turn", lead: `Your turn · ${compactAge(now - since)}`, detail: replied, action, today };
 }

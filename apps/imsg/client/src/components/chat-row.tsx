@@ -1,5 +1,4 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import Svg, { Path } from "react-native-svg";
 import { tiebreakLabel, type HandleTiebreak } from "@shared/address";
 import { settleActionFor } from "@shared/chat-state";
 import { conversationRoute } from "@shared/imessage";
@@ -30,17 +29,16 @@ import { pressAnchor } from "@/lib/action-sheet";
 import { formatListTimestamp } from "@/lib/format";
 import { AGENT_ATTENTION, agentStatusLine, draftPreview } from "@/lib/inbox-model";
 import { compactAge } from "@/lib/turn-age";
+import { rowChip, type RowChip } from "@/lib/row-chip";
 import { RowAge } from "./conversations/row-age";
 import { ROW_SIGNAL_SIZE, UNREAD_DOT_SIZE, rowSignal } from "@/lib/row-signal";
 import { SWIPE_THRESHOLD } from "@/lib/row-swipe";
 import { hapticCommit } from "@/lib/haptics";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 
-import { AgentBadge } from "./agent-badge";
 import { ChatAvatar } from "./avatar";
-import { HandleIcon, SourceIcon } from "./service-label";
+import { HandleIcon } from "./service-label";
 import { RowPan } from "./lazy-surfaces";
-import { FAVORITE_GOLD } from "@/constants/theme";
 
 /** The Agents lens status word's color: the attention's own, so the line reads like the badge. */
 const STATUS_COLOR = {
@@ -51,13 +49,25 @@ const STATUS_COLOR = {
   open: "textTertiary",
 } as const satisfies Record<NonNullable<ChatSummary["agent"]>["attention"], keyof ReturnType<typeof useTheme>>;
 
-function RowSignal({ chat }: { readonly chat: ChatSummary }): React.JSX.Element {
+/** The trailing slot: the unread dot, or nothing. The slot keeps its width so the hover More button lands in place. */
+function RowSignal({ dot }: { readonly dot: boolean }): React.JSX.Element {
   const theme = useTheme();
-  const unread = rowSignal(chat) === "unread";
   return (
     <View aria-hidden style={styles.signal}>
-      {unread ? <View testID="unread-dot" style={[styles.unreadDot, { backgroundColor: theme.accent }]} /> : null}
+      {dot ? <View testID="unread-dot" style={[styles.unreadDot, { backgroundColor: theme.accent }]} /> : null}
     </View>
+  );
+}
+
+/** One tinted chip at the head of the preview line: the agent's state, or where Later left the conversation. */
+function PreviewChip({ chip, compact }: { readonly chip: RowChip; readonly compact: boolean }): React.JSX.Element {
+  const theme = useTheme();
+  const color = chip.tone === "neutral" ? theme.textSecondary : theme[chip.tone];
+  return (
+    <Text testID="row-chip" style={[styles.chip, { color, backgroundColor: chip.tone === "neutral" ? theme.field : `${color}24`, fontSize: compact ? 11 : 13 }]}>
+      <Ionicons name={chip.icon} size={compact ? 10 : 12} color={color} />
+      {` ${chip.label}`}
+    </Text>
   );
 }
 
@@ -113,6 +123,7 @@ function ChatRowInner({
   chat,
   handle,
   personal = false,
+  boldUnread = false,
   selected,
   keyboardFocused = false,
   onOpen,
@@ -125,8 +136,10 @@ function ChatRowInner({
   handle?: HandleTiebreak;
   /** A thread in the personal mailbox rather than the work one. */
   personal?: boolean;
+  /** A lens that already means unread or attention: unread shows as a semibold name, not the dot. */
+  boldUnread?: boolean;
   selected: boolean;
-  /** Glide-mode cursor: the persimmon ring on the selected row while navigating. */
+  /** Glide-mode cursor: the blue ring on the selected row while the keyboard drives the list. */
   keyboardFocused?: boolean;
   onOpen: (chat: ChatSummary) => void;
   /** The Agents lens: the row also shows the agent chat's title and status, and its time is the agent's. */
@@ -169,6 +182,8 @@ function ChatRowInner({
   if (today?.rank != null) spoken.unshift(`number ${today.rank} today`);
   if (today?.reason) spoken.push(today.reason);
   const source = platformBadge(conversationRoute(chat));
+  const chip = rowChip(chat, { agentLens });
+  const signal = rowSignal(chat, { boldUnread });
   spoken.push(sourceLabel(source, personal), handle ? tiebreakLabel(handle) : null);
 
   const contextRef = useWebContextMenu<typeof Pressable>((anchor) => openMenu(chat, anchor));
@@ -248,20 +263,18 @@ function ChatRowInner({
         <Text testID="today-rank" style={[styles.rank, { color: theme.textTertiary, paddingTop: compact ? 2 : 0 }]}>{today.rank ?? ""}</Text>
       ) : null}
       <View style={today && compact ? styles.todayAvatar : null}>
-        <ChatAvatar chat={chat} size={compact ? 32 : 44} />
-        {chat.agent ? <AgentBadge attention={chat.agent.attention} size={compact ? 16 : 19} /> : null}
+        <ChatAvatar chat={chat} size={compact ? 32 : 44} source={{ badge: source, personal }} />
       </View>
       <View style={styles.content}>
         <View style={styles.topLine}>
           <View style={styles.nameGroup}>
-            <Text numberOfLines={1} style={[styles.name, { color: theme.text, fontSize: compact ? 13 : 17 }]}>
+            <Text numberOfLines={1} style={[styles.name, { color: theme.text, fontSize: compact ? 13 : 17 }, boldUnread && signal !== "bold" && styles.nameRead]}>
               {chat.displayName}
             </Text>
-            <SourceIcon badge={source} personal={personal} size={compact ? 14 : 16} decorative />
             {handle ? <HandleIcon tiebreak={handle} size={compact ? 12 : 14} decorative /> : null}
             {/* Private CRM layer (favorite/priority). Mirrors the star on favorited contacts. */}
             {chat.crm?.is_favorite && (
-              <Ionicons name="star" size={12} color={FAVORITE_GOLD} accessibilityLabel="Favorite" style={styles.favoriteStar} />
+              <Ionicons name="star" size={12} color={theme.textTertiary} accessibilityLabel="Favorite" style={styles.favoriteStar} />
             )}
           </View>
           {/* Trailing slot: the time, or the hover actions on desktop. */}
@@ -308,6 +321,8 @@ function ChatRowInner({
             numberOfLines={2}
             style={[styles.messagePreview, { color: theme.textSecondary, fontSize: compact ? 12.5 : 15, lineHeight: compact ? 17 : 20 }]}
           >
+            {chip ? <PreviewChip chip={chip} compact={compact} /> : null}
+            {chip ? " " : null}
             {agent && status ? (
               <>
                 {status.word ? <Text style={[styles.statusWord, { color: theme[STATUS_COLOR[agent.attention]] }]}>{status.word}</Text> : null}
@@ -345,17 +360,12 @@ function ChatRowInner({
             </Pressable>
           ) : (
             <View style={styles.messageSignal}>
-              <RowSignal chat={chat} />
+              <RowSignal dot={signal === "dot"} />
             </View>
           )}
         </View>
         {today?.reason ? (
-          <View testID="today-reason" style={styles.reason}>
-            <Svg width={10} height={10} viewBox="0 0 10 10" style={styles.spark} aria-hidden>
-              <Path fill={theme.textTertiary} d="M5 0c.3 2.6 1.4 3.7 5 5-3.6 1.3-4.7 2.4-5 5-.3-2.6-1.4-3.7-5-5 3.6-1.3 4.7-2.4 5-5Z" />
-            </Svg>
-            <Text numberOfLines={2} style={[styles.reasonText, { color: theme.textTertiary, fontSize: compact ? 11.5 : 14, lineHeight: compact ? 15 : 19 }]}>{today.reason}</Text>
-          </View>
+          <Text testID="today-reason" numberOfLines={1} style={[styles.reason, { color: theme.textTertiary, fontSize: compact ? 11 : 13, lineHeight: compact ? 15 : 18 }]}>{today.reason}</Text>
         ) : null}
       </View>
     </Pressable>
@@ -444,6 +454,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     minWidth: 0,
   },
+  nameRead: { fontWeight: "400" },
+  chip: { borderRadius: 4, fontWeight: "600", paddingHorizontal: 4 },
   time: {
     flexShrink: 0,
     fontVariant: ["tabular-nums"],
@@ -467,20 +479,15 @@ const styles = StyleSheet.create({
     gap: 7,
     marginTop: 1,
   },
+  // Today's rank and reason are context, not signal: tertiary ink, dimmed further.
   rank: {
     fontSize: 11,
     fontVariant: ["tabular-nums"],
+    opacity: 0.6,
     textAlign: "right",
     width: 16,
   },
-  reason: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 5,
-    marginTop: 3,
-  },
-  spark: { flexShrink: 0, marginTop: 2.5 },
-  reasonText: { flex: 1, minWidth: 0 },
+  reason: { marginTop: 2, opacity: 0.8 },
   messageSignal: {
     alignSelf: "flex-start",
   },

@@ -24,7 +24,7 @@ describe("stripCopy", () => {
       messages: [msg(friday - H, false), msg(friday, true), msg(NOW - 5 * H, false), msg(NOW - H, false)],
       historyComplete: false, now: NOW, compact: false,
     });
-    expect(copy).toEqual({ tone: "turn", lead: "Your turn for 5h", detail: "You last replied yesterday", action: "settle", today: null });
+    expect(copy).toEqual({ tone: "turn", lead: "Your turn · 5h", detail: "You last replied yesterday", action: "settle", today: null });
   });
 
   test("a ranked Today conversation carries its rank and reason in place of the reply line", () => {
@@ -34,7 +34,7 @@ describe("stripCopy", () => {
       today: { rank: 3, reason: "Guest list locks at 6 PM." },
     });
     expect(copy?.today).toEqual({ rank: 3, reason: "Guest list locks at 6 PM." });
-    expect(copy?.lead).toBe("Your turn for 1h");
+    expect(copy?.lead).toBe("Your turn · 1h");
   });
 
   test("phone wording and a weekday older than yesterday", () => {
@@ -51,7 +51,7 @@ describe("stripCopy", () => {
     const input = { chat: chat({ unresponded: true }, { at: NOW - 40 * 60_000, fromMe: false }), messages: [msg(NOW - 40 * 60_000, false)], now: NOW, compact: false };
     expect(stripCopy({ ...input, historyComplete: true })?.detail).toBe("You haven't replied yet");
     expect(stripCopy({ ...input, historyComplete: false })?.detail).toBeNull();
-    expect(stripCopy({ ...input, historyComplete: true })?.lead).toBe("Your turn for 40m");
+    expect(stripCopy({ ...input, historyComplete: true })?.lead).toBe("Your turn · 40m");
   });
 
   test("group events never count as a reply or the start of a turn", () => {
@@ -60,12 +60,12 @@ describe("stripCopy", () => {
       messages: [msg(NOW - 9 * H, true, true), msg(NOW - 3 * H, false)],
       historyComplete: true, now: NOW, compact: false,
     });
-    expect(copy).toMatchObject({ lead: "Your turn for 3h", detail: "You haven't replied yet" });
+    expect(copy).toMatchObject({ lead: "Your turn · 3h", detail: "You haven't replied yet" });
   });
 
   test("waiting names whose move it is", () => {
     const copy = stripCopy({ chat: chat({ waiting: true }, { at: NOW - 2 * 24 * H, fromMe: true }), messages: [], historyComplete: false, now: NOW, compact: false });
-    expect(copy).toMatchObject({ tone: "waiting", lead: "Waiting on Tracy 2d", detail: null });
+    expect(copy).toMatchObject({ tone: "waiting", lead: "Waiting on Tracy · 2d", detail: null });
   });
 
   test("settled offers un-settle and says what brings it back", () => {
