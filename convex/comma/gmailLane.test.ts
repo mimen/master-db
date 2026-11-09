@@ -265,3 +265,56 @@ describe("archive from Comma", () => {
     await expect(as.mutation(api.comma.outbox.enqueue, { clientKey: "a1", conversationId: imessage, payload: { kind: "archive" } })).rejects.toThrow("Only a mailbox archives");
   });
 });
+
+describe("two mailboxes", () => {
+  const PERSONAL = "miladmaaan@gmail.com";
+
+  /** The workspace mailbox from `connected`, and a gmail.com one holding the same thread under the same Gmail ids. */
+  async function twoMailboxes() {
+    const workspace = await connected();
+    const { t } = workspace;
+    const credentials = await sealCredentials({ refreshToken: REFRESH_TOKEN, accessToken: "ya29.seeded", expiresAt: Date.now() + 3_600_000 }, `gmail:${PERSONAL}`);
+    const personalId = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("comma_accounts", {
+        platform: "gmail", externalId: PERSONAL, label: PERSONAL, selfHandles: [PERSONAL], health: "ok", createdAt: 2, credentials,
+        gmailGrant: { app: "personal", grantedAt: Date.now() },
+      });
+      await ctx.db.insert("comma_sync_state", { accountId: id, key: "gmail:history", cursor: "1000", updatedAt: 1 });
+      return id;
+    });
+    await t.action(internal.comma.gmailSync.backstop, {});
+    const threads = await t.run(async (ctx) => (await ctx.db.query("comma_conversations").collect()).filter((row) => row.gmail?.threadId === "t-doors"));
+    const personal = threads.find((row) => row.accountId === personalId)!;
+    const personalMessages = () => t.run(async (ctx) => await ctx.db.query("comma_messages")
+      .withIndex("by_conversation_date", (q) => q.eq("conversationId", personal._id)).collect());
+    return { ...workspace, personalId, threads, personal, personalMessages };
+  }
+
+  test("each mailbox keeps its own thread for the same Gmail ids, and a reply goes out from the thread's mailbox", async () => {
+    const { t, as, accountId, personalId, threads, personal, personalMessages, messages } = await twoMailboxes();
+    expect(threads.map((row) => row.accountId).sort()).toEqual([accountId, personalId].sort());
+    expect((await personalMessages()).map((row) => [row.guid, row.accountId])).toEqual([["m0", personalId], ["m1", personalId]]);
+    expect((await messages()).map((row) => [row.guid, row.accountId])).toEqual([["m0", accountId], ["m1", accountId]]);
+
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "p1", conversationId: personal._id, payload: reply("See you at 8.") });
+    await settle(t);
+    const { headers } = parseRfc822(google.sent[0]!.raw);
+    expect(headers.From).toBe(PERSONAL);
+    expect(headers["Message-ID"]).toBe("<comma.p1@gmail.com>");
+    expect((await personalMessages()).map((row) => row.guid)).toEqual(["m0", "m1", "sent-1"]);
+    expect((await messages()).map((row) => row.guid)).toEqual(["m0", "m1"]);
+  });
+
+  test("one mailbox failing in the backstop leaves the other syncing, and the run still reports the failure", async () => {
+    const { t, accountId, personalMessages, messages } = await twoMailboxes();
+    const unreadable = await sealCredentials({ refreshToken: REFRESH_TOKEN, accessToken: "x", expiresAt: 0 }, "gmail:someone-else");
+    await t.run((ctx) => ctx.db.patch(accountId, { credentials: unreadable }));
+    google.deliver({
+      id: "m2", threadId: "t-doors", labelIds: ["INBOX"], internalDate: Date.now(), text: "Running late.",
+      headers: { From: `Sam Lee <${SAM}>`, To: MAILBOX, Subject: "Re: Doors", "Message-ID": "<sam-2@venue.test>" },
+    });
+    await expect(t.action(internal.comma.gmailSync.backstop, {})).rejects.toThrow("1 mailbox(es) failed");
+    expect((await personalMessages()).map((row) => row.guid)).toEqual(["m0", "m1", "m2"]);
+    expect((await messages()).map((row) => row.guid)).toEqual(["m0", "m1"]);
+  });
+});

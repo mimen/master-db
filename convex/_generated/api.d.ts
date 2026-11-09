@@ -201,9 +201,11 @@ export declare const api: {
           _id: Id<"comma_accounts">;
           connected: boolean;
           createdAt: number;
+          gmailApp?: "workspace" | "personal";
           health: "ok" | "needsAttention";
           label: string;
           platform: "imessage" | "slack" | "gmail";
+          reconnectBy?: number;
         }>
       >;
     };
@@ -565,7 +567,12 @@ export declare const api: {
         { accountId: Id<"comma_accounts"> },
         null
       >;
-      startGmailConnect: FunctionReference<"action", "public", {}, string>;
+      startGmailConnect: FunctionReference<
+        "action",
+        "public",
+        { app?: "workspace" | "personal" },
+        string
+      >;
     };
     history: {
       messageWindow: FunctionReference<
@@ -5128,6 +5135,7 @@ export declare const internal: {
         "internal",
         { accountId: Id<"comma_accounts"> },
         {
+          app: "workspace" | "personal";
           credentials?: { ciphertext: string; iv: string; keyVersion: number };
           externalId: string;
         } | null
@@ -5136,6 +5144,7 @@ export declare const internal: {
         "mutation",
         "internal",
         {
+          app: "workspace" | "personal";
           credentials: { ciphertext: string; iv: string; keyVersion: number };
           email: string;
           selfHandles: Array<string>;
@@ -5578,6 +5587,12 @@ export declare const internal: {
         { cursor: string | null; dryRun: boolean; limit?: number },
         { changed: number; cursor: string; isDone: boolean; scanned: number }
       >;
+      backfillReactionKeysPage: FunctionReference<
+        "mutation",
+        "internal",
+        { cursor: string | null; dryRun: boolean; limit?: number },
+        { changed: number; cursor: string; isDone: boolean; scanned: number }
+      >;
       backfillSlackThreadsPage: FunctionReference<
         "mutation",
         "internal",
@@ -5600,6 +5615,12 @@ export declare const internal: {
         }>
       >;
       runKindsBackfill: FunctionReference<
+        "action",
+        "internal",
+        { dryRun: boolean; limit?: number },
+        { changed: number; scanned: number }
+      >;
+      runReactionKeysBackfill: FunctionReference<
         "action",
         "internal",
         { dryRun: boolean; limit?: number },
@@ -7428,7 +7449,7 @@ export declare const internal: {
         "mutation",
         "internal",
         { platform: "imessage" | "slack" | "gmail"; state: string },
-        { verifier?: string } | null
+        { gmailApp?: "workspace" | "personal"; verifier?: string } | null
       >;
       disconnect: FunctionReference<
         "mutation",
@@ -7441,6 +7462,7 @@ export declare const internal: {
         "internal",
         {
           expiresAt: number;
+          gmailApp?: "workspace" | "personal";
           platform: "imessage" | "slack" | "gmail";
           state: string;
           verifier?: string;

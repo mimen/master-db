@@ -399,12 +399,21 @@ export const watch = internalAction({
   },
 });
 
+/** Runs `work` for every connected mailbox. One mailbox failing does not keep the others from their turn. */
+async function eachMailbox(ctx: ActionCtx, work: (ctx: ActionCtx, accountId: Id<"comma_accounts">) => Promise<void>): Promise<void> {
+  const failures: unknown[] = [];
+  for (const accountId of await ctx.runQuery(internal.comma.gmailSync.mailboxes, {})) {
+    await work(ctx, accountId).catch((error: unknown) => failures.push(error));
+  }
+  if (failures.length) throw new AggregateError(failures, `${failures.length} mailbox(es) failed`);
+}
+
 /** The daily cron: renews every mailbox's watch, days before it lapses. */
 export const renewWatches = internalAction({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
-    for (const accountId of await ctx.runQuery(internal.comma.gmailSync.mailboxes, {})) await watchMailbox(ctx, accountId);
+    await eachMailbox(ctx, watchMailbox);
     return null;
   },
 });
@@ -414,7 +423,7 @@ export const backstop = internalAction({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
-    for (const accountId of await ctx.runQuery(internal.comma.gmailSync.mailboxes, {})) await syncMailbox(ctx, accountId);
+    await eachMailbox(ctx, syncMailbox);
     return null;
   },
 });

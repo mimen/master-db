@@ -11,6 +11,12 @@ export const platform = v.union(v.literal("imessage"), v.literal("slack"), v.lit
 
 /** One signed-in identity on a platform: an iMessage Mac, a Slack workspace, a mailbox. Credentials arrive with OAuth. */
 export const accountHealth = v.union(v.literal("ok"), v.literal("needsAttention"));
+/**
+ * The Google OAuth app a mailbox connected through. `workspace` is the internal app for the AUF Workspace, whose grants
+ * last; `personal` is the external app in Testing mode for a gmail.com mailbox, whose grants Google ends after 7 days.
+ */
+export const gmailApp = v.union(v.literal("workspace"), v.literal("personal"));
+export type GmailApp = Infer<typeof gmailApp>;
 /** An OAuth token, AES-GCM encrypted under COMMA_TOKEN_KEY (convex/comma/credentials.ts). Only internal actions open it. */
 export const sealedCredentials = v.object({ keyVersion: v.number(), iv: v.string(), ciphertext: v.string() });
 export const accountFields = {
@@ -26,6 +32,8 @@ export const accountFields = {
   credentials: v.optional(sealedCredentials),
   /** Slack channels whose top-level messages Comma keeps. Elsewhere it keeps only DMs and Milad's threads. */
   slackChannels: v.optional(v.array(v.string())),
+  /** The Google app a mailbox last connected through, and when. Absent on a mailbox from before G4: the workspace app. */
+  gmailGrant: v.optional(v.object({ app: gmailApp, grantedAt: v.number() })),
 };
 
 /** A Slack event_id already received, so a retry is dropped. The backstop prunes old ones. */
@@ -36,6 +44,8 @@ export const oauthStateFields = {
   state: v.string(), platform, expiresAt: v.number(),
   /** Google's PKCE code verifier; the callback sends it with the code. */
   verifier: v.optional(v.string()),
+  /** The Google app the consent URL named; the callback exchanges the code with the same one. */
+  gmailApp: v.optional(gmailApp),
 };
 
 /**

@@ -33,6 +33,8 @@ export class FakeGmail {
   /** Access tokens minted so far; the newest is live, older ones expire. */
   readonly accessTokens: string[] = [];
   revokedRefresh = false;
+  /** The address the profile answers, so a test can connect a second mailbox. */
+  mailbox = MAILBOX;
   /** The refresh grant answers this error instead of a token. */
   refreshError: string | null = null;
   private minted = 0;
@@ -60,7 +62,7 @@ export class FakeGmail {
       if (call.form.token === REFRESH_TOKEN) this.revokedRefresh = true;
       return { body: {} };
     });
-    this.on("GET", /\/users\/me\/profile$/, () => ({ body: { emailAddress: MAILBOX, historyId: String(this.historyId) } }));
+    this.on("GET", /\/users\/me\/profile$/, () => ({ body: { emailAddress: this.mailbox, historyId: String(this.historyId) } }));
     this.on("GET", /\/users\/me\/threads$/, (call) => this.listThreads(call));
     this.on("GET", /\/users\/me\/threads\/[^/]+$/, (call) => this.thread(call));
     this.on("GET", /\/users\/me\/history$/, (call) => this.listHistory(call));
@@ -298,5 +300,7 @@ export function stubGmailEnv(): void {
   vi.stubEnv("GMAIL_PUSH_TOPIC", PUSH_TOPIC);
   vi.stubEnv("GOOGLE_CLIENT_ID", "google-client-id");
   vi.stubEnv("GOOGLE_CLIENT_SECRET", "google-client-secret");
+  vi.stubEnv("GOOGLE_PERSONAL_CLIENT_ID", "google-personal-client-id");
+  vi.stubEnv("GOOGLE_PERSONAL_CLIENT_SECRET", "google-personal-client-secret");
   vi.stubEnv("COMMA_TOKEN_KEY", `1:${btoa(String.fromCharCode(...new Uint8Array(32).fill(7)))}`);
 }

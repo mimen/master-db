@@ -4,9 +4,10 @@ import { addressesMatch, stripServiceSuffix } from "../../apps/imsg/shared/addre
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
-import { accountHealth, platform, type CommaPlatform } from "../schema/comma/validators";
+import { accountHealth, gmailApp, platform, type CommaPlatform } from "../schema/comma/validators";
 
 import { IMESSAGE_ACCOUNT } from "./conversationIdentity";
+import { reconnectBy } from "./googleAuth";
 import type { AccountScope } from "./messageShape";
 
 /**
@@ -86,13 +87,20 @@ export const listAccounts = query({
   args: {},
   returns: v.array(v.object({
     _id: v.id("comma_accounts"), platform, label: v.string(), health: accountHealth, connected: v.boolean(), createdAt: v.number(),
+    /** A mailbox's Google app, and when its grant ends where Google ends grants. */
+    gmailApp: v.optional(gmailApp), reconnectBy: v.optional(v.number()),
   })),
   handler: async (ctx) => {
     await assertAllowed(ctx);
-    return (await ctx.db.query("comma_accounts").collect()).map((account) => ({
-      _id: account._id, platform: account.platform, label: account.label, health: account.health, createdAt: account.createdAt,
-      // The iMessage account has no token: the Mini's bridge is its connection.
-      connected: account.platform === "imessage" || account.credentials !== undefined,
-    }));
+    return (await ctx.db.query("comma_accounts").collect()).map((account) => {
+      const ends = account.credentials ? reconnectBy(account.gmailGrant) : undefined;
+      return {
+        _id: account._id, platform: account.platform, label: account.label, health: account.health, createdAt: account.createdAt,
+        // The iMessage account has no token: the Mini's bridge is its connection.
+        connected: account.platform === "imessage" || account.credentials !== undefined,
+        ...(account.platform === "gmail" ? { gmailApp: account.gmailGrant?.app ?? "workspace" as const } : {}),
+        ...(ends !== undefined ? { reconnectBy: ends } : {}),
+      };
+    });
   },
 });
