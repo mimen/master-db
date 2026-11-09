@@ -104,10 +104,19 @@ describe("bare keys and glide (list) mode", () => {
   test("the deleted bare action keys match nothing, in glide or out of it", () => {
     for (const listMode of [false, true]) {
       setListMode(listMode);
-      for (const key of ["e", "u", "z", "c", "h", "/"]) {
+      for (const key of ["e", "u", "z", "c", "/"]) {
         expect(matchBinding(stroke({ key }))).toBeNull();
       }
       expect(matchBinding(stroke({ key: "?", shiftKey: true }))).toBeNull();
+    }
+  });
+
+  test("H is Later, Superhuman's key, and like j/k only outside a text field", () => {
+    for (const listMode of [false, true]) {
+      setListMode(listMode);
+      const binding = matchBinding(stroke({ key: "h" }));
+      expect(binding?.commandId).toBe("conversation.later");
+      expect(binding?.allowInEditable).toBe(false);
     }
   });
 

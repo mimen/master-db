@@ -22,7 +22,9 @@ import { advanceTarget, publishQueuePosition, queueOrder, queuePosition, useRend
 import { traceTriage } from "@/lib/triage-trace";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { openAgentPane } from "@/lib/agent-pane";
+import { useActionSheet } from "@/lib/action-sheet";
 import { markChatUnread, undoLastAction } from "@/lib/chat-actions";
+import { openDeferMenu } from "@/lib/later";
 import { DEFAULT_INBOX_FILTERS, desktopInboxTitle } from "@/lib/inbox-model";
 import {
   getListAdapter,
@@ -238,6 +240,7 @@ export function MessagesWorkspace({
   // React Compiler bail on this entire screen, and the readers are all keyboard
   // handlers that run well after commit.
   const agentEnabled = useAgentEnabled();
+  const showSheet = useActionSheet();
   const overlaysRef = useRef({ utilityOpen, agentEnabled });
   useEffect(() => {
     selectedRef.current = selected;
@@ -282,6 +285,16 @@ export function MessagesWorkspace({
           return;
         }
         markChatUnread(sel, () => showToast("Marked unread — ⌘⇧Z to undo"));
+      },
+      deferSelected: (kind) => {
+        const sel = selectedRef.current;
+        if (!sel) {
+          showToast("Select a conversation first");
+          return;
+        }
+        // A snooze takes the row out of every lens but All and Drafts.
+        const leaves = kind === "later" && stateRef.current !== "all" && stateRef.current !== "drafts";
+        openDeferMenu(showSheet, sel, kind, { onPicked: leaves ? () => getListAdapter()?.selectNeighborOf(sel.conversationId) : undefined });
       },
       toggleDetails: () => {
         const sel = selectedRef.current;
@@ -340,7 +353,7 @@ export function MessagesWorkspace({
       setKeyboardRuntime(null);
       setListMode(false);
     };
-  }, [active, wide, refresh, closeTopSurface, closeUtility, dispatch, openHelp, openPalette]);
+  }, [active, wide, refresh, closeTopSurface, closeUtility, dispatch, openHelp, openPalette, showSheet]);
 
   const list = (
     <ConversationListPane
