@@ -26,13 +26,23 @@ type GmailMessageValue = Infer<typeof gmailMessageValue>;
 type Header = { name: string; value: string };
 type RawThread = { messages?: (RawGmailMessage & { payload?: { headers?: Header[] } })[] };
 
-/** A 4xx (a 429 included) is Google turning the request away. A 5xx or a lost answer may come after Gmail acted. */
+/** Waits before each retry of a rate-limited request. A backfill can hold the mailbox's per-user quota for a while. */
+const RATE_LIMIT_WAITS_MS = [2_000, 5_000, 10_000];
+
+/**
+ * A 4xx (a 429 included) is Google turning the request away. A 5xx or a lost answer may come after Gmail acted.
+ * A rate limit is also a refusal, so it is safe to try again; the send fails only if the limit outlasts the waits.
+ */
 async function call<T>(url: string, init: Parameters<typeof googleApi>[1]): Promise<T> {
-  try {
-    return await googleApi<T>(url, init);
-  } catch (error) {
-    if (error instanceof GoogleApiError && error.status < 500) throw new NotSentError(error.message);
-    throw error;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await googleApi<T>(url, init);
+    } catch (error) {
+      if (!(error instanceof GoogleApiError && error.status < 500)) throw error;
+      const wait = error.rateLimited ? RATE_LIMIT_WAITS_MS[attempt] : undefined;
+      if (wait === undefined) throw new NotSentError(error.message);
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
   }
 }
 
