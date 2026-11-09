@@ -4,7 +4,7 @@ import type { FunctionArgs, FunctionReference, FunctionReturnType } from "convex
 import { attentionOf } from "@shared/platform-profile";
 import type { ConversationId } from "@shared/types";
 import { agentApi } from "./agent-api";
-import { commaApi, todayApi, triageApi } from "./convex-api";
+import { commaApi, laterApi, todayApi, triageApi } from "./convex-api";
 import { watchCommandVia, type ResultCommandClient } from "./convex-commands";
 
 /**
@@ -31,6 +31,10 @@ export const rowAfter = {
   },
   pin: (row: Row, pinned: boolean): Row => ({ ...row, flags: { ...row.flags, pinned } }),
   markUnread: (row: Row): Row => ({ ...row, flags: { ...row.flags, unread: true } }),
+  snooze: (row: Row, until: number): Row => ({
+    ...row, unreadCount: 0, flags: { ...row.flags, unresponded: false, waiting: false, unread: false },
+    later: { ...(row.later?.followUp ? { followUp: row.later.followUp } : {}), snoozedUntil: until },
+  }),
   read: (row: Row, at: number): Row => {
     const unreadCount = at >= row.lastMessageAt ? 0 : row.unreadCount;
     return { ...row, unreadCount, flags: { ...row.flags, unread: unreadCount > 0 } };
@@ -72,6 +76,7 @@ export const optimistic = {
   settleAgents: ((store, { conversationId }) => dropAgentChats(store, conversationId)) satisfies OptimisticUpdate<FunctionArgs<typeof agentApi.settleConversationAgents>>,
   pin: ((store, { conversationId, pinned }) => patchRow(store, conversationId, (row) => rowAfter.pin(row, pinned))) satisfies OptimisticUpdate<FunctionArgs<typeof triageApi.setPinned>>,
   markUnread: ((store, { conversationId }) => patchRow(store, conversationId, rowAfter.markUnread)) satisfies OptimisticUpdate<FunctionArgs<typeof triageApi.markUnread>>,
+  snooze: ((store, { conversationId, until }) => patchRow(store, conversationId, (row) => rowAfter.snooze(row, until))) satisfies OptimisticUpdate<FunctionArgs<typeof laterApi.snooze>>,
   read: ((store, { conversationId, at }) => patchRow(store, conversationId, (row) => rowAfter.read(row, at))) satisfies OptimisticUpdate<FunctionArgs<typeof triageApi.markRead>>,
 };
 
@@ -97,6 +102,19 @@ export function conversationStateVia(client: ConversationStateClient) {
     },
     async markUnread(conversationId: ConversationId): Promise<void> {
       await client.mutation(triageApi.markUnread, { conversationId }, { optimisticUpdate: optimistic.markUnread });
+    },
+    /** Later: out of every queue until `until`, or back early on a new message. */
+    async snooze(conversationId: ConversationId, until: number): Promise<void> {
+      await client.mutation(laterApi.snooze, { conversationId, until }, { optimisticUpdate: optimistic.snooze });
+    },
+    async unsnooze(conversationId: ConversationId): Promise<void> {
+      await client.mutation(laterApi.unsnooze, { conversationId });
+    },
+    async followUp(conversationId: ConversationId, at: number): Promise<void> {
+      await client.mutation(laterApi.setFollowUp, { conversationId, at });
+    },
+    async clearFollowUp(conversationId: ConversationId): Promise<void> {
+      await client.mutation(laterApi.clearFollowUp, { conversationId });
     },
     /** Reads in Convex at once; resolves when the Mini has sent iMessage's read receipt, and rejects if it could not. */
     async read(conversationId: ConversationId): Promise<void> {

@@ -28,6 +28,7 @@ import { useConversation } from "@/hooks/use-chat-directory";
 import { useTheme } from "@/hooks/use-theme";
 import { useToday } from "@/hooks/use-today";
 import { onTriageSettling, toggleSettleChat } from "@/hooks/use-triage-actions";
+import { useActionSheet } from "@/lib/action-sheet";
 import { openAgentPane } from "@/lib/agent-pane";
 import { markChatUnread, readChat, undoLastAction } from "@/lib/chat-actions";
 import { conversationToChat } from "@/lib/convex-adapters";
@@ -38,6 +39,7 @@ import { openExternalUrl } from "@/lib/external-link";
 import { useLightbox } from "@/lib/lightbox";
 import { isShown, registerEscapeCloser, runEscapeClosers, setKeyboardRuntime } from "@/lib/keyboard/controller";
 import { EMAIL_SANDBOX, emailDocument, foldQuotes, messageFiles, openByDefault, threadFiles, type MailFile } from "@/lib/mail";
+import { openDeferMenu } from "@/lib/later";
 import { inLens, regularSenders, type MailLens } from "@/lib/mail-lens";
 import { setMailSelection } from "@/lib/mail-selection";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
@@ -103,6 +105,7 @@ export function MailWorkspace({ wide, active = false }: { readonly wide: boolean
   // Keyboard (docs/keyboard-design.md), the way Contacts and Messages register theirs: ⌘E archives the open thread,
   // j/k walk the list, ⌘J asks the agent, Esc closes what is on top. Read through refs, so a key acts on current state.
   const { closeTopSurface, closeUtility, openHelp, openPalette } = useDesktopShellContext();
+  const showSheet = useActionSheet();
   const agentOpen = useDesktopShellState((state) => state.utility?.kind === "agent" && state.utility.workspace === "mail");
   const agentEnabled = useAgentEnabled();
   const selectedChat = useConversation(selectedId);
@@ -155,6 +158,10 @@ export function MailWorkspace({ wide, active = false }: { readonly wide: boolean
         const chat = thread();
         if (chat) markChatUnread(chat, () => showToast("Marked unread — ⌘⇧Z to undo"));
       },
+      deferSelected: (kind) => {
+        const chat = thread();
+        if (chat) openDeferMenu(showSheet, chat, kind);
+      },
       toggleDetails: () => undefined,
       openAgent: () => {
         const { selectedId: current, agentEnabled: enabled } = live.current;
@@ -174,7 +181,7 @@ export function MailWorkspace({ wide, active = false }: { readonly wide: boolean
       closePanel,
     });
     return () => setKeyboardRuntime(null);
-  }, [active, wide, closeTopSurface, closeUtility, openHelp, openPalette]);
+  }, [active, wide, closeTopSurface, closeUtility, openHelp, openPalette, showSheet]);
 
   const mailboxBar = mailboxes.length > 1 ? (
     <View role="tablist" accessibilityLabel="Mailbox" style={styles.lenses}>
@@ -691,7 +698,7 @@ function EmailFrame({ html, images, inline, title }: { html: string; images: boo
     srcDoc: emailDocument(html, { images, inline }),
     sandbox: EMAIL_SANDBOX,
     referrerPolicy: "no-referrer",
-    style: { border: 0, width: "100%", height, background: "#fff", borderRadius: 8 },
+    style: { border: 0, width: "100%", height, background: "transparent", borderRadius: 8 },
     onLoad: (event: { currentTarget: HTMLIFrameElement }) => {
       const doc = event.currentTarget.contentDocument;
       if (!doc) return;

@@ -163,6 +163,20 @@ export interface ChatFlags {
   pinned: boolean;
 }
 
+/** Why a snoozed conversation came back: its time came, or someone wrote first. */
+export type SnoozeReturnReason = "time" | "message";
+
+/**
+ * Comma-only deferrals. Later takes a conversation out of every queue until `snoozedUntil`; it comes back early on a
+ * new inbound message. A conversation that came back, or whose follow-up fell due with no reply, needs the user again.
+ */
+export interface ChatLater {
+  snoozedUntil?: number;
+  returned?: { reason: SnoozeReturnReason; until: number; at: number };
+  /** Remind if no reply by `at`; `since` is the user's own message it waits on. */
+  followUp?: { at: number; since: number; due: boolean };
+}
+
 /** A conversation's Convex id: what the app selects, routes, keys and commands by. */
 export type ConversationId = GenericId<"comma_conversations">;
 
@@ -222,6 +236,7 @@ export interface ChatSummary {
   /** Epoch ms of the oldest genuine unread inbound message, or null when unavailable. */
   firstUnreadAt?: number | null;
   flags: ChatFlags;
+  later?: ChatLater;
   /**
    * Deduped, lowercased name terms (display, first, last, nickname,
    * organization…) drawn from every participant's Identity Mirror record —

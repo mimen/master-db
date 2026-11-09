@@ -12,7 +12,10 @@ import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { ChatAvatar, PersonAvatar } from "@/components/avatar";
 import { ThreadView } from "@/components/lazy-surfaces";
-import { FaceTimeButton } from "@/components/facetime-button";
+import { useFaceTimeActions } from "@/components/facetime-button";
+import { UnavailableState } from "@/components/empty-state";
+import { BackButton } from "@/components/ui/back-button";
+import { useActionSheet } from "@/lib/action-sheet";
 import { SourceIcon } from "@/components/service-label";
 import { openAgentPane } from "@/lib/agent-pane";
 import { openThreadSearch } from "@/lib/thread-search";
@@ -74,58 +77,43 @@ export default function ChatScreen(): React.JSX.Element | null {
   }>();
   const headerHeight = useHeaderHeight();
   const theme = useTheme();
+  const showSheet = useActionSheet();
   const { wide, width } = useLayoutMode();
   const agentEnabled = useAgentEnabled();
   const chat = useConversation(params.conversationId);
+  const faceTime = useFaceTimeActions({
+    conversationId: params.conversationId,
+    isGroup: chat?.isGroup ?? false,
+    address: chat ? dmAddress(chat) : null,
+  });
   const jumpTarget: JumpTarget | null =
     params.targetGuid && params.targetDate
       ? { guid: params.targetGuid, dateCreated: Number(params.targetDate) }
       : null;
   if (wide) return null;
+  // An email Today ranks reads in the Mail reader.
+  if (chat?.route.platform === "gmail") return <Redirect href={{ pathname: "/mail", params: { thread: chat.conversationId } }} />;
   if (chat === null) {
     return (
       <>
-        <Stack.Screen options={{ headerTitle: "", headerLeft: () => (
-          <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => goBackOrHome(router)} hitSlop={8} style={{ paddingHorizontal: 4 }}>
-            <Ionicons name="chevron-back" size={26} color={theme.accent} />
-          </Pressable>
-        ) }} />
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12, backgroundColor: theme.background }}>
-          <Text style={{ color: theme.textSecondary }}>Conversation not found</Text>
-          <Pressable accessibilityRole="button" onPress={() => goBackOrHome(router)} hitSlop={8}>
-            <Text style={{ color: theme.accent, fontSize: 15, fontWeight: "600" }}>Back</Text>
-          </Pressable>
-        </View>
+        <Stack.Screen options={{ headerTitle: "", headerLeft: () => <BackButton />, headerRight: () => null }} />
+        <UnavailableState onBack={() => goBackOrHome(router)} />
       </>
     );
   }
-  // An email Today ranks reads in the Mail reader.
-  if (chat?.route.platform === "gmail") return <Redirect href={{ pathname: "/mail", params: { thread: chat.conversationId } }} />;
   // Room left of the action pill: ~70pt for the back button, ~44pt per action, ~32pt of pill padding.
-  const titleMaxWidth = width - 70 - (agentEnabled ? 4 : 3) * 44 - 32;
+  const titleMaxWidth = width - 70 - (agentEnabled ? 3 : 2) * 44 - 32;
+  const openMore = () => showSheet({ actions: [{ label: "Search conversation", onPress: () => openThreadSearch() }, ...faceTime] });
 
   return (
     <>
       <Stack.Screen
         options={{
           headerTitleAlign: "left",
-          headerLeft: () => (
-            <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => goBackOrHome(router)} hitSlop={8} style={{ paddingHorizontal: 4 }}>
-              <Ionicons name="chevron-back" size={26} color={theme.accent} />
-            </Pressable>
-          ),
+          headerLeft: () => <BackButton />,
           headerTitle: () => <HeaderTitle chat={chat} maxWidth={titleMaxWidth} />,
           headerRight: () => (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 18, paddingHorizontal: 6 }}>
-              <FaceTimeButton
-                conversationId={params.conversationId}
-                isGroup={chat?.isGroup ?? false}
-                address={chat ? dmAddress(chat) : null}
-                color={theme.accent}
-              />
-              <Pressable accessibilityRole="button" accessibilityLabel="Search conversation" onPress={() => openThreadSearch()} hitSlop={8}>
-                <Ionicons name="search" size={22} color={theme.accent} />
-              </Pressable>
               {agentEnabled ? (
                 <Pressable accessibilityRole="button" accessibilityLabel="Ask the agent" onPress={() => openAgentPane(params.conversationId)} hitSlop={8}>
                   <Ionicons name="sparkles-outline" size={22} color={theme.accent} />
@@ -138,6 +126,9 @@ export default function ChatScreen(): React.JSX.Element | null {
                 hitSlop={8}
               >
                 <Ionicons name="information-circle-outline" size={26} color={theme.accent} />
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="More actions" onPress={openMore} hitSlop={8}>
+                <Ionicons name="ellipsis-horizontal-circle-outline" size={26} color={theme.accent} />
               </Pressable>
             </View>
           ),

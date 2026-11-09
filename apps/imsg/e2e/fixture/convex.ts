@@ -56,6 +56,7 @@ export function conversationRow(chat: ChatSummary): Conversation {
     flags: chat.flags, unreadCount: chat.unreadCount,
     // Where the unread run starts, as the bridge stores it on the conversation.
     ...(chat.unreadCount && chat.firstUnreadAt ? { unread: { count: chat.unreadCount, firstAt: chat.firstUnreadAt } } : {}),
+    ...(chat.later ? { later: chat.later } : {}),
     ...(chat.crm ? { crm: chat.crm } : {}),
   };
 }
@@ -660,6 +661,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     "comma/queries:listMessages": async (args) => paginate(slackWorld.owns(String(args.conversationId)) ? slackWorld.messages(String(args.conversationId))
       : mailWorld.owns(String(args.conversationId)) ? mailWorld.messages(String(args.conversationId))
         : await messages(String(args.conversationId)), args.paginationOpts as Pagination),
+    "comma/later:listSnoozed": async () => (await conversations()).filter((row) => row.later?.snoozedUntil !== undefined),
     "comma/queries:listEmailThreads": async (args) => paginate(mailWorld.threads(), args.paginationOpts as Pagination),
     "comma/queries:searchMessages": async (args) => {
       const text = String(args.query).trim();

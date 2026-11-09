@@ -25,6 +25,9 @@ import {
 import { commandQuery, peopleFirstSections, recencyAge, turnAge, type RowAge } from "@/lib/palette-people";
 import { splitAroundMatch } from "@/lib/split-match";
 import { toggleSettleChat } from "@/hooks/use-triage-actions";
+import { conversationToChat } from "@/lib/convex-adapters";
+import { laterApi } from "@/lib/convex-api";
+import { runCommand as runKeyboardCommand } from "@/lib/keyboard/controller";
 import { openPersonPane } from "@/lib/person-pane";
 import { openScheduledPane } from "@/lib/scheduled-pane";
 import { openSettingsPane } from "@/lib/settings-pane";
@@ -36,7 +39,7 @@ import { useToday } from "@/hooks/use-today";
 import { addressesMatch, formatAddress } from "@shared/address";
 import { conversationRoute, fromBridgeMessage } from "@shared/imessage";
 import { composeSections, type ComposeRow } from "@/lib/palette/compose-rows";
-import { useChatDirectory } from "@/hooks/use-chat-directory";
+import { useChatDirectory, useConversation } from "@/hooks/use-chat-directory";
 import { openAgentChat } from "@/hooks/use-agent-toasts";
 import { agentApi, type AgentChatSummary } from "@/lib/agent-api";
 import { AGENT_ATTENTION } from "@/lib/inbox-model";
@@ -136,6 +139,9 @@ function PaletteRoot({
   const [searching, setSearching] = useState(false);
   // One clock per open: ages must not tick while the cursor moves.
   const [now] = useState(() => Date.now());
+  // The Snoozed view: the palette lists every snoozed conversation in place of its search.
+  const [snoozedView, setSnoozedView] = useState(false);
+  const snoozed = useQuery(laterApi.listSnoozed, snoozedView ? {} : "skip");
   const commandFilter = commandQuery(query);
   const searchText = commandFilter === null ? query.trim() : "";
 
@@ -171,6 +177,15 @@ function PaletteRoot({
   const { agentPane } = useAgentSettings();
   const agentChats = useQuery(agentApi.listAgentChats, agentPane ? {} : "skip") ?? NO_AGENT_CHATS;
   const sections = useMemo((): PaletteSection[] => {
+    if (snoozedView) {
+      const needle = query.trim().toLowerCase();
+      const items = (snoozed ?? []).map(conversationToChat)
+        .filter((chat) => !needle || chat.displayName.toLowerCase().includes(needle))
+        .map((chat): PaletteItem => chat.isGroup
+          ? { kind: "group", key: `snoozed-${chat.conversationId}`, chat, matchedMember: null }
+          : { kind: "conversation", key: `snoozed-${chat.conversationId}`, chat });
+      return items.length > 0 ? [{ title: "Snoozed", items }] : [];
+    }
     if (commandFilter !== null) {
       // ">" asks for commands only: the engine with no conversations yields just its command list.
       return buildPaletteSections({ query: commandFilter, chats: [], messages: [], contacts: [] });
@@ -180,7 +195,7 @@ function PaletteRoot({
       return agents ? [...people.sections, agents] : people.sections;
     }
     return buildPaletteSections({ query, chats, messages, contacts, agentChats });
-  }, [commandFilter, query, chats, messages, contacts, people, agentChats]);
+  }, [snoozedView, snoozed, commandFilter, query, chats, messages, contacts, people, agentChats]);
   const flat = useMemo(() => flattenSections(sections), [sections]);
   const flatRef = useRef(flat);
   flatRef.current = flat;
@@ -206,6 +221,8 @@ function PaletteRoot({
         return;
       case "action":
         if (id.value === "new-message") return onCompose();
+        if (id.value === "later") return void runKeyboardCommand("conversation.later", "palette");
+        if (id.value === "follow-up") return void runKeyboardCommand("conversation.followUp", "palette");
         if (id.value === "scheduled") {
           if (openScheduledPane()) return;
           return void router.push("/scheduled");
@@ -230,6 +247,10 @@ function PaletteRoot({
       item.command.id.value === "new-message"
     ) {
       return onCompose();
+    }
+    if (item.kind === "command" && item.command.id.kind === "action" && item.command.id.value === "snoozed") {
+      setQuery("");
+      return setSnoozedView(true);
     }
     onClose();
     switch (item.kind) {
@@ -323,7 +344,10 @@ function PaletteRoot({
         contentContainerStyle={styles.listContent}
         {...({ id: "command-palette-results", role: "listbox", "aria-label": "Results" } as object)}
       >
-        {sections.length === 0 && searchText.length >= 2 && (
+        {snoozedView && sections.length === 0 && (
+          <Text style={[paletteStyles.empty, { color: theme.textSecondary }]}>{snoozed === undefined ? "Loading…" : "Nothing snoozed"}</Text>
+        )}
+        {!snoozedView && sections.length === 0 && searchText.length >= 2 && (
           <Text style={[paletteStyles.empty, { color: theme.textSecondary }]}>
             {searching ? "Searching…" : `No results for “${searchText}”`}
           </Text>
@@ -414,6 +438,25 @@ function Age({ age }: { age: RowAge | null | undefined }) {
   );
 }
 
+/** A message hit: its sender, or the conversation's name when the sender is unresolved, then the snippet. */
+function MessageHitContent({ hit: m, needle }: { hit: SearchHit; needle: string }) {
+  const theme = useTheme();
+  const chat = useConversation(m.conversationId);
+  const sender = m.isFromMe ? "You" : m.sender?.name ?? null;
+  const title = sender ?? chat?.displayName ?? (m.sender?.address ? formatAddress(m.sender.address) : "Message");
+  return (
+    <>
+      {sender === null && chat ? <ChatAvatar chat={chat} size={26} />
+        : <PersonAvatar address={m.isFromMe ? null : (m.sender?.address ?? null)} name={title} size={26} />}
+      <View style={[paletteStyles.textCol, styles.inline]}>
+        <Text numberOfLines={1} style={[paletteStyles.title, styles.noShrink, { color: theme.text }]}>{title}</Text>
+        <Highlighted text={m.text} needle={needle} color={theme.popTertiary} style={[paletteStyles.subtitle, styles.shrink]} />
+      </View>
+      <Text style={[styles.age, { color: theme.popTertiary }]}>{formatReceiptTime(m.dateCreated)}</Text>
+    </>
+  );
+}
+
 function PaletteRowContent({ item, needle, age, now }: { item: PaletteItem; needle: string; age?: RowAge; now: number }) {
   const theme = useTheme();
   switch (item.kind) {
@@ -453,20 +496,8 @@ function PaletteRowContent({ item, needle, age, now }: { item: PaletteItem; need
         </>
       );
     }
-    case "message": {
-      const m = item.message;
-      const sender = m.isFromMe ? "You" : (m.sender?.name ?? m.sender?.address ?? "?");
-      return (
-        <>
-          <PersonAvatar address={m.isFromMe ? null : (m.sender?.address ?? null)} name={sender} size={26} />
-          <View style={[paletteStyles.textCol, styles.inline]}>
-            <Text numberOfLines={1} style={[paletteStyles.title, styles.noShrink, { color: theme.text }]}>{sender}</Text>
-            <Highlighted text={m.text} needle={needle} color={theme.popTertiary} style={[paletteStyles.subtitle, styles.shrink]} />
-          </View>
-          <Text style={[styles.age, { color: theme.popTertiary }]}>{formatReceiptTime(m.dateCreated)}</Text>
-        </>
-      );
-    }
+    case "message":
+      return <MessageHitContent hit={item.message} needle={needle} />;
     case "agent":
       return (
         <>

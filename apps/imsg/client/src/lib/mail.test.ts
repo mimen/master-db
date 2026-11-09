@@ -59,6 +59,12 @@ describe("emailDocument", () => {
     expect(doc).toContain("default-src 'none'");
   });
 
+  test("a plain email turns dark with the app; one with its own backgrounds keeps its white card", () => {
+    expect(emailDocument(html, { images: false })).toContain("@media (prefers-color-scheme:dark)");
+    expect(emailDocument('<table bgcolor="#f4f4f4"><tr><td>Sale</td></tr></table>', { images: false })).not.toContain("prefers-color-scheme");
+    expect(emailDocument('<div style="background-color: #222">Hi</div>', { images: false })).not.toContain("prefers-color-scheme");
+  });
+
   test("the sandbox never allows scripts", () => {
     expect(EMAIL_SANDBOX).not.toContain("allow-scripts");
   });

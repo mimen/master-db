@@ -45,7 +45,7 @@ async function connected() {
       participants: [{ address: `slack:${SAM}`, name: null }],
     });
     const thread = await ctx.db.insert("comma_conversations", {
-      ...base, conversationKey: "th:C1:1700000000.000200", slack: { channel: "C1", threadTs: "1700000000.000200" }, kind: "group",
+      ...base, conversationKey: "th:C1:1700000000.000200", slack: { channel: "C1", threadTs: "1700000000.000200", following: true }, kind: "group",
       displayName: "#bookings", rawDisplayName: "#bookings", isGroup: true, participants: [{ address: `slack:${SAM}`, name: null }],
     });
     await ctx.db.insert("comma_messages", {

@@ -101,10 +101,10 @@ test("B8: a link to a conversation that doesn't exist says so and reads nothing"
   const page = desk.page;
   const calls = convexCalls(page);
   await page.goto("/c/does-not-exist", { waitUntil: "domcontentloaded" });
-  await expect(page.getByText("Conversation not found")).toBeVisible();
+  await expect(page.getByText("This conversation isn't available")).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(page.getByText("Conversation not found")).toBeVisible();
+  await expect(page.getByText("This conversation isn't available")).toBeVisible();
   await expect(page.getByRole("button", { name: "Back", exact: true }).last()).toBeVisible();
   expect(calls.filter((call) => call.name === "comma/triage:markRead")).toEqual([]);
 });

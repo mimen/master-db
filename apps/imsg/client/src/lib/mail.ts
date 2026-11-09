@@ -1,11 +1,16 @@
 import type { GenericId } from "convex/values";
 
+import { Colors } from "@/constants/tokens";
+
 /**
  * The Mail workspace's pure rules for the document an email's cleaned HTML renders in, and for the files a reply all
  * or forward carries; who a reply goes to is shared/email-reply.ts. Convex cleans the HTML (convex/comma/emailHtml.ts);
  * the reader shows it in an iframe with no scripts, under a CSP that blocks every remote load until the user asks for
  * images, so either layer alone keeps a script out. The lenses are in mail-lens.ts.
  */
+
+/** HTML that paints its own backgrounds, so recolouring its text for dark mode could leave it unreadable. */
+const DESIGNED = /\bbgcolor\s*=|background(-color|-image)?\s*:/i;
 
 const DATA_IMAGE = /^data:image\/(png|gif|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/;
 
@@ -20,12 +25,16 @@ export function emailDocument(html: string, { images, inline = {} }: { images: b
     const url = inline[cid.replace(/&amp;/g, "&")];
     return url && DATA_IMAGE.test(url) ? ` src="${url}"` : attribute;
   });
+  // A plain email takes the app's dark surface; a designed one (its own backgrounds) keeps the white card it was drawn on.
+  const dark = DESIGNED.test(body) ? ""
+    : `@media (prefers-color-scheme:dark){:root{color-scheme:dark}html,body{background:${Colors.dark.surface};color:${Colors.dark.text}}` +
+      `a{color:${Colors.dark.accent}}details.comma-fold>summary{background:${Colors.dark.backgroundElement};color:${Colors.dark.textSecondary}}}`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}">` +
     "<style>html,body{margin:0;background:#fff;color:#1d1d1f;font:14px/1.5 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;" +
-    "overflow-wrap:anywhere}body{display:flow-root}img{max-width:100%;height:auto}table{max-width:100%}pre{white-space:pre-wrap}" +
+    "overflow-wrap:anywhere}body{display:flow-root;padding:12px 14px}img{max-width:100%;height:auto}table{max-width:100%}pre{white-space:pre-wrap}" +
     "details.comma-fold>summary{display:inline-block;list-style:none;cursor:pointer;margin:4px 0;padding:0 7px;border-radius:7px;" +
     "background:#e8eaed;color:#5f6368;font-size:12px;line-height:14px;letter-spacing:1px}details.comma-fold>summary:hover{background:#dadce0}" +
-    "details.comma-fold>summary::-webkit-details-marker{display:none}details.comma-fold[open]>summary{margin-bottom:8px}</style></head>" +
+    `details.comma-fold>summary::-webkit-details-marker{display:none}details.comma-fold[open]>summary{margin-bottom:8px}${dark}</style></head>` +
     `<body>${body}</body></html>`;
 }
 

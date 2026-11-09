@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { useCallback, useEffect, useState } from "react";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Reanimated, { cancelAnimation, Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 
 import { useTheme } from "@/hooks/use-theme";
 import { pressAnchor, useActionSheet } from "@/lib/action-sheet";
-import { builtLine, busyCopy, todayDate, todayTime, type TodayBusy, type TodayHeader, type TodayMode } from "@/lib/today";
+import { buildDetail, builtLine, busyCopy, todayDate, todayTime, type TodayBusy, type TodayHeader, type TodayMode } from "@/lib/today";
 
 type Colors = ReturnType<typeof useTheme>;
 
@@ -34,6 +35,26 @@ function ChevronIcon({ color }: { readonly color: string }) {
     <Svg width={10} height={10} viewBox="0 0 10 10" fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <Path d="M2.5 4l2.5 2.5L7.5 4" />
     </Svg>
+  );
+}
+
+/** A web hover tooltip: RNW drops `title`, so it goes on the DOM node. Touch has no hover; callers give it another way in. */
+export function useDomTitle(text: string | null) {
+  return useCallback((node: unknown) => {
+    if (Platform.OS !== "web" || !(node instanceof HTMLElement)) return;
+    if (text) node.setAttribute("title", text);
+    else node.removeAttribute("title");
+  }, [text]);
+}
+
+/** A small info glyph whose explanation is a hover tooltip; a press toggles it for touch. */
+export function InfoTip({ text, onPress }: { readonly text: string; readonly onPress: () => void }) {
+  const colors = useTheme();
+  const tooltip = useDomTitle(text);
+  return (
+    <Pressable ref={tooltip} accessibilityRole="button" accessibilityLabel={text} onPress={onPress} hitSlop={8}>
+      <Ionicons aria-hidden name="information-circle-outline" size={13} color={colors.textTertiary} />
+    </Pressable>
   );
 }
 
@@ -87,7 +108,9 @@ function UpdateButton({ label, busy, onPress, colors, segment = false }: {
 }
 
 /** Update, with Regenerate from scratch one menu away: one bordered pill, a hairline between the segments. */
-function BuildControl({ busy, onRequest, colors }: { readonly busy: TodayBusy | null; readonly onRequest: (mode: TodayMode) => void; readonly colors: Colors }) {
+function BuildControl({ busy, detail, onRequest, colors }: {
+  readonly busy: TodayBusy | null; readonly detail: string; readonly onRequest: (mode: TodayMode) => void; readonly colors: Colors;
+}) {
   const showSheet = useActionSheet();
   const [hovered, setHovered] = useState(false);
   const disabled = busy !== null;
@@ -103,7 +126,10 @@ function BuildControl({ busy, onRequest, colors }: { readonly busy: TodayBusy | 
         disabled={disabled}
         onPress={(event) => showSheet({
           anchor: { ...pressAnchor(event), align: "end" },
-          actions: [{ label: "Regenerate from scratch", icon: "refresh", note: "New session: rereads the inbox and re-ranks everything", onPress: () => onRequest("fresh") }],
+          actions: [
+            { label: detail, icon: "information-circle-outline", disabled: true, onPress: () => undefined },
+            { label: "Regenerate from scratch", icon: "refresh", note: "New session: rereads the inbox and re-ranks everything", separatorBefore: true, onPress: () => onRequest("fresh") },
+          ],
         })}
         onHoverIn={() => setHovered(true)}
         onHoverOut={() => setHovered(false)}
@@ -115,6 +141,11 @@ function BuildControl({ busy, onRequest, colors }: { readonly busy: TodayBusy | 
   );
 }
 
+function MetaLine({ text, title, colors }: { readonly text: string; readonly title: string | null; readonly colors: Colors }) {
+  const tooltip = useDomTitle(title);
+  return <Text ref={tooltip} testID="today-meta" style={[styles.meta, { color: colors.textTertiary }]}>{text}</Text>;
+}
+
 /** The Today lens's plan card: the date, Update, what was built, the brief and the day's progress. */
 export function TodayHeaderCard({ header, dayStart, onRequest }: {
   readonly header: TodayHeader;
@@ -122,11 +153,18 @@ export function TodayHeaderCard({ header, dayStart, onRequest }: {
   readonly onRequest: (mode: TodayMode) => void;
 }) {
   const colors = useTheme();
-  if (header.kind === "loading") return null;
-  const { busy } = header;
-  const busyText = busy ? busyCopy(busy) : null;
   const date = todayDate(dayStart);
   const card = [styles.plan, { backgroundColor: colors.backgroundElement }];
+  if (header.kind === "loading") {
+    return (
+      <View testID="today-header" style={card}>
+        <Text style={[styles.title, { color: colors.text }]}>{date}</Text>
+        <Text testID="today-meta" style={[styles.meta, { color: colors.textTertiary }]}>Loading…</Text>
+      </View>
+    );
+  }
+  const { busy } = header;
+  const busyText = busy ? busyCopy(busy) : null;
   // Before today's first queue, Build now and Retry are Updates too: the worker continues yesterday's session if it can.
   const update = () => onRequest("update");
 
@@ -162,6 +200,7 @@ export function TodayHeaderCard({ header, dayStart, onRequest }: {
   }
 
   const total = header.settled + header.toGo;
+  const detail = buildDetail(header);
   const meta = busyText ? busyText.meta
     : header.cleared ? `${header.settled} settled today${header.newSince ? ` · ${header.newSince} new since ${todayTime(header.builtAt)}` : ""}`
     : builtLine(header);
@@ -169,9 +208,9 @@ export function TodayHeaderCard({ header, dayStart, onRequest }: {
     <View testID="today-header" style={card}>
       <View style={styles.top}>
         <Text style={[styles.title, { color: colors.text }]}>{header.cleared && !busy ? "Queue cleared" : date}</Text>
-        <BuildControl busy={busy} onRequest={onRequest} colors={colors} />
+        <BuildControl busy={busy} detail={detail} onRequest={onRequest} colors={colors} />
       </View>
-      <Text testID="today-meta" style={[styles.meta, { color: colors.textTertiary }]}>{meta}</Text>
+      <MetaLine text={meta} title={busyText || header.cleared ? null : detail} colors={colors} />
       {header.lastError && !busy ? (
         <Text style={[styles.meta, { color: colors.destructive }]}>{header.lastError}</Text>
       ) : null}

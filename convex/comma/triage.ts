@@ -17,15 +17,14 @@ import { isAssociated, scopeOf } from "./messageShape";
  */
 
 type ConversationId = Id<"comma_conversations">;
-type StateFields = Partial<Pick<Doc<"comma_conversation_state">,
-  "dismissedUnrespondedGuid" | "dismissedWaitingGuid" | "mutedUnresponded" | "markedUnread" | "pinned" | "readAt">>;
+type StateFields = Partial<Omit<Doc<"comma_conversation_state">, "_id" | "_creationTime" | "conversationId" | "updatedAt">>;
 
-async function stateOf(ctx: MutationCtx, conversationId: ConversationId) {
+export async function stateOf(ctx: MutationCtx, conversationId: ConversationId) {
   return await ctx.db.query("comma_conversation_state")
     .withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId)).unique();
 }
 
-async function writeState(ctx: MutationCtx, conversationId: ConversationId, fields: StateFields): Promise<void> {
+export async function writeState(ctx: MutationCtx, conversationId: ConversationId, fields: StateFields): Promise<void> {
   const row = await stateOf(ctx, conversationId);
   const updatedAt = Date.now();
   if (row) await ctx.db.patch(row._id, { ...fields, updatedAt });
@@ -44,7 +43,7 @@ async function logClear(ctx: MutationCtx, conversationId: ConversationId, messag
   await ctx.db.insert("comma_triage_events", { conversationId, messageGuid, reason, clearedAt });
 }
 
-async function conversationOf(ctx: MutationCtx, conversationId: ConversationId): Promise<Doc<"comma_conversations">> {
+export async function conversationOf(ctx: MutationCtx, conversationId: ConversationId): Promise<Doc<"comma_conversations">> {
   const conversation = await ctx.db.get(conversationId);
   if (!conversation) throw new ConvexError("Conversation not found");
   return conversation;
@@ -77,6 +76,13 @@ async function writeBack(ctx: MutationCtx, conversation: Doc<"comma_conversation
   return id;
 }
 
+/** A settle is Done: it ends a snooze and clears what resurfaced. A follow-up still waiting outlives it. */
+async function handledDeferrals(ctx: MutationCtx, conversationId: ConversationId): Promise<StateFields> {
+  const row = await stateOf(ctx, conversationId);
+  if (row?.snooze) await ctx.scheduler.cancel(row.snooze.job);
+  return { snooze: undefined, snoozeReturn: undefined, ...(row?.followUp?.due ? { followUp: undefined } : {}) };
+}
+
 /**
  * Settles the conversation on its last message, the one every client shows and computeFlags compares. With an
  * anchor, a different last message rejects the settle, so a message the user has not seen is never dismissed.
@@ -87,7 +93,10 @@ export async function settleConversation(ctx: MutationCtx, conversationId: Conve
   const last = conversation.lastMessage;
   if (!last) throw new ConvexError("chat has no last message");
   if (anchor !== undefined && anchor !== last.guid && !(await sameSend(ctx, conversation, anchor, last.guid))) throw new ConvexError("latest message changed");
-  await writeState(ctx, conversationId, last.isFromMe ? { dismissedWaitingGuid: last.guid } : { dismissedUnrespondedGuid: last.guid });
+  await writeState(ctx, conversationId, {
+    ...(last.isFromMe ? { dismissedWaitingGuid: last.guid } : { dismissedUnrespondedGuid: last.guid }),
+    ...await handledDeferrals(ctx, conversationId),
+  });
   if (source.by === "user" || !source.quiet) await logClear(ctx, conversationId, last.guid, "dismiss", Date.now());
   await settleConversationChats(ctx, conversationId);
   return await writeBack(ctx, conversation, source, { kind: "archive", anchor: last.guid });

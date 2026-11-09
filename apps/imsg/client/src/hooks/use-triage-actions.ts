@@ -1,4 +1,4 @@
-import { settleActionFor } from "@shared/chat-state";
+import { isSnoozed, settleActionFor } from "@shared/chat-state";
 import type { ChatSummary, ConversationId } from "@shared/types";
 import { useCallback } from "react";
 import { beginUndoAction, commitUndoAction, runLatestUndo, runUndo } from "@/lib/action-undo";
@@ -61,7 +61,7 @@ function settleWrite(chat: ChatSummary, settled: (reverse: () => Promise<void>) 
     const anchor = opts.pinned ?? chat.lastMessage?.guid;
     // In Needs you only for its agent chats, it settles just those: a conversation settle's Undo would
     // undismiss both anchors and bring back a flag the user had already cleared.
-    const agentsOnly = !chat.flags.unresponded && !chat.flags.waiting;
+    const agentsOnly = !chat.flags.unresponded && !chat.flags.waiting && !isSnoozed(chat);
     const written: Promise<{ archived: Promise<unknown> | null }> = conversationState().then(async (state) => {
       if (!agentsOnly) return await state.settle(chat.conversationId, anchor);
       await state.settleAgents(chat.conversationId);

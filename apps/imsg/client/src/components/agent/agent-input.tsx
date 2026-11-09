@@ -60,16 +60,20 @@ async function stageFiles(files: readonly File[]): Promise<StagedAttachment[]> {
   }));
 }
 
-export function AgentInput({ running, history, choice, onChoice, onSend, onStop }: {
+export function AgentInput({ running, history, choice, defaultChoice, onChoice, onSend, onStop }: {
   readonly running: boolean;
   /** What the user asked before, oldest first, for the up arrow. */
   readonly history: readonly string[];
   readonly choice: AgentModelChoice;
+  /** The Settings default. The model and effort chips show only when the choice differs, or after "+" asks for them. */
+  readonly defaultChoice: AgentModelChoice;
   readonly onChoice: (choice: AgentModelChoice) => void;
   readonly onSend: (intent: SendIntent) => void;
   readonly onStop: () => void;
 }) {
   const theme = useTheme();
+  const [pickersAsked, setPickersAsked] = useState(false);
+  const showPickers = pickersAsked || choice.model !== defaultChoice.model || choice.effort !== defaultChoice.effort;
   const type = useTypeRamp();
   const showSheet = useActionSheet();
   const inputRef = useRef<TextInput>(null);
@@ -185,6 +189,7 @@ export function AgentInput({ running, history, choice, onChoice, onSend, onStop 
       actions.push({ label: "Paste Image", onPress: pick("pasteNativeImage") });
     }
     actions.push({ label: "File", onPress: pick("pickFiles") });
+    if (!showPickers) actions.push({ label: "Model and effort", onPress: () => void setPickersAsked(true) });
     if (Platform.OS === "web" && attachRef.current) attachRef.current.measureInWindow((x, y) => showSheet({ actions, anchor: { x, y } }));
     else showSheet({ actions });
   };
@@ -231,8 +236,12 @@ export function AgentInput({ running, history, choice, onChoice, onSend, onStop 
               {({ active }) => <Ionicons name="add" size={18} color={active ? theme.text : theme.icon} />}
             </IconButton>
           </View>
-          <Dropdown variant="chip" label="Model" value={choice.model} options={MODEL_OPTIONS} menuWidth={184} onChange={(model) => onChoice(withModel(model))} />
-          <Dropdown variant="chip" label="Effort" value={choice.effort} options={EFFORT_OPTIONS} menuWidth={150} onChange={(effort) => onChoice({ ...choice, effort })} />
+          {showPickers ? (
+            <>
+              <Dropdown variant="chip" label="Model" value={choice.model} options={MODEL_OPTIONS} menuWidth={184} onChange={(model) => onChoice(withModel(model))} />
+              <Dropdown variant="chip" label="Effort" value={choice.effort} options={EFFORT_OPTIONS} menuWidth={150} onChange={(effort) => onChoice({ ...choice, effort })} />
+            </>
+          ) : null}
           <View style={styles.sendGroup}>
             {running ? (
               <RoundButton label="Stop" fill={theme.field} onPress={onStop}>

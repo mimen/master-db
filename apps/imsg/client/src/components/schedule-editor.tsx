@@ -11,6 +11,8 @@ interface ScheduleEditorProps {
   initialText: string;
   initialSendAt: number;
   textEditable?: boolean;
+  /** Shown when onSubmit rejects. */
+  failure?: string;
   /** Pin the card's bottom-right corner this far from the window's bottom-right (desktop send button). */
   anchor?: { right: number; bottom: number } | null;
   onClose: () => void;
@@ -23,6 +25,7 @@ export function ScheduleEditor({
   initialText,
   initialSendAt,
   textEditable = true,
+  failure = "Couldn't save this scheduled message",
   anchor = null,
   onClose,
   onSubmit,
@@ -45,7 +48,7 @@ export function ScheduleEditor({
   }, [initialSendAt, initialText, visible]);
 
   const submit = async (): Promise<void> => {
-    if (!text.trim()) {
+    if (textEditable && !text.trim()) {
       setError("Message text is required");
       return;
     }
@@ -60,7 +63,7 @@ export function ScheduleEditor({
       await onSubmit(text.trim(), parsed.value);
       onClose();
     } catch {
-      setError("Couldn't save this scheduled message");
+      setError(failure);
     } finally {
       setBusy(false);
     }

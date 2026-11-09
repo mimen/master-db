@@ -1,5 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import AiChat02Icon from "@hugeicons/core-free-icons/AiChat02Icon";
+import SparklesIcon from "@hugeicons/core-free-icons/SparklesIcon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useConvex } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -13,7 +13,6 @@ import { Radius, Space } from "@/constants/tokens";
 import { useAgentChats, useAgentItems } from "@/hooks/use-agent";
 import { useConversation } from "@/hooks/use-chat-directory";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
-import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { useTypeRamp } from "@/hooks/use-type";
 import { agentApi, agentItemKey, type AgentAttachmentMeta, type AgentChatId, type AgentItem, type AgentItemId } from "@/lib/agent-api";
@@ -24,6 +23,7 @@ import { agentIsRunning, liveStatus, promptHistory, transcriptRows } from "@/lib
 import { formatReceiptTime } from "@/lib/format";
 import { useAgentSettings } from "@/lib/settings";
 import { showToast } from "@/lib/toast";
+import { pressAnchor, useActionSheet } from "@/lib/action-sheet";
 
 import { AgentInput, type SendIntent } from "./agent-input";
 import { TranscriptRowView, WorkingStatus, type TranscriptActions } from "./agent-transcript";
@@ -53,6 +53,7 @@ export function AgentPane({ conversationId, requestedChatId, onClose }: {
 }) {
   const theme = useTheme();
   const type = useTypeRamp();
+  const showSheet = useActionSheet();
   const convex = useConvex();
   const settings = useAgentSettings();
   const name = useConversation(conversationId)?.displayName ?? "this conversation";
@@ -71,7 +72,6 @@ export function AgentPane({ conversationId, requestedChatId, onClose }: {
   const { scrollProps, follow, disclosure } = useLiveFollow();
   const running = agentIsRunning(chat?.state);
   const keyboardHeight = useKeyboardHeight();
-  const { wide } = useLayoutMode();
   // A pick in the input lasts for the shown chat; once sent, the chat carries it.
   const [picked, setPicked] = useState<{ readonly chatId: AgentChatId; readonly choice: AgentModelChoice } | null>(null);
   const shownId = chatId ?? newChat.current;
@@ -150,11 +150,17 @@ export function AgentPane({ conversationId, requestedChatId, onClose }: {
     <View testID="agent-pane" style={[styles.root, { backgroundColor: theme.background, paddingBottom: keyboardHeight }]} {...({ dataSet: { agentPane: "true" } } as object)}>
       <PaneHeader
         title={selection ? <ChatSwitcher chats={chats ?? []} name={name} selection={selection} onSelect={choose} /> : "Agent"}
-        leading={<HugeiconsIcon icon={AiChat02Icon} size={18} color={theme.text} strokeWidth={1.6} />}
+        leading={<HugeiconsIcon icon={SparklesIcon} size={18} color={theme.text} strokeWidth={1.6} />}
         actions={<>
-          {chat && settled === undefined ? <Button label="Settle" onPress={settle} /> : null}
-          {/* A phone's header has no room for it beside the title; the switcher's menu carries New chat. */}
-          {wide ? <Button label="New chat" onPress={() => choose({ kind: "new" })} disabled={selection?.kind !== "chat"} /> : null}
+          {/* New chat lives in the switcher's menu; the title keeps the room. */}
+          {chat && settled === undefined ? (
+            <IconButton
+              label="More chat actions"
+              onPress={(event) => showSheet({ actions: [{ label: "Settle chat", onPress: settle }], anchor: { ...pressAnchor(event), align: "end" } })}
+            >
+              {({ active }) => <Ionicons name="ellipsis-horizontal" size={18} color={active ? theme.text : theme.icon} />}
+            </IconButton>
+          ) : null}
           {onClose ? (
             <IconButton label="Close agent" onPress={onClose}>
               {({ active }) => <Ionicons name="close" size={18} color={active ? theme.text : theme.icon} />}
@@ -181,6 +187,7 @@ export function AgentPane({ conversationId, requestedChatId, onClose }: {
         running={running}
         history={history}
         choice={choice}
+        defaultChoice={agentModelChoice(settings.agentModel, settings.agentEffort)}
         onChoice={(next) => setPicked({ chatId: shownId, choice: next })}
         onSend={send}
         onStop={() => {

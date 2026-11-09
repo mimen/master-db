@@ -6,7 +6,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useActionSheet } from "@/lib/action-sheet";
 import { Springs } from "@/constants/springs";
 import { useTheme } from "@/hooks/use-theme";
-import type { ThemeColors } from "./ui/interaction";
+import { focusVisible, type InteractionState, type ThemeColors } from "./ui/interaction";
 import { HEADER_FONT } from "./contacts-theme";
 
 const DRAG = { dataSet: { tauriDragRegion: "" } } as object;
@@ -87,10 +87,10 @@ export function ContactsSwitch({ value, onChange, label }: {
       accessibilityLabel={label}
       onPress={() => onChange(!value)}
       hitSlop={8}
-      style={({ focused }: { pressed: boolean; focused?: boolean }) => [
+      style={(state: InteractionState) => [
         styles.switch,
         { backgroundColor: value ? colors.switchOn : colors.switchOff },
-        focused && ({ outlineColor: colors.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: 2 } as object),
+        focusVisible(state) && ({ outlineColor: colors.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: 2 } as object),
       ]}
     >
       <Animated.View style={[styles.thumb, { backgroundColor: value ? colors.background : "#FFFFFF" }, thumb]} />
@@ -119,13 +119,13 @@ export function ContactsButton({ label, onPress, tone = "secondary", icon, disab
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      style={({ hovered, pressed, focused }: { hovered?: boolean; pressed: boolean; focused?: boolean }) => [
+      style={(state: InteractionState) => [
         styles.button,
         tone === "primary" && { backgroundColor: colors.text },
         tone === "secondary" && { backgroundColor: colors.surface, borderColor: colors.dividerStrong, borderWidth: 1 },
-        tone !== "primary" && (hovered || pressed) && { backgroundColor: colors.rowHover },
-        tone === "primary" && (hovered || pressed) && { opacity: pressed ? 0.8 : 0.9 },
-        focused && { outlineColor: colors.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: 1 } as object,
+        tone !== "primary" && (state.hovered || state.pressed) && { backgroundColor: colors.rowHover },
+        tone === "primary" && (state.hovered || state.pressed) && { opacity: state.pressed ? 0.8 : 0.9 },
+        focusVisible(state) && { outlineColor: colors.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: 1 } as object,
         disabled && { opacity: 0.4 },
       ]}
     >

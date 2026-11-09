@@ -25,7 +25,7 @@ import { useNameOrder } from "@/lib/settings";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
 import { PersonAvatar } from "./avatar";
 import { PHONE_TAB_BAR_CLEARANCE } from "./phone-tab-bar";
-import { ServiceDot } from "./service-label";
+import { SourceIcon } from "./service-label";
 import { ChromeIconButton } from "./sidebar/chrome-icon-button";
 import { SidebarChrome } from "./sidebar/sidebar-chrome";
 import { SidebarFooter } from "./sidebar/sidebar-footer";
@@ -34,6 +34,7 @@ import { SidebarHeader } from "./sidebar/sidebar-header";
 import { SidebarSearchField } from "./sidebar/sidebar-search-field";
 import { SyntheticScrollThumb } from "./sidebar/synthetic-scroll-thumb";
 import { useSyntheticScrollMetrics } from "./sidebar/use-synthetic-scroll-metrics";
+import { focusVisible, type InteractionState } from "./ui/interaction";
 
 type Row =
   | ContactRow<ContactListRow>
@@ -145,7 +146,7 @@ export function ContactsListPane({ wide, selectedId, hasSelection = false, onSel
       );
     }
     const person = item.person;
-    const handles = [...person.normalized_phones, ...person.normalized_emails];
+    const badges = [...new Map([...person.normalized_phones, ...person.normalized_emails].map((h) => [serviceOf(h).label, serviceOf(h)])).values()];
     return (
       <PersonRow
         wide={wide}
@@ -155,8 +156,8 @@ export function ContactsListPane({ wide, selectedId, hasSelection = false, onSel
         secondary={contactSecondary(person)}
         avatar={<PersonAvatar address={primaryHandle(person)} name={person.display_name} size={wide ? 32 : 42} photoUrl={person.photoUrl} />}
         trailing={
-          <View style={styles.dots} accessibilityLabel={handles.map((h) => serviceOf(h).label).join(", ")}>
-            {handles.slice(0, 3).map((h) => <ServiceDot key={h} badge={serviceOf(h)} size={wide ? 7 : 9} />)}
+          <View style={styles.dots} accessibilityLabel={badges.map((b) => b.label).join(", ")}>
+            {badges.slice(0, 3).map((b) => <SourceIcon key={b.label} badge={b} size={wide ? 12 : 14} decorative />)}
           </View>
         }
         onPress={() => onSelectPerson(person)}
@@ -302,11 +303,11 @@ function PersonRow({ wide, selected, title, secondary, duplicate, avatar, traili
       accessibilityLabel={[title, duplicate ? "possible duplicate" : null, secondary].filter(Boolean).join(", ")}
       accessibilityState={{ selected }}
       onPress={onPress}
-      style={({ hovered, pressed, focused }: { hovered?: boolean; pressed: boolean; focused?: boolean }) => [
+      style={(state: InteractionState) => [
         styles.row,
         wide ? styles.rowWide : styles.rowPhone,
-        { backgroundColor: selected || pressed ? theme.rowSelected : hovered ? theme.rowHover : "transparent" },
-        focused && ({ outlineColor: theme.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: -2 } as object),
+        { backgroundColor: selected || state.pressed ? theme.rowSelected : state.hovered ? theme.rowHover : "transparent" },
+        focusVisible(state) && ({ outlineColor: theme.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: -2 } as object),
       ]}
     >
       {avatar}

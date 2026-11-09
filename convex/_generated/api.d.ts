@@ -714,6 +714,103 @@ export declare const api: {
         }>
       >;
     };
+    later: {
+      clearFollowUp: FunctionReference<
+        "mutation",
+        "public",
+        { conversationId: Id<"comma_conversations"> },
+        null
+      >;
+      listSnoozed: FunctionReference<
+        "query",
+        "public",
+        {},
+        Array<{
+          _creationTime: number;
+          _id: Id<"comma_conversations">;
+          accountId?: Id<"comma_accounts">;
+          chatGuids?: Array<string>;
+          contactsAvailable: boolean;
+          conversationKey: string;
+          crm?: {
+            is_favorite?: boolean;
+            priority?: number;
+            tags?: Array<string>;
+          };
+          displayName: string;
+          flags: {
+            mutedUnresponded: boolean;
+            pinned: boolean;
+            unread: boolean;
+            unresponded: boolean;
+            waiting: boolean;
+          };
+          gmail?: {
+            archiveError?: string;
+            bulk: boolean;
+            inInbox: boolean;
+            subject: string;
+            threadId: string;
+            unread?: number;
+          };
+          groupPhotoGuid?: string;
+          groupPhotoStorageId?: Id<"_storage">;
+          groupPhotoUrl: string | null;
+          hasGroupPhoto?: boolean;
+          isGroup: boolean;
+          isSpam: boolean;
+          kind: "dm" | "group" | "channel" | "thread" | "emailThread";
+          known: boolean;
+          later?: {
+            followUp?: { at: number; due: boolean; since: number };
+            returned?: { at: number; reason: "time" | "message"; until: number };
+            snoozedUntil?: number;
+          };
+          lastMessage?: {
+            dateCreated: number;
+            guid: string;
+            hasAttachments: boolean;
+            isFromMe: boolean;
+            mentionsMe?: boolean;
+            senderName: string | null;
+            text: string;
+          };
+          lastMessageAt: number;
+          participants: Array<{
+            address: string;
+            name: string | null;
+            photoUrl?: string | null;
+          }>;
+          platform?: "imessage" | "slack" | "gmail";
+          primaryChatGuid?: string;
+          rawDisplayName?: string;
+          searchNames: Array<string>;
+          slack?: { channel: string; following?: boolean; threadTs?: string };
+          thread?: { parentId?: Id<"comma_conversations">; replyCount: number };
+          unread?: { count: number; firstAt: number };
+          unreadCount: number;
+          updatedAt: number;
+        }>
+      >;
+      setFollowUp: FunctionReference<
+        "mutation",
+        "public",
+        { at: number; conversationId: Id<"comma_conversations"> },
+        null
+      >;
+      snooze: FunctionReference<
+        "mutation",
+        "public",
+        { conversationId: Id<"comma_conversations">; until: number },
+        null
+      >;
+      unsnooze: FunctionReference<
+        "mutation",
+        "public",
+        { conversationId: Id<"comma_conversations"> },
+        null
+      >;
+    };
     linkPreview: {
       fetchLinkPreview: FunctionReference<
         "action",
@@ -781,7 +878,11 @@ export declare const api: {
           payload:
             | {
                 email?: {
-                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    storageId: Id<"_storage">;
+                  }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -848,7 +949,11 @@ export declare const api: {
             | {
                 accountId: Id<"comma_accounts">;
                 email: {
-                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    storageId: Id<"_storage">;
+                  }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -1449,7 +1554,11 @@ export declare const api: {
           payload:
             | {
                 email?: {
-                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    storageId: Id<"_storage">;
+                  }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -1516,7 +1625,11 @@ export declare const api: {
             | {
                 accountId: Id<"comma_accounts">;
                 email: {
-                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    storageId: Id<"_storage">;
+                  }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -2184,6 +2297,11 @@ export declare const api: {
           isSpam: boolean;
           kind: "dm" | "group" | "channel" | "thread" | "emailThread";
           known: boolean;
+          later?: {
+            followUp?: { at: number; due: boolean; since: number };
+            returned?: { at: number; reason: "time" | "message"; until: number };
+            snoozedUntil?: number;
+          };
           lastMessage?: {
             dateCreated: number;
             guid: string;
@@ -2322,6 +2440,11 @@ export declare const api: {
             isSpam: boolean;
             kind: "dm" | "group" | "channel" | "thread" | "emailThread";
             known: boolean;
+            later?: {
+              followUp?: { at: number; due: boolean; since: number };
+              returned?: { at: number; reason: "time" | "message"; until: number };
+              snoozedUntil?: number;
+            };
             lastMessage?: {
               dateCreated: number;
               guid: string;
@@ -2419,6 +2542,11 @@ export declare const api: {
             isSpam: boolean;
             kind: "dm" | "group" | "channel" | "thread" | "emailThread";
             known: boolean;
+            later?: {
+              followUp?: { at: number; due: boolean; since: number };
+              returned?: { at: number; reason: "time" | "message"; until: number };
+              snoozedUntil?: number;
+            };
             lastMessage?: {
               dateCreated: number;
               guid: string;
@@ -2613,7 +2741,11 @@ export declare const api: {
           error?: string;
           payload?: {
             email?: {
-              attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+              attachments?: Array<{
+                filename: string;
+                mimeType: string;
+                storageId: Id<"_storage">;
+              }>;
               cc: Array<string>;
               subject: string;
               to: Array<string>;
@@ -2682,6 +2814,11 @@ export declare const api: {
           isSpam: boolean;
           kind: "dm" | "group" | "channel" | "thread" | "emailThread";
           known: boolean;
+          later?: {
+            followUp?: { at: number; due: boolean; since: number };
+            returned?: { at: number; reason: "time" | "message"; until: number };
+            snoozedUntil?: number;
+          };
           lastMessage?: {
             dateCreated: number;
             guid: string;
@@ -2837,7 +2974,11 @@ export declare const api: {
           conversationId: Id<"comma_conversations">;
           payload: {
             email?: {
-              attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+              attachments?: Array<{
+                filename: string;
+                mimeType: string;
+                storageId: Id<"_storage">;
+              }>;
               cc: Array<string>;
               subject: string;
               to: Array<string>;
@@ -5508,7 +5649,6 @@ export declare const internal: {
             | {
                 conversationId: Id<"comma_conversations">;
                 filename?: string;
-                gmail?: { contentId?: string; inline: boolean; partId: string };
                 guid: string;
                 height?: number;
                 hideAttachment: boolean;
@@ -5540,7 +5680,6 @@ export declare const internal: {
                 accountId?: Id<"comma_accounts">;
                 conversationId: Id<"comma_conversations">;
                 filename?: string;
-                gmail?: { contentId?: string; inline: boolean; partId: string };
                 guid: string;
                 height?: number;
                 hideAttachment: boolean;
@@ -5729,6 +5868,20 @@ export declare const internal: {
         null
       >;
     };
+    later: {
+      followUpDue: FunctionReference<
+        "mutation",
+        "internal",
+        { at: number; conversationId: Id<"comma_conversations"> },
+        null
+      >;
+      wake: FunctionReference<
+        "mutation",
+        "internal",
+        { conversationId: Id<"comma_conversations">; until: number },
+        null
+      >;
+    };
     media: {
       bridgeMedia: FunctionReference<
         "mutation",
@@ -5848,7 +6001,11 @@ export declare const internal: {
           payload:
             | {
                 email?: {
-                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    storageId: Id<"_storage">;
+                  }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -5915,7 +6072,11 @@ export declare const internal: {
             | {
                 accountId: Id<"comma_accounts">;
                 email: {
-                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    storageId: Id<"_storage">;
+                  }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -7027,7 +7188,11 @@ export declare const internal: {
           payload:
             | {
                 email?: {
-                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    storageId: Id<"_storage">;
+                  }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -7094,7 +7259,11 @@ export declare const internal: {
             | {
                 accountId: Id<"comma_accounts">;
                 email: {
-                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    storageId: Id<"_storage">;
+                  }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -7887,7 +8056,12 @@ export declare const internal: {
             | { channel: string; kind: "deleted"; ts: string }
             | {
                 kind: "user";
-                user: { email?: string; id: string; image?: string; name: string };
+                user: {
+                  email?: string;
+                  id: string;
+                  image?: string;
+                  name: string;
+                };
               }
             | {
                 at: number;
@@ -8041,7 +8215,12 @@ export declare const internal: {
               | { channel: string; type: "im" | "mpim" | "channel" }
               | { channel: string; threadTs: string; type: "thread" };
           }>;
-          users: Array<{ email?: string; id: string; image?: string; name: string }>;
+          users: Array<{
+            email?: string;
+            id: string;
+            image?: string;
+            name: string;
+          }>;
         },
         { skipped: number; written: number }
       >;

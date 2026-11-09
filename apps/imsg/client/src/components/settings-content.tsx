@@ -6,7 +6,7 @@ import type { AccountId } from "@shared/types";
 import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { anyApi, type FunctionReturnType } from "convex/server";
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type JSX, type ReactNode } from "react";
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Dropdown, type DropdownOption } from "./ui/dropdown";
 
@@ -47,6 +47,7 @@ import {
   type ThemePreference,
 } from "@/lib/settings";
 import { showToast } from "@/lib/toast";
+import { Toggle } from "@/components/ui/toggle";
 
 export interface SettingsContentProps {
   /** Desktop pane wants its own header with a close button. */
@@ -201,12 +202,10 @@ function SlackChannels({ accountId }: { accountId: AccountId }): JSX.Element {
       <SettingRow title="Channels" caption={channels === null ? "Reading your channels from Slack…" : caption}>{null}</SettingRow>
       {Array.isArray(channels) && channels.map((channel) => (
         <SettingRow key={channel.id} title={`#${channel.name}`} caption={channel.isPrivate ? "Private" : undefined}>
-          <Switch
+          <Toggle
             accessibilityLabel={`Follow #${channel.name}`}
             value={channel.following}
             onValueChange={(value) => follow(channel, value)}
-            trackColor={{ true: theme.accent, false: theme.divider }}
-            thumbColor="#ffffff"
           />
         </SettingRow>
       ))}

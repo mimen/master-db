@@ -1,7 +1,7 @@
 import type { ChatSummary, ConversationId } from "@shared/types";
 import { describe, expect, test } from "bun:test";
 
-import { builtLine, busyCopy, classifyToday, planToday, settleAllTargets, todayHeader, toTodayView, type TodayHeader, type TodayRun, type TodayView } from "./today";
+import { buildDetail, builtLine, busyCopy, classifyToday, planToday, settleAllTargets, todayHeader, toTodayView, type TodayHeader, type TodayRun, type TodayView } from "./today";
 
 const SNAPSHOT = 1_000_000;
 const DAY_START = 500_000;
@@ -217,17 +217,18 @@ describe("todayHeader", () => {
     expect(busyCopy({ state: "building", mode: "fresh" })).toEqual({ label: "Regenerating", meta: "Reading threads with Opus 5.5…" });
   });
 
-  test("after an Update the meta names the session it continued, by time on the same day and by date across days", () => {
+  test("the meta says when; the detail names the session it continued, by time on the same day and by date across days", () => {
     // 11:52 AM on Oct 27 in Los Angeles; the session began at 7:01 AM that day, or on Oct 26.
     const updatedAt = Date.parse("2026-10-27T18:52:00Z");
     const meta = (session?: Session) => {
       const v = view([{ id: "a", group: "friday" }], ["a"], {}, { snapshotAt: updatedAt, candidateCount: 380, ...(session ? { session } : {}) });
-      return builtLine(todayHeader(v, plan(v)) as Extract<TodayHeader, { kind: "queue" }>);
+      const header = todayHeader(v, plan(v)) as Extract<TodayHeader, { kind: "queue" }>;
+      return [builtLine(header), buildDetail(header)];
     };
-    expect(meta({ id: "s", startedAt: Date.parse("2026-10-27T14:01:00Z"), updates: 3 })).toBe("Updated 11:52 AM · session from 7:01 AM · Opus 5.5 · read 81 of 380 threads");
-    expect(meta({ id: "s", startedAt: Date.parse("2026-10-26T14:01:00Z"), updates: 6 })).toBe("Updated 11:52 AM · session from Oct 26 · Opus 5.5 · read 81 of 380 threads");
-    expect(meta({ id: "s", startedAt: updatedAt, updates: 0 }), "a fresh build").toBe("Built 11:52 AM · Opus 5.5 · read 81 of 380 threads");
-    expect(meta(), "a queue from before sessions").toBe("Built 11:52 AM · Opus 5.5 · read 81 of 380 threads");
+    expect(meta({ id: "s", startedAt: Date.parse("2026-10-27T14:01:00Z"), updates: 3 })).toEqual(["Updated 11:52 AM", "Session from 7:01 AM · Opus 5.5 · read 81 of 380 threads"]);
+    expect(meta({ id: "s", startedAt: Date.parse("2026-10-26T14:01:00Z"), updates: 6 })).toEqual(["Updated 11:52 AM", "Session from Oct 26 · Opus 5.5 · read 81 of 380 threads"]);
+    expect(meta({ id: "s", startedAt: updatedAt, updates: 0 }), "a fresh build").toEqual(["Built 11:52 AM", "Opus 5.5 · read 81 of 380 threads"]);
+    expect(meta(), "a queue from before sessions").toEqual(["Built 11:52 AM", "Opus 5.5 · read 81 of 380 threads"]);
   });
 
   test("the header reads what was read against every candidate, and an older queue against its Needs you", () => {

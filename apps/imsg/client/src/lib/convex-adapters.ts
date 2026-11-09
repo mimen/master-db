@@ -37,6 +37,7 @@ export function conversationToChat(
     unreadCount: row.unreadCount,
     firstUnreadAt: row.unreadCount ? row.unread?.firstAt ?? null : null,
     flags: row.flags,
+    ...(row.later ? { later: row.later } : {}),
     searchNames: row.searchNames,
     ...(row.crm ? { crm: row.crm } : {}),
     ...(row.thread ? { thread: row.thread } : {}),

@@ -128,7 +128,7 @@ export function Dropdown<T extends string | number>({ label, value, options, onC
           title ? styles.title : chip ? styles.chip : styles.field,
           bare ? { backgroundColor: "transparent" } : { backgroundColor: theme.surface, borderColor: theme.dividerStrong },
           (state.hovered || (bare && state.pressed)) && { backgroundColor: bare ? theme.rowHover : theme.backgroundElement },
-          (anchor !== null || focusVisible(state)) && ({ outlineColor: theme.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: 1 } as ViewStyle),
+          focusVisible(state) && ({ outlineColor: theme.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: 1 } as ViewStyle),
           style,
         ]}
       >

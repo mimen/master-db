@@ -3,7 +3,9 @@ import type { ChatState } from "./chat-state";
 import {
   computeCounts,
   computeFlags,
+  conversationFlags,
   isSettled,
+  laterOf,
   matchesFilters,
   settleActionFor,
   settleLeavesLens,
@@ -507,5 +509,41 @@ describe("computeCounts", () => {
     expect(computeCounts(chats, "known").all + computeCounts(chats, "unknown").all).toBe(
       computeCounts(chats, "all").all,
     );
+  });
+});
+
+describe("Later and Follow up", () => {
+  const until = 5000;
+
+  test("a snoozed conversation carries no queue flag, and its unread count is zero", () => {
+    const state = makeState({ snooze: { until, setAt: 1 }, markedUnread: true, pinned: true });
+    expect(computeFlags(IMESSAGE_DM, state, makeLast(), 3)).toEqual(makeFlags({ pinned: true }));
+    expect(conversationFlags(IMESSAGE_DM, state, makeLast(), 1000, 3).unreadCount).toBe(0);
+  });
+
+  test("one back from a snooze, or with a follow-up due, needs the user even when the user spoke last", () => {
+    const last = makeLast({ isFromMe: true });
+    expect(computeFlags(IMESSAGE_DM, makeState({ snoozeReturn: { reason: "time", until, at: until } }), last, 0)).toMatchObject({ unresponded: true, waiting: false });
+    expect(computeFlags(IMESSAGE_DM, makeState({ followUp: { at: until, since: 1000, due: true }, dismissedWaitingGuid: "m1" }), last, 0))
+      .toMatchObject({ unresponded: true, waiting: false });
+    expect(computeFlags(IMESSAGE_DM, makeState({ followUp: { at: until, since: 1000, due: false } }), last, 0)).toMatchObject({ unresponded: false, waiting: true });
+  });
+
+  test("counts leave a snoozed conversation out of every queue but All, and Settled does not claim it", () => {
+    const snoozed = makeChat({ conversationId: "s" as ConversationId, later: { snoozedUntil: until } });
+    const open = makeChat({ conversationId: "o" as ConversationId, flags: makeFlags({ unresponded: true, unread: true }) });
+    const counts = computeCounts([snoozed, open], "all");
+    expect(counts).toMatchObject({ all: 2, unresponded: 1, unread: 1, waiting: 0, settled: 0 });
+    expect(isSettled(snoozed)).toBe(false);
+  });
+
+  test("settling a snoozed conversation is Done", () => {
+    expect(settleActionFor(makeChat({ later: { snoozedUntil: until } }))).toBe("settle");
+  });
+
+  test("laterOf leaves the scheduler's job ids out", () => {
+    const state = { ...makeState({ snooze: { until, setAt: 1 }, followUp: { at: 9, since: 1, due: false } }), job: "x" };
+    expect(laterOf(state)).toEqual({ snoozedUntil: until, followUp: { at: 9, since: 1, due: false } });
+    expect(laterOf(makeState())).toBeUndefined();
   });
 });

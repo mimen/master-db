@@ -7,7 +7,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -18,6 +17,8 @@ import { router } from "expo-router";
 import { api, attachmentThumbnailUrl } from "@/lib/api";
 import { ContextMenuArea } from "@/components/context-menu-area";
 import { type PopoverAnchor, useActionSheet } from "@/lib/action-sheet";
+import { openDeferMenu } from "@/lib/later";
+import { canFollowUp, laterLines } from "@/lib/later-times";
 import { copyHandleAction } from "@/lib/copy-handle";
 import { pinChat, renameChat } from "@/lib/chat-actions";
 import { contactService } from "@/lib/contact-service";
@@ -45,6 +46,7 @@ import { SourceIcon } from "./service-label";
 import { TriageGeometry } from "@/constants/triage-theme";
 import { useTheme } from "@/hooks/use-theme";
 import type { ThemeColors } from "@/components/ui/interaction";
+import { Toggle } from "@/components/ui/toggle";
 
 const GRID_GAP = 4;
 const GRID_MAX = 6;
@@ -444,6 +446,30 @@ export function ChatInfoContent({
         )}
 
         {summary && (
+          <Section
+            title="Later"
+            divider={theme.divider}
+            labelColor={theme.textSecondary}
+            action={{ label: summary.later?.snoozedUntil !== undefined ? "Change…" : "Snooze…", onPress: () => openDeferMenu(showSheet, summary, "later") }}
+          >
+            <View testID="details-later" style={styles.laterLines}>
+              {laterLines(summary.later).map((line) => (
+                <Text key={line} style={{ color: theme.text, fontSize: type.body }}>{line}</Text>
+              ))}
+              {canFollowUp(summary) && (
+                <Pressable accessibilityRole="button" accessibilityLabel="Follow up…" hitSlop={6} onPress={() => openDeferMenu(showSheet, summary, "followUp")}>
+                  {({ hovered, pressed }) => (
+                    <Text style={[{ color: theme.textSecondary, fontSize: type.body }, (hovered || pressed) && { textDecorationLine: "underline" }]}>
+                      {summary.later?.followUp ? "Change follow-up…" : "Follow up if no reply…"}
+                    </Text>
+                  )}
+                </Pressable>
+              )}
+            </View>
+          </Section>
+        )}
+
+        {summary && (
           <View style={[styles.section, { borderTopColor: theme.divider }]}>
             <ToggleRow
               icon="pin-outline"
@@ -584,15 +610,7 @@ function ToggleRow({
     <View style={styles.toggleRow}>
       <Ionicons name={icon} size={17} color={onChange ? theme.icon : theme.disabled} />
       <Text style={[styles.toggleLabel, { color: onChange ? theme.text : theme.disabled, fontSize: type.body }]}>{label}</Text>
-      <Switch
-        accessibilityLabel={label}
-        value={value}
-        disabled={!onChange}
-        onValueChange={onChange}
-        trackColor={{ true: theme.text, false: theme.switchOff }}
-        thumbColor={value ? theme.surface : "#FFFFFF"}
-        {...({ activeThumbColor: theme.surface } as object)}
-      />
+      <Toggle accessibilityLabel={label} value={value} disabled={!onChange} onValueChange={onChange} />
     </View>
   );
 }
@@ -666,6 +684,7 @@ const styles = StyleSheet.create({
   tagInput: { minWidth: 60, paddingVertical: 0 },
   section: { borderTopWidth: 1, marginTop: 18, paddingBottom: 6, paddingTop: 14 },
   sectionNote: { marginBottom: 8, marginTop: -4 },
+  laterLines: { gap: 6 },
   sectionHead: { alignItems: "baseline", flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
   sectionTitle: { fontWeight: "600" },
   sectionAction: { fontWeight: "500" },

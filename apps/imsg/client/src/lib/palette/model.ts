@@ -19,7 +19,7 @@ export type PaletteCommandId =
   | { kind: "state"; value: StateFilter }
   | { kind: "type"; value: TypeFilter }
   | { kind: "tab"; value: WorkspaceId }
-  | { kind: "action"; value: "new-message" | "shortcuts" | "scheduled" | "settings" | "update-today" | "regenerate-today" }
+  | { kind: "action"; value: "new-message" | "shortcuts" | "scheduled" | "settings" | "update-today" | "regenerate-today" | "later" | "follow-up" | "snoozed" }
   | { kind: "view"; value: string };
 
 export interface PaletteCommand {
@@ -85,6 +85,9 @@ export const PALETTE_COMMANDS: readonly PaletteCommand[] = [
     keywords: workspace.keywords,
   })),
   { id: { kind: "action", value: "new-message" }, title: "New message", keywords: ["compose", "start", "chat"], shortcut: shortcutFor("conversation.new") },
+  { id: { kind: "action", value: "later" }, title: "Later…", keywords: ["snooze", "defer", "remind me", "later"], shortcut: shortcutFor("conversation.later") },
+  { id: { kind: "action", value: "follow-up" }, title: "Follow up if no reply…", keywords: ["follow up", "remind", "reminder", "no reply", "nudge"] },
+  { id: { kind: "action", value: "snoozed" }, title: "Snoozed", keywords: ["view", "later", "snooze", "deferred"] },
   { id: { kind: "action", value: "scheduled" }, title: "Scheduled messages", keywords: ["schedule", "later", "send later", "queue", "pending"] },
   { id: { kind: "action", value: "shortcuts" }, title: "Keyboard shortcuts", keywords: ["help", "keys"], shortcut: shortcutFor("help.open") },
   { id: { kind: "action", value: "settings" }, title: "Settings", keywords: ["preferences", "options", "config"] },

@@ -224,6 +224,12 @@ export function runCommand(id: CommandId, _source: CommandSource): boolean {
     case "conversation.markUnread":
       rt.markUnreadSelected();
       return true;
+    case "conversation.later":
+      rt.deferSelected("later");
+      return true;
+    case "conversation.followUp":
+      rt.deferSelected("followUp");
+      return true;
     case "conversation.details":
       rt.toggleDetails();
       return true;

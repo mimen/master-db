@@ -14,6 +14,7 @@ import { AiStatusProvider } from "@/hooks/use-ai";
 import { ChatDirectoryProvider } from "@/hooks/use-chats";
 import { TodayProvider } from "@/hooks/use-today";
 import { ReleaseUpdateBanners } from "@/components/lazy-surfaces";
+import { LaterPicker } from "@/components/later-picker";
 import { ActionSheetProvider } from "@/lib/action-sheet";
 import { AppErrorBoundary } from "@/lib/app-error-boundary";
 import { guardWindowFileDrops } from "@/lib/attachments";
@@ -29,11 +30,15 @@ import { hydrateSidebarWidth } from "@/lib/sidebar-width";
 import { ToastHost } from "@/lib/toast";
 import { ensureGlobalWebCss } from "@/lib/web-css";
 import { HEADER_FONT, HEADER_FONT_SOURCE } from "@/lib/header-font";
+import { BackButton } from "@/components/ui/back-button";
 
 ensureGlobalWebCss();
 // Before the first render: an icon draws an empty Text until its font is registered, and the
 // header face swaps in late, so either one registered after first paint moves the sidebar header.
 void loadAsync({ ...Ionicons.font, [HEADER_FONT]: HEADER_FONT_SOURCE }).catch(() => undefined);
+
+/** Every phone modal leads with the same accent chevron, not the platform default arrow. */
+const backButton = () => <BackButton />;
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -90,17 +95,18 @@ export default function RootLayout() {
                     options={{ headerBackButtonDisplayMode: "minimal" }}
                   />
                   <Stack.Screen name="chat/[guid]" options={{ headerShown: false }} />
-                  <Stack.Screen name="search" options={{ presentation: "modal", title: "Search" }} />
-                  <Stack.Screen name="new-chat" options={{ presentation: "modal", title: "New message" }} />
-                  <Stack.Screen name="chat-info" options={{ presentation: "modal", title: "Details" }} />
-                  <Stack.Screen name="scheduled" options={{ presentation: "modal", title: "Scheduled" }} />
+                  <Stack.Screen name="search" options={{ presentation: "modal", title: "Search", headerLeft: backButton }} />
+                  <Stack.Screen name="new-chat" options={{ presentation: "modal", title: "New message", headerLeft: backButton }} />
+                  <Stack.Screen name="chat-info" options={{ presentation: "modal", title: "Details", headerLeft: backButton }} />
+                  <Stack.Screen name="scheduled" options={{ presentation: "modal", title: "Scheduled", headerLeft: backButton }} />
                   <Stack.Screen name="agent" options={{ presentation: "modal", headerShown: false }} />
-                  <Stack.Screen name="forward" options={{ presentation: "modal", title: "Forward" }} />
-                  <Stack.Screen name="person" options={{ presentation: "modal", title: "Contact" }} />
+                  <Stack.Screen name="forward" options={{ presentation: "modal", title: "Forward", headerLeft: backButton }} />
+                  <Stack.Screen name="person" options={{ presentation: "modal", title: "Contact", headerLeft: backButton }} />
                     <Stack.Screen name="settings" options={{ presentation: "modal", title: "Settings" }} />
                   </Stack>
                 </DesktopShellProvider>
                 <ReleaseUpdateBanners />
+                <LaterPicker />
                 <StatusBar style="auto" />
               </ToastHost>
             </LightboxProvider>

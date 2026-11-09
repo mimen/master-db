@@ -1,13 +1,14 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { Platform as ChatPlatform, TypeFilter } from "@shared/types";
 import { useEffect } from "react";
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, useWindowDimensions, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Reanimated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
 
 import { SourceIcon } from "./service-label";
 import { Dropdown, type DropdownOption } from "./ui/dropdown";
 import { Springs } from "@/constants/springs";
 import { useTheme } from "@/hooks/use-theme";
+import { Toggle as Switch } from "@/components/ui/toggle";
 import {
   INCLUDE_LABELS,
   ONLY_LABELS,
@@ -77,13 +78,7 @@ function Toggle({
       <View style={[styles.sheetRow, { borderBottomColor: theme.divider }]}>
         <Ionicons aria-hidden name={icon} size={20} color={theme.icon} style={styles.sheetIcon} />
         <Text style={[styles.sheetLabel, { color: theme.text }]}>{label}</Text>
-        <Switch
-          accessibilityLabel={`${label}, ${count}`}
-          value={checked}
-          onValueChange={onToggle}
-          trackColor={{ false: theme.switchOff, true: theme.switchOn }}
-          thumbColor="#FFFFFF"
-        />
+        <Switch accessibilityLabel={`${label}, ${count}`} value={checked} onValueChange={onToggle} />
       </View>
     );
   }
