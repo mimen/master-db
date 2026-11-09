@@ -24,7 +24,8 @@ test("the app opens on Today; a settle leaves a rank gap and moves progress; Upd
   const { page } = desk;
   await openToday(page);
   await expect(page.getByRole("tab", { name: /^Today, \d+/ })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByTestId("today-meta")).toHaveText("Updated 10:30 AM · session from Aug 19 · Opus 5.5 · read 15 of 21 threads");
+  await expect(page.getByTestId("today-meta")).toHaveText("Updated 10:30 AM");
+  await expect(page.getByTestId("today-meta")).toHaveAttribute("title", "Session from Aug 19 · Opus 5.5 · read 15 of 21 threads");
   await expect(page.getByText("New since 10:30 AM", { exact: true })).toBeVisible();
   const rows = page.getByTestId("conversation-row");
   const alex = rows.filter({ hasText: "Alex Rivera" });
@@ -45,7 +46,8 @@ test("the app opens on Today; a settle leaves a rank gap and moves progress; Upd
   await expect(page.getByTestId("today-meta")).toHaveText("Checking what changed with Opus 5.5…");
   await expect(page.getByTestId("today-build-menu")).toBeDisabled();
   await expect(page.getByTestId("today-update")).toHaveText("Update", { timeout: 10_000 });
-  await expect(page.getByTestId("today-meta")).toHaveText(/^Updated \d+:\d\d [AP]M · session from Aug 19 · Opus 5\.5 · read \d+ of \d+ threads$/);
+  await expect(page.getByTestId("today-meta")).toHaveText(/^Updated \d+:\d\d [AP]M$/);
+  await expect(page.getByTestId("today-meta")).toHaveAttribute("title", /^Session from Aug 19 · Opus 5\.5 · read \d+ of \d+ threads$/);
   await expect(page.getByText("New since 10:30 AM", { exact: true })).toHaveCount(0);
   await expect(rows.filter({ hasText: "Launch Crew" }).getByTestId("today-rank")).toHaveText("1");
   await expect(page.getByTestId("today-progress")).toHaveText("1 settled · 14 to go");
@@ -114,7 +116,8 @@ test("Regenerate from scratch is one menu away and starts a new session", async 
   await expect(page.getByTestId("today-update")).toHaveText("Regenerating");
   await expect(page.getByTestId("today-meta")).toHaveText("Reading threads with Opus 5.5…");
   await expect(page.getByTestId("today-update")).toHaveText("Update", { timeout: 10_000 });
-  await expect(page.getByTestId("today-meta")).toHaveText(/^Built \d+:\d\d [AP]M · Opus 5\.5 · read \d+ of \d+ threads$/);
+  await expect(page.getByTestId("today-meta")).toHaveText(/^Built \d+:\d\d [AP]M$/);
+  await expect(page.getByTestId("today-meta")).toHaveAttribute("title", /^Opus 5\.5 · read \d+ of \d+ threads$/);
   expect(builds).toEqual(["fresh"]);
 });
 

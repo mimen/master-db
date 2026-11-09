@@ -270,12 +270,17 @@ export const busyCopy = (busy: TodayBusy): { label: string; meta: string } => BU
 const shortDate = (at: number): string => new Date(at).toLocaleDateString("en-US", { timeZone: TODAY_TIME_ZONE, month: "short", day: "numeric" });
 
 /** The idle meta line: when the queue was built or updated, the session an Update continued, and what was read. */
+/** The card's meta line: when the queue was built, or last updated. */
 export function builtLine(header: Extract<TodayHeader, { kind: "queue" }>): string {
-  const built = todayTime(header.builtAt);
+  return `${header.sessionFrom === null ? "Built" : "Updated"} ${todayTime(header.builtAt)}`;
+}
+
+/** How the queue was built, for the Update menu and the meta line's tooltip: the session, the model and what it read. */
+export function buildDetail(header: Extract<TodayHeader, { kind: "queue" }>): string {
   const { sessionFrom } = header;
-  const when = sessionFrom === null ? `Built ${built}`
-    : `Updated ${built} · session from ${todayWindow(sessionFrom).day === todayWindow(header.builtAt).day ? todayTime(sessionFrom) : shortDate(sessionFrom)}`;
-  return `${when} · ${header.model} · read ${header.readCount} of ${header.candidateCount} threads`;
+  const session = sessionFrom === null ? []
+    : [`Session from ${todayWindow(sessionFrom).day === todayWindow(header.builtAt).day ? todayTime(sessionFrom) : shortDate(sessionFrom)}`];
+  return [...session, header.model, `read ${header.readCount} of ${header.candidateCount} threads`].join(" · ");
 }
 
 export function todayHeader(view: TodayView | null | undefined, plan: TodayPlan): TodayHeader {

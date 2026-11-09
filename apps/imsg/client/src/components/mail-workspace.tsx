@@ -577,7 +577,7 @@ function EmailFrame({ html, images, inline, title }: { html: string; images: boo
     srcDoc: emailDocument(html, { images, inline }),
     sandbox: EMAIL_SANDBOX,
     referrerPolicy: "no-referrer",
-    style: { border: 0, width: "100%", height, background: "#fff", borderRadius: 8 },
+    style: { border: 0, width: "100%", height, background: "transparent", borderRadius: 8 },
     onLoad: (event: { currentTarget: HTMLIFrameElement }) => {
       const doc = event.currentTarget.contentDocument;
       if (!doc) return;

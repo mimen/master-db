@@ -78,21 +78,32 @@ export function ChatAvatar({ chat, size }: { chat: ChatSummary; size: number }) 
   const ringColor = theme.background;
   const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
   const uri = groupPhotoUrl(chat);
-  if (!chat.isGroup) {
+  if (chat.kind === "channel") {
+    const radius = Math.round(size * 0.28);
+    return (
+      <View style={[styles.circle, { width: size, height: size, borderRadius: radius, backgroundColor: theme.avatar[avatarSlot(chat.displayName, theme.avatar.length)] }]}>
+        <Text style={{ fontSize: Math.round(size * 0.46), fontWeight: "600", color: theme.avatarText }}>#</Text>
+        {uri && uri !== failedPhoto ? (
+          <Image source={{ uri }} onError={() => setFailedPhoto(uri)} style={[StyleSheet.absoluteFill, { borderRadius: radius }]} contentFit="cover" recyclingKey={chat.conversationId} cachePolicy="memory-disk" />
+        ) : null}
+      </View>
+    );
+  }
+  const sorted = [...new Map(chat.participants.map((p) => [p.address, p])).values()].sort(
+    (a, b) => Number(b.name !== null) - Number(a.name !== null),
+  );
+  if (!chat.isGroup || sorted.length < 2) {
+    const only = sorted[0];
     return (
       <PersonAvatar
-        address={chat.participants[0]?.address ?? null}
-        name={chat.displayName}
+        address={only?.address ?? null}
+        name={chat.isGroup ? (only?.name ?? chat.displayName) : chat.displayName}
         size={size}
-        photoUrl={chat.participants[0]?.photoUrl}
+        photoUrl={only?.photoUrl}
       />
     );
   }
-  const sorted = [...chat.participants].sort(
-    (a, b) => Number(b.name !== null) - Number(a.name !== null),
-  );
-  const first = sorted[0];
-  const second = sorted[1] ?? sorted[0];
+  const [first, second] = sorted;
   const face = Math.round(size * 0.6);
   return (
     <View style={{ width: size, height: size }}>

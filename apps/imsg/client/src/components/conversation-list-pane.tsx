@@ -71,7 +71,7 @@ import {
 } from "@/lib/palette/saved-views";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
 import { planToday, settleAllTargets, todayHeader, type TodaySectionKey } from "@/lib/today";
-import { TodayHeaderCard } from "./today-header";
+import { InfoTip, TodayHeaderCard } from "./today-header";
 import { isListMode, requestFocus, subscribeListMode } from "@/lib/keyboard/controller";
 import { nextLeaving, withLeaving, type LeavingRow } from "@/lib/leaving-rows";
 import { useSyncExternalStore } from "react";
@@ -439,7 +439,8 @@ export function ConversationListPane({
           // FlashListRef and FlatList's ref don't overlap; callers only use
           // scrollToOffset / scrollToIndex (ConversationListHandle).
           ref={listRef as never}
-          data={rows}
+          // Until the first listConversations page lands, Today's plan would claim the queue is cleared.
+          data={loading ? [] : rows}
           keyExtractor={rowKey}
           {...(Platform.OS === "web" ? {} : { getItemType: (row: InboxRow) => row.kind })}
           // Native-only: FlatList has no drawDistance, and FlashList's is what
@@ -492,7 +493,7 @@ export function ConversationListPane({
                 <Text style={[styles.lensNote, { color: theme.textSecondary, fontSize: type.secondary }]}>Settled</Text>
               ) : null}
               {onToday && !search.active ? (
-                <TodayHeaderCard header={todayHeader(today.view, plan)} dayStart={today.view?.dayStart ?? today.dayStart} onRequest={(mode) => void today.request(mode)} />
+                <TodayHeaderCard header={loading ? { kind: "loading" } : todayHeader(today.view, plan)} dayStart={today.view?.dayStart ?? today.dayStart} onRequest={(mode) => void today.request(mode)} />
               ) : null}
               {!search.active && (!onToday || chips.length > 0) ? (
                 <FilterChipRow
@@ -509,7 +510,7 @@ export function ConversationListPane({
             </View>
           }
           ListEmptyComponent={
-            loading && chats.length === 0 ? (
+            loading ? (
               <SkeletonList />
             ) : emptyLens ? (
               <EmptyLens
@@ -602,7 +603,9 @@ function TodaySectionHeader({ row, onToggleFold, onSettleAll }: {
 }) {
   const theme = useTheme();
   const fold = row.fold;
-  const detail = row.detail ? <Text style={[styles.todayDetail, { color: theme.textTertiary }]}>{row.detail}</Text> : null;
+  const [explained, setExplained] = useState(false);
+  const info = row.detail ? <InfoTip text={row.detail} onPress={() => setExplained((open) => !open)} /> : null;
+  const detail = row.detail && explained ? <Text style={[styles.todayDetail, { color: theme.textTertiary }]}>{row.detail}</Text> : null;
   if (fold) {
     return (
       <Pressable
@@ -614,7 +617,10 @@ function TodaySectionHeader({ row, onToggleFold, onSettleAll }: {
         style={({ hovered }) => [styles.fold, hovered && { backgroundColor: theme.rowHover }]}
       >
         <View style={styles.foldText}>
-          <Text accessibilityRole="header" style={[styles.foldLabel, { color: theme.textSecondary }]}>{row.label}</Text>
+          <View style={styles.todayTitleRow}>
+            <Text accessibilityRole="header" style={[styles.foldLabel, { color: theme.textSecondary }]}>{row.label}</Text>
+            {info}
+          </View>
           {detail}
         </View>
         <View style={styles.chev}>
@@ -630,6 +636,7 @@ function TodaySectionHeader({ row, onToggleFold, onSettleAll }: {
         <View style={styles.todayTitleRow}>
           {row.tone === "fresh" ? <View style={[styles.freshDot, { backgroundColor: theme.accent }]} /> : null}
           <Text accessibilityRole="header" style={[styles.todayTitle, { color: theme.text }]}>{row.label}</Text>
+          {info}
         </View>
         <View style={styles.todayActions}>
           {row.key === `section-today-${SETTLE_SECTION}` ? (

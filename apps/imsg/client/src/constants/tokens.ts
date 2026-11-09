@@ -44,9 +44,9 @@ export const TypeRamp: { readonly desktop: TypeRampScale; readonly mobile: TypeR
 
 /**
  * The one semantic palette: Signal. Pure neutral with one persimmon accent
- * that marks your-turn time (`turn`), the active lens (`lensBar`) and keyboard
- * focus (`focusRing`). `accent` stays iMessage blue: it is the sent bubble,
- * the unread dot and links, not chrome. Every text token was measured at
+ * that marks your-turn time (`turn`) and the active lens (`lensBar`). Keyboard
+ * focus (`focusRing`) is a calm blue, so it never reads as urgent. `accent` stays
+ * iMessage blue: it is the sent bubble, the unread dot and links, not chrome. Every text token was measured at
  * 4.5:1 or better on `background`, `thread` and `surface` in its scheme
  * (artifacts/2026-10-04-design-overhaul/round4/contrast.mjs).
  */
@@ -67,7 +67,7 @@ export const Palette = {
     onTurn: "#FFFFFF",
     turnMark: "#EC5A1E",
     lensBar: "#EC5A1E",
-    focusRing: "#E0500F",
+    focusRing: "#3B82F6",
     success: "#1F7A35",
     warning: "#C93400",
     destructive: "#C4261B",
@@ -86,7 +86,7 @@ export const Palette = {
     onTurn: "#1A0B03",
     turnMark: "#FF6A2B",
     lensBar: "#FF6A2B",
-    focusRing: "#FF7A40",
+    focusRing: "#60A5FA",
     success: "#30D158",
     warning: "#FF9F0A",
     destructive: "#FF6B5E",
@@ -165,7 +165,7 @@ export const Colors = {
     divider: "rgba(255,255,255,0.07)",
     dividerStrong: "rgba(255,255,255,0.12)",
     sms: "#30D158",
-    avatar: ["#2A2A2E", "#2E2E33", "#28282C", "#2C2C31", "#303035", "#29292D"],
+    avatar: ["#38383E", "#3C3C42", "#36363C", "#3A3A40", "#3E3E44", "#37373D"],
     avatarText: "#D6D6DB",
     swipeIdle: "#2A2A2E",
     onSwipeIdle: "#C4C4CA",
