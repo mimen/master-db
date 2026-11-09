@@ -103,7 +103,8 @@ describe("slack", () => {
     const conversation = { platform: "slack" as const, accountId: "acct" as never, slack: { channel: "C1", threadTs: "1.0" } };
     expect(sendRoute(conversation)).toEqual({ platform: "slack", accountId: "acct", channel: "C1", threadTs: "1.0" });
     // A followed thread's `slack` carries `following`; the route must not, or the outbox insert fails validation.
-    expect(sendRoute({ ...conversation, slack: { ...conversation.slack, following: true } }))
+    const followed = { ...conversation.slack, following: true };
+    expect(sendRoute({ ...conversation, slack: followed }))
       .toEqual({ platform: "slack", accountId: "acct", channel: "C1", threadTs: "1.0" });
     expect(routeFor(conversation)).toEqual(sendRoute(conversation));
     expect(routeFor(conversation, "SMS")).toBeNull();
