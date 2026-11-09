@@ -714,6 +714,103 @@ export declare const api: {
         }>
       >;
     };
+    later: {
+      clearFollowUp: FunctionReference<
+        "mutation",
+        "public",
+        { conversationId: Id<"comma_conversations"> },
+        null
+      >;
+      listSnoozed: FunctionReference<
+        "query",
+        "public",
+        {},
+        Array<{
+          _creationTime: number;
+          _id: Id<"comma_conversations">;
+          accountId?: Id<"comma_accounts">;
+          chatGuids?: Array<string>;
+          contactsAvailable: boolean;
+          conversationKey: string;
+          crm?: {
+            is_favorite?: boolean;
+            priority?: number;
+            tags?: Array<string>;
+          };
+          displayName: string;
+          flags: {
+            mutedUnresponded: boolean;
+            pinned: boolean;
+            unread: boolean;
+            unresponded: boolean;
+            waiting: boolean;
+          };
+          gmail?: {
+            archiveError?: string;
+            bulk: boolean;
+            inInbox: boolean;
+            subject: string;
+            threadId: string;
+            unread?: number;
+          };
+          groupPhotoGuid?: string;
+          groupPhotoStorageId?: Id<"_storage">;
+          groupPhotoUrl: string | null;
+          hasGroupPhoto?: boolean;
+          isGroup: boolean;
+          isSpam: boolean;
+          kind: "dm" | "group" | "channel" | "thread" | "emailThread";
+          known: boolean;
+          later?: {
+            followUp?: { at: number; due: boolean; since: number };
+            returned?: { at: number; reason: "time" | "message"; until: number };
+            snoozedUntil?: number;
+          };
+          lastMessage?: {
+            dateCreated: number;
+            guid: string;
+            hasAttachments: boolean;
+            isFromMe: boolean;
+            mentionsMe?: boolean;
+            senderName: string | null;
+            text: string;
+          };
+          lastMessageAt: number;
+          participants: Array<{
+            address: string;
+            name: string | null;
+            photoUrl?: string | null;
+          }>;
+          platform?: "imessage" | "slack" | "gmail";
+          primaryChatGuid?: string;
+          rawDisplayName?: string;
+          searchNames: Array<string>;
+          slack?: { channel: string; following?: boolean; threadTs?: string };
+          thread?: { parentId?: Id<"comma_conversations">; replyCount: number };
+          unread?: { count: number; firstAt: number };
+          unreadCount: number;
+          updatedAt: number;
+        }>
+      >;
+      setFollowUp: FunctionReference<
+        "mutation",
+        "public",
+        { at: number; conversationId: Id<"comma_conversations"> },
+        null
+      >;
+      snooze: FunctionReference<
+        "mutation",
+        "public",
+        { conversationId: Id<"comma_conversations">; until: number },
+        null
+      >;
+      unsnooze: FunctionReference<
+        "mutation",
+        "public",
+        { conversationId: Id<"comma_conversations"> },
+        null
+      >;
+    };
     linkPreview: {
       fetchLinkPreview: FunctionReference<
         "action",
@@ -2200,6 +2297,11 @@ export declare const api: {
           isSpam: boolean;
           kind: "dm" | "group" | "channel" | "thread" | "emailThread";
           known: boolean;
+          later?: {
+            followUp?: { at: number; due: boolean; since: number };
+            returned?: { at: number; reason: "time" | "message"; until: number };
+            snoozedUntil?: number;
+          };
           lastMessage?: {
             dateCreated: number;
             guid: string;
@@ -2338,6 +2440,11 @@ export declare const api: {
             isSpam: boolean;
             kind: "dm" | "group" | "channel" | "thread" | "emailThread";
             known: boolean;
+            later?: {
+              followUp?: { at: number; due: boolean; since: number };
+              returned?: { at: number; reason: "time" | "message"; until: number };
+              snoozedUntil?: number;
+            };
             lastMessage?: {
               dateCreated: number;
               guid: string;
@@ -2435,6 +2542,11 @@ export declare const api: {
             isSpam: boolean;
             kind: "dm" | "group" | "channel" | "thread" | "emailThread";
             known: boolean;
+            later?: {
+              followUp?: { at: number; due: boolean; since: number };
+              returned?: { at: number; reason: "time" | "message"; until: number };
+              snoozedUntil?: number;
+            };
             lastMessage?: {
               dateCreated: number;
               guid: string;
@@ -2702,6 +2814,11 @@ export declare const api: {
           isSpam: boolean;
           kind: "dm" | "group" | "channel" | "thread" | "emailThread";
           known: boolean;
+          later?: {
+            followUp?: { at: number; due: boolean; since: number };
+            returned?: { at: number; reason: "time" | "message"; until: number };
+            snoozedUntil?: number;
+          };
           lastMessage?: {
             dateCreated: number;
             guid: string;
@@ -5747,6 +5864,20 @@ export declare const internal: {
         "action",
         "internal",
         { lane: "imessage" | "slack" | "gmail" | "ai" | "aiBackground" },
+        null
+      >;
+    };
+    later: {
+      followUpDue: FunctionReference<
+        "mutation",
+        "internal",
+        { at: number; conversationId: Id<"comma_conversations"> },
+        null
+      >;
+      wake: FunctionReference<
+        "mutation",
+        "internal",
+        { conversationId: Id<"comma_conversations">; until: number },
         null
       >;
     };

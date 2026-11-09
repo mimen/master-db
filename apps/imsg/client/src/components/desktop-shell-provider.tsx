@@ -283,6 +283,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
       findInConversation: () => undefined,
       settleSelected: () => undefined,
       markUnreadSelected: () => undefined,
+      deferSelected: () => undefined,
       toggleDetails: () => undefined,
       openAgent: () => undefined,
       focusListSearch: () => undefined,
