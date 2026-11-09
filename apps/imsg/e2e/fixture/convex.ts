@@ -186,6 +186,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
   // Settings' accounts: the Mac's iMessage account, and Slack once a spec connects it.
   const slackAccount = { connected: false, ever: false };
   const gmailAccount = { connected: false, ever: false };
+  const personalGmail = { connected: false, ever: false };
   const mini = { online: true, heartbeat: true, beatAt: new Date().getTime(), notSentAfterMs: NOT_SENT_AFTER_MS, held: new Map<string, { release: () => void; timer: ReturnType<typeof setTimeout> }>() };
   const strand = (clientKey: string, error: string) => {
     const receipt = receipts.get(clientKey);
@@ -577,15 +578,24 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     "comma/accounts:listAccounts": async () => [
       { _id: "account-imessage", platform: "imessage", label: "iMessage", health: "ok", connected: true, createdAt: 1 },
       ...(slackAccount.ever ? [{ _id: "account-slack", platform: "slack", label: "AUF", health: "ok", connected: slackAccount.connected, createdAt: 2 }] : []),
-      ...(gmailAccount.ever ? [{ _id: "account-gmail", platform: "gmail", label: "milad@afternoonumbrellafriends.com", health: "ok", connected: gmailAccount.connected, createdAt: 3 }] : []),
+      ...(gmailAccount.ever ? [{
+        _id: "account-gmail", platform: "gmail", label: "milad@afternoonumbrellafriends.com", health: "ok", connected: gmailAccount.connected, createdAt: 3,
+        gmailApp: "workspace",
+      }] : []),
+      // A gmail.com mailbox through the Testing-mode app, granted 2 days ago. The browser counts down on the real clock,
+      // not the server's pinned Date.now, so the deadline is read off the real one.
+      ...(personalGmail.ever ? [{
+        _id: "account-gmail-personal", platform: "gmail", label: "miladmaaan@gmail.com", health: "ok", connected: personalGmail.connected, createdAt: 4,
+        gmailApp: "personal", ...(personalGmail.connected ? { reconnectBy: performance.timeOrigin + performance.now() + 5 * 86_400_000 } : {}),
+      }] : []),
     ],
     // The fixture's Google consent screen approves at once, as the real callback lands the mailbox.
-    "comma/googleAuth:startGmailConnect": async () => {
-      Object.assign(gmailAccount, { connected: true, ever: true });
+    "comma/googleAuth:startGmailConnect": async (args) => {
+      Object.assign(args.app === "personal" ? personalGmail : gmailAccount, { connected: true, ever: true });
       return "/__fixture/gmail-connected";
     },
-    "comma/googleAuth:disconnectGmail": async () => {
-      gmailAccount.connected = false;
+    "comma/googleAuth:disconnectGmail": async (args) => {
+      (args.accountId === "account-gmail-personal" ? personalGmail : gmailAccount).connected = false;
       return null;
     },
     // The fixture's Slack consent screen approves at once, the way the real callback lands the account.
@@ -920,6 +930,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     for (const { timer } of mini.held.values()) clearTimeout(timer);
     Object.assign(slackAccount, { connected: false, ever: false });
     Object.assign(gmailAccount, { connected: false, ever: false });
+    Object.assign(personalGmail, { connected: false, ever: false });
     slackWorld.reset();
     mailWorld.reset();
     commaScheduled.clear();

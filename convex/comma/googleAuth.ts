@@ -36,12 +36,16 @@ export const googleRedirectUri = () => `${siteUrl()}/comma/oauth/google/callback
 
 /**
  * The OAuth apps a mailbox connects through, by their env names. The Workspace app is internal to the AUF organization
- * and its grants last. A gmail.com mailbox cannot use an internal app, so it uses an external app in Testing mode.
+ * and its grants last. A gmail.com mailbox cannot use an internal app, so it uses an external app in Testing mode, in
+ * its own Cloud project. Gmail pushes only to a topic in the app's own project, so each app names its topic.
  */
 const GOOGLE_APPS = {
-  workspace: { clientId: "GOOGLE_CLIENT_ID", clientSecret: "GOOGLE_CLIENT_SECRET" },
-  personal: { clientId: "GOOGLE_PERSONAL_CLIENT_ID", clientSecret: "GOOGLE_PERSONAL_CLIENT_SECRET" },
-} as const satisfies Record<GmailApp, { clientId: string; clientSecret: string }>;
+  workspace: { clientId: "GOOGLE_CLIENT_ID", clientSecret: "GOOGLE_CLIENT_SECRET", pushTopic: "GMAIL_PUSH_TOPIC" },
+  personal: { clientId: "GOOGLE_PERSONAL_CLIENT_ID", clientSecret: "GOOGLE_PERSONAL_CLIENT_SECRET", pushTopic: "GMAIL_PERSONAL_PUSH_TOPIC" },
+} as const satisfies Record<GmailApp, { clientId: string; clientSecret: string; pushTopic: string }>;
+
+/** The Pub/Sub topic the app's mailboxes push to, or undefined when only the backstop reads them. */
+export const pushTopic = (app: GmailApp): string | undefined => process.env[GOOGLE_APPS[app].pushTopic] || undefined;
 
 /** Google ends a Testing-mode app's grant this long after consent, until the app passes verification. */
 export const TESTING_GRANT_MS = 7 * 24 * 60 * 60_000;

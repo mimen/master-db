@@ -17,6 +17,7 @@ import { TriageGeometry } from "@/constants/triage-theme";
 import { useTheme } from "@/hooks/use-theme";
 import { api } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
+import { grantEnded, reconnectCaption } from "@/lib/gmail-grant";
 import { convexClient } from "@/lib/identity";
 import { runCommand } from "@/lib/keyboard/controller";
 import { shortcutFor } from "@/lib/keyboard/registry";
@@ -253,9 +254,12 @@ function OAuthAccountRow({ first, name, account, about, reading, start, stop }: 
       ),
     }],
   });
-  const live = account?.connected && account.health === "ok";
-  const caption = live ? `${account.label}. ${reading}`
-    : account?.connected ? `${account.label}. ${name} stopped answering. Reconnect to keep reading.`
+  const now = Date.now();
+  const ended = grantEnded(account?.reconnectBy, now);
+  const live = account?.connected && account.health === "ok" && !ended;
+  const countdown = account?.reconnectBy !== undefined ? ` ${reconnectCaption(account.reconnectBy, now)}` : "";
+  const caption = live ? `${account.label}. ${reading}${countdown}`
+    : account?.connected ? `${account.label}.${ended ? countdown : ` ${name} stopped answering. Reconnect to keep reading.`}`
       : account ? `${account.label}. Not connected.` : about;
   return (
     <SettingRow first={first} title={name} caption={caption}>
@@ -298,10 +302,19 @@ function AccountsGroup(): JSX.Element | null {
       <OAuthAccountRow
         first={false}
         name="Gmail"
-        account={accounts.find((account) => account.platform === "gmail")}
+        account={accounts.find((account) => account.platform === "gmail" && account.gmailApp !== "personal")}
         about="Read your AUF mailbox in Comma's Mail."
         reading="Comma reads your inbox. Replying and archiving from Comma are coming."
         start={() => startGmailConnect({})}
+        stop={(accountId) => disconnectGmail({ accountId })}
+      />
+      <OAuthAccountRow
+        first={false}
+        name="Personal Gmail"
+        account={accounts.find((account) => account.platform === "gmail" && account.gmailApp === "personal")}
+        about="Read your gmail.com mailbox in Comma's Mail. Google asks you to reconnect it every week."
+        reading="Comma reads your inbox."
+        start={() => startGmailConnect({ app: "personal" })}
         stop={(accountId) => disconnectGmail({ accountId })}
       />
     </Group>

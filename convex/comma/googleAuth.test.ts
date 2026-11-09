@@ -8,7 +8,7 @@ import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
 import { openCredentials } from "./credentials";
-import { ALIAS, FakeGmail, MAILBOX, REFRESH_TOKEN, stubGmailEnv } from "./fakeGmail.vitest";
+import { ALIAS, FakeGmail, MAILBOX, PUSH_TOPIC, REFRESH_TOKEN, stubGmailEnv } from "./fakeGmail.vitest";
 import { GMAIL_SCOPES, gmailToken, TESTING_GRANT_MS } from "./googleAuth";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
@@ -204,6 +204,17 @@ describe("a gmail.com mailbox through the personal app", () => {
     expect(await tokenFor(t, workspace._id)).toBe(google.accessToken);
     const refreshes = google.calls.filter((call) => call.form.grant_type === "refresh_token");
     expect(refreshes.map((call) => call.form.client_id)).toEqual(["google-personal-client-id", "google-client-id"]);
+  });
+
+  test("the mailbox watches its own app's topic, since Gmail pushes only within the app's project; with none, it waits for the backstop", async () => {
+    const { t, as } = await setup();
+    google.mailbox = PERSONAL;
+    await connect(t, as, { app: "personal" });
+    expect(google.watches).toEqual([]);
+    vi.stubEnv("GMAIL_PERSONAL_PUSH_TOPIC", "projects/comma-personal/topics/comma-gmail");
+    await t.action(internal.comma.gmailSync.renewWatches, {});
+    expect(google.watches).toEqual([{ topicName: "projects/comma-personal/topics/comma-gmail" }]);
+    expect(google.watches).not.toContainEqual({ topicName: PUSH_TOPIC });
   });
 
   test("Settings counts down to the weekly reconnect; the workspace mailbox has none", async () => {
