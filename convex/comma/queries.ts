@@ -2,7 +2,7 @@ import { paginationOptsValidator, paginationResultValidator } from "convex/serve
 import { v, type Infer } from "convex/values";
 
 import { formatAddress } from "../../apps/imsg/shared/address";
-import { conversationFlags } from "../../apps/imsg/shared/chat-state";
+import { conversationFlags, laterOf } from "../../apps/imsg/shared/chat-state";
 import type { Id } from "../_generated/dataModel";
 import { query, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
@@ -15,6 +15,7 @@ import {
   conversationKind as conversationKindValidator,
   draftListItem,
   draftView,
+  laterView,
   messageDoc,
   participant,
   platform as platformValidator,
@@ -35,7 +36,7 @@ import { resolveConversationNames } from "./names";
 import { normalizedAddress, personForNormalized } from "./photos";
 import { reactionsOf } from "./reactionStore";
 
-const conversationView = v.object({
+export const conversationView = v.object({
   ...conversationDoc.fields,
   kind: conversationKindValidator,
   participants: v.array(v.object({ ...participant.fields, photoUrl: v.optional(v.union(v.string(), v.null())) })),
@@ -47,6 +48,7 @@ const conversationView = v.object({
     pinned: v.boolean(),
   }),
   unreadCount: v.number(),
+  later: v.optional(laterView),
   /** A participant resolves to a named person in the identity graph. */
   known: v.boolean(),
   /** False while the identity graph holds no Apple contacts, so the Unknown lens fails open. */
@@ -148,7 +150,9 @@ export async function withConversationState(
       : (await findMessage(ctx, scopeOf(conversation), lastMessage.guid))?.sender?.address;
     if (senderAddress) senderName = personName(await read.person(senderAddress)) ?? formatAddress(senderAddress);
   }
+  const later = laterOf(state ?? undefined);
   return { ...conversation, kind: ruled.kind, displayName: names.displayName, participants, flags, unreadCount, ...(crm ? { crm } : {}),
+    ...(later ? { later } : {}),
     known: names.known, contactsAvailable: await read.contactsAvailable(), searchNames: names.searchNames,
     ...(lastMessage ? { lastMessage: { ...lastMessage, senderName } } : {}),
     groupPhotoUrl: conversation.groupPhotoStorageId ? await read.storageUrl(conversation.groupPhotoStorageId) : null,

@@ -387,6 +387,8 @@ export const attachmentFields = {
   isOnDisk: v.optional(imessageAttachmentFields.isOnDisk),
 };
 
+export const snoozeReturnReason = v.union(v.literal("time"), v.literal("message"));
+
 export const conversationStateFields = {
   conversationId: v.id("comma_conversations"),
   dismissedUnrespondedGuid: v.optional(v.string()),
@@ -396,7 +398,19 @@ export const conversationStateFields = {
   pinned: v.boolean(),
   readAt: v.number(),
   updatedAt: v.number(),
+  /** Later, in Comma only: Gmail keeps the thread in its inbox. `job` is the wake scheduled for `until`. */
+  snooze: v.optional(v.object({ until: v.number(), setAt: v.number(), job: v.id("_scheduled_functions") })),
+  snoozeReturn: v.optional(v.object({ reason: snoozeReturnReason, until: v.number(), at: v.number() })),
+  /** `job` fires at `at` and is gone once the follow-up is due. */
+  followUp: v.optional(v.object({ at: v.number(), since: v.number(), due: v.boolean(), job: v.optional(v.id("_scheduled_functions")) })),
 };
+
+/** What a client sees of a conversation's deferrals: shared/chat-state.ts laterOf. */
+export const laterView = v.object({
+  snoozedUntil: v.optional(v.number()),
+  returned: v.optional(v.object({ reason: snoozeReturnReason, until: v.number(), at: v.number() })),
+  followUp: v.optional(v.object({ at: v.number(), since: v.number(), due: v.boolean() })),
+});
 
 export const triageEventFields = {
   conversationId: v.id("comma_conversations"),

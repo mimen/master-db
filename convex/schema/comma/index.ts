@@ -71,9 +71,9 @@ export const comma_attachments = defineTable(attachmentFields)
   .index("by_messageGuid", ["messageGuid"])
   .index("by_conversationId", ["conversationId"]);
 
-export const comma_conversation_state = defineTable(conversationStateFields).index("by_conversationId", [
-  "conversationId",
-]);
+export const comma_conversation_state = defineTable(conversationStateFields)
+  .index("by_conversationId", ["conversationId"])
+  .index("by_snoozeUntil", ["snooze.until"]);
 
 export const comma_triage_events = defineTable(triageEventFields)
   .index("by_clearedAt", ["clearedAt"])

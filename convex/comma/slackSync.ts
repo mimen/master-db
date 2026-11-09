@@ -17,6 +17,7 @@ import { mentions, parseSlackMessage, parseSlackUser, selfUserId, type SlackMess
 import { slackAttachmentGuid, writeSlackFiles } from "./slackFiles";
 import { slackNames, unknownSlackUsers, upsertSlackUsers } from "./slackPeople";
 import { slackDisplayText, slackModelText } from "./slackText";
+import { resurfaceOnMessages } from "./later";
 import { logReplies } from "./triage";
 
 /**
@@ -144,7 +145,7 @@ export async function writeSlackBatch(ctx: MutationCtx, accountId: Id<"comma_acc
   let written = 0;
   let skipped = 0;
   const touched = new Set<Id<"comma_conversations">>();
-  const real: Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe" | "sender">[] = [];
+  const real: Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe" | "sender" | "mentionsMe">[] = [];
   for (const home of await homesOf(ctx, accountId, conversations)) {
     const conversationId = await upsertConversation(ctx, account, self, home);
     for (const message of home.messages) {
@@ -191,6 +192,7 @@ export async function writeSlackBatch(ctx: MutationCtx, accountId: Id<"comma_acc
     await countReplies(ctx, accountId, conversationId);
   }
   await logReplies(ctx, real);
+  await resurfaceOnMessages(ctx, real);
   await schedulePersonSummaries(ctx, real);
   return { written, skipped };
 }

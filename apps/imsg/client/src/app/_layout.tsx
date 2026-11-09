@@ -14,6 +14,7 @@ import { AiStatusProvider } from "@/hooks/use-ai";
 import { ChatDirectoryProvider } from "@/hooks/use-chats";
 import { TodayProvider } from "@/hooks/use-today";
 import { ReleaseUpdateBanners } from "@/components/lazy-surfaces";
+import { LaterPicker } from "@/components/later-picker";
 import { ActionSheetProvider } from "@/lib/action-sheet";
 import { AppErrorBoundary } from "@/lib/app-error-boundary";
 import { guardWindowFileDrops } from "@/lib/attachments";
@@ -104,6 +105,7 @@ export default function RootLayout() {
                   </Stack>
                 </DesktopShellProvider>
                 <ReleaseUpdateBanners />
+                <LaterPicker />
                 <StatusBar style="auto" />
               </ToastHost>
             </LightboxProvider>

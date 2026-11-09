@@ -17,6 +17,8 @@ export type CommandId =
   | "conversation.find"
   | "conversation.settle"
   | "conversation.markUnread"
+  | "conversation.later"
+  | "conversation.followUp"
   | "conversation.details"
   | "list.focusSearch"
   | "action.undo"
@@ -65,6 +67,8 @@ export interface KeyboardRuntime {
   findInConversation(): void;
   settleSelected(): void;
   markUnreadSelected(): void;
+  /** Opens the Later… or Follow up… menu for the selected conversation. */
+  deferSelected(kind: "later" | "followUp"): void;
   toggleDetails(): void;
   /** Opens the Agent tab for the open conversation and focuses its input. */
   openAgent(): void;

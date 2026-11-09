@@ -400,7 +400,8 @@ describe("attachments", () => {
     // As a message ingested before this change: no rows, no guids, no blobs.
     await t.run(async (ctx) => {
       for (const row of await ctx.db.query("comma_attachments").collect()) {
-        await ctx.storage.delete(row.originalStorageId!);
+        // A download still in flight on a slow runner has no blob yet.
+        if (row.originalStorageId) await ctx.storage.delete(row.originalStorageId);
         await ctx.db.delete(row._id);
       }
       const message = (await ctx.db.query("comma_messages").collect()).find((row) => row.guid === "m-inv")!;
