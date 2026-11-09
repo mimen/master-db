@@ -284,7 +284,10 @@ const STEP_QUERY = {
   recent: `newer_than:${BACKFILL_DAYS}d -in:inbox -in:spam -in:trash -in:chats -in:drafts`,
 } as const;
 type Step = keyof typeof STEP_QUERY;
-export type GmailBackfillState = { run: string; steps: Step[]; pageToken?: string };
+/** `failures`: the current page's failures in a row. */
+export type GmailBackfillState = { run: string; steps: Step[]; pageToken?: string; failures?: number };
+/** A page that keeps failing past this many tries in a row stops the backfill, with its error in the logs. */
+const PAGE_TRIES = 5;
 
 const connectedGmail = async (ctx: Pick<QueryCtx, "db">) => (await ctx.db.query("comma_accounts")
   .withIndex("by_platform_externalId", (q) => q.eq("platform", "gmail")).collect()).filter((account) => account.credentials !== undefined);
@@ -334,7 +337,10 @@ export const saveBackfill = internalMutation({
   },
 });
 
-/** Reads one page of threads, writes each quietly, saves where it got to, and schedules the next. A 429 waits. */
+/**
+ * Reads one page of threads, writes each quietly, saves where it got to, and schedules the next. A rate limit waits;
+ * any other error retries the page, since re-reading it is safe, until it has failed PAGE_TRIES times in a row.
+ */
 export const backfill = internalAction({
   args: { accountId: v.id("comma_accounts"), run: v.string() },
   returns: v.null(),
@@ -352,10 +358,17 @@ export const backfill = internalAction({
       const page = await googleApi<{ threads?: { id: string }[]; nextPageToken?: string }>(`${GMAIL_API}/threads?${params}`, { token });
       const self = await ctx.runQuery(internal.comma.gmailSync.selfHandles, { accountId });
       for (const thread of page.threads ?? []) await readThread(ctx, token, accountId, thread.id, true, self);
-      next = page.nextPageToken ? { ...state, pageToken: page.nextPageToken } : { run, steps: state.steps.slice(1) };
+      next = page.nextPageToken ? { run, steps: state.steps, pageToken: page.nextPageToken } : { run, steps: state.steps.slice(1) };
     } catch (error) {
-      if (!(error instanceof GoogleApiError && error.rateLimited)) throw error;
-      delay = 30_000;
+      if (error instanceof GoogleApiError && error.rateLimited) {
+        delay = 30_000;
+      } else {
+        const failures = (state.failures ?? 0) + 1;
+        if (failures >= PAGE_TRIES) throw error;
+        console.warn(`gmail backfill: page failed (${failures}/${PAGE_TRIES}), retrying`, error);
+        next = { ...state, failures };
+        delay = 30_000 * failures;
+      }
     }
     if (!(await ctx.runMutation(internal.comma.gmailSync.saveBackfill, { accountId, run, state: JSON.stringify(next) }))) return null;
     if (next.steps.length) await ctx.scheduler.runAfter(delay, internal.comma.gmailSync.backfill, { accountId, run });
