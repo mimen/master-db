@@ -1,9 +1,11 @@
-import type { ScheduledMessage, ScheduledMessageStatus } from "@shared/types";
+import type { ScheduledMessageStatus } from "@shared/types";
+
+import type { ScheduledItem } from "./scheduled";
 
 export interface ScheduledGroup {
   readonly key: string;
   readonly title: string;
-  readonly items: readonly ScheduledMessage[];
+  readonly items: readonly ScheduledItem[];
 }
 
 const NOT_SENT: ReadonlySet<ScheduledMessageStatus> = new Set(["failed", "interrupted", "expired"]);
@@ -34,11 +36,11 @@ export function scheduledDayTitle(ms: number, now: Date = new Date()): string {
  * The Scheduled pane's sections: anything that failed to go out first as
  * "Not sent", then the queue by send day, then what already went out.
  */
-export function groupScheduled(items: readonly ScheduledMessage[], now: Date = new Date()): ScheduledGroup[] {
+export function groupScheduled(items: readonly ScheduledItem[], now: Date = new Date()): ScheduledGroup[] {
   const sorted = [...items].sort((a, b) => a.sendAt - b.sendAt);
   const notSent = sorted.filter((item) => isNotSent(item.status));
   const sent = sorted.filter((item) => item.status === "complete");
-  const byDay = new Map<number, ScheduledMessage[]>();
+  const byDay = new Map<number, ScheduledItem[]>();
   for (const item of sorted) {
     if (isNotSent(item.status) || item.status === "complete") continue;
     const day = startOfDay(item.sendAt);

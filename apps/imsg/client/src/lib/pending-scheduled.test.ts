@@ -3,9 +3,9 @@ import { describe, expect, test } from "bun:test";
 import { retirePendingScheduled, withoutPendingScheduled, type PendingScheduled } from "./pending-scheduled";
 import { pendingScheduledCount } from "./scheduled";
 
-const row = (bbId: number, status: "pending" | "in-progress" | "complete" = "pending") => ({ bbId, status });
+const row = (id: number, status: "pending" | "in-progress" | "complete" = "pending") => ({ _id: `row-${id}`, status });
 const pending = (...entries: [number, boolean][]): PendingScheduled =>
-  new Map(entries.map(([id, confirmed]) => [id, { confirmed }]));
+  new Map(entries.map(([id, confirmed]) => [`row-${id}`, { confirmed }]));
 
 describe("withoutPendingScheduled", () => {
   test("a cancelled or sent-now message leaves the pending count on the tap", () => {

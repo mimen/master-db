@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
-import type { ScheduledMessage } from "@shared/types";
+import type { ScheduledItem } from "./scheduled";
 import { groupScheduled, scheduledDayTitle } from "./scheduled-groups";
 
 const NOW = new Date(2026, 9, 1, 12, 0); // Thursday Oct 1, noon
 const at = (day: number, hour: number): number => new Date(2026, 9, day, hour, 0).getTime();
 
-function item(id: number, sendAt: number, status: ScheduledMessage["status"] = "pending"): ScheduledMessage {
-  return { id, chatGuid: `c${id}`, chatName: `Chat ${id}`, text: "hi", sendAt, status, error: null, sentAt: null };
+function item(id: number, sendAt: number, status: ScheduledItem["status"] = "pending"): ScheduledItem {
+  return { id: `row-${id}`, bbId: id, platform: "imessage", chatGuid: `c${id}`, chatName: `Chat ${id}`, text: "hi", sendAt, status, error: null, sentAt: null };
 }
 
 test("day titles read relative to now", () => {
@@ -25,7 +25,7 @@ test("not-sent items lead, the queue groups by day in time order, sent items tra
     item(5, at(1, 7), "complete"),
     item(6, at(1, 8), "expired"),
   ], NOW);
-  expect(groups.map((g) => [g.title, g.items.map((i) => i.id)])).toEqual([
+  expect(groups.map((g) => [g.title, g.items.map((i) => i.bbId)])).toEqual([
     ["Not sent", [6, 2]],
     ["Tomorrow", [3]],
     ["Saturday", [4, 1]],

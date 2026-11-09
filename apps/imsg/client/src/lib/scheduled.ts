@@ -1,4 +1,44 @@
-import type { ScheduledMessageStatus } from "@shared/types";
+import type { ConversationId, Platform, ScheduledMessageStatus } from "@shared/types";
+
+/** A row on the Scheduled screen: BlueBubbles' own for iMessage (`bbId`), or one Comma schedules for Slack and Gmail. */
+export interface ScheduledItem {
+  /** The Convex row's id. */
+  id: string;
+  bbId?: number;
+  platform: Platform;
+  /** Absent until the bridge has mirrored the scheduled message's chat. */
+  conversationId?: ConversationId;
+  chatGuid?: string;
+  chatName: string;
+  /** An email's subject. */
+  subject?: string;
+  text: string;
+  sendAt: number;
+  status: ScheduledMessageStatus;
+  error: string | null;
+  sentAt: number | null;
+}
+
+/** `Sam Lee <sam@venue.test>` reads as Sam Lee; a bare address as itself. */
+export function recipientName(recipient: string): string {
+  return recipient.replace(/<[^>]*>/, "").replace(/"/g, "").trim() || recipient.replace(/[<>]/g, "").trim();
+}
+
+/** Quick relative schedule targets, iMessage "Send Later" style. */
+export function scheduleOptions(now = new Date()): Array<{ label: string; at: number }> {
+  const tonight = new Date(now);
+  tonight.setHours(20, 0, 0, 0);
+  const tomorrowAm = new Date(now);
+  tomorrowAm.setDate(now.getDate() + 1);
+  tomorrowAm.setHours(9, 0, 0, 0);
+  const opts = [
+    { label: "In 1 hour", at: now.getTime() + 3_600_000 },
+    { label: "In 3 hours", at: now.getTime() + 3 * 3_600_000 },
+  ];
+  if (tonight.getTime() > now.getTime()) opts.push({ label: "Tonight, 8 PM", at: tonight.getTime() });
+  opts.push({ label: "Tomorrow, 9 AM", at: tomorrowAm.getTime() });
+  return opts;
+}
 
 /**
  * Pure formatting for app/scheduled.tsx's row timestamps:

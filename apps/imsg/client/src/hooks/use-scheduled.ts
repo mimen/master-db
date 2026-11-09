@@ -5,17 +5,18 @@ import { api } from "@/lib/api";
 import { scheduledToScheduled } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { pendScheduled, usePendingScheduled } from "@/lib/pending-scheduled";
+import type { ScheduledItem } from "@/lib/scheduled";
 import { useChatDirectory } from "./use-chat-directory";
-import type { ChatSummary, ScheduledMessage } from "@shared/types";
+import type { ChatSummary } from "@shared/types";
 
 export { formatScheduledWhen } from "@/lib/scheduled";
 
 export interface UseScheduledResult {
-  items: ScheduledMessage[];
+  items: ScheduledItem[];
   loading: boolean;
-  cancel: (id: number) => void;
-  sendNow: (id: number) => Promise<void>;
-  edit: (item: ScheduledMessage, text: string, sendAt: number) => Promise<void>;
+  cancel: (item: ScheduledItem) => Promise<void>;
+  sendNow: (item: ScheduledItem) => Promise<void>;
+  edit: (item: ScheduledItem, text: string, sendAt: number) => Promise<void>;
 }
 
 export function useScheduled(): UseScheduledResult {
@@ -31,23 +32,19 @@ export function useScheduledState(
 ): UseScheduledResult {
   const shown = usePendingScheduled(rows);
   const items = useMemo(() => (shown ?? []).map((row) => scheduledToScheduled(row, chats ?? [])), [shown, chats]);
-  const cancel = useCallback((id: number) => {
-    const pending = pendScheduled(id);
-    actions.cancelScheduled(id).then(pending.confirm, pending.rollback);
-  }, [actions]);
-  const sendNow = useCallback(async (id: number): Promise<void> => {
-    const pending = pendScheduled(id);
+  /** Takes the message off the queue at once, and puts it back if the command fails. */
+  const pended = useCallback(async (item: ScheduledItem, run: () => Promise<void>): Promise<void> => {
+    const pending = pendScheduled(item.id);
     try {
-      await actions.sendScheduledNow(id);
+      await run();
       pending.confirm();
     } catch (error) {
       pending.rollback();
       throw error;
     }
-  }, [actions]);
-  const edit = useCallback(async (item: ScheduledMessage, text: string, sendAt: number): Promise<void> => {
-    if (!item.conversationId) throw new Error("Scheduled message is unavailable");
-    await actions.updateScheduled(item.id, item.conversationId, text, sendAt);
-  }, [actions]);
+  }, []);
+  const cancel = useCallback((item: ScheduledItem) => pended(item, () => actions.cancelScheduled(item)), [actions, pended]);
+  const sendNow = useCallback((item: ScheduledItem) => pended(item, () => actions.sendScheduledNow(item)), [actions, pended]);
+  const edit = useCallback((item: ScheduledItem, text: string, sendAt: number) => actions.updateScheduled(item, text, sendAt), [actions]);
   return { items, loading: rows === undefined, cancel, sendNow, edit };
 }
