@@ -14,11 +14,12 @@ import { join } from "node:path";
 import { brotliCompressSync, constants } from "node:zlib";
 
 /**
- * 2026-11-07 fixture build: 464,836 bytes brotli across entry, __common and the Metro runtime, plus about 1%.
- * Raised from 458,000 (the 2026-10-11 baseline of 444,244 plus 3%): the growth since then is feature
- * work, and the few milliseconds it costs a first visit was judged not worth a trimming pass.
+ * 2026-11-09 fixture build: 470,154 bytes brotli across entry, __common and the Metro runtime, plus about 1%.
+ * Raised from 470,000 (the 2026-11-07 build of 464,836 plus 1%) when Gmail attachments, reply all, forward and
+ * new email landed: Mail's agent pane wiring and the new-email command sit in the shell. Milad judged the
+ * ceiling arbitrary next to feature work and approved raising it; the composer's picker and uploader stay lazy.
  */
-const CEILING_BYTES = 470_000;
+const CEILING_BYTES = 474_900;
 
 const exportDirectory = process.env.IMSG_BUNDLE_DIR ?? join(import.meta.dir, "../e2e/fixture/dist");
 
