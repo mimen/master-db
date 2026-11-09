@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { attentionOf, composerConfig, IMESSAGE_PROFILE, platformServiceBadges, PROFILES, reactionSupport, screeningOf, support, type Feature, type ProfileRoute } from "./platform-profile";
+import { attentionOf, composerConfig, IMESSAGE_PROFILE, loadsRemoteImages, platformServiceBadges, PROFILES, reactionSupport, screeningOf, support, type Feature, type ProfileRoute } from "./platform-profile";
 
 const dm = (service: ProfileRoute["service"]): ProfileRoute => ({ platform: "imessage", service, isGroup: false });
 const group = (service: ProfileRoute["service"]): ProfileRoute => ({ platform: "imessage", service, isGroup: true });
@@ -187,5 +187,25 @@ describe("Gmail", () => {
 
   test("the composer draws Gmail's badge and Enter adds a line", () => {
     expect(composerConfig({ platform: "gmail", service: "Gmail" })).toMatchObject({ placeholder: "Reply", enterSends: false, badge: { label: "Gmail" } });
+  });
+});
+
+describe("loadsRemoteImages", () => {
+  const mail = (fields: { known?: boolean; isSpam?: boolean; bulk?: boolean }) => ({ platform: "gmail" as const, known: false, isSpam: false, bulk: false, ...fields });
+
+  test("a known sender's images load; a stranger's wait, regular or not", () => {
+    expect(loadsRemoteImages(mail({ known: true }), false)).toBe(true);
+    expect(loadsRemoteImages(mail({}), false)).toBe(false);
+    expect(loadsRemoteImages(mail({}), true)).toBe(false);
+  });
+
+  test("a mailing list's load only when the user gets it regularly", () => {
+    expect(loadsRemoteImages(mail({ bulk: true }), true)).toBe(true);
+    expect(loadsRemoteImages(mail({ bulk: true }), false)).toBe(false);
+  });
+
+  test("spam always waits, even bulk spam from a known or regular sender", () => {
+    expect(loadsRemoteImages(mail({ isSpam: true, known: true }), true)).toBe(false);
+    expect(loadsRemoteImages(mail({ isSpam: true, bulk: true }), true)).toBe(false);
   });
 });

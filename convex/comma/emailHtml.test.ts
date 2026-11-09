@@ -53,6 +53,16 @@ describe("cleanEmailHtml", () => {
     expect(html).not.toContain("custom-tag");
   });
 
+  test("Outlook's quoted tail, from the rule above its reply header to the end, is wrapped for the reader to fold", () => {
+    const outlook = `<div>Works for us.</div><div id="appendonsend"></div><hr style="display:inline-block;width:98%">
+<div id="divRplyFwdMsg"><b>From:</b> Sam Lee<br><b>Sent:</b> Monday</div><div>Can you do the 16th?</div>`;
+    const { html } = cleanEmailHtml(outlook);
+    expect(html).toMatch(/^<div>Works for us\.<\/div><div class="comma-quote"><div><\/div><hr [^>]*>\s*<div><b>From:<\/b> Sam Lee/);
+    expect(html).toMatch(/Can you do the 16th\?<\/div><\/div>$/);
+    expect(html).not.toContain("divRplyFwdMsg");
+    expect(cleanEmailHtml("<p>No reply here</p>").html).not.toContain("comma-quote");
+  });
+
   test("text that looks like markup stays text", () => {
     expect(cleanEmailHtml("<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>").html).toBe("<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>");
   });

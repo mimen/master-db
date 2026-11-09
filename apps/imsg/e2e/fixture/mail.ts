@@ -13,7 +13,7 @@ import { FIXTURE_NOW } from "./world";
 
 /**
  * The fixture's mailbox, as convex/comma/queries.ts listEmailThreads and listMessages return it: a known sender's thread
- * whose HTML carries a script, a tracking pixel and a remote image, a newsletter, and a stranger. The HTML goes through
+ * whose HTML carries a script, a tracking pixel and a remote image, a newsletter, and a stranger with a remote image. The HTML goes through
  * the real cleaner, convex/comma/emailHtml.ts; convex/comma/gmailSync.test.ts proves the sync that stores it.
  *
  * Its lane runs as convex/comma/gmailLane.ts does: a send lands as Gmail's message in its thread, a send whose answer is
@@ -41,6 +41,8 @@ type Mail = {
 type Thread = {
   key: string; subject: string; known: boolean; bulk: boolean; participant: Address; mail: Mail[];
   inInbox: boolean; state: ChatState | undefined; archiveError?: string;
+  /** Messages Gmail labels UNREAD, as gmailSync counts them. */
+  unread?: number;
 };
 type Receipt = { id: string; status: "pending" | "sent" | "failed" | "unknown"; clientKey: string; updatedAt: number; error?: string; result?: CommandResult; resultGuid?: string };
 
@@ -64,9 +66,36 @@ const seedThreads = (): Thread[] => [
   {
     key: "t-stranger", subject: "Booking inquiry", known: false, bulk: false, participant: { address: "pat@agency.test", name: "Pat Moreno" },
     inInbox: true, state: undefined,
-    mail: [{ id: "ms1", from: { address: "pat@agency.test", name: "Pat Moreno" }, minutesAgo: 90, text: "Is the 14th still open for a two-hour set?" }],
+    mail: [{
+      id: "ms1", from: { address: "pat@agency.test", name: "Pat Moreno" }, minutesAgo: 90, text: "Is the 14th still open for a two-hour set?",
+      html: `<p>Is the 14th still open for a two-hour set?</p><img src="https://cdn.example.test/press-shot.jpg" width="400" alt="Press shot">`,
+    }],
   },
 ];
+
+const JORDAN = { address: "jordan@agency.test", name: "Jordan Kim" };
+const ROUTING = "Austin 3/12, Dallas 3/14, Houston 3/15, New Orleans 3/18.";
+const gmailReply = (body: string, attribution: string, quoted: string) =>
+  `<div dir="ltr">${body}</div><br><div class="gmail_quote"><div dir="ltr" class="gmail_attr">${attribution}</div>` +
+  `<blockquote class="gmail_quote" style="margin:0 0 0 .8ex;border-left:1px #ccc solid;padding-left:1ex">${quoted}</blockquote></div>`;
+const first = `<div dir="ltr"><p>Hi Milad,</p><p>Here is the draft routing for March: ${ROUTING}</p><p>Holds expire Friday.</p><p>Jordan</p></div>`;
+const apple = `<div>Houston can move to the 16th if that helps the drive.</div><div><br></div><div>On Mar 2, 2027, at 4:10 PM, Milad &lt;milad@afternoonumbrellafriends.com&gt; wrote:<br><br></div>` +
+  `<blockquote type="cite"><div>Dallas to Houston is tight. Can Houston slide a day?</div><div><br></div><div>&gt; ${ROUTING}</div></blockquote>`;
+const third = gmailReply("<p>Houston confirmed for the 16th. Updated sheet attached.</p><p>Jordan</p>", "On Tue, Mar 3, 2027 at 9:02 AM Jordan Kim &lt;jordan@agency.test&gt; wrote:<br>", apple);
+const fourth = gmailReply("<p>One more: New Orleans wants a 10 pm set instead of 11. OK?</p><p>Jordan</p>", "On Wed, Mar 4, 2027 at 11:40 AM Jordan Kim &lt;jordan@agency.test&gt; wrote:<br>", third);
+
+/** A long thread whose replies quote everything before them, the last two unread, seeded on request. */
+const longThread = (): Thread => ({
+  key: "t-tour", subject: "March routing", known: true, bulk: false, participant: JORDAN, inInbox: true, state: undefined, unread: 2,
+  mail: [
+    { id: "mt1", from: JORDAN, minutesAgo: 4 * 1440, text: `Hi Milad, Here is the draft routing for March: ${ROUTING} Holds expire Friday. Jordan`, html: first },
+    { id: "mt2", from: MILAD, fromMe: true, minutesAgo: 3 * 1440, to: [JORDAN],
+      text: `Dallas to Houston is tight. Can Houston slide a day?\n\nOn Sun, Mar 1, 2027 at 10:15 AM Jordan Kim <jordan@agency.test> wrote:\n> Hi Milad,\n> Here is the draft routing for March: ${ROUTING}\n> Holds expire Friday.\n> Jordan` },
+    { id: "mt3", from: JORDAN, minutesAgo: 2 * 1440, text: "Houston can move to the 16th if that helps the drive.", html: apple },
+    { id: "mt4", from: JORDAN, minutesAgo: 1440, text: "Houston confirmed for the 16th. Updated sheet attached.", html: third },
+    { id: "mt5", from: JORDAN, minutesAgo: 12, text: "One more: New Orleans wants a 10 pm set instead of 11. OK?", html: fourth },
+  ],
+});
 
 const guidOf = (thread: Thread) => `mail:${thread.key}`;
 const dateOf = (mail: Mail) => mail.at ?? FIXTURE_NOW - (mail.minutesAgo ?? 0) * MINUTE;
@@ -92,11 +121,11 @@ function conversation(thread: Thread) {
   const last = thread.mail[thread.mail.length - 1]!;
   const lastMessageAt = dateOf(last);
   const lastMessage = { guid: message(thread, last).guid, text: last.text, dateCreated: lastMessageAt, isFromMe: last.fromMe === true, senderName: last.from.name, hasAttachments: false };
-  const { flags, unreadCount } = conversationFlags({ platform: "gmail", kind: "emailThread" }, thread.state, lastMessage, lastMessageAt, 0);
+  const { flags, unreadCount } = conversationFlags({ platform: "gmail", kind: "emailThread" }, thread.state, lastMessage, lastMessageAt, thread.unread ?? 0);
   return {
     _id: fixtureConversationId(guidOf(thread)), _creationTime: FIXTURE_NOW, platform: "gmail" as const, accountId: ACCOUNT,
     conversationKey: gmail.conversationKey(thread.key), kind: "emailThread" as const, isGroup: true,
-    gmail: { threadId: thread.key, subject: thread.subject, inInbox: thread.inInbox, bulk: thread.bulk, ...(thread.archiveError ? { archiveError: thread.archiveError } : {}) },
+    gmail: { threadId: thread.key, subject: thread.subject, inInbox: thread.inInbox, bulk: thread.bulk, ...(thread.unread ? { unread: thread.unread } : {}), ...(thread.archiveError ? { archiveError: thread.archiveError } : {}) },
     displayName: thread.known ? thread.participant.name! : thread.participant.name ?? thread.participant.address, rawDisplayName: "",
     participants: [{ address: thread.participant.address, name: thread.known ? thread.participant.name : null, photoUrl: null }],
     lastMessage, lastMessageAt, isSpam: false, updatedAt: FIXTURE_NOW, flags, unreadCount, groupPhotoUrl: null, known: thread.known,
@@ -218,6 +247,9 @@ export function createMailFixture(receipts: Map<string, Receipt>) {
     },
     refuseNextArchive: (error: string) => {
       refuseNextArchive = error;
+    },
+    seedLongThread: () => {
+      if (!find("mail:t-tour")) threads = [...threads, longThread()];
     },
     reset,
   };

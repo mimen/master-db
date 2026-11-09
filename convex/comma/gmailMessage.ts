@@ -1,4 +1,5 @@
 import { normalizeEmail } from "../../apps/imsg/shared/address";
+import { QUOTE_START } from "../../apps/imsg/shared/email-quote";
 import type { ModelText, ToModelText } from "../../apps/imsg/shared/model-text";
 
 import { cleanEmailHtml, htmlToText } from "./emailHtml";
@@ -114,13 +115,6 @@ function decodeEntities(text: string): string {
     code.startsWith("#") ? String.fromCharCode(Number(code.slice(1))) : ({ amp: "&", lt: "<", gt: ">", quot: "\"" } as Record<string, string>)[code]!);
 }
 
-/** The lines where a reply's quoted history starts, as Gmail, Apple Mail and Outlook write them. */
-const QUOTE_START = [
-  /^On .+(\n.+)?wrote:\s*$/m,
-  /^-{2,}\s*(Original Message|Forwarded message)\s*-{2,}/im,
-  /^From: .+\n(Sent|Date): /m,
-  /^_{10,}\s*$/m,
-];
 /** A signature: the standard delimiter, or a phone's sign-off. */
 const SIGNATURE_START = [/^-- ?$/m, /^Sent from my (iPhone|iPad|Android|phone)/im, /^Get Outlook for /im];
 

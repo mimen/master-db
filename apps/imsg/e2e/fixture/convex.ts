@@ -903,8 +903,9 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
   });
   // Makes the next email send's answer get lost (unknown until the check finds it), or Gmail refuse the next archive.
   app.post("/__fixture/mail", async (c) => {
-    const body = await c.req.json<{ loseNextAnswerMs?: number; refuseNextArchive?: string }>();
+    const body = await c.req.json<{ loseNextAnswerMs?: number; refuseNextArchive?: string; longThread?: boolean }>();
     if (body.loseNextAnswerMs !== undefined) mailWorld.loseNextAnswer(body.loseNextAnswerMs);
+    if (body.longThread) mailWorld.seedLongThread();
     if (body.refuseNextArchive !== undefined) mailWorld.refuseNextArchive(body.refuseNextArchive);
     return c.json({ ok: true });
   });

@@ -253,6 +253,17 @@ export function screeningOf(conversation: Screened & { platform: Platform }): Sc
   return PROFILES[conversation.platform].screening(conversation);
 }
 
+/**
+ * Whether an email's remote images load without asking: a known sender's do, and so do a mailing list's the user gets
+ * regularly. A stranger's and spam wait for Load images. Spam is checked first because Gmail screens bulk before spam.
+ * Tracking pixels never reach the reader either way (convex/comma/emailHtml.ts).
+ */
+export function loadsRemoteImages(conversation: Screened & { platform: Platform }, regularSender: boolean): boolean {
+  if (conversation.isSpam) return false;
+  const screening = screeningOf(conversation);
+  return screening === "known" || (screening === "bulk" && regularSender);
+}
+
 export type Support = { ok: true } | { ok: false; reason: string };
 
 const OK: Support = { ok: true };

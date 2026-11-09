@@ -1,12 +1,14 @@
 import type { api as convexApi } from "@convex-api";
+import { splitQuote } from "@shared/email-quote";
 import { pendingClientKey } from "@shared/pending-send";
+import { loadsRemoteImages } from "@shared/platform-profile";
 import type { ConversationId } from "@shared/types";
 import { useConvexAuth, usePaginatedQuery, useQuery } from "convex/react";
 import { anyApi, type FunctionReturnType } from "convex/server";
 import { ConvexError } from "convex/values";
 import { useGlobalSearchParams } from "expo-router";
-import { createElement, useEffect, useMemo, useState, type JSX } from "react";
-import { ActivityIndicator, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { createElement, useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { ActivityIndicator, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 
 import { DesktopSplit } from "@/components/desktop-split";
 import { EmailComposer, type ComposerStart } from "@/components/email-composer";
@@ -21,7 +23,7 @@ import { conversationState } from "@/lib/conversation-state";
 import { commaApi } from "@/lib/convex-api";
 import { formatListTimestamp, formatReceiptTime } from "@/lib/format";
 import { headerFace } from "@/lib/header-font";
-import { EMAIL_SANDBOX, emailDocument, type ReplyMode } from "@/lib/mail";
+import { EMAIL_SANDBOX, emailDocument, foldQuotes, openByDefault, regularSenders, type ReplyMode } from "@/lib/mail";
 import { inLens, type MailLens } from "@/lib/mail-lens";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
 import { showToast } from "@/lib/toast";
@@ -29,7 +31,8 @@ import { showToast } from "@/lib/toast";
 /**
  * The Mail workspace: inbox threads under two lenses, and a reader that shows each message as a card, with Reply,
  * Reply all and Archive. With two mailboxes connected, a chip row narrows the lenses to one. The email composer opens
- * below the cards; an agent's draft opens it on its own.
+ * below the cards; an agent's draft opens it on its own. A thread opens at its first unread message, or its newest,
+ * with the rest folded to one line and quoted history behind "•••".
  */
 
 type Thread = FunctionReturnType<typeof commaApi.listEmailThreads>["page"][number];
@@ -57,6 +60,8 @@ export function MailWorkspace({ wide }: { readonly wide: boolean }): JSX.Element
   const shown = useMemo(() => mailbox ? results.filter((row) => row.accountId === mailbox) : results, [results, mailbox]);
   const rows = useMemo(() => shown.filter((row) => inLens(row, lens)), [shown, lens]);
   const more = shown.length - rows.length;
+  // ponytail: counts the loaded pages only; a per-sender count in Convex if a monthly list keeps reading as irregular.
+  const regular = useMemo(() => regularSenders(results), [results]);
 
   const mailboxBar = mailboxes.length > 1 ? (
     <View role="tablist" accessibilityLabel="Mailbox" style={styles.lenses}>
@@ -147,6 +152,7 @@ export function MailWorkspace({ wide }: { readonly wide: boolean }): JSX.Element
       key={selectedId}
       conversationId={selectedId}
       subject={results.find((row) => row._id === selectedId)?.gmail?.subject}
+      regularSenders={regular}
       onBack={wide ? undefined : () => setSelectedId(null)}
     />
   ) : (
@@ -179,8 +185,16 @@ function ThreadRow({ thread, selected, onPress }: { thread: Thread; selected: bo
   );
 }
 
-/** `subject` is the listed row's; a thread opened from search, archived or not yet listed, reads it off its messages. */
-export function EmailReader({ conversationId, subject, onBack }: { conversationId: ConversationId; subject?: string; onBack?: () => void }): JSX.Element {
+/**
+ * `subject` is the listed row's; a thread opened from search, archived or not yet listed, reads it off its messages.
+ * `regularSenders` are the lists whose images load without asking; without it, only a known sender's do.
+ */
+export function EmailReader({ conversationId, subject, regularSenders: regular, onBack }: {
+  conversationId: ConversationId;
+  subject?: string;
+  regularSenders?: ReadonlySet<string>;
+  onBack?: () => void;
+}): JSX.Element {
   const theme = useTheme();
   const { results, status, loadMore } = usePaginatedQuery(commaApi.listMessages, { conversationId }, { initialNumItems: 25 });
   const messages = useMemo(() => [...results].sort((a, b) => a.dateCreated - b.dateCreated), [results]);
@@ -206,6 +220,25 @@ export function EmailReader({ conversationId, subject, onBack }: { conversationI
     setOpenedDraft(draft.updatedAt);
     compose("reply", { text: draft.text, ...(draft.note ? { note: draft.note } : {}) });
   });
+  // Which messages open, fixed when the thread first loads, so reading it never folds a message away under the user.
+  const [initial, setInitial] = useState<ReturnType<typeof openByDefault> | null>(null);
+  if (!initial && conversation !== undefined && status !== "LoadingFirstPage" && messages.length) {
+    setInitial(openByDefault(messages, conversation?.unreadCount ?? 0));
+  }
+  const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(new Map());
+  const newest = messages[messages.length - 1]?._id;
+  const isOpen = (id: string) => toggled.get(id) ?? (id === newest || initial?.open.has(id) === true);
+  const scroller = useRef<ScrollView>(null);
+  const landed = useRef(false);
+  const land = (event: LayoutChangeEvent) => {
+    if (landed.current) return;
+    landed.current = true;
+    scroller.current?.scrollTo({ y: Math.max(0, event.nativeEvent.layout.y - 12), animated: false });
+  };
+  const images = conversation ? loadsRemoteImages(
+    { platform: "gmail", known: conversation.known, isSpam: conversation.isSpam, bulk: conversation.gmail?.bulk },
+    conversation.participants.some((participant) => regular?.has(participant.address.toLowerCase()) === true),
+  ) : false;
   const settled = conversation ? !conversation.flags.unresponded && !conversation.flags.waiting : false;
   const archive = () => {
     if (!conversation) return;
@@ -232,13 +265,22 @@ export function EmailReader({ conversationId, subject, onBack }: { conversationI
           <Text accessibilityRole="alert" style={[styles.archiveError, { color: theme.destructive }]}>{conversation.gmail.archiveError}</Text>
         ) : null}
       </View>
-      <ScrollView contentContainerStyle={styles.cards}>
+      <ScrollView ref={scroller} contentContainerStyle={styles.cards}>
         {status === "CanLoadMore" ? (
           <Pressable accessibilityRole="button" onPress={() => loadMore(25)} style={styles.more}>
             <Text style={[styles.moreText, { color: theme.textSecondary }]}>Earlier messages</Text>
           </Pressable>
         ) : null}
-        {status === "LoadingFirstPage" ? <ActivityIndicator style={styles.loading} /> : messages.map((message) => <EmailCard key={message._id} message={message} />)}
+        {!initial ? <ActivityIndicator style={styles.loading} /> : messages.map((message) => (
+          <EmailCard
+            key={message._id}
+            message={message}
+            open={isOpen(message._id)}
+            imagesByDefault={images}
+            onToggle={() => setToggled((current) => new Map(current).set(message._id, !isOpen(message._id)))}
+            onLayout={message._id === initial.target ? land : undefined}
+          />
+        ))}
       </ScrollView>
       {composing ? (
         <View style={onBack && { paddingBottom: PHONE_TAB_BAR_CLEARANCE }}>
@@ -273,16 +315,45 @@ export function EmailReader({ conversationId, subject, onBack }: { conversationI
 
 const names = (addresses: readonly { address: string; name: string | null }[]) => addresses.map((a) => a.name ?? a.address).join(", ");
 
-function EmailCard({ message }: { message: Email }): JSX.Element {
+/** One message: a one-line row when folded, the whole email when open. Its header folds it again. */
+function EmailCard({ message, open, imagesByDefault, onToggle, onLayout }: {
+  message: Email;
+  open: boolean;
+  imagesByDefault: boolean;
+  onToggle: () => void;
+  onLayout?: (event: LayoutChangeEvent) => void;
+}): JSX.Element {
   const theme = useTheme();
-  const [images, setImages] = useState(false);
+  const [asked, setAsked] = useState(false);
+  const [quoteOpen, setQuoteOpen] = useState(false);
   const from = message.gmail?.from ?? message.sender ?? { address: "", name: null };
   const name = message.isFromMe ? "You" : message.sender?.name ?? from.name ?? from.address;
   const html = message.gmail?.html;
   const blocked = message.gmail?.blockedImages ?? 0;
+  const images = imagesByDefault || asked;
+  const split = splitQuote(message.text);
+  const when = formatReceiptTime(message.dateCreated);
+  if (!open) {
+    const snippet = (message.modelText ?? split?.fresh ?? message.text).replace(/\s+/g, " ").trim();
+    return (
+      <Pressable
+        testID="email-card"
+        aria-expanded={false}
+        accessibilityRole="button"
+        accessibilityLabel={`${name}, ${snippet}, ${when}`}
+        onPress={onToggle}
+        onLayout={onLayout}
+        style={({ hovered }: { hovered?: boolean }) => [styles.card, styles.folded, { backgroundColor: hovered ? theme.rowHover : theme.surface, borderColor: theme.divider }]}
+      >
+        <Text numberOfLines={1} style={[styles.from, styles.foldedName, { color: theme.text }]}>{name}</Text>
+        <Text numberOfLines={1} style={[styles.foldedSnippet, { color: theme.textSecondary }]}>{snippet}</Text>
+        <Text style={[styles.time, { color: theme.textTertiary }]}>{when}</Text>
+      </Pressable>
+    );
+  }
   return (
-    <View testID="email-card" style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.divider }]}>
-      <View style={styles.cardHead}>
+    <View testID="email-card" aria-expanded onLayout={onLayout} style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.divider }]}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Fold the message from ${name}`} onPress={onToggle} style={styles.cardHead}>
         <View style={styles.fill}>
           <Text numberOfLines={1} style={[styles.from, { color: theme.text }]}>
             {name}{name !== from.address ? <Text style={{ color: theme.textTertiary }}>{`  ${from.address}`}</Text> : null}
@@ -293,13 +364,13 @@ function EmailCard({ message }: { message: Email }): JSX.Element {
             </Text>
           ) : null}
         </View>
-        <Text style={[styles.time, { color: theme.textTertiary }]}>{formatReceiptTime(message.dateCreated)}</Text>
-      </View>
+        <Text style={[styles.time, { color: theme.textTertiary }]}>{when}</Text>
+      </Pressable>
       {message.sendState ? <SendState clientKey={pendingClientKey(message.guid) ?? ""} state={message.sendState} /> : null}
       {html !== undefined && Platform.OS === "web" ? (
         <>
           {blocked > 0 && !images ? (
-            <Pressable accessibilityRole="button" onPress={() => setImages(true)} style={[styles.loadImages, { borderColor: theme.divider }]}>
+            <Pressable accessibilityRole="button" onPress={() => setAsked(true)} style={[styles.loadImages, { borderColor: theme.divider }]}>
               <Text style={[styles.loadImagesText, { color: theme.accent }]}>Load images</Text>
               <Text style={[styles.loadImagesNote, { color: theme.textTertiary }]}>{blocked === 1 ? "1 remote image is blocked" : `${blocked} remote images are blocked`}</Text>
             </Pressable>
@@ -308,7 +379,21 @@ function EmailCard({ message }: { message: Email }): JSX.Element {
         </>
       ) : (
         // ponytail: phones show the plain text; a JavaScript-off WebView for the HTML needs react-native-webview in an EAS build.
-        <Text selectable style={[styles.plain, { color: theme.text }]}>{message.text}</Text>
+        <View style={styles.plainBody}>
+          <Text selectable style={[styles.plain, { color: theme.text }]}>{split ? split.fresh : message.text}</Text>
+          {split ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={quoteOpen ? "Hide quoted text" : "Show quoted text"}
+              aria-expanded={quoteOpen}
+              onPress={() => setQuoteOpen(!quoteOpen)}
+              style={({ hovered }: { hovered?: boolean }) => [styles.fold, { backgroundColor: hovered ? theme.rowSelected : theme.rowHover }]}
+            >
+              <Text style={[styles.foldText, { color: theme.textSecondary }]}>•••</Text>
+            </Pressable>
+          ) : null}
+          {split && quoteOpen ? <Text selectable style={[styles.plain, { color: theme.textSecondary }]}>{split.quote}</Text> : null}
+        </View>
       )}
     </View>
   );
@@ -325,7 +410,7 @@ function SendState({ clientKey, state }: { clientKey: string; state: NonNullable
   return <Text style={[styles.sendState, { color: state === "failed" || state === "notSent" ? theme.destructive : theme.textTertiary }]}>{copy}</Text>;
 }
 
-/** The cleaned HTML in a sandboxed iframe that runs no scripts, sized to its content once it loads. */
+/** The cleaned HTML in a sandboxed iframe that runs no scripts, its quotes folded, sized to its content as they open. */
 function EmailFrame({ html, images, title }: { html: string; images: boolean; title: string }): JSX.Element {
   const [height, setHeight] = useState(120);
   return createElement("iframe", {
@@ -335,8 +420,13 @@ function EmailFrame({ html, images, title }: { html: string; images: boolean; ti
     referrerPolicy: "no-referrer",
     style: { border: 0, width: "100%", height, background: "#fff", borderRadius: 8 },
     onLoad: (event: { currentTarget: HTMLIFrameElement }) => {
-      const body = event.currentTarget.contentDocument?.documentElement;
-      if (body) setHeight(body.scrollHeight + 4);
+      const doc = event.currentTarget.contentDocument;
+      if (!doc) return;
+      foldQuotes(doc);
+      // The body, not the document: the document is never shorter than the frame, so a folded quote would leave a gap.
+      const fit = () => setHeight(doc.body.scrollHeight + 4);
+      doc.addEventListener("toggle", fit, true);
+      fit();
     },
   });
 }
@@ -376,6 +466,12 @@ const styles = StyleSheet.create({
   from: { fontSize: 14, fontWeight: "600" },
   to: { fontSize: 12.5, paddingTop: 2 },
   plain: { fontSize: 14, lineHeight: 21 },
+  plainBody: { alignItems: "flex-start", gap: 8 },
+  fold: { borderRadius: 7, paddingHorizontal: 8, paddingVertical: 1 },
+  foldText: { fontSize: 12, fontWeight: "700", letterSpacing: 1 },
+  folded: { alignItems: "center", flexDirection: "row", gap: 12, paddingVertical: 11 },
+  foldedName: { flexShrink: 0, maxWidth: "30%" },
+  foldedSnippet: { flex: 1, fontSize: 13.5 },
   loadImages: { alignItems: "center", borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 10, paddingHorizontal: 12, paddingVertical: 8 },
   loadImagesText: { fontSize: 13, fontWeight: "600" },
   loadImagesNote: { fontSize: 12.5 },
