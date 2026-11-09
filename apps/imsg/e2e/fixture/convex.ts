@@ -514,6 +514,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
   app.get("/__fixture/slack-file/:name", (c) => c.req.param("name") === "flyer.png"
     ? new Response(readFileSync(new URL("./assets/run-of-show.png", import.meta.url)), { headers: { "Content-Type": "image/png" } })
     : new Response("%PDF-1.4 fixture rider", { headers: { "Content-Type": "application/pdf" } }));
+  // What convex/comma/gmailFiles.ts stored for the invoice thread's files; any other id is an upload served the same way.
+  app.get("/__fixture/mail-file/:storageId", (c) => c.req.param("storageId").endsWith(".png")
+    ? new Response(readFileSync(new URL("./assets/run-of-show.png", import.meta.url)), { headers: { "Content-Type": "image/png" } })
+    : new Response("%PDF-1.4 fixture invoice", { headers: { "Content-Type": "application/pdf" } }));
   app.get("/__fixture/slack-connected", (c) => c.html("<p>Slack is connected. You can close this tab.</p>"));
   app.get("/__fixture/gmail-connected", (c) => c.html("<p>Gmail is connected. You can close this tab.</p>"));
   app.get("/__fixture/media/:guid", (c) => {
@@ -586,13 +590,13 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
       ...(slackAccount.ever ? [{ _id: "account-slack", platform: "slack", label: "AUF", health: "ok", connected: slackAccount.connected, createdAt: 2 }] : []),
       ...(gmailAccount.ever ? [{
         _id: "account-gmail", platform: "gmail", label: "milad@afternoonumbrellafriends.com", health: "ok", connected: gmailAccount.connected, createdAt: 3,
-        gmailApp: "workspace",
+        gmailApp: "workspace", selfHandles: ["milad@afternoonumbrellafriends.com", "milad@auf.network"],
       }] : []),
       // A gmail.com mailbox through the Testing-mode app, granted 2 days ago. The browser counts down on the real clock,
       // not the server's pinned Date.now, so the deadline is read off the real one.
       ...(personalGmail.ever ? [{
         _id: "account-gmail-personal", platform: "gmail", label: "miladmaaan@gmail.com", health: "ok", connected: personalGmail.connected, createdAt: 4,
-        gmailApp: "personal", ...(personalGmail.connected ? { reconnectBy: performance.timeOrigin + performance.now() + 5 * 86_400_000 } : {}),
+        gmailApp: "personal", selfHandles: ["miladmaaan@gmail.com"], ...(personalGmail.connected ? { reconnectBy: performance.timeOrigin + performance.now() + 5 * 86_400_000 } : {}),
       }] : []),
     ],
     // The fixture's Google consent screen approves at once, as the real callback lands the mailbox.
@@ -627,7 +631,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
       return `upload-${String(args.storageId)}`;
     },
     "comma/media:attachmentMedia": async (args) => {
-      const found = await attachment(String(args.guid)) ?? slackWorld.attachment(String(args.guid));
+      const found = await attachment(String(args.guid)) ?? slackWorld.attachment(String(args.guid)) ?? mailWorld.attachment(String(args.guid));
       return found ? { guid: found.guid, thumbUrl: found.thumbUrl, originalUrl: found.originalUrl } : null;
     },
     "comma/media:attachmentChatGuid": async (args) => (await attachment(String(args.guid)))?.conversationId ?? null,
@@ -787,6 +791,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
         const payload = args.payload as CommaOutboxPayload;
         const chatGuid = typeof args.conversationId === "string" ? args.conversationId : "";
         if (slackWorld.owns(chatGuid)) return slackWorld.enqueue(chatGuid, clientKey, payload);
+        if (payload.kind === "sendEmail") {
+          if (chatGuid) throw new FixtureError("sendEmail must be global", 400);
+          return mailWorld.sendEmail(clientKey, payload);
+        }
         if (mailWorld.owns(chatGuid)) {
           const queued = mailWorld.enqueue(chatGuid, clientKey, payload);
           // Production's enqueue takes the thread's draft with its send.
@@ -908,10 +916,14 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     if (body.loseNextAnswerMs !== undefined) slackWorld.loseNextAnswer(body.loseNextAnswerMs);
     return c.json({ ok: true, conversationId: fixtureConversationId(body.seedChannel ? SLACK_CHANNEL : SLACK_DM) });
   });
-  // Makes the next email send's answer get lost (unknown until the check finds it), or Gmail refuse the next archive.
+  // Makes the next email send's answer get lost (unknown until the check finds it), or Gmail refuse the next archive; seeds the
+  // invoice thread, or connects both mailboxes.
   app.post("/__fixture/mail", async (c) => {
-    const body = await c.req.json<{ loseNextAnswerMs?: number; refuseNextArchive?: string; longThread?: boolean }>();
+    const body = await c.req.json<{ loseNextAnswerMs?: number; refuseNextArchive?: string; longThread?: boolean; invoice?: boolean; mailboxes?: boolean }>();
     if (body.loseNextAnswerMs !== undefined) mailWorld.loseNextAnswer(body.loseNextAnswerMs);
+    if (body.invoice) mailWorld.seedInvoice();
+    // Both mailboxes connected, as Settings shows them after Connect.
+    if (body.mailboxes) for (const mailbox of [gmailAccount, personalGmail]) Object.assign(mailbox, { connected: true, ever: true });
     if (body.longThread) mailWorld.seedLongThread();
     if (body.refuseNextArchive !== undefined) mailWorld.refuseNextArchive(body.refuseNextArchive);
     return c.json({ ok: true });

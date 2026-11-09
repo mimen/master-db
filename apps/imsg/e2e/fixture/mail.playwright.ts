@@ -41,7 +41,7 @@ test("the reader shows each message as a card, and a message with a script and a
   await expect(reader.getByTestId("email-card")).toHaveCount(2);
   await expect(reader.getByText("What time is load-in?")).toBeVisible();
   await expect(reader.getByRole("button", { name: "Reply", exact: true })).toBeVisible();
-  await expect(reader.getByRole("button", { name: "Reply all" })).toBeVisible();
+  await expect(reader.getByRole("button", { name: "Reply all", exact: true })).toBeVisible();
 
   const frame = reader.locator("iframe");
   await expect(frame).toHaveAttribute("sandbox", "allow-same-origin allow-popups allow-popups-to-escape-sandbox");

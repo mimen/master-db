@@ -2,6 +2,7 @@ import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { api, internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 import { ALLOWED_EMAIL } from "../_lib/authed";
 import crons from "../crons";
 import schema from "../schema";
@@ -345,5 +346,88 @@ describe("the Mail list", () => {
       ["t-news", false, true, true], ["t-stranger", false, false, true], ["t-sam", true, false, true],
     ]);
     expect(page.find((row) => row.gmail?.threadId === "t-sam")).toMatchObject({ displayName: "Sam Lee", gmail: { subject: "Doors" } });
+  });
+});
+
+describe("attachments", () => {
+  const invoice = () => google.deliver(inbound("m-inv", "t-invoice", `Sam Lee <${SAM}>`, {
+    subject: "Invoice #42", text: "Invoice attached.",
+    html: '<p>Invoice attached.</p><img src="cid:logo@venue" alt="Venue">',
+    files: [
+      { filename: "invoice-42.pdf", mimeType: "application/pdf", data: "%PDF-1.7 invoice" },
+      { filename: "logo.png", mimeType: "image/png", data: "PNGLOGO", contentId: "logo@venue" },
+      { filename: "note.txt", mimeType: "text/plain", data: "small", inlineData: true },
+    ],
+  }));
+  const rows = (t: T) => t.run((ctx) => ctx.db.query("comma_attachments").collect());
+  const bytes = (t: T, id: Id<"_storage">) => t.run(async (ctx) => await (await ctx.storage.get(id))?.text());
+
+  test("each part becomes an attachment stored from attachments.get, an inline image keeps its cid, and the reader lists them", async () => {
+    invoice();
+    const { t, as } = await setup();
+    await connect(t, as);
+    const stored = (await rows(t)).sort((a, b) => a.guid.localeCompare(b.guid));
+    expect(stored.map((row) => [row.guid, row.platform, row.filename, row.mimeType, row.totalBytes, row.gmail])).toEqual([
+      ["m-inv:1", "gmail", "invoice-42.pdf", "application/pdf", 16, { partId: "1", inline: false }],
+      ["m-inv:2", "gmail", "logo.png", "image/png", 7, { partId: "2", inline: true, contentId: "logo@venue" }],
+      ["m-inv:3", "gmail", "note.txt", "text/plain", 5, { partId: "3", inline: false }],
+    ]);
+    expect(await Promise.all(stored.map((row) => bytes(t, row.originalStorageId!)))).toEqual(["%PDF-1.7 invoice", "PNGLOGO", "small"]);
+    // Gmail's attachment ids go stale between reads; each download re-read the message and used a fresh one.
+    expect(google.gmailCalls("/attachments/").length).toBe(2);
+
+    const [message] = await t.run((ctx) => ctx.db.query("comma_messages").filter((q) => q.eq(q.field("guid"), "m-inv")).collect());
+    expect(message!.attachmentGuids).toEqual(["m-inv:1", "m-inv:2", "m-inv:3"]);
+    expect(message!.gmail!.html).toContain('data-comma-cid="logo@venue"');
+    expect(message!.gmail!.html).not.toContain("cid:");
+    const conversationId = (await thread(t, "t-invoice"))!._id;
+    const { page } = await as.query(api.comma.queries.listMessages, { conversationId, paginationOpts: { numItems: 10, cursor: null } });
+    expect(page[0]!.attachments.map((a) => [a.filename, a.originalUrl !== null])).toEqual([["invoice-42.pdf", true], ["logo.png", true], ["note.txt", true]]);
+    expect(await as.query(api.comma.media.attachmentMedia, { guid: "m-inv:1" })).toMatchObject({ guid: "m-inv:1" });
+
+    // Reading the thread again writes nothing twice.
+    await t.action(internal.comma.gmailSync.backstop, {});
+    google.relabel("t-invoice", { remove: ["UNREAD"] });
+    await t.action(internal.comma.gmailSync.backstop, {});
+    await settle(t);
+    expect((await rows(t)).length).toBe(3);
+  });
+
+  test("the files backfill gives messages stored before attachments their files, and stops at the end", async () => {
+    invoice();
+    const { t, as } = await setup();
+    await connect(t, as);
+    // As a message ingested before this change: no rows, no guids, no blobs.
+    await t.run(async (ctx) => {
+      for (const row of await ctx.db.query("comma_attachments").collect()) {
+        await ctx.storage.delete(row.originalStorageId!);
+        await ctx.db.delete(row._id);
+      }
+      const message = (await ctx.db.query("comma_messages").collect()).find((row) => row.guid === "m-inv")!;
+      await ctx.db.patch(message._id, { attachmentGuids: [] });
+    });
+    await t.action(internal.comma.gmailSync.startFilesBackfill, {});
+    await settle(t);
+    const stored = await rows(t);
+    expect(stored.map((row) => row.guid).sort()).toEqual(["m-inv:1", "m-inv:2", "m-inv:3"]);
+    expect(stored.every((row) => row.originalStorageId !== undefined)).toBe(true);
+    const [message] = await t.run((ctx) => ctx.db.query("comma_messages").filter((q) => q.eq(q.field("guid"), "m-inv")).collect());
+    expect(message!.attachmentGuids).toHaveLength(3);
+  });
+});
+
+describe("the agent on an email thread", () => {
+  test("reads each message's new content, quoted history and markup gone, with the thread's people", async () => {
+    seedMailbox();
+    const { t, as } = await setup();
+    await connect(t, as);
+    const conversationId = (await thread(t, "t-sam"))!._id;
+    const context = await t.mutation(internal.comma.agentContext.agentContext, { conversationId, limit: 40 });
+    expect(context.title).toBe("Sam Lee");
+    expect(context.participants).toEqual([expect.objectContaining({ name: "Sam Lee", handles: expect.arrayContaining([SAM]) })]);
+    expect(context.messages.map((message) => [message.sender, message.modelText, message.subject, message.threadRef])).toEqual([
+      ["Sam Lee", "Yes, 8 works.", "Doors", "t-sam"],
+    ]);
+    expect(context.messages[0]!.text).toContain("Doors at 8?");
   });
 });

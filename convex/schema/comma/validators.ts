@@ -369,9 +369,16 @@ export const attachmentInput = v.object({ ...postedAttachmentFields, imessage: i
 /** The flat form bridges built before accounts post. Drop once the Mini posts attachmentInput. */
 export const legacyAttachmentInput = v.object({ ...attachmentCoreFields, ...imessageAttachmentFields });
 
+/**
+ * Gmail's own attachment fields: the MIME part it came from, and its Content-ID when the HTML body shows it inline
+ * (`cid:`), in which case the reader draws it in the body, not as a tile.
+ */
+export const gmailAttachmentFields = v.object({ partId: v.string(), contentId: v.optional(v.string()), inline: v.boolean() });
+
 /** A stored attachment; rows the backfill has not reached keep chat.db's fields flat. Read them through messageShape.ts. */
 export const attachmentFields = {
   ...attachmentCoreFields,
+  gmail: v.optional(gmailAttachmentFields),
   imessage: v.optional(imessageAttachment),
   transferName: imessageAttachmentFields.transferName,
   uti: imessageAttachmentFields.uti,
@@ -463,6 +470,12 @@ export const suggestionFeedback = v.object({
   finalText: v.string(),
 });
 
+/** A file a sent email carries, already in Convex storage: an upload, or an attachment Comma holds. */
+export const emailAttachment = v.object({ storageId: v.id("_storage"), filename: v.string(), mimeType: v.string() });
+export const emailFields = v.object({
+  to: v.array(v.string()), cc: v.array(v.string()), subject: v.string(), attachments: v.optional(v.array(emailAttachment)),
+});
+
 export const sendPayload = v.object({
   kind: v.literal("send"),
   text: v.string(),
@@ -470,7 +483,7 @@ export const sendPayload = v.object({
   replyToPart: v.optional(v.number()),
   mentions: v.optional(v.array(mention)),
   /** An email's recipients and subject. A Gmail send needs them; no other platform reads them. */
-  email: v.optional(v.object({ to: v.array(v.string()), cc: v.array(v.string()), subject: v.string() })),
+  email: v.optional(emailFields),
 });
 const reactPayload = v.object({
   kind: v.literal("react"),
@@ -529,8 +542,14 @@ export const imessagePayload = v.union(
   v.object({ kind: v.literal("createFaceTimeLink") }),
 );
 
-/** Gmail's own: a thread leaves the inbox when it is settled in Comma, and returns when it is unsettled. */
-export const gmailPayload = v.union(v.object({ kind: v.literal("archive") }), v.object({ kind: v.literal("unarchive") }));
+/**
+ * Gmail's own: a thread leaves the inbox when it is settled in Comma, and returns when it is unsettled. `sendEmail`
+ * starts a new thread from a mailbox (a new email or a forward), so it names its account and no conversation.
+ */
+export const gmailPayload = v.union(
+  v.object({ kind: v.literal("archive") }), v.object({ kind: v.literal("unarchive") }),
+  v.object({ kind: v.literal("sendEmail"), accountId: v.id("comma_accounts"), text: v.string(), email: emailFields }),
+);
 
 /** Model work. It reads the conversation from Convex and never touches a messaging platform. */
 export const aiPayload = v.union(
@@ -643,13 +662,18 @@ export const gmailMessageValue = v.object({
   id: v.string(), threadId: v.string(), internalDate: v.number(), labelIds: v.array(v.string()), from: participant,
   to: v.array(participant), cc: v.array(participant), subject: v.string(), snippet: v.string(), bulk: v.boolean(), text: v.string(),
   html: v.optional(v.string()), blockedImages: v.optional(v.number()), model: v.object(modelTextFields),
+  /** Its attachment parts, from a full read. A sent one names the stored file it was built from. Absent on results stored before attachments. */
+  attachments: v.optional(v.array(v.object({
+    ...gmailAttachmentFields.fields, filename: v.string(), mimeType: v.string(), size: v.number(), storageId: v.optional(v.id("_storage")),
+  }))),
 });
 
 const okResult = <K extends string>(kind: K) => v.object({ kind: v.literal(kind), ok: v.literal(true) });
 const messageResult = <K extends string>(kind: K) => v.object({ kind: v.literal(kind), message: commandMessage });
 export const commandResult = v.union(
   messageResult("send"), v.object({ kind: v.literal("send"), guid: v.string(), slack: slackMessage }),
-  v.object({ kind: v.literal("send"), guid: v.string(), gmail: gmailMessageValue }), messageResult("sendContact"), messageResult("sendAttachment"), messageResult("createFaceTimeLink"),
+  v.object({ kind: v.literal("send"), guid: v.string(), gmail: gmailMessageValue }),
+  v.object({ kind: v.literal("sendEmail"), guid: v.string(), gmail: gmailMessageValue }), messageResult("sendContact"), messageResult("sendAttachment"), messageResult("createFaceTimeLink"),
   v.object({ kind: v.literal("createChat"), conversationId: v.optional(v.id("comma_conversations")), chatGuid: v.string(), service: v.literal("iMessage"), isGroup: v.boolean(), participants: v.array(v.string()), message: commandMessage }),
   v.object({ kind: v.literal("schedule"), scheduled: commandScheduled }),
   v.object({ kind: v.literal("editScheduled"), scheduled: commandScheduled }),

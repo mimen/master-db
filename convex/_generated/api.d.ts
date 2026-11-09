@@ -206,6 +206,7 @@ export declare const api: {
           label: string;
           platform: "imessage" | "slack" | "gmail";
           reconnectBy?: number;
+          selfHandles?: Array<string>;
         }>
       >;
     };
@@ -595,6 +596,7 @@ export declare const api: {
             accountId?: Id<"comma_accounts">;
             conversationId: Id<"comma_conversations">;
             filename?: string;
+            gmail?: { contentId?: string; inline: boolean; partId: string };
             guid: string;
             height?: number;
             hideAttachment: boolean;
@@ -779,6 +781,7 @@ export declare const api: {
           payload:
             | {
                 email?: {
+                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -842,6 +845,17 @@ export declare const api: {
             | { kind: "createFaceTimeLink" }
             | { kind: "archive" }
             | { kind: "unarchive" }
+            | {
+                accountId: Id<"comma_accounts">;
+                email: {
+                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  cc: Array<string>;
+                  subject: string;
+                  to: Array<string>;
+                };
+                kind: "sendEmail";
+                text: string;
+              }
             | {
                 kind: "suggestions";
                 model: "opus" | "terra";
@@ -983,6 +997,15 @@ export declare const api: {
               }
             | {
                 gmail: {
+                  attachments?: Array<{
+                    contentId?: string;
+                    filename: string;
+                    inline: boolean;
+                    mimeType: string;
+                    partId: string;
+                    size: number;
+                    storageId?: Id<"_storage">;
+                  }>;
                   blockedImages?: number;
                   bulk: boolean;
                   cc: Array<{ address: string; name: string | null }>;
@@ -1004,6 +1027,39 @@ export declare const api: {
                 };
                 guid: string;
                 kind: "send";
+              }
+            | {
+                gmail: {
+                  attachments?: Array<{
+                    contentId?: string;
+                    filename: string;
+                    inline: boolean;
+                    mimeType: string;
+                    partId: string;
+                    size: number;
+                    storageId?: Id<"_storage">;
+                  }>;
+                  blockedImages?: number;
+                  bulk: boolean;
+                  cc: Array<{ address: string; name: string | null }>;
+                  from: { address: string; name: string | null };
+                  html?: string;
+                  id: string;
+                  internalDate: number;
+                  labelIds: Array<string>;
+                  model: {
+                    modelText?: string;
+                    subject?: string;
+                    threadRef?: string;
+                  };
+                  snippet: string;
+                  subject: string;
+                  text: string;
+                  threadId: string;
+                  to: Array<{ address: string; name: string | null }>;
+                };
+                guid: string;
+                kind: "sendEmail";
               }
             | {
                 kind: "sendContact";
@@ -1393,6 +1449,7 @@ export declare const api: {
           payload:
             | {
                 email?: {
+                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -1456,6 +1513,17 @@ export declare const api: {
             | { kind: "createFaceTimeLink" }
             | { kind: "archive" }
             | { kind: "unarchive" }
+            | {
+                accountId: Id<"comma_accounts">;
+                email: {
+                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  cc: Array<string>;
+                  subject: string;
+                  to: Array<string>;
+                };
+                kind: "sendEmail";
+                text: string;
+              }
             | {
                 kind: "suggestions";
                 model: "opus" | "terra";
@@ -1586,6 +1654,15 @@ export declare const api: {
               }
             | {
                 gmail: {
+                  attachments?: Array<{
+                    contentId?: string;
+                    filename: string;
+                    inline: boolean;
+                    mimeType: string;
+                    partId: string;
+                    size: number;
+                    storageId?: Id<"_storage">;
+                  }>;
                   blockedImages?: number;
                   bulk: boolean;
                   cc: Array<{ address: string; name: string | null }>;
@@ -1607,6 +1684,39 @@ export declare const api: {
                 };
                 guid: string;
                 kind: "send";
+              }
+            | {
+                gmail: {
+                  attachments?: Array<{
+                    contentId?: string;
+                    filename: string;
+                    inline: boolean;
+                    mimeType: string;
+                    partId: string;
+                    size: number;
+                    storageId?: Id<"_storage">;
+                  }>;
+                  blockedImages?: number;
+                  bulk: boolean;
+                  cc: Array<{ address: string; name: string | null }>;
+                  from: { address: string; name: string | null };
+                  html?: string;
+                  id: string;
+                  internalDate: number;
+                  labelIds: Array<string>;
+                  model: {
+                    modelText?: string;
+                    subject?: string;
+                    threadRef?: string;
+                  };
+                  snippet: string;
+                  subject: string;
+                  text: string;
+                  threadId: string;
+                  to: Array<{ address: string; name: string | null }>;
+                };
+                guid: string;
+                kind: "sendEmail";
               }
             | {
                 kind: "sendContact";
@@ -2369,6 +2479,7 @@ export declare const api: {
               accountId?: Id<"comma_accounts">;
               conversationId: Id<"comma_conversations">;
               filename?: string;
+              gmail?: { contentId?: string; inline: boolean; partId: string };
               guid: string;
               height?: number;
               hideAttachment: boolean;
@@ -2501,7 +2612,12 @@ export declare const api: {
           conversationId?: Id<"comma_conversations">;
           error?: string;
           payload?: {
-            email?: { cc: Array<string>; subject: string; to: Array<string> };
+            email?: {
+              attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+              cc: Array<string>;
+              subject: string;
+              to: Array<string>;
+            };
             kind: "send";
             mentions?: Array<{
               address: string;
@@ -2719,7 +2835,12 @@ export declare const api: {
         {
           conversationId: Id<"comma_conversations">;
           payload: {
-            email?: { cc: Array<string>; subject: string; to: Array<string> };
+            email?: {
+              attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+              cc: Array<string>;
+              subject: string;
+              to: Array<string>;
+            };
             kind: "send";
             mentions?: Array<{
               address: string;
@@ -4991,6 +5112,22 @@ export declare const internal: {
         { size: number; storageId: Id<"_storage"> }
       >;
     };
+    gmailFiles: {
+      downloadFiles: FunctionReference<
+        "action",
+        "internal",
+        {
+          accountId: Id<"comma_accounts">;
+          messageId: string;
+          parts: Array<{
+            attachmentId: Id<"comma_attachments">;
+            mimeType: string;
+            partId: string;
+          }>;
+        },
+        null
+      >;
+    };
     gmailLane: {
       findSend: FunctionReference<
         "action",
@@ -5003,6 +5140,15 @@ export declare const internal: {
         "internal",
         {
           candidates: Array<{
+            attachments?: Array<{
+              contentId?: string;
+              filename: string;
+              inline: boolean;
+              mimeType: string;
+              partId: string;
+              size: number;
+              storageId?: Id<"_storage">;
+            }>;
             blockedImages?: number;
             bulk: boolean;
             cc: Array<{ address: string; name: string | null }>;
@@ -5055,6 +5201,18 @@ export declare const internal: {
         },
         null
       >;
+      filesBackfill: FunctionReference<
+        "action",
+        "internal",
+        { accountId: Id<"comma_accounts">; cursor: string | null },
+        null
+      >;
+      heldThreads: FunctionReference<
+        "query",
+        "internal",
+        { accountId: Id<"comma_accounts">; cursor: string | null },
+        { cursor: string; done: boolean; threadIds: Array<string> }
+      >;
       historyCursor: FunctionReference<
         "query",
         "internal",
@@ -5067,6 +5225,15 @@ export declare const internal: {
         {
           accountId: Id<"comma_accounts">;
           messages: Array<{
+            attachments?: Array<{
+              contentId?: string;
+              filename: string;
+              inline: boolean;
+              mimeType: string;
+              partId: string;
+              size: number;
+              storageId?: Id<"_storage">;
+            }>;
             blockedImages?: number;
             bulk: boolean;
             cc: Array<{ address: string; name: string | null }>;
@@ -5124,6 +5291,7 @@ export declare const internal: {
         { accountId: Id<"comma_accounts">; resync: boolean },
         null
       >;
+      startFilesBackfill: FunctionReference<"action", "internal", {}, null>;
       sync: FunctionReference<
         "action",
         "internal",
@@ -5339,6 +5507,7 @@ export declare const internal: {
             | {
                 conversationId: Id<"comma_conversations">;
                 filename?: string;
+                gmail?: { contentId?: string; inline: boolean; partId: string };
                 guid: string;
                 height?: number;
                 hideAttachment: boolean;
@@ -5370,6 +5539,7 @@ export declare const internal: {
                 accountId?: Id<"comma_accounts">;
                 conversationId: Id<"comma_conversations">;
                 filename?: string;
+                gmail?: { contentId?: string; inline: boolean; partId: string };
                 guid: string;
                 height?: number;
                 hideAttachment: boolean;
@@ -5677,6 +5847,7 @@ export declare const internal: {
           payload:
             | {
                 email?: {
+                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -5740,6 +5911,17 @@ export declare const internal: {
             | { kind: "createFaceTimeLink" }
             | { kind: "archive" }
             | { kind: "unarchive" }
+            | {
+                accountId: Id<"comma_accounts">;
+                email: {
+                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  cc: Array<string>;
+                  subject: string;
+                  to: Array<string>;
+                };
+                kind: "sendEmail";
+                text: string;
+              }
             | {
                 kind: "suggestions";
                 model: "opus" | "terra";
@@ -5870,6 +6052,15 @@ export declare const internal: {
               }
             | {
                 gmail: {
+                  attachments?: Array<{
+                    contentId?: string;
+                    filename: string;
+                    inline: boolean;
+                    mimeType: string;
+                    partId: string;
+                    size: number;
+                    storageId?: Id<"_storage">;
+                  }>;
                   blockedImages?: number;
                   bulk: boolean;
                   cc: Array<{ address: string; name: string | null }>;
@@ -5891,6 +6082,39 @@ export declare const internal: {
                 };
                 guid: string;
                 kind: "send";
+              }
+            | {
+                gmail: {
+                  attachments?: Array<{
+                    contentId?: string;
+                    filename: string;
+                    inline: boolean;
+                    mimeType: string;
+                    partId: string;
+                    size: number;
+                    storageId?: Id<"_storage">;
+                  }>;
+                  blockedImages?: number;
+                  bulk: boolean;
+                  cc: Array<{ address: string; name: string | null }>;
+                  from: { address: string; name: string | null };
+                  html?: string;
+                  id: string;
+                  internalDate: number;
+                  labelIds: Array<string>;
+                  model: {
+                    modelText?: string;
+                    subject?: string;
+                    threadRef?: string;
+                  };
+                  snippet: string;
+                  subject: string;
+                  text: string;
+                  threadId: string;
+                  to: Array<{ address: string; name: string | null }>;
+                };
+                guid: string;
+                kind: "sendEmail";
               }
             | {
                 kind: "sendContact";
@@ -6356,6 +6580,15 @@ export declare const internal: {
               }
             | {
                 gmail: {
+                  attachments?: Array<{
+                    contentId?: string;
+                    filename: string;
+                    inline: boolean;
+                    mimeType: string;
+                    partId: string;
+                    size: number;
+                    storageId?: Id<"_storage">;
+                  }>;
                   blockedImages?: number;
                   bulk: boolean;
                   cc: Array<{ address: string; name: string | null }>;
@@ -6377,6 +6610,39 @@ export declare const internal: {
                 };
                 guid: string;
                 kind: "send";
+              }
+            | {
+                gmail: {
+                  attachments?: Array<{
+                    contentId?: string;
+                    filename: string;
+                    inline: boolean;
+                    mimeType: string;
+                    partId: string;
+                    size: number;
+                    storageId?: Id<"_storage">;
+                  }>;
+                  blockedImages?: number;
+                  bulk: boolean;
+                  cc: Array<{ address: string; name: string | null }>;
+                  from: { address: string; name: string | null };
+                  html?: string;
+                  id: string;
+                  internalDate: number;
+                  labelIds: Array<string>;
+                  model: {
+                    modelText?: string;
+                    subject?: string;
+                    threadRef?: string;
+                  };
+                  snippet: string;
+                  subject: string;
+                  text: string;
+                  threadId: string;
+                  to: Array<{ address: string; name: string | null }>;
+                };
+                guid: string;
+                kind: "sendEmail";
               }
             | {
                 kind: "sendContact";
@@ -6760,6 +7026,7 @@ export declare const internal: {
           payload:
             | {
                 email?: {
+                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -6823,6 +7090,17 @@ export declare const internal: {
             | { kind: "createFaceTimeLink" }
             | { kind: "archive" }
             | { kind: "unarchive" }
+            | {
+                accountId: Id<"comma_accounts">;
+                email: {
+                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  cc: Array<string>;
+                  subject: string;
+                  to: Array<string>;
+                };
+                kind: "sendEmail";
+                text: string;
+              }
             | {
                 kind: "suggestions";
                 model: "opus" | "terra";
@@ -6953,6 +7231,15 @@ export declare const internal: {
               }
             | {
                 gmail: {
+                  attachments?: Array<{
+                    contentId?: string;
+                    filename: string;
+                    inline: boolean;
+                    mimeType: string;
+                    partId: string;
+                    size: number;
+                    storageId?: Id<"_storage">;
+                  }>;
                   blockedImages?: number;
                   bulk: boolean;
                   cc: Array<{ address: string; name: string | null }>;
@@ -6974,6 +7261,39 @@ export declare const internal: {
                 };
                 guid: string;
                 kind: "send";
+              }
+            | {
+                gmail: {
+                  attachments?: Array<{
+                    contentId?: string;
+                    filename: string;
+                    inline: boolean;
+                    mimeType: string;
+                    partId: string;
+                    size: number;
+                    storageId?: Id<"_storage">;
+                  }>;
+                  blockedImages?: number;
+                  bulk: boolean;
+                  cc: Array<{ address: string; name: string | null }>;
+                  from: { address: string; name: string | null };
+                  html?: string;
+                  id: string;
+                  internalDate: number;
+                  labelIds: Array<string>;
+                  model: {
+                    modelText?: string;
+                    subject?: string;
+                    threadRef?: string;
+                  };
+                  snippet: string;
+                  subject: string;
+                  text: string;
+                  threadId: string;
+                  to: Array<{ address: string; name: string | null }>;
+                };
+                guid: string;
+                kind: "sendEmail";
               }
             | {
                 kind: "sendContact";

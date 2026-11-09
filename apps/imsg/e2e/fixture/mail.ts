@@ -16,7 +16,9 @@ import { FIXTURE_NOW } from "./world";
  * whose HTML carries a script, a tracking pixel and a remote image, a newsletter, and a stranger with a remote image. The HTML goes through
  * the real cleaner, convex/comma/emailHtml.ts; convex/comma/gmailSync.test.ts proves the sync that stores it.
  *
- * Its lane runs as convex/comma/gmailLane.ts does: a send lands as Gmail's message in its thread, a send whose answer is
+ * On request it also holds an invoice thread with a PDF, a photo and an inline logo, as convex/comma/gmailFiles.ts stores
+ * them. Its lane runs as convex/comma/gmailLane.ts does: a send lands as Gmail's message in its thread (a sendEmail as
+ * a new thread), with the files it carried, a send whose answer is
  * lost ends unknown until the check finds it, and a settle archives the thread (an unsettle unarchives it), or, when
  * Gmail refuses, takes the settle back with Gmail's error. convex/comma/gmailLane.test.ts proves the real ones.
  */
@@ -34,10 +36,14 @@ export const HOSTILE_HTML = `<html><head><style>.cta{color:#c2410c}</style><scri
 <div class="gmail_quote">On Thu, Aug 20, 2026 Milad wrote:<blockquote>What time is load-in?</blockquote></div></body></html>`;
 
 type Address = { address: string; name: string | null };
+/** A stored attachment; `contentId` marks an image the HTML body shows inline. */
+type MailFixtureFile = { name: string; mimeType: string; size: number; storageId: string; contentId?: string };
 type Mail = {
   id: string; from: Address; minutesAgo?: number; at?: number; text: string; html?: string; fromMe?: boolean; to?: Address[]; cc?: Address[];
-  clientKey?: string; sendState?: "sending" | "failed";
+  clientKey?: string; sendState?: "sending" | "failed"; files?: MailFixtureFile[];
 };
+/** Where the fixture serves a stored file, as Convex storage would. */
+export const mailFileUrl = (storageId: string) => `/__fixture/mail-file/${storageId}`;
 type Thread = {
   key: string; subject: string; known: boolean; bulk: boolean; participant: Address; mail: Mail[];
   inInbox: boolean; state: ChatState | undefined; archiveError?: string;
@@ -97,6 +103,30 @@ const longThread = (): Thread => ({
   ],
 });
 
+const ROSA = { address: "rosa@venue.test", name: "Rosa Diaz" };
+const INVOICE = "mail-invoice-42.pdf";
+
+/** The venue's invoice: Rosa sends it to Milad with Sam on To and Dana on Cc, then Sam adds the stage photo. */
+const invoiceThread = (): Thread => ({
+  key: "t-invoice", subject: "Invoice #42 for Saturday", known: true, bulk: false, participant: ROSA, inInbox: true, state: undefined,
+  mail: [
+    {
+      id: "mi1", from: ROSA, minutesAgo: 240, to: [MILAD, { address: "sam@venue.test", name: "Sam Lee" }], cc: [{ address: "dana@venue.test", name: "Dana Ortiz" }],
+      text: "Hi Milad, invoice #42 for Saturday is attached. Net 15. Rosa",
+      html: '<p>Hi Milad, invoice #42 for Saturday is attached. Net 15.</p><p>Rosa</p><img src="cid:logo@venue" alt="Venue logo" width="120">',
+      files: [
+        { name: "invoice-42.pdf", mimeType: "application/pdf", size: 48_213, storageId: INVOICE },
+        { name: "logo.png", mimeType: "image/png", size: 2_311, storageId: "mail-logo.png", contentId: "logo@venue" },
+      ],
+    },
+    {
+      id: "mi2", from: { address: "sam@venue.test", name: "Sam Lee" }, minutesAgo: 30, to: [MILAD, ROSA], cc: [{ address: "dana@venue.test", name: "Dana Ortiz" }],
+      text: "Adding the stage photo for the advance.",
+      files: [{ name: "stage.png", mimeType: "image/png", size: 91_540, storageId: "mail-stage.png" }],
+    },
+  ],
+});
+
 const guidOf = (thread: Thread) => `mail:${thread.key}`;
 const dateOf = (mail: Mail) => mail.at ?? FIXTURE_NOW - (mail.minutesAgo ?? 0) * MINUTE;
 
@@ -108,12 +138,24 @@ function message(thread: Thread, mail: Mail) {
     _id: guid, _creationTime: dateCreated, platform: "gmail" as const, accountId: ACCOUNT, guid, conversationId: guidOf(thread),
     dateCreated, isFromMe: mail.fromMe === true, sender: { address: mail.from.address, name: mail.fromMe ? null : thread.known ? mail.from.name : null },
     text: mail.text, subject: thread.subject, threadRef: thread.key, edited: false, retracted: false, isGroupEvent: false, mentions: [],
-    attachmentGuids: [], attachments: [], reactions: [], sourceVersion: 0,
+    attachmentGuids: (mail.files ?? []).map((_, index) => `${mail.id}:${index + 1}`), attachments: (mail.files ?? []).map((file, index) => attachmentOf(thread, mail, file, index)),
+    reactions: [], sourceVersion: 0,
     ...(mail.clientKey ? { clientKey: mail.clientKey } : {}), ...(mail.sendState ? { sendState: mail.sendState } : {}),
     ...(mail.sendState ? {} : {
       gmail: { from: mail.from, to: mail.to ?? [mail.fromMe ? thread.participant : MILAD], cc: mail.cc ?? [], bulk: thread.bulk,
         ...(cleaned ? { html: cleaned.html, blockedImages: cleaned.blockedImages } : {}) },
     }),
+  };
+}
+
+/** A stored attachment as listMessages serves it. */
+function attachmentOf(thread: Thread, mail: Mail, file: MailFixtureFile, index: number) {
+  const guid = `${mail.id}:${index + 1}`;
+  return {
+    _id: guid, _creationTime: FIXTURE_NOW, platform: "gmail" as const, accountId: ACCOUNT, guid, messageGuid: mail.id, conversationId: guidOf(thread),
+    mimeType: file.mimeType, filename: file.name, totalBytes: file.size, hideAttachment: false, sourceVersion: 0,
+    originalStorageId: file.storageId, gmail: { partId: String(index + 1), inline: file.contentId !== undefined, ...(file.contentId ? { contentId: file.contentId } : {}) },
+    thumbUrl: null, originalUrl: mailFileUrl(file.storageId),
   };
 }
 
@@ -154,14 +196,15 @@ export function createMailFixture(receipts: Map<string, Receipt>) {
       ...(last.isFromMe ? { dismissedWaitingGuid: last.guid } : { dismissedUnrespondedGuid: last.guid }) };
   };
 
-  /** Gmail took the send: it lands in its thread as Gmail's message, as onResult and landFoundSend land it. */
-  const land = (thread: Thread, clientKey: string, payload: Extract<CommaOutboxPayload, { kind: "send" }>) => {
+  /** Gmail took the send: it lands in its thread as Gmail's message, with its files, as onResult and landFoundSend land it. */
+  const land = (thread: Thread, clientKey: string, payload: Extract<CommaOutboxPayload, { kind: "send" | "sendEmail" }>) => {
     const id = `sent-${++sent}`;
     const to = parseAddresses(payload.email!.to.join(", "));
     const cc = parseAddresses(payload.email!.cc.join(", "));
+    const files = (payload.email!.attachments ?? []).map((file) => ({ name: file.filename, mimeType: file.mimeType, size: 0, storageId: String(file.storageId) }));
     thread.mail = [...thread.mail.filter((mail) => mail.clientKey !== clientKey),
-      { id, from: MILAD, fromMe: true, at: Date.now(), text: payload.text, to, cc, clientKey }];
-    return { id, result: { kind: "send" as const, guid: id, gmail: {
+      { id, from: MILAD, fromMe: true, at: Date.now(), text: payload.text, to, cc, clientKey, files }];
+    return { id, result: { kind: payload.kind === "send" ? "send" as const : "sendEmail" as const, guid: id, gmail: {
       id, threadId: thread.key, internalDate: Date.now(), labelIds: ["SENT"], from: MILAD, to, cc, subject: payload.email!.subject,
       snippet: payload.text.slice(0, 200), bulk: false, text: payload.text, model: { threadRef: thread.key },
     } } };
@@ -202,6 +245,17 @@ export function createMailFixture(receipts: Map<string, Receipt>) {
     }, checkAfter);
     timers.add(timer);
     return receipt(clientKey, { status: "unknown", error: "The operation timed out." });
+  };
+
+  /** A new email or a forward: Gmail starts a thread, which lands outside the inbox, as sent mail does. */
+  const sendEmail = (clientKey: string, payload: Extract<CommaOutboxPayload, { kind: "sendEmail" }>): string => {
+    if (!payload.email.to.length && !payload.email.cc.length) throw new Error("An email needs someone to send it to");
+    const recipient = parseAddresses(payload.email.to.join(", "))[0] ?? parseAddresses(payload.email.cc.join(", "))[0]!;
+    const thread: Thread = { key: `t-new-${sent + 1}`, subject: payload.email.subject, known: true, bulk: false, participant: recipient, inInbox: false, state: undefined, mail: [] };
+    threads = [...threads, thread];
+    const { id, result } = land(thread, clientKey, payload);
+    receipt(clientKey, { status: "sent", result, resultGuid: id });
+    return `outbox-${clientKey}`;
   };
 
   const reset = () => {
@@ -247,6 +301,12 @@ export function createMailFixture(receipts: Map<string, Receipt>) {
     },
     refuseNextArchive: (error: string) => {
       refuseNextArchive = error;
+    },
+    sendEmail,
+    attachment: (guid: string) => threads.flatMap((thread) => thread.mail.flatMap((mail) => (mail.files ?? []).map((file, index) => attachmentOf(thread, mail, file, index))))
+      .find((row) => row.guid === guid) ?? null,
+    seedInvoice: () => {
+      if (!find("mail:t-invoice")) threads = [...threads, invoiceThread()];
     },
     seedLongThread: () => {
       if (!find("mail:t-tour")) threads = [...threads, longThread()];

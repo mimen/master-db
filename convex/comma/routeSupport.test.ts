@@ -53,7 +53,7 @@ describe("a Gmail route", () => {
     expect(unsupportedReason(gmail, true, { kind: "send", text: "hi", replyToGuid: "m1", email: { ...email, to: [], cc: ["pat@agency.test"] } })).toBeNull();
     expect(unsupportedReason(gmail, true, { kind: "send", text: "hi" })).toBe("An email needs someone to send it to");
     expect(unsupportedReason(gmail, true, { kind: "suggestions", model: "opus", refresh: false })).toBe("Reply suggestions aren't on for email");
-    expect(unsupportedReason(gmail, true, { kind: "sendAttachment", storageId: "s" as never, filename: "a", mimeType: "a", isAudioMessage: false })).toBe("Not in Comma's Gmail yet");
+    expect(unsupportedReason(gmail, true, { kind: "sendAttachment", storageId: "s" as never, filename: "a", mimeType: "a", isAudioMessage: false })).toBe("Attach files in the email composer");
     expect(unsupportedReason(gmail, true, { kind: "archive" })).toBeNull();
     expect(unsupportedReason({ platform: "slack", accountId: "a" as never, channel: "D1" }, false, { kind: "unarchive" })).toBe("Only a mailbox archives");
     expect(unsupportedReason(gmail, true, { kind: "react", messageGuid: "m", reaction: "emoji:🔥", remove: false })).toBe("Gmail can't send emoji reactions");

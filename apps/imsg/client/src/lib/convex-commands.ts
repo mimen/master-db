@@ -34,7 +34,8 @@ function newClientKey(): string {
   return `command-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 async function enqueueCommandVia(client: CommandClient, conversationId: ConversationId | null, payload: CommandPayload, clientKey = newClientKey()): Promise<GenericId<"comma_outbox">> {
-  const global = payload.kind === "createChat" || payload.kind === "clearSuggestionLearning";
+  // A new email names its mailbox, not a conversation (convex/comma/enqueue.ts GLOBAL_KINDS).
+  const global = payload.kind === "createChat" || payload.kind === "clearSuggestionLearning" || payload.kind === "sendEmail";
   if (!conversationId && !global) throw new Error("This command requires a conversation");
   const id = await client.mutation(commaOutbox.enqueue, {
     clientKey,

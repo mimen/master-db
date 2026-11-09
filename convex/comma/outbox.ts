@@ -31,7 +31,7 @@ export const AUTO_RETRY = {
   schedule: false, editScheduled: false, cancelScheduled: false,
   createChat: false, sendContact: false, sendAttachment: false, participant: false,
   leaveGroup: false, deleteChat: false, sendScheduledNow: false, createFaceTimeLink: false,
-  archive: true, unarchive: true,
+  archive: true, unarchive: true, sendEmail: false,
   suggestionFeedback: false, typing: true, clearSuggestionLearning: true, suggestions: true, identify: true, transcribe: true, personSummary: true,
 } satisfies Record<CommaOutboxPayload["kind"], boolean>;
 export const IDEMPOTENT_KINDS = new Set(Object.entries(AUTO_RETRY).filter(([, retry]) => retry).map(([kind]) => kind));

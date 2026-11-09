@@ -12,6 +12,7 @@ import { publishExecutorStatus } from "./bridgeState";
 import { gmail } from "./conversationIdentity";
 import { findByKey, findMessage } from "./conversationLookup";
 import { GMAIL_API, googleApi, GoogleApiError } from "./gmailApi";
+import { writeGmailFiles } from "./gmailFiles";
 import { METADATA_HEADERS, parseGmailMessage, type EmailAddress, type RawGmailMessage } from "./gmailMessage";
 import { gmailToken, pushTopic } from "./googleAuth";
 import { refreshLastMessage } from "./pendingSends";
@@ -117,12 +118,20 @@ export async function insertGmailMessages(ctx: MutationCtx, account: Doc<"comma_
   const scope = { platform: "gmail" as const, accountId: account._id };
   const real: Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe" | "sender">[] = [];
   for (const message of messages) {
-    if (await findMessage(ctx, scope, message.id)) continue;
+    const stored = await findMessage(ctx, scope, message.id);
+    if (stored) {
+      // A message stored before Comma kept Gmail's attachments gets them from any later full read, which the files backfill relies on.
+      if (message.attachments?.length && !stored.attachmentGuids.length) {
+        await ctx.db.patch(stored._id, { attachmentGuids: await writeGmailFiles(ctx, account._id, stored.conversationId, message) });
+      }
+      continue;
+    }
+    const attachmentGuids = await writeGmailFiles(ctx, account._id, conversationId, message);
     const row = {
       platform: "gmail" as const, accountId: account._id, conversationId, guid: message.id, dateCreated: message.internalDate,
       isFromMe: message.labelIds.includes("SENT") || isSelf(account, message.from.address),
       sender: message.from, text: message.text, ...message.model, mentions: [], mentionsMe: false, edited: false, retracted: false,
-      isGroupEvent: false, attachmentGuids: [], sourceVersion: 0, ...(clientKey ? { clientKey } : {}),
+      isGroupEvent: false, attachmentGuids, sourceVersion: 0, ...(clientKey ? { clientKey } : {}),
       gmail: {
         from: message.from, to: message.to, cc: message.cc, bulk: message.bulk,
         ...(message.html !== undefined ? { html: message.html, blockedImages: message.blockedImages ?? 0 } : {}),
@@ -372,6 +381,58 @@ export const backfill = internalAction({
     }
     if (!(await ctx.runMutation(internal.comma.gmailSync.saveBackfill, { accountId, run, state: JSON.stringify(next) }))) return null;
     if (next.steps.length) await ctx.scheduler.runAfter(delay, internal.comma.gmailSync.backfill, { accountId, run });
+    return null;
+  },
+});
+
+// ---- Files backfill: every held thread re-read in full, so messages stored before attachments get theirs. ----
+
+const FILES_PAGE = 25;
+
+export const heldThreads = internalQuery({
+  args: { accountId: v.id("comma_accounts"), cursor: v.union(v.string(), v.null()) },
+  returns: v.object({ threadIds: v.array(v.string()), cursor: v.string(), done: v.boolean() }),
+  handler: async (ctx, { accountId, cursor }) => {
+    const page = await ctx.db.query("comma_conversations")
+      .withIndex("by_platform_account_key", (q) => q.eq("platform", "gmail").eq("accountId", accountId))
+      .paginate({ numItems: FILES_PAGE, cursor });
+    return { threadIds: page.page.flatMap((row) => row.gmail ? [row.gmail.threadId] : []), cursor: page.continueCursor, done: page.isDone };
+  },
+});
+
+/**
+ * Not run on deploy. Start it once for every connected mailbox with
+ * `CONVEX_DEPLOYMENT=dev:shiny-gerbil-853 bunx convex run comma/gmailSync:startFilesBackfill '{}'`.
+ * Re-reading a thread writes nothing it already holds, so a second run only costs reads.
+ */
+export const startFilesBackfill = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    for (const accountId of await ctx.runQuery(internal.comma.gmailSync.mailboxes, {})) {
+      await ctx.scheduler.runAfter(0, internal.comma.gmailSync.filesBackfill, { accountId, cursor: null });
+    }
+    return null;
+  },
+});
+
+/** One page of held threads per step. A rate limit retries the same page 30 seconds on; any other error stops the run, with its error in the logs. */
+export const filesBackfill = internalAction({
+  args: { accountId: v.id("comma_accounts"), cursor: v.union(v.string(), v.null()) },
+  returns: v.null(),
+  handler: async (ctx, { accountId, cursor }) => {
+    const token = await gmailToken(ctx, accountId);
+    if (!token) return null;
+    const page = await ctx.runQuery(internal.comma.gmailSync.heldThreads, { accountId, cursor });
+    const self = await ctx.runQuery(internal.comma.gmailSync.selfHandles, { accountId });
+    try {
+      for (const threadId of page.threadIds) await readThread(ctx, token, accountId, threadId, true, self);
+    } catch (error) {
+      if (!(error instanceof GoogleApiError && error.rateLimited)) throw error;
+      await ctx.scheduler.runAfter(30_000, internal.comma.gmailSync.filesBackfill, { accountId, cursor });
+      return null;
+    }
+    if (!page.done) await ctx.scheduler.runAfter(STEP_MS, internal.comma.gmailSync.filesBackfill, { accountId, cursor: page.cursor });
     return null;
   },
 });

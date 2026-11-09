@@ -10,29 +10,38 @@ import { useGlobalSearchParams } from "expo-router";
 import { createElement, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { ActivityIndicator, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 
+import type { ReplyMode } from "@shared/email-reply";
+import { Image } from "expo-image";
+
 import { DesktopSplit } from "@/components/desktop-split";
-import { EmailComposer, type ComposerStart } from "@/components/email-composer";
+import { EmailComposer, type ComposerSource, type ComposerStart } from "@/components/email-composer";
+import { FileCard } from "@/components/media";
 import { PHONE_TAB_BAR_CLEARANCE } from "@/components/phone-tab-bar";
 import { SidebarChrome } from "@/components/sidebar/sidebar-chrome";
 import { SidebarFooter } from "@/components/sidebar/sidebar-footer";
 import { SidebarFrame } from "@/components/sidebar/sidebar-frame";
 import { SidebarHeader } from "@/components/sidebar/sidebar-header";
 import { TriageGeometry } from "@/constants/triage-theme";
+import { useAgentEnabled } from "@/hooks/use-agent";
 import { useTheme } from "@/hooks/use-theme";
+import { openAgentPane } from "@/lib/agent-pane";
 import { conversationState } from "@/lib/conversation-state";
 import { commaApi } from "@/lib/convex-api";
 import { formatListTimestamp, formatReceiptTime } from "@/lib/format";
 import { headerFace } from "@/lib/header-font";
-import { EMAIL_SANDBOX, emailDocument, foldQuotes, openByDefault, regularSenders, type ReplyMode } from "@/lib/mail";
+import { openExternalUrl } from "@/lib/external-link";
+import { useLightbox } from "@/lib/lightbox";
+import { EMAIL_SANDBOX, emailDocument, foldQuotes, messageFiles, openByDefault, regularSenders, threadFiles, type MailFile } from "@/lib/mail";
 import { inLens, type MailLens } from "@/lib/mail-lens";
+import { setMailSelection } from "@/lib/mail-selection";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
 import { showToast } from "@/lib/toast";
 
 /**
- * The Mail workspace: inbox threads under two lenses, and a reader that shows each message as a card, with Reply,
- * Reply all and Archive. With two mailboxes connected, a chip row narrows the lenses to one. The email composer opens
- * below the cards; an agent's draft opens it on its own. A thread opens at its first unread message, or its newest,
- * with the rest folded to one line and quoted history behind "•••".
+ * The Mail workspace: inbox threads under two lenses, a reader that shows each message as a card with its files and
+ * its own Reply, Reply all and Forward, and New email. With two mailboxes connected, a chip row narrows the lenses to
+ * one. The email composer opens below the cards; an agent's draft opens it on its own. A thread opens at its first
+ * unread message, or its newest, with the rest folded to one line and quoted history behind "•••".
  */
 
 type Thread = FunctionReturnType<typeof commaApi.listEmailThreads>["page"][number];
@@ -46,14 +55,25 @@ export function MailWorkspace({ wide }: { readonly wide: boolean }): JSX.Element
   const { isAuthenticated } = useConvexAuth();
   const [lens, setLens] = useState<MailLens>("people");
   const [selectedId, setSelectedId] = useState<ConversationId | null>(null);
+  const [composingNew, setComposingNew] = useState(false);
+  const open = (id: ConversationId | null) => {
+    setComposingNew(false);
+    setSelectedId(id);
+  };
+  // The wide shell's agent pane follows the open thread.
+  useEffect(() => {
+    setMailSelection(wide && !composingNew ? selectedId : null);
+    return () => setMailSelection(null);
+  }, [wide, selectedId, composingNew]);
   // Search opens a mail hit as /mail?thread=<id>.
   const { thread: routed } = useGlobalSearchParams<{ thread?: string }>();
   useEffect(() => {
-    if (routed) setSelectedId(routed as ConversationId);
+    if (routed) open(routed as ConversationId);
   }, [routed]);
   const { results, status, loadMore } = usePaginatedQuery(commaApi.listEmailThreads, isAuthenticated ? {} : "skip", { initialNumItems: 50 });
   const accounts = useQuery(accountsApi.listAccounts, isAuthenticated ? {} : "skip");
-  const mailboxes = (accounts ?? []).filter((account) => account.platform === "gmail" && account.connected);
+  const mailboxes = useMemo(() => (accounts ?? []).filter((account) => account.platform === "gmail" && account.connected)
+    .sort((a, b) => Number(a.gmailApp === "personal") - Number(b.gmailApp === "personal")), [accounts]);
   const [chosen, setMailbox] = useState<string | null>(null);
   const mailbox = mailboxes.length > 1 && mailboxes.some((account) => account._id === chosen) ? chosen : null;
   // ponytail: narrows the loaded pages on the client; a server-side filter when one mailbox's threads sit pages deep.
@@ -112,9 +132,19 @@ export function MailWorkspace({ wide }: { readonly wide: boolean }): JSX.Element
     </View>
   );
 
+  const compose = mailboxes.length ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="New email"
+      onPress={() => setComposingNew(true)}
+      style={({ hovered }: { hovered?: boolean }) => [styles.action, { borderColor: theme.divider, backgroundColor: hovered ? theme.rowHover : "transparent" }]}
+    >
+      <Text style={[styles.actionText, { color: theme.text }]}>New email</Text>
+    </Pressable>
+  ) : null;
   const list = (
     <SidebarFrame
-      chrome={wide ? <SidebarHeader testID="mail-desk-header" search={<View style={styles.fill} />} actions={null} below={heading} /> : <SidebarChrome actions={null} />}
+      chrome={wide ? <SidebarHeader testID="mail-desk-header" search={<View style={styles.fill} />} actions={compose} below={heading} /> : <SidebarChrome actions={compose} />}
       footer={wide ? <SidebarFooter workspace="mail" /> : null}
     >
       {status === "LoadingFirstPage" ? <ActivityIndicator style={styles.loading} /> : (
@@ -122,7 +152,7 @@ export function MailWorkspace({ wide }: { readonly wide: boolean }): JSX.Element
           testID="mail-list"
           data={rows}
           keyExtractor={(row) => row._id}
-          renderItem={({ item }) => <ThreadRow thread={item} selected={wide && selectedId === item._id} onPress={() => setSelectedId(item._id as ConversationId)} />}
+          renderItem={({ item }) => <ThreadRow thread={item} selected={wide && !composingNew && selectedId === item._id} onPress={() => open(item._id as ConversationId)} />}
           ListHeaderComponent={wide ? null : (
             <View style={{ paddingTop: SIDEBAR_TITLE_HEIGHT }}>
               <Text accessibilityRole="header" style={[styles.phoneTitle, { color: theme.text }]}>Mail</Text>
@@ -147,13 +177,28 @@ export function MailWorkspace({ wide }: { readonly wide: boolean }): JSX.Element
     </SidebarFrame>
   );
 
-  const reader = selectedId ? (
+  const reader = composingNew ? (
+    <View testID="new-email" style={[styles.fill, { backgroundColor: theme.thread }]}>
+      <ScrollView contentContainerStyle={!wide && { paddingBottom: PHONE_TAB_BAR_CLEARANCE }}>
+        <EmailComposer
+          conversationId={null}
+          accountId={null}
+          mailboxes={mailbox ? mailboxes.filter((account) => account._id === mailbox) : mailboxes}
+          start={{ mode: "new" }}
+          subject=""
+          self={new Set()}
+          hasDraft={false}
+          onClose={() => setComposingNew(false)}
+        />
+      </ScrollView>
+    </View>
+  ) : selectedId ? (
     <EmailReader
       key={selectedId}
       conversationId={selectedId}
       subject={results.find((row) => row._id === selectedId)?.gmail?.subject}
       regularSenders={regular}
-      onBack={wide ? undefined : () => setSelectedId(null)}
+      onBack={wide ? undefined : () => open(null)}
     />
   ) : (
     <View style={[styles.fill, styles.center, { backgroundColor: theme.thread }]}>
@@ -161,7 +206,7 @@ export function MailWorkspace({ wide }: { readonly wide: boolean }): JSX.Element
     </View>
   );
 
-  if (!wide) return <View style={[styles.fill, { backgroundColor: theme.background }]}>{selectedId ? reader : list}</View>;
+  if (!wide) return <View style={[styles.fill, { backgroundColor: theme.background }]}>{selectedId || composingNew ? reader : list}</View>;
   return <DesktopSplit list={list} detail={reader} />;
 }
 
@@ -204,22 +249,36 @@ export function EmailReader({ conversationId, subject, regularSenders: regular, 
   const [composing, setComposing] = useState<ComposerStart | null>(null);
   const [openedDraft, setOpenedDraft] = useState<number | null>(null);
   const threadSubject = subject ?? messages[0]?.subject ?? "";
+  const mailbox = (accounts ?? []).find((account) => account._id === conversation?.accountId);
+  // The mailbox's own addresses, and any the user sent this thread from, which a reply all leaves out.
   const self = useMemo(() => new Set([
-    ...(accounts ?? []).filter((account) => account._id === conversation?.accountId).map((account) => account.label.toLowerCase()),
+    ...(mailbox ? [mailbox.label, ...mailbox.selfHandles ?? []] : []).map((address) => address.toLowerCase()),
     ...messages.filter((message) => message.isFromMe && message.gmail).map((message) => message.gmail!.from.address.toLowerCase()),
-  ]), [accounts, conversation?.accountId, messages]);
+  ]), [mailbox, messages]);
   const replyTarget = [...messages].reverse().find((message) => message.gmail && !pendingClientKey(message.guid));
-  const compose = (mode: ReplyMode, extra: Pick<ComposerStart, "text" | "note"> = {}) => {
-    if (!replyTarget?.gmail) return;
-    const { from, to, cc } = replyTarget.gmail;
-    setComposing({ mode, replyTo: { guid: replyTarget.guid, isFromMe: replyTarget.isFromMe, from, to, cc }, ...extra });
+  const files = useMemo(() => threadFiles(messages), [messages]);
+  const sourceOf = (message: Email): ComposerSource | null => message.gmail ? {
+    guid: message.guid, isFromMe: message.isFromMe, from: message.gmail.from, to: message.gmail.to, cc: message.gmail.cc,
+    name: message.isFromMe ? "you" : message.sender?.name ?? message.gmail.from.name ?? message.gmail.from.address,
+    date: message.dateCreated, text: message.modelText ?? splitQuote(message.text)?.fresh ?? message.text,
+  } : null;
+  const compose = (mode: ReplyMode | "forward", message = replyTarget, extra: { text?: string; note?: string; files?: readonly MailFile[] } = {}) => {
+    const source = message && sourceOf(message);
+    if (!source) return;
+    setComposing(mode === "forward"
+      ? { mode, replyTo: { ...source, text: message.text }, files: messageFiles(message) }
+      : { mode, replyTo: source, ...extra });
   };
-  // An agent's draft for this thread opens the composer with its text, once per draft.
+  // An agent's draft for this thread opens the composer with its text and files, once per draft.
   useEffect(() => {
     if (!draft?.text || composing || openedDraft === draft.updatedAt || !replyTarget) return;
     setOpenedDraft(draft.updatedAt);
-    compose("reply", { text: draft.text, ...(draft.note ? { note: draft.note } : {}) });
+    compose("reply", replyTarget, {
+      text: draft.text, ...(draft.note ? { note: draft.note } : {}),
+      ...(draft.attachments?.length ? { files: draft.attachments.map(({ storageId, filename, mimeType, size }) => ({ storageId, filename, mimeType, size })) } : {}),
+    });
   });
+  const agentEnabled = useAgentEnabled();
   // Which messages open, fixed when the thread first loads, so reading it never folds a message away under the user.
   const [initial, setInitial] = useState<ReturnType<typeof openByDefault> | null>(null);
   if (!initial && conversation !== undefined && status !== "LoadingFirstPage" && messages.length) {
@@ -255,6 +314,11 @@ export function EmailReader({ conversationId, subject, regularSenders: regular, 
         ) : null}
         <View style={styles.readerTitle}>
           <Text accessibilityRole="header" numberOfLines={2} style={[styles.readerSubject, { color: theme.text }]}>{threadSubject}</Text>
+          {agentEnabled ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Ask the agent" onPress={() => openAgentPane(conversationId)} style={({ hovered }: { hovered?: boolean }) => [styles.action, { borderColor: theme.divider, backgroundColor: hovered ? theme.rowHover : "transparent" }]}>
+              <Text style={[styles.actionText, { color: theme.text }]}>Ask agent</Text>
+            </Pressable>
+          ) : null}
           {conversation ? (
             <Pressable accessibilityRole="button" onPress={archive} style={({ hovered }: { hovered?: boolean }) => [styles.action, { borderColor: theme.divider, backgroundColor: hovered ? theme.rowHover : "transparent" }]}>
               <Text style={[styles.actionText, { color: theme.text }]}>{settled ? "Move to Inbox" : "Archive"}</Text>
@@ -279,14 +343,17 @@ export function EmailReader({ conversationId, subject, regularSenders: regular, 
             imagesByDefault={images}
             onToggle={() => setToggled((current) => new Map(current).set(message._id, !isOpen(message._id)))}
             onLayout={message._id === initial.target ? land : undefined}
+            onCompose={message.gmail && !pendingClientKey(message.guid) ? (mode) => compose(mode, message) : undefined}
           />
         ))}
       </ScrollView>
       {composing ? (
         <View style={onBack && { paddingBottom: PHONE_TAB_BAR_CLEARANCE }}>
           <EmailComposer
-            key={`${composing.replyTo.guid}:${openedDraft ?? 0}`}
+            key={`${composing.mode === "new" ? "" : composing.replyTo.guid}:${composing.mode}:${openedDraft ?? 0}`}
             conversationId={conversationId}
+            accountId={conversation?.accountId ?? null}
+            mailboxes={mailbox ? [mailbox] : []}
             start={composing}
             subject={threadSubject}
             self={self}
@@ -296,15 +363,21 @@ export function EmailReader({ conversationId, subject, regularSenders: regular, 
         </View>
       ) : (
         <View style={[styles.replyBar, onBack && { paddingBottom: PHONE_TAB_BAR_CLEARANCE }, { borderTopColor: theme.divider, backgroundColor: theme.background }]}>
-          {(["reply", "replyAll"] as const).map((mode) => (
+          {[
+            { label: "Reply", run: () => compose("reply") },
+            { label: "Reply all", run: () => compose("replyAll") },
+            // Copying someone onto a thread they missed: reply all with every file in the thread, each with its checkbox.
+            ...(files.length ? [{ label: "Reply all with attachments", run: () => compose("replyAll", replyTarget, { files }) }] : []),
+            { label: "Forward", run: () => compose("forward") },
+          ].map((action) => (
             <Pressable
-              key={mode}
+              key={action.label}
               accessibilityRole="button"
               disabled={!replyTarget}
-              onPress={() => compose(mode)}
+              onPress={action.run}
               style={({ hovered }: { hovered?: boolean }) => [styles.action, { borderColor: theme.divider, backgroundColor: hovered ? theme.rowHover : "transparent" }]}
             >
-              <Text style={[styles.actionText, { color: theme.text }]}>{mode === "reply" ? "Reply" : "Reply all"}</Text>
+              <Text style={[styles.actionText, { color: theme.text }]}>{action.label}</Text>
             </Pressable>
           ))}
         </View>
@@ -316,12 +389,14 @@ export function EmailReader({ conversationId, subject, regularSenders: regular, 
 const names = (addresses: readonly { address: string; name: string | null }[]) => addresses.map((a) => a.name ?? a.address).join(", ");
 
 /** One message: a one-line row when folded, the whole email when open. Its header folds it again. */
-function EmailCard({ message, open, imagesByDefault, onToggle, onLayout }: {
+function EmailCard({ message, open, imagesByDefault, onToggle, onLayout, onCompose }: {
   message: Email;
   open: boolean;
   imagesByDefault: boolean;
   onToggle: () => void;
   onLayout?: (event: LayoutChangeEvent) => void;
+  /** Reply, reply all or forward this message; absent while it is still sending. */
+  onCompose?: (mode: ReplyMode | "forward") => void;
 }): JSX.Element {
   const theme = useTheme();
   const [asked, setAsked] = useState(false);
@@ -333,6 +408,7 @@ function EmailCard({ message, open, imagesByDefault, onToggle, onLayout }: {
   const images = imagesByDefault || asked;
   const split = splitQuote(message.text);
   const when = formatReceiptTime(message.dateCreated);
+  const inlineImages = useInlineImages(open && html !== undefined ? message.attachments : []);
   if (!open) {
     const snippet = (message.modelText ?? split?.fresh ?? message.text).replace(/\s+/g, " ").trim();
     return (
@@ -375,7 +451,7 @@ function EmailCard({ message, open, imagesByDefault, onToggle, onLayout }: {
               <Text style={[styles.loadImagesNote, { color: theme.textTertiary }]}>{blocked === 1 ? "1 remote image is blocked" : `${blocked} remote images are blocked`}</Text>
             </Pressable>
           ) : null}
-          <EmailFrame html={html} images={images} title={`Email from ${name}`} />
+          <EmailFrame html={html} images={images} inline={inlineImages} title={`Email from ${name}`} />
         </>
       ) : (
         // ponytail: phones show the plain text; a JavaScript-off WebView for the HTML needs react-native-webview in an EAS build.
@@ -395,8 +471,91 @@ function EmailCard({ message, open, imagesByDefault, onToggle, onLayout }: {
           {split && quoteOpen ? <Text selectable style={[styles.plain, { color: theme.textSecondary }]}>{split.quote}</Text> : null}
         </View>
       )}
+      <EmailFiles message={message} />
+      {onCompose ? (
+        <View style={styles.cardActions}>
+          {([["reply", "Reply"], ["replyAll", "Reply all"], ["forward", "Forward"]] as const).map(([mode, label]) => (
+            <Pressable
+              key={mode}
+              accessibilityRole="button"
+              accessibilityLabel={`${label} to the message from ${name}`}
+              onPress={() => onCompose(mode)}
+              style={({ hovered }: { hovered?: boolean }) => [styles.cardAction, { backgroundColor: hovered ? theme.rowHover : "transparent" }]}
+            >
+              <Text style={[styles.cardActionText, { color: theme.textSecondary }]}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
+}
+
+type Attachment = Email["attachments"][number];
+const shownAsFile = (attachment: Attachment) => !attachment.gmail?.inline;
+const isImage = (attachment: Attachment) => attachment.mimeType?.startsWith("image/") === true;
+
+/** A message's files: images as thumbnails that open in the lightbox, the rest as tiles that open the file. Inline images draw in the body. */
+function EmailFiles({ message }: { message: Email }): JSX.Element | null {
+  const openLightbox = useLightbox();
+  const shown = message.attachments.filter(shownAsFile);
+  if (!shown.length) return null;
+  const photos = shown.filter((attachment) => isImage(attachment) && attachment.originalUrl);
+  const media = photos.map((attachment) => ({ guid: attachment.guid, originalUrl: attachment.originalUrl, thumbUrl: attachment.thumbUrl, isVideo: false }));
+  return (
+    <View testID="email-files" style={styles.emailFiles}>
+      {photos.map((attachment, index) => (
+        <Pressable
+          key={attachment.guid}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${attachment.filename ?? "photo"}`}
+          onPress={() => openLightbox(media, index)}
+          style={styles.thumb}
+        >
+          <Image source={{ uri: attachment.thumbUrl ?? attachment.originalUrl! }} style={styles.thumbImage} contentFit="cover" />
+        </Pressable>
+      ))}
+      {shown.filter((attachment) => !photos.includes(attachment)).map((attachment) => (
+        <FileCard
+          key={attachment.guid}
+          filename={attachment.filename ?? "Attachment"}
+          bytes={attachment.totalBytes ?? null}
+          onPress={attachment.originalUrl ? () => void openExternalUrl(attachment.originalUrl!) : undefined}
+        />
+      ))}
+    </View>
+  );
+}
+
+/**
+ * The message's inline images as data: URLs by Content-ID, read from storage on the web, so the sandboxed frame shows
+ * them under its CSP, which allows data: images and nothing remote.
+ */
+function useInlineImages(attachments: readonly Attachment[]): Readonly<Record<string, string>> {
+  const [urls, setUrls] = useState<Readonly<Record<string, string>>>({});
+  const wanted = attachments.filter((attachment) => attachment.gmail?.inline && attachment.gmail.contentId && isImage(attachment) && attachment.originalUrl);
+  const key = wanted.map((attachment) => attachment.guid).join(" ");
+  useEffect(() => {
+    if (!key || Platform.OS !== "web") return;
+    let live = true;
+    void Promise.all(wanted.map(async (attachment) => {
+      const blob = await (await fetch(attachment.originalUrl!)).blob();
+      const url = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob.slice(0, blob.size, attachment.mimeType));
+      });
+      return [attachment.gmail!.contentId!, url] as const;
+    })).then((entries) => {
+      if (live) setUrls(Object.fromEntries(entries));
+    }).catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the attachments' guids, which fix their URLs.
+  }, [key]);
+  return urls;
 }
 
 /** Where an email that has not landed stands. An unknown outcome is never offered for a resend. */
@@ -411,11 +570,11 @@ function SendState({ clientKey, state }: { clientKey: string; state: NonNullable
 }
 
 /** The cleaned HTML in a sandboxed iframe that runs no scripts, its quotes folded, sized to its content as they open. */
-function EmailFrame({ html, images, title }: { html: string; images: boolean; title: string }): JSX.Element {
+function EmailFrame({ html, images, inline, title }: { html: string; images: boolean; inline: Readonly<Record<string, string>>; title: string }): JSX.Element {
   const [height, setHeight] = useState(120);
   return createElement("iframe", {
     title,
-    srcDoc: emailDocument(html, { images }),
+    srcDoc: emailDocument(html, { images, inline }),
     sandbox: EMAIL_SANDBOX,
     referrerPolicy: "no-referrer",
     style: { border: 0, width: "100%", height, background: "#fff", borderRadius: 8 },
@@ -475,5 +634,11 @@ const styles = StyleSheet.create({
   loadImages: { alignItems: "center", borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 10, paddingHorizontal: 12, paddingVertical: 8 },
   loadImagesText: { fontSize: 13, fontWeight: "600" },
   loadImagesNote: { fontSize: 12.5 },
-  replyBar: { borderTopWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 8, paddingHorizontal: 20, paddingVertical: 12 },
+  cardActions: { flexDirection: "row", gap: 4, marginLeft: -8 },
+  cardAction: { borderRadius: 7, paddingHorizontal: 8, paddingVertical: 4 },
+  cardActionText: { fontSize: 12.5, fontWeight: "600" },
+  emailFiles: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  thumb: { borderRadius: 10, height: 120, overflow: "hidden", width: 160 },
+  thumbImage: { height: 120, width: 160 },
+  replyBar: { borderTopWidth: StyleSheet.hairlineWidth, flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 20, paddingVertical: 12 },
 });

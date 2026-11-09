@@ -13,8 +13,10 @@ export const REFRESH_TOKEN = "1//fake-refresh";
 /** One message in the fake mailbox. Headers are the RFC 5322 ones Gmail returns; bodies are served on a full read. */
 export type FakeMail = {
   id: string; threadId: string; labelIds: string[]; internalDate: number; headers: Record<string, string>;
-  text?: string; html?: string; snippet?: string;
+  text?: string; html?: string; snippet?: string; files?: FakeFile[];
 };
+/** An attachment part. `inlineData`: Gmail serves a small part's bytes in the message itself, with no attachmentId. */
+export type FakeFile = { filename: string; mimeType: string; data: string; contentId?: string; inlineData?: boolean };
 
 export const PUSH_SERVICE_ACCOUNT = "comma-gmail-push@comma-auf.iam.gserviceaccount.com";
 export const PUSH_TOPIC = "projects/comma-auf/topics/comma-gmail";
@@ -22,7 +24,15 @@ export const PUSH_TOPIC = "projects/comma-auf/topics/comma-gmail";
 const b64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const b64text = (text: string) => b64url(new TextEncoder().encode(text));
 
-type Call = { method: string; url: URL; form: Record<string, string>; json: unknown; token: string | null };
+type Call = { method: string; url: URL; form: Record<string, string>; json: unknown; raw?: { contentType: string; body: string }; token: string | null };
+
+/** A multipart/related upload: its JSON metadata, then the message/rfc822 part. */
+function parseUpload(call: Call): { raw: string; threadId?: string } {
+  const boundary = /boundary=([^;]+)/.exec(call.raw?.contentType ?? "")?.[1] ?? "";
+  const [meta = "", message = ""] = (call.raw?.body ?? "").split(`--${boundary}`).slice(1, 3).map((part) => part.slice(part.indexOf("\r\n\r\n") + 4));
+  const metadata = JSON.parse(meta.trim()) as { threadId?: string };
+  return { raw: message.replace(/\r\n$/, ""), ...(metadata.threadId ? { threadId: metadata.threadId } : {}) };
+}
 type Answer = { status?: number; body: unknown };
 type Route = (call: Call) => Answer;
 
@@ -48,8 +58,10 @@ export class FakeGmail {
   /** Threads per page on threads.list. */
   pageSize = 100;
   watches: { topicName: string }[] = [];
-  /** Every message users.messages.send took, as its RFC 822 text, with the threadId it was sent into. */
-  readonly sent: { raw: string; threadId?: string }[] = [];
+  /** Every message users.messages.send took, as its RFC 822 text, with the threadId it was sent into and whether it came through the upload endpoint. */
+  readonly sent: { raw: string; threadId?: string; upload: boolean }[] = [];
+  /** Gmail mints a new attachment id on every read; the fake does too, so a stale one fails. */
+  private reads = 0;
   /** Gmail sets its own Message-ID on a send instead of keeping Comma's. */
   replacesMessageId = false;
   stopped = false;
@@ -80,6 +92,13 @@ export class FakeGmail {
       const wanted = /^rfc822msgid:(.+)$/.exec(call.url.searchParams.get("q") ?? "")?.[1];
       const found = this.mail.filter((message) => wanted && message.headers["Message-ID"] === `<${wanted}>`);
       return { body: found.length ? { messages: found.map((message) => ({ id: message.id, threadId: message.threadId })) } : {} };
+    });
+    this.on("GET", /\/users\/me\/messages\/[^/]+\/attachments\/[^/]+$/, (call) => {
+      const [, id, , attachmentId] = call.url.pathname.split("/").slice(-4).map(decodeURIComponent);
+      const [read, index] = (attachmentId ?? "").split(".").slice(1).map(Number);
+      const file = this.mail.find((message) => message.id === id)?.files?.[index ?? -1];
+      if (!file || read !== this.reads) return { status: 404, body: { error: { code: 404, status: "NOT_FOUND" } } };
+      return { body: { size: file.data.length, data: b64text(file.data) } };
     });
     this.on("GET", /\/users\/me\/messages\/[^/]+$/, (call) => {
       const message = this.mail.find((candidate) => candidate.id === decodeURIComponent(call.url.pathname.split("/").pop()!));
@@ -174,30 +193,41 @@ export class FakeGmail {
   }
 
   private serialize(message: FakeMail, format: string | null, wanted: Set<string>) {
+    if (format === "full") this.reads++;
+    const text = (message.text !== undefined ? [{ mimeType: "text/plain", body: { data: b64text(message.text) } }] : [])
+      .concat(message.html !== undefined ? [{ mimeType: "text/html", body: { data: b64text(message.html) } }] : []);
+    const files = (message.files ?? []).map((file, index) => ({
+      partId: String(index + 1), mimeType: file.mimeType, filename: file.filename,
+      headers: file.contentId ? [{ name: "Content-ID", value: `<${file.contentId}>` }] : [],
+      body: file.inlineData ? { size: file.data.length, data: b64text(file.data) } : { size: file.data.length, attachmentId: `att.${this.reads}.${index}` },
+    }));
+    const parts = files.length
+      ? [{ partId: "0", mimeType: "multipart/alternative", parts: text.map((part, index) => ({ ...part, partId: `0.${index}` })) }, ...files]
+      : text.map((part, index) => ({ ...part, partId: String(index) }));
     return {
       id: message.id, threadId: message.threadId, labelIds: message.labelIds, internalDate: String(message.internalDate),
       snippet: message.snippet ?? (message.text ?? "").slice(0, 100),
       payload: {
-        mimeType: "multipart/alternative",
+        partId: "", mimeType: files.length ? "multipart/mixed" : "multipart/alternative",
         headers: Object.entries(message.headers).filter(([name]) => format === "full" || wanted.has(name.toLowerCase())).map(([name, value]) => ({ name, value })),
-        ...(format === "full" ? { parts: [
-          ...(message.text !== undefined ? [{ mimeType: "text/plain", body: { data: b64text(message.text) } }] : []),
-          ...(message.html !== undefined ? [{ mimeType: "text/html", body: { data: b64text(message.html) } }] : []),
-        ] } : {}),
+        ...(format === "full" ? { parts } : {}),
       },
     };
   }
 
   /** users.messages.send: the raw message joins its thread (or starts one) as a SENT message, as Gmail files it. */
   private send(call: Call): Answer {
-    const { raw, threadId } = call.json as { raw: string; threadId?: string };
-    const text = new TextDecoder().decode(Uint8Array.from(atob(raw.replace(/-/g, "+").replace(/_/g, "/")), (char) => char.charCodeAt(0)));
-    this.sent.push({ raw: text, ...(threadId ? { threadId } : {}) });
-    const { headers, parts } = parseRfc822(text);
+    const upload = call.url.pathname.startsWith("/upload/");
+    const { raw: text, threadId } = upload ? parseUpload(call) : (({ raw, threadId: id }) => ({
+      raw: new TextDecoder().decode(Uint8Array.from(atob(raw.replace(/-/g, "+").replace(/_/g, "/")), (char) => char.charCodeAt(0))), threadId: id,
+    }))(call.json as { raw: string; threadId?: string });
+    if (upload && call.url.searchParams.get("uploadType") !== "multipart") return { status: 400, body: { error: { code: 400, status: "INVALID_ARGUMENT" } } };
+    this.sent.push({ raw: text, upload, ...(threadId ? { threadId } : {}) });
+    const { headers, parts, files } = parseRfc822(text);
     if (this.replacesMessageId) headers["Message-ID"] = `<gmail-${this.sent.length}@mail.gmail.com>`;
     const mail = this.deliver({
       id: `sent-${this.sent.length}`, threadId: threadId ?? `thread-sent-${this.sent.length}`, labelIds: ["SENT"], headers,
-      text: parts["text/plain"], html: parts["text/html"],
+      text: parts["text/plain"], html: parts["text/html"], files: files.map(({ filename, mimeType, text: data }) => ({ filename, mimeType, data })),
     });
     return { body: { id: mail.id, threadId: mail.threadId, labelIds: mail.labelIds } };
   }
@@ -247,9 +277,11 @@ export class FakeGmail {
     const method = init?.method ?? "GET";
     const body = init?.body;
     const form = body instanceof URLSearchParams ? Object.fromEntries(body) : {};
-    const json = typeof body === "string" ? JSON.parse(body) as unknown : undefined;
+    const contentType = new Headers(init?.headers).get("Content-Type") ?? "";
+    const raw = typeof body === "string" && contentType.startsWith("multipart/") ? { contentType, body } : undefined;
+    const json = typeof body === "string" && !raw ? JSON.parse(body) as unknown : undefined;
     const auth = new Headers(init?.headers).get("Authorization");
-    const call: Call = { method, url, form, json, token: auth?.startsWith("Bearer ") ? auth.slice("Bearer ".length) : null };
+    const call: Call = { method, url, form, json, raw, token: auth?.startsWith("Bearer ") ? auth.slice("Bearer ".length) : null };
     this.calls.push(call);
     const route = this.routes.find(([pattern, verb]) => verb === method && pattern.test(`${url.origin}${url.pathname}`));
     if (!route) throw new Error(`FakeGmail: unexpected ${method} ${url.href}`);
@@ -271,18 +303,36 @@ export class FakeGmail {
   }
 }
 
-/** An RFC 822 message's headers and its base64 parts by type, as the Gmail lane writes them. */
-export function parseRfc822(text: string): { headers: Record<string, string>; parts: Record<string, string> } {
-  const [head = "", ...rest] = text.split("\r\n\r\n");
+type ParsedFile = { filename: string; mimeType: string; disposition: string; text: string };
+
+/**
+ * An RFC 822 message's headers, its base64 text parts by type, and its attachment parts, as the Gmail lane writes them.
+ * A multipart/mixed body is read through to the multipart/alternative inside it.
+ */
+export function parseRfc822(text: string): { headers: Record<string, string>; parts: Record<string, string>; files: ParsedFile[] } {
+  const split = text.indexOf("\r\n\r\n");
+  const head = text.slice(0, split);
   const headers = Object.fromEntries(head.split("\r\n").map((line) => [line.slice(0, line.indexOf(":")), line.slice(line.indexOf(":") + 1).trim()]));
-  const boundary = /boundary="([^"]+)"/.exec(headers["Content-Type"] ?? "")?.[1];
   const parts: Record<string, string> = {};
-  for (const chunk of boundary ? rest.join("\r\n\r\n").split(`--${boundary}`) : []) {
-    const [partHead, body] = chunk.split("\r\n\r\n");
-    const type = /Content-Type: ([^;\r\n]+)/.exec(partHead ?? "")?.[1];
-    if (type && body !== undefined) parts[type] = new TextDecoder().decode(Uint8Array.from(atob(body.replace(/\s+/g, "")), (char) => char.charCodeAt(0)));
-  }
-  return { headers, parts };
+  const files: ParsedFile[] = [];
+  const decode = (body: string) => new TextDecoder().decode(Uint8Array.from(atob(body.replace(/\s+/g, "")), (char) => char.charCodeAt(0)));
+  const walk = (contentType: string, body: string) => {
+    const boundary = /boundary="([^"]+)"/.exec(contentType)?.[1];
+    if (!boundary) return;
+    for (const chunk of body.split(`--${boundary}`).slice(1)) {
+      if (chunk.startsWith("--")) break;
+      const at = chunk.indexOf("\r\n\r\n");
+      const partHead = chunk.slice(0, at);
+      const partBody = chunk.slice(at + 4);
+      const type = /Content-Type: ([^\r\n]+)/.exec(partHead)?.[1] ?? "";
+      const disposition = /Content-Disposition: ([^\r\n]+)/.exec(partHead)?.[1];
+      if (type.startsWith("multipart/")) walk(type, partBody);
+      else if (disposition) files.push({ filename: /filename="([^"]*)"/.exec(disposition)?.[1] ?? "", mimeType: type.split(";")[0]!.trim(), disposition, text: decode(partBody) });
+      else parts[type.split(";")[0]!.trim()] = decode(partBody);
+    }
+  };
+  walk(headers["Content-Type"] ?? "", text.slice(split + 4));
+  return { headers, parts, files };
 }
 
 /** A Pub/Sub push request for a change in `emailAddress`'s mailbox. */

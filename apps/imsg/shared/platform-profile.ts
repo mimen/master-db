@@ -193,10 +193,10 @@ export const SLACK_PROFILE: PlatformProfile = {
   )) as Record<Feature, FeatureRule>,
 };
 
-/** What Comma runs on Gmail. */
-const GMAIL_LIVE: readonly Feature[] = ["send", "reply", "schedule"];
+/** What Comma runs on Gmail. Attachments ride on the email the composer sends. */
+const GMAIL_LIVE: readonly Feature[] = ["send", "reply", "schedule", "attachments"];
 /** What Gmail has that Comma does not run yet. Reactions, edits, typing and the rest Gmail lacks. */
-const GMAIL_SOON: readonly Feature[] = ["attachments"];
+const GMAIL_SOON: readonly Feature[] = [];
 
 /** Milad's Google Workspace mailbox. The email composer replaces the chat composer. */
 export const GMAIL_PROFILE: PlatformProfile = {

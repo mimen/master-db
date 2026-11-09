@@ -18,7 +18,7 @@ import { profileRoute, unsupportedReason } from "./routeSupport";
 
 type SendPayload = Extract<CommaOutboxPayload, { kind: "send" }>;
 
-const GLOBAL_KINDS = new Set<CommaOutboxPayload["kind"]>(["createChat", "clearSuggestionLearning"]);
+const GLOBAL_KINDS = new Set<CommaOutboxPayload["kind"]>(["createChat", "clearSuggestionLearning", "sendEmail"]);
 const expireRef = makeFunctionReference<"mutation", { clientKey: string }, null>("comma/pendingSends:expire");
 
 /** Idempotent on clientKey. A send shows its pending bubble at once. */
@@ -36,11 +36,19 @@ export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversation
   const route = conversation ? sendRoute(conversation) : undefined;
   const unsupported = conversation && route && unsupportedReason(route, conversation.isGroup, payload);
   if (unsupported) throw new ConvexError(unsupported);
+  if (payload.kind === "sendEmail") await checkNewEmail(ctx, payload);
   const now = Date.now();
-  // ponytail: a global command (createChat) names no platform, so it is iMessage's until another platform creates chats.
-  const id = await insertCommand(ctx, { clientKey, conversationId, route, payload, platform: route?.platform ?? "imessage", now });
+  // A new email names its mailbox. ponytail: createChat names no platform, so it is iMessage's until another platform creates chats.
+  const platform = route?.platform ?? (payload.kind === "sendEmail" ? "gmail" : "imessage");
+  const id = await insertCommand(ctx, { clientKey, conversationId, route, payload, platform, now });
   if (payload.kind === "send" && conversation && route) await createPendingSend(ctx, { conversation, route, clientKey, payload, now });
   return { id, created: true };
+}
+
+/** A new email goes from a mailbox to someone; Convex refuses it here rather than in the lane. */
+async function checkNewEmail(ctx: MutationCtx, payload: Extract<CommaOutboxPayload, { kind: "sendEmail" }>): Promise<void> {
+  if ((await ctx.db.get(payload.accountId))?.platform !== "gmail") throw new ConvexError("Choose a mailbox to send from");
+  if (!payload.email.to.length && !payload.email.cc.length) throw new ConvexError("An email needs someone to send it to");
 }
 
 /** Inserts a pending command into its lane, and starts the lane's executor when Convex runs it. */

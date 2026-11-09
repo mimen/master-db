@@ -23,6 +23,10 @@ async function openThread(desk: { page: import("@playwright/test").Page }) {
   return reader;
 }
 
+/** The chips in To or Cc, by the name each reads as. */
+const chips = (composer: import("@playwright/test").Locator, field: "To" | "Cc") =>
+  composer.getByRole("button", { name: new RegExp(` from ${field}$`) }).evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label")!.replace(/^Remove | from (To|Cc)$/g, "")));
+
 function enqueued(page: import("@playwright/test").Page): Payload[] {
   const payloads: Payload[] = [];
   page.on("request", (request) => {
@@ -40,8 +44,9 @@ test("mail-send: reply prefills the sender and subject, reply all adds the rest,
 
   await reader.getByRole("button", { name: "Reply", exact: true }).click();
   const composer = page.getByTestId("email-composer");
-  await expect(composer.getByLabel("To")).toHaveValue("Sam Lee <sam@venue.test>");
-  await expect(composer.getByLabel("Cc")).toHaveValue("");
+  expect(await chips(composer, "To")).toEqual(["Sam Lee"]);
+  expect(await chips(composer, "Cc")).toEqual([]);
+  await expect(composer.getByTestId("composer-source")).toContainText("Replying to Sam Lee");
   await expect(composer.getByLabel("Subject")).toHaveValue("Re: Load-in for Saturday");
 
   const body = composer.getByLabel("Message");
@@ -52,8 +57,8 @@ test("mail-send: reply prefills the sender and subject, reply all adds the rest,
   await expect(reader.getByTestId("email-card")).toHaveCount(2);
 
   await composer.getByRole("tab", { name: "Reply all" }).click();
-  await expect(composer.getByLabel("To")).toHaveValue("Sam Lee <sam@venue.test>");
-  await expect(composer.getByLabel("Cc")).toHaveValue("Dana Ortiz <dana@venue.test>");
+  await expect.poll(() => chips(composer, "Cc")).toEqual(["Dana Ortiz"]);
+  expect(await chips(composer, "To")).toEqual(["Sam Lee"]);
   await page.screenshot({ path: join(evidence, "1-composer-reply-all.png") });
 
   await body.press("Meta+Enter");
@@ -117,7 +122,7 @@ test("mail-send: an agent's draft opens the email composer with its text and not
   const composer = page.getByTestId("email-composer");
   await expect(composer.getByLabel("Message")).toHaveValue("6 works. I'll bring the van.");
   await expect(composer.getByText("Sam asked to confirm load-in.")).toBeVisible();
-  await expect(composer.getByLabel("To")).toHaveValue("Sam Lee <sam@venue.test>");
+  expect(await chips(composer, "To")).toEqual(["Sam Lee"]);
   await page.screenshot({ path: join(evidence, "6-agent-draft.png") });
   await composer.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.getByTestId("email-card").filter({ hasText: "6 works. I'll bring the van." })).toHaveCount(1);
