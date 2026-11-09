@@ -102,6 +102,19 @@ describe("the backfill", () => {
     expect((await stateOf(t, (await thread(t, "t-sam"))!._id))?.dismissedUnrespondedGuid).toBeUndefined();
   });
 
+  test("a page whose read fails once is read again, and the backfill still finishes", async () => {
+    seedMailbox();
+    let dropped = 0;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (/\/threads\/t-sam\b/.test(String(input)) && dropped++ === 0) throw new TypeError("error decoding response body");
+      return await google.fetch(input, init);
+    });
+    const { t, as } = await setup();
+    await connect(t, as);
+    expect(dropped).toBeGreaterThan(1);
+    expect((await threads(t)).map((row) => row.gmail!.threadId).sort()).toEqual(["t-news", "t-old-sam", "t-sam", "t-stranger"]);
+  });
+
   test("a person's mail keeps its subject, thread and new content for models, and its HTML cleaned", async () => {
     seedMailbox();
     const { t, as } = await setup();
