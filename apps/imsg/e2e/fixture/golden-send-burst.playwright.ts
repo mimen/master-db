@@ -74,13 +74,18 @@ test("send-burst: a burst keeps send order in the thread and the newest send in 
   };
   const timeline: { at: number; landed: string[]; thread: string[]; preview: string }[] = [];
   const start = Date.now();
-  await page.waitForTimeout(700);
-  await desk.receive(desk.chats.needs, inbound);
-  while (Date.now() - start < 6_500) {
+  const tick = async () => {
     const landed = (await stored()).filter((r) => sends.includes(r.text) && r.guid.startsWith("out-")).map((r) => r.text).reverse();
     const shown = await page.evaluate(() => (window as unknown as { __burst: Sample[] }).__burst.at(-1)!);
     timeline.push({ at: Date.now() - start, landed, thread: shown.thread, preview: sends.find((text) => shown.preview.includes(text)) ?? "" });
     await shoot(`landed-${landed.length}`);
+  };
+  // Sampled before the wait: on a slow runner the typing outlasts the first send's 1.5s, so a later first tick misses 0.
+  await tick();
+  await page.waitForTimeout(700);
+  await desk.receive(desk.chats.needs, inbound);
+  while (Date.now() - start < 6_500) {
+    await tick();
     await page.waitForTimeout(300);
   }
   writeFileSync(join(evidence, "timeline.json"), JSON.stringify(timeline, null, 2));
