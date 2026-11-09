@@ -46,8 +46,8 @@ export const BINDINGS: readonly KeyBinding[] = [
   { commandId: "list.focusSearch", combo: "mod+shift+f", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true },
   // The browser keeps ⌘N and ⌘W for itself, so these two only ever land in the
   // desktop shell — where the Tauri native menu dispatches the same command ids
-  // (desktop/src-tauri/src/lib.rs). Hidden from help because the menu already
-  // advertises them, and in a plain browser tab they do not fire at all.
+  // (desktop/src-tauri/src/lib.rs). Hidden from inline hints, which a plain
+  // browser tab would show for keys that never fire there; help still lists them.
   { commandId: "conversation.new", combo: "mod+n", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true, hidden: true },
   { commandId: "navigation.close", combo: "mod+w", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true, hidden: true },
 
@@ -116,6 +116,14 @@ export function shortcutFor(id: CommandId): string | undefined {
   return binding ? formatCombo(binding.combo) : undefined;
 }
 
+/** Keys a surface binds itself, outside the command registry, so help lists every key there is. */
+const SURFACE_KEYS: readonly HelpEntry[] = [
+  { title: "Switch lens", keys: ["⌘1–⌘7"] },
+  { title: "Use a suggestion", keys: ["⌥1–⌥3"] },
+  { title: "Accept the suggested text", keys: ["Tab"] },
+  { title: "Send an email", keys: ["⌘↵"] },
+];
+
 /** Help entries derived from the registry — cannot drift from behavior.
  * Commands sharing a title (Enter opens in the list, replies elsewhere) read
  * as one entry, since to the user they are one key doing one job. */
@@ -123,11 +131,11 @@ export function helpEntries(): HelpEntry[] {
   const entries = new Map<string, string[]>();
   for (const command of COMMANDS) {
     const keys = BINDINGS
-      .filter((b) => b.commandId === command.id && !b.hidden)
+      .filter((b) => b.commandId === command.id)
       .map((b) => formatCombo(b.combo));
     if (keys.length === 0) continue;
     const merged = entries.get(command.title) ?? [];
     entries.set(command.title, [...merged, ...keys.filter((key) => !merged.includes(key))]);
   }
-  return [...entries].map(([title, keys]) => ({ title, keys }));
+  return [...[...entries].map(([title, keys]) => ({ title, keys })), ...SURFACE_KEYS];
 }

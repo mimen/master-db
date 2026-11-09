@@ -282,6 +282,16 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
     expect(later).toEqual(["newer settle undone"]);
   });
 
+  test("a settle toast's Undo reverses that settle even after a newer action committed", async () => {
+    await toggleSettleChat(owed(1));
+    const later: string[] = [];
+    commitUndoAction(beginUndoAction(), () => later.push("newer action undone"));
+    toasts[0]!.onPress!();
+    await until(() => writes.length > 1);
+    expect(writes.slice(1)).toEqual([["comma/triage:unsettle", { conversationId: "conv-1" }]]);
+    expect(later).toEqual([]);
+  });
+
   test("Settle all with nothing open says so and leaves no undo entry", async () => {
     await settleAllChats([{ chat: chat({ agent: undefined, lastMessage: null }), anchor: "q" }]);
     expect(toasts.map((t) => t.message)).toEqual(["Nothing left to settle here"]);

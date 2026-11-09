@@ -30,9 +30,11 @@ import {
   getListAdapter,
   isListMode,
   requestFocus,
+  runEscapeClosers,
   setKeyboardRuntime,
   setListMode,
 } from "@/lib/keyboard/controller";
+import { lensFilters } from "@/lib/palette/saved-views";
 import { conversationRoute, onSelectChat, type Selection } from "@/lib/selection";
 import { playReceive } from "@/lib/sounds";
 import { useReceiveSound } from "@/hooks/use-receive-sound";
@@ -58,6 +60,7 @@ export function MessagesWorkspace({
   const shell = useDesktopShellContext();
   const { closeTopSurface, closeUtility, dispatch, openHelp, openPalette, registerMessagesActions, reportMessagesRail } = shell;
   const utilityOpen = useDesktopShellState((state) => state.utility?.workspace === "messages");
+  const agentOpen = useDesktopShellState((state) => state.utility?.kind === "agent" && state.utility.workspace === "messages");
   const shellSelection = useDesktopShellState((state) => state.messages.selection);
   // Today is the working view: the inbox opens on the day's ranked queue.
   const [state, setState] = useState<StateFilter>("today");
@@ -135,7 +138,11 @@ export function MessagesWorkspace({
   useEffect(() => {
     if (!wide) return;
     registerMessagesActions({
-      applyState: setState,
+      // A lens the palette opens takes its own remembered People filter, as a tab click does.
+      applyState: (next) => {
+        setState(next);
+        setType(lensFilters(next, DEFAULT_INBOX_FILTERS.type).type);
+      },
       applyType: setType,
       clearSelection: () => {
         traceTriage({ kind: "clear", via: "clearSelection" });
@@ -213,7 +220,9 @@ export function MessagesWorkspace({
     renderedRef.current = rendered;
   });
   useEffect(() => {
-    const chat = selectedId ? allChatsRef.current.find((c) => c.conversationId === selectedId) : undefined;
+    // Today lists email threads too, which only its rendered rows hold.
+    const chat = selectedId ? allChatsRef.current.find((c) => c.conversationId === selectedId)
+      ?? renderedRef.current?.find((c) => c.conversationId === selectedId) : undefined;
     const shown = !chat || !ADVANCING.has(state) ? false
       : state === "today" ? renderedRef.current?.some((c) => c.conversationId === chat.conversationId) === true
       : matchesFilters(chat, state, type);
@@ -242,12 +251,12 @@ export function MessagesWorkspace({
   // handlers that run well after commit.
   const agentEnabled = useAgentEnabled();
   const showSheet = useActionSheet();
-  const overlaysRef = useRef({ utilityOpen, agentEnabled });
+  const overlaysRef = useRef({ utilityOpen, agentOpen, agentEnabled });
   useEffect(() => {
     selectedRef.current = selected;
     stateRef.current = state;
     openChatRef.current = openChat;
-    overlaysRef.current = { utilityOpen, agentEnabled };
+    overlaysRef.current = { utilityOpen, agentOpen, agentEnabled };
   });
   useEffect(() => {
     if (Platform.OS !== "web" || !wide || !active) return;
@@ -313,11 +322,12 @@ export function MessagesWorkspace({
       undoLast: () => showToast(undoLastAction() ? "Undone" : "Nothing to undo"),
       // Esc precedence ladder — first applicable step only.
       escape: () => {
-        if (closeTopSurface()) return;
+        if (closeTopSurface() || runEscapeClosers()) return;
         const o = overlaysRef.current;
-        const focused = globalThis.document.activeElement;
-        if (focused instanceof HTMLElement && focused.closest("[data-agent-pane]")) {
-          requestFocus("composer");
+        if (o.agentOpen) {
+          const focused = globalThis.document.activeElement;
+          closeUtility();
+          if (focused instanceof HTMLElement && focused.closest("[data-agent-pane]")) requestFocus("composer");
           return;
         }
         // An active list search clears before anything else closes.
@@ -333,7 +343,7 @@ export function MessagesWorkspace({
         // Already gliding with nothing to close — stay.
       },
       closePanel: () => {
-        if (closeTopSurface()) return true;
+        if (closeTopSurface() || runEscapeClosers()) return true;
         const o = overlaysRef.current;
         if (getListAdapter()?.clearSearch()) return true;
         if (o.utilityOpen) {
@@ -365,6 +375,7 @@ export function MessagesWorkspace({
       loading={loading}
       offline={error !== null}
       wide={wide}
+      active={active}
       selectedId={wide ? selected?.conversationId : undefined}
       held={wide ? held : null}
       onFiltersChange={(filters) => {

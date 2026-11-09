@@ -40,6 +40,9 @@ export function relativeDay(at: number, now: number): string {
   return format(at, "MMM d");
 }
 
+/** What brings a settled conversation back, in its platform's own word. */
+const AGAIN: Record<ChatSummary["route"]["platform"], string> = { imessage: "texts", slack: "messages", gmail: "emails" };
+
 /** Who "texts again": a DM's first name, a phone number whole, a group as "someone". */
 export function firstName(chat: Pick<ChatSummary, "displayName" | "isGroup">): string {
   if (chat.isGroup) return "someone";
@@ -59,7 +62,7 @@ export function stripCopy({ chat, messages, historyComplete, now, compact, today
   const action = settleActionFor(chat);
   if (action === "none") return null;
   if (action === "unsettle") {
-    return { tone: "settled", lead: "Settled", detail: `Back in Needs you if ${firstName(chat)} texts again`, action, today: null };
+    return { tone: "settled", lead: "Settled", detail: `Back in Needs you if ${firstName(chat)} ${AGAIN[chat.route.platform]} again`, action, today: null };
   }
   // With no triage flag set, only an open agent chat makes Settle the action; nobody's turn is due.
   if (!chat.flags.unresponded && !chat.flags.waiting) return { tone: "settled", lead: "Agent chat open", detail: null, action, today };

@@ -26,18 +26,17 @@ interface Preset {
   block: number;
 }
 
-// Keyed by label prefix so the menu dresses today's thread-view labels with no caller change.
+// Keyed by label prefix so the menu dresses today's thread-view labels with no caller change. No preset names a
+// shortcut: nothing binds a key while the menu is open, and in a browser ⌘R reloads the app.
 const PRESETS: ReadonlyArray<readonly [prefix: string, preset: Preset]> = [
-  ["Reply", { icon: "arrow-undo-outline", shortcut: "⌘R", block: 0 }],
-  // "Copy Maya's number" and the like: same icon, but ⌘C copies the message, not the handle.
-  ["Copy ", { icon: "copy-outline", block: 0 }],
-  ["Copy", { icon: "copy-outline", shortcut: "⌘C", block: 0 }],
+  ["Reply", { icon: "arrow-undo-outline", block: 0 }],
+  ["Copy", { icon: "copy-outline", block: 0 }],
   ["Forward", { icon: "arrow-redo-outline", block: 0 }],
   ["Send again", { icon: "refresh", block: 0 }],
   ["Edit", { icon: "pencil-outline", block: 1 }],
   ["Unsend", { icon: "arrow-undo-circle-outline", block: 1 }],
   ["Undo send", { icon: "arrow-undo-circle-outline", block: 1 }],
-  ["Delete", { icon: "trash-outline", shortcut: "⌫", block: 2 }],
+  ["Delete", { icon: "trash-outline", block: 2 }],
 ];
 
 const PENDING_SUFFIX = " · available once sent";

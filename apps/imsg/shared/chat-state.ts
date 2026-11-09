@@ -161,7 +161,9 @@ export function matchesFilters(chat: ChatSummary, state: StateFilter, type: Type
 
 /**
  * Settled: a conversation with a last message, neither triage flag, and no
- * unsettled agent chat.
+ * unsettled agent chat, on a platform whose rule wants something of that last
+ * message. A Slack channel nobody mentioned the user in wants nothing, so it
+ * was never settled.
  *
  * The client never sees a dismissal GUID, so settled is read off the derived
  * flags instead. Equivalent by construction: for a chat with a last message,
@@ -170,7 +172,9 @@ export function matchesFilters(chat: ChatSummary, state: StateFilter, type: Type
  * dismissed.
  */
 export function isSettled(chat: ChatSummary): boolean {
-  return chat.lastMessage !== null && !chat.flags.unresponded && !chat.flags.waiting && chat.agent === undefined && !isSnoozed(chat);
+  if (chat.lastMessage === null || chat.flags.unresponded || chat.flags.waiting || chat.agent !== undefined || isSnoozed(chat)) return false;
+  // A Slack thread the user doesn't follow is never listed, so `following` is not needed here.
+  return attentionOf({ platform: chat.route.platform, kind: chat.kind }, chat.lastMessage) !== "none";
 }
 
 /** What the one triage gesture does to a conversation in its current state. */

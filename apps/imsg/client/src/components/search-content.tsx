@@ -61,6 +61,8 @@ export function SearchContent({
       setMessages([]);
       return;
     }
+    // A search still in flight when the query changes lands nothing: an older query never overwrites a newer one.
+    let current = true;
     const handle = setTimeout(() => {
       setSearching(true);
       Promise.all([
@@ -68,12 +70,16 @@ export function SearchContent({
         scopeConversation || platform ? Promise.resolve([]) : api.contacts(query.trim()).catch(() => []),
       ])
         .then(([messageResults, contactResults]) => {
+          if (!current) return;
           setMessages(messageResults);
           setContacts(contactResults.slice(0, 6));
         })
-        .finally(() => setSearching(false));
+        .finally(() => current && setSearching(false));
     }, 350);
-    return () => clearTimeout(handle);
+    return () => {
+      current = false;
+      clearTimeout(handle);
+    };
   }, [query, scopeConversation, platform]);
 
   const open = (conversationId: ConversationId, name: string) => {

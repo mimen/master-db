@@ -170,10 +170,10 @@ describe("registry", () => {
     expect(entries.find((e) => e.title === "Settle / un-settle")?.keys).toEqual(["⌘E"]);
     expect(entries.find((e) => e.title === "Mark unread")?.keys).toEqual(["⌘U"]);
     expect(entries.find((e) => e.title === "Undo last action")?.keys).toEqual(["⌘Z", "⌘⇧Z"]);
-    expect(entries.find((e) => e.title === "Close panel / window")).toBeUndefined();
-    // ⌘N is browser-reserved (so: hidden) and bare `c` is gone, which leaves New
-    // message with no advertised key. The native menu is where the shell shows it.
-    expect(entries.find((e) => e.title === "New message")).toBeUndefined();
+    // ⌘N and ⌘W fire only in the desktop shell, but help lists every key, theirs and the surfaces' own.
+    expect(entries.find((e) => e.title === "Close panel / window")?.keys).toEqual(["⌘W"]);
+    expect(entries.find((e) => e.title === "New message")?.keys).toEqual(["⌘N"]);
+    expect(entries.map((e) => e.keys.join(" "))).toEqual(expect.arrayContaining(["⌘1–⌘7", "⌥1–⌥3", "Tab", "⌘↵"]));
   });
 
   test("help lists Enter once and names Esc for where it goes", () => {

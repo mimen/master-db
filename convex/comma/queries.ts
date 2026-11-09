@@ -223,12 +223,14 @@ export const listEmailThreads = query({
   },
 });
 
+/** A deep link's id is a string: one that is not a conversation id reads as no conversation, not a validator error. */
 export const getConversation = query({
-  args: { conversationId: v.id("comma_conversations") },
+  args: { conversationId: v.string() },
   returns: v.union(conversationView, v.null()),
   handler: async (ctx, args) => {
     await assertAllowed(ctx);
-    const conversation = await ctx.db.get(args.conversationId);
+    const id = ctx.db.normalizeId("comma_conversations", args.conversationId);
+    const conversation = id ? await ctx.db.get(id) : null;
     return conversation ? await withConversationState(ctx, conversation) : null;
   },
 });
@@ -284,19 +286,21 @@ export async function withMessageAttachments(ctx: QueryCtx, message: CommaMessag
 
 export const listMessages = query({
   args: {
-    conversationId: v.id("comma_conversations"),
+    conversationId: v.string(),
     paginationOpts: paginationOptsValidator,
   },
   returns: paginationResultValidator(messageView),
   handler: async (ctx, args) => {
     await assertAllowed(ctx);
+    const conversationId = ctx.db.normalizeId("comma_conversations", args.conversationId);
+    if (!conversationId) return { page: [], isDone: true, continueCursor: "" };
     const result = await ctx.db
       .query("comma_messages")
-      .withIndex("by_conversation_date", (q) => q.eq("conversationId", args.conversationId))
+      .withIndex("by_conversation_date", (q) => q.eq("conversationId", conversationId))
       .order("desc")
       .filter(shownInThread)
       .paginate(args.paginationOpts);
-    const conversation = await ctx.db.get(args.conversationId);
+    const conversation = await ctx.db.get(conversationId);
     const thread = conversation?.slack?.threadTs ? conversation.slack : null;
     const rootGuid = thread ? slack.messageGuid(thread.channel, thread.threadTs!) : null;
     // A thread's root lives in its channel or DM; the thread shows it first, under its replies' last page.
@@ -320,6 +324,8 @@ export const searchMessages = query({
     conversationId: v.optional(v.id("comma_conversations")),
     from: v.optional(v.union(v.literal("me"), v.literal("them"))),
     platform: v.optional(platformValidator),
+    /** Every platform but this one: the Messages sidebar leaves Gmail to Mail. */
+    exceptPlatform: v.optional(platformValidator),
   },
   returns: v.array(messageRead),
   handler: async (ctx, args) => {
@@ -331,7 +337,7 @@ export const searchMessages = query({
 
 /** Associated messages are filtered after the search: rows written since the side object carry no isTapback to match. */
 export async function searchMessageRows(ctx: QueryCtx, args: {
-  query: string; conversationId?: Id<"comma_conversations">; from?: "me" | "them"; platform?: CommaPlatform;
+  query: string; conversationId?: Id<"comma_conversations">; from?: "me" | "them"; platform?: CommaPlatform; exceptPlatform?: CommaPlatform;
 }): Promise<CommaMessageDoc[]> {
   return await ctx.db
     .query("comma_messages")
@@ -344,7 +350,8 @@ export async function searchMessageRows(ctx: QueryCtx, args: {
       return search;
     })
     .filter((q) => q.and(q.neq(q.field("isTapback"), true), q.neq(q.field("imessage.isAssociatedMessage"), true),
-      args.platform === "imessage" ? q.and(q.neq(q.field("platform"), "slack"), q.neq(q.field("platform"), "gmail")) : true))
+      args.platform === "imessage" ? q.and(q.neq(q.field("platform"), "slack"), q.neq(q.field("platform"), "gmail")) : true,
+      args.exceptPlatform ? q.neq(q.field("platform"), args.exceptPlatform) : true))
     .take(50);
 }
 

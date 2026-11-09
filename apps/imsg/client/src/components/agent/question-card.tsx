@@ -3,6 +3,7 @@ import { Platform, Pressable, StyleSheet, Text, TextInput, View, type StyleProp,
 
 import { Button } from "@/components/ui/button";
 import { Radius, Space, Weight } from "@/constants/tokens";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { useTypeRamp } from "@/hooks/use-type";
 import type { AgentEntry } from "@/lib/agent-api";
@@ -54,6 +55,8 @@ export function QuestionCard({ entry, shortcuts, onAnswer }: {
 }) {
   const theme = useTheme();
   const type = useTypeRamp();
+  // A key hint is for a keyboard: the narrow layout is a phone's.
+  const { wide } = useLayoutMode();
   const [selections, setSelections] = useState<Record<string, QuestionSelection>>({});
   const [active, setActive] = useState(0);
   const [sending, setSending] = useState(false);
@@ -170,7 +173,7 @@ export function QuestionCard({ entry, shortcuts, onAnswer }: {
       {error ? <Text accessibilityRole="alert" style={[styles.hint, { color: theme.destructive }]}>{error}</Text> : null}
       {pending ? (
         <View style={styles.footer}>
-          <Text style={[styles.hint, { color: theme.textTertiary, flex: 1 }]}>{Platform.OS === "web" && shortcuts ? "Press a number to pick" : ""}</Text>
+          <Text style={[styles.hint, { color: theme.textTertiary, flex: 1 }]}>{Platform.OS === "web" && wide && shortcuts ? "Press a number to pick" : ""}</Text>
           <Button label={sending ? "Sending…" : "Answer"} variant="primary" disabled={!answers || sending} onPress={() => submit(answers)} />
         </View>
       ) : null}

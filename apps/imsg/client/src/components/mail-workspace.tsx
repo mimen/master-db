@@ -2,10 +2,10 @@ import type { api as convexApi } from "@convex-api";
 import { splitQuote } from "@shared/email-quote";
 import { pendingClientKey } from "@shared/pending-send";
 import { loadsRemoteImages } from "@shared/platform-profile";
-import type { ConversationId } from "@shared/types";
+import type { ChatSummary, ConversationId } from "@shared/types";
+import { settleActionFor } from "@shared/chat-state";
 import { useConvexAuth, usePaginatedQuery, useQuery } from "convex/react";
 import { anyApi, type FunctionReturnType } from "convex/server";
-import { ConvexError } from "convex/values";
 import { useGlobalSearchParams } from "expo-router";
 import { createElement, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { ActivityIndicator, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
@@ -13,6 +13,7 @@ import { ActivityIndicator, FlatList, Platform, Pressable, ScrollView, StyleShee
 import type { ReplyMode } from "@shared/email-reply";
 import { Image } from "expo-image";
 
+import { useDesktopShellContext, useDesktopShellState } from "@/components/desktop-shell-context";
 import { DesktopSplit } from "@/components/desktop-split";
 import { EmailComposer, type ComposerSource, type ComposerStart } from "@/components/email-composer";
 import { FileCard } from "@/components/media";
@@ -23,16 +24,23 @@ import { SidebarFrame } from "@/components/sidebar/sidebar-frame";
 import { SidebarHeader } from "@/components/sidebar/sidebar-header";
 import { TriageGeometry } from "@/constants/triage-theme";
 import { useAgentEnabled } from "@/hooks/use-agent";
+import { useConversation } from "@/hooks/use-chat-directory";
 import { useTheme } from "@/hooks/use-theme";
+import { useToday } from "@/hooks/use-today";
+import { onTriageSettling, toggleSettleChat } from "@/hooks/use-triage-actions";
+import { useActionSheet } from "@/lib/action-sheet";
 import { openAgentPane } from "@/lib/agent-pane";
-import { conversationState } from "@/lib/conversation-state";
+import { markChatUnread, readChat, undoLastAction } from "@/lib/chat-actions";
+import { conversationToChat } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { formatListTimestamp, formatReceiptTime } from "@/lib/format";
 import { headerFace } from "@/lib/header-font";
 import { openExternalUrl } from "@/lib/external-link";
 import { useLightbox } from "@/lib/lightbox";
-import { EMAIL_SANDBOX, emailDocument, foldQuotes, messageFiles, openByDefault, regularSenders, threadFiles, type MailFile } from "@/lib/mail";
-import { inLens, type MailLens } from "@/lib/mail-lens";
+import { isShown, registerEscapeCloser, runEscapeClosers, setKeyboardRuntime } from "@/lib/keyboard/controller";
+import { EMAIL_SANDBOX, emailDocument, foldQuotes, messageFiles, openByDefault, threadFiles, type MailFile } from "@/lib/mail";
+import { openDeferMenu } from "@/lib/later";
+import { inLens, regularSenders, type MailLens } from "@/lib/mail-lens";
 import { setMailSelection } from "@/lib/mail-selection";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
 import { showToast } from "@/lib/toast";
@@ -50,10 +58,11 @@ type Email = FunctionReturnType<typeof commaApi.listMessages>["page"][number];
 const accountsApi = anyApi.comma.accounts as unknown as typeof convexApi.comma.accounts;
 const LENSES: readonly { id: MailLens; label: string }[] = [{ id: "people", label: "People" }, { id: "all", label: "All inbox" }];
 
-export function MailWorkspace({ wide }: { readonly wide: boolean }): JSX.Element {
+/** `active`: the wide shell shows Mail, so the keyboard acts on it. */
+export function MailWorkspace({ wide, active = false }: { readonly wide: boolean; readonly active?: boolean }): JSX.Element {
   const theme = useTheme();
   const { isAuthenticated } = useConvexAuth();
-  const [lens, setLens] = useState<MailLens>("people");
+  const [lens, setLensState] = useState<MailLens>("people");
   const [selectedId, setSelectedId] = useState<ConversationId | null>(null);
   const [composingNew, setComposingNew] = useState(false);
   const open = (id: ConversationId | null) => {
@@ -74,14 +83,105 @@ export function MailWorkspace({ wide }: { readonly wide: boolean }): JSX.Element
   const accounts = useQuery(accountsApi.listAccounts, isAuthenticated ? {} : "skip");
   const mailboxes = useMemo(() => (accounts ?? []).filter((account) => account.platform === "gmail" && account.connected)
     .sort((a, b) => Number(a.gmailApp === "personal") - Number(b.gmailApp === "personal")), [accounts]);
-  const [chosen, setMailbox] = useState<string | null>(null);
+  const [chosen, setChosen] = useState<string | null>(null);
   const mailbox = mailboxes.length > 1 && mailboxes.some((account) => account._id === chosen) ? chosen : null;
   // ponytail: narrows the loaded pages on the client; a server-side filter when one mailbox's threads sit pages deep.
+  const listed = (inMailbox: string | null, inThisLens: MailLens) =>
+    results.filter((row) => (!inMailbox || row.accountId === inMailbox) && inLens(row, inThisLens));
   const shown = useMemo(() => mailbox ? results.filter((row) => row.accountId === mailbox) : results, [results, mailbox]);
   const rows = useMemo(() => shown.filter((row) => inLens(row, lens)), [shown, lens]);
+  // A switch of mailbox or lens closes a thread the new list does not hold.
+  const narrowTo = (nextMailbox: string | null, nextLens: MailLens) => {
+    if (selectedId && !listed(nextMailbox, nextLens).some((row) => row._id === selectedId)) open(null);
+    setChosen(nextMailbox);
+    setLensState(nextLens);
+  };
+  const setLens = (next: MailLens) => narrowTo(mailbox, next);
+  const setMailbox = (next: string | null) => narrowTo(next, lens);
   const more = shown.length - rows.length;
   // ponytail: counts the loaded pages only; a per-sender count in Convex if a monthly list keeps reading as irregular.
   const regular = useMemo(() => regularSenders(results), [results]);
+
+  // Keyboard (docs/keyboard-design.md), the way Contacts and Messages register theirs: ⌘E archives the open thread,
+  // j/k walk the list, ⌘J asks the agent, Esc closes what is on top. Read through refs, so a key acts on current state.
+  const { closeTopSurface, closeUtility, openHelp, openPalette } = useDesktopShellContext();
+  const showSheet = useActionSheet();
+  const agentOpen = useDesktopShellState((state) => state.utility?.kind === "agent" && state.utility.workspace === "mail");
+  const agentEnabled = useAgentEnabled();
+  const selectedChat = useConversation(selectedId);
+  const live = useRef({ rows, selectedId, selectedChat, agentOpen, agentEnabled, composeNew: () => setComposingNew(true), open, canCompose: mailboxes.length > 0 });
+  useEffect(() => {
+    live.current = { rows, selectedId, selectedChat, agentOpen, agentEnabled, composeNew: () => setComposingNew(true), open, canCompose: mailboxes.length > 0 };
+  });
+  // Archiving the open thread moves on to the next one, as Today, Needs you and Unread do in Messages; the last one stays.
+  useEffect(() => onTriageSettling((conversationId) => {
+    const { rows: list, selectedId: current, open: show } = live.current;
+    if (conversationId !== current) return;
+    const at = list.findIndex((row) => row._id === conversationId);
+    const next = at < 0 ? undefined : list[at + 1] ?? list[at - 1];
+    if (next) show(next._id as ConversationId);
+  }), []);
+  useEffect(() => {
+    if (Platform.OS !== "web" || !wide || !active) return;
+    const thread = (): ChatSummary | null => {
+      const chat = live.current.selectedChat;
+      if (!chat) showToast("Select a thread first");
+      return chat ?? null;
+    };
+    const closePanel = (): boolean => {
+      if (closeTopSurface() || runEscapeClosers()) return true;
+      if (live.current.agentOpen) {
+        closeUtility();
+        return true;
+      }
+      if (!live.current.selectedId) return false;
+      live.current.open(null);
+      return true;
+    };
+    setKeyboardRuntime({
+      openPalette: () => openPalette(false),
+      openNewMessage: () => (live.current.canCompose ? live.current.composeNew() : openPalette(true)),
+      openHelp,
+      moveSelection: (delta) => {
+        const { rows: list, selectedId: current, open: show } = live.current;
+        const at = list.findIndex((row) => row._id === current);
+        const next = list[at < 0 ? (delta > 0 ? 0 : list.length - 1) : Math.min(list.length - 1, Math.max(0, at + delta))];
+        if (next) show(next._id as ConversationId);
+      },
+      activateSelection: () => undefined,
+      findInConversation: () => undefined,
+      settleSelected: () => {
+        const chat = thread();
+        if (chat) void toggleSettleChat(chat);
+      },
+      markUnreadSelected: () => {
+        const chat = thread();
+        if (chat) markChatUnread(chat, () => showToast("Marked unread — ⌘⇧Z to undo"));
+      },
+      deferSelected: (kind) => {
+        const chat = thread();
+        if (chat) openDeferMenu(showSheet, chat, kind);
+      },
+      toggleDetails: () => undefined,
+      openAgent: () => {
+        const { selectedId: current, agentEnabled: enabled } = live.current;
+        if (current && enabled) openAgentPane(current);
+      },
+      focusListSearch: () => openPalette(false),
+      undoLast: () => showToast(undoLastAction() ? "Undone" : "Nothing to undo"),
+      escape: () => {
+        if (closeTopSurface() || runEscapeClosers()) return;
+        if (live.current.agentOpen) {
+          closeUtility();
+          return;
+        }
+        const focused = globalThis.document?.activeElement;
+        if (focused instanceof HTMLElement) focused.blur();
+      },
+      closePanel,
+    });
+    return () => setKeyboardRuntime(null);
+  }, [active, wide, closeTopSurface, closeUtility, openHelp, openPalette, showSheet]);
 
   const mailboxBar = mailboxes.length > 1 ? (
     <View role="tablist" accessibilityLabel="Mailbox" style={styles.lenses}>
@@ -234,13 +334,16 @@ function ThreadRow({ thread, selected, onPress }: { thread: Thread; selected: bo
  * `subject` is the listed row's; a thread opened from search, archived or not yet listed, reads it off its messages.
  * `regularSenders` are the lists whose images load without asking; without it, only a known sender's do.
  */
-export function EmailReader({ conversationId, subject, regularSenders: regular, onBack }: {
+export function EmailReader({ conversationId, subject, regularSenders: listed, onBack }: {
   conversationId: ConversationId;
   subject?: string;
   regularSenders?: ReadonlySet<string>;
   onBack?: () => void;
 }): JSX.Element {
   const theme = useTheme();
+  // Opened from Today, the reader judges images by the same inbox threads Mail does.
+  const today = useToday();
+  const regular = listed ?? today.regularSenders;
   const { results, status, loadMore } = usePaginatedQuery(commaApi.listMessages, { conversationId }, { initialNumItems: 25 });
   const messages = useMemo(() => [...results].sort((a, b) => a.dateCreated - b.dateCreated), [results]);
   const conversation = useQuery(commaApi.getConversation, { conversationId });
@@ -284,6 +387,11 @@ export function EmailReader({ conversationId, subject, regularSenders: regular, 
   if (!initial && conversation !== undefined && status !== "LoadingFirstPage" && messages.length) {
     setInitial(openByDefault(messages, conversation?.unreadCount ?? 0));
   }
+  // Read once the unread messages it opens on are fixed, so the read can't fold them away.
+  const opened = initial !== null && conversation !== null;
+  useEffect(() => {
+    if (opened) readChat(conversationId).catch(() => undefined);
+  }, [conversationId, opened]);
   const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(new Map());
   const newest = messages[messages.length - 1]?._id;
   const isOpen = (id: string) => toggled.get(id) ?? (id === newest || initial?.open.has(id) === true);
@@ -298,12 +406,25 @@ export function EmailReader({ conversationId, subject, regularSenders: regular, 
     { platform: "gmail", known: conversation.known, isSpam: conversation.isSpam, bulk: conversation.gmail?.bulk },
     conversation.participants.some((participant) => regular?.has(participant.address.toLowerCase()) === true),
   ) : false;
-  const settled = conversation ? !conversation.flags.unresponded && !conversation.flags.waiting : false;
+  // Archive is the one triage gesture, so it answers with a toast and Undo, and moves Mail on to the next thread.
+  const chat = useMemo(() => (conversation ? conversationToChat(conversation) : null), [conversation]);
+  const settled = chat ? settleActionFor(chat) === "unsettle" : false;
   const archive = () => {
-    if (!conversation) return;
-    void conversationState().then((state) => settled ? state.unsettle(conversationId) : state.settle(conversationId, conversation.lastMessage?.guid))
-      .catch((error: unknown) => showToast(error instanceof ConvexError ? String(error.data) : settled ? "Couldn't move it to the inbox." : "Couldn't archive it."));
+    if (chat) void toggleSettleChat(chat);
   };
+  // Esc closes the composer while it holds nothing the user wrote.
+  const composerBox = useRef<View>(null);
+  useEffect(() => {
+    if (!composing) return;
+    return registerEscapeCloser(() => {
+      const box = composerBox.current as unknown as HTMLElement | null;
+      if (!isShown(box)) return false;
+      const body = box?.querySelector?.("textarea");
+      if (body && body.value.trim() !== "") return false;
+      setComposing(null);
+      return true;
+    });
+  }, [composing]);
   return (
     <View testID="email-reader" style={[styles.fill, { backgroundColor: theme.thread }]}>
       <View style={[styles.readerHeader, { borderBottomColor: theme.divider }]}>
@@ -348,7 +469,7 @@ export function EmailReader({ conversationId, subject, regularSenders: regular, 
         ))}
       </ScrollView>
       {composing ? (
-        <View style={onBack && { paddingBottom: PHONE_TAB_BAR_CLEARANCE }}>
+        <View ref={composerBox} style={onBack && { paddingBottom: PHONE_TAB_BAR_CLEARANCE }}>
           <EmailComposer
             key={`${composing.mode === "new" ? "" : composing.replyTo.guid}:${composing.mode}:${openedDraft ?? 0}`}
             conversationId={conversationId}

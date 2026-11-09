@@ -5,7 +5,6 @@ import { bridgeSnapshot, readChatSnapshot, webStore, writeChatSnapshot } from "@
 import { agentApi } from "@/lib/agent-api";
 import { conversationToChat, withAgents, withDrafts } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
-import { setDesktopBadgeCount } from "@/lib/desktop-shell";
 import { usePendingRenames } from "@/lib/pending-renames";
 import { useDirectoryWithPendingSends } from "@/lib/pending-sends";
 import { useAgentSettings } from "@/lib/settings";
@@ -117,22 +116,6 @@ export function useChats(state: StateFilter, type: TypeFilter, freezeMembership 
   }, [all, state, type, freezeMembership, held]);
   // Unknown, not zero, until the first list arrives: a zero would paint and then jump.
   const counts = useMemo(() => (directory === null ? null : computeCounts(all, type)), [directory, all, type]);
-
-  // Dock/home-screen unread badge (Safari web apps + installed PWAs).
-  useEffect(() => {
-    if (Platform.OS !== "web") return;
-    // "known", not "all": the dock badge must never count junk or messages
-    // from unrecognised numbers, and "all" now includes both.
-    const unread = all.filter((c) => matchesFilters(c, "unread", "known")).length;
-    if (setDesktopBadgeCount(unread)) return;
-    const nav = navigator as Navigator & {
-      setAppBadge?: (n: number) => Promise<void>;
-      clearAppBadge?: () => Promise<void>;
-    };
-    if (!nav.setAppBadge) return;
-    if (unread > 0) void nav.setAppBadge(unread).catch(() => undefined);
-    else void nav.clearAppBadge?.().catch(() => undefined);
-  }, [all]);
 
   return { chats, allChats: all, counts, loading, error, refresh };
 }

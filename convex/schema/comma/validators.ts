@@ -561,7 +561,8 @@ export const imessagePayload = v.union(
  * starts a new thread from a mailbox (a new email or a forward), so it names its account and no conversation.
  */
 export const gmailPayload = v.union(
-  v.object({ kind: v.literal("archive") }), v.object({ kind: v.literal("unarchive") }),
+  // `anchor`: the message the settle covered. Only it and the messages before it leave the inbox.
+  v.object({ kind: v.literal("archive"), anchor: v.optional(v.string()) }), v.object({ kind: v.literal("unarchive") }),
   v.object({ kind: v.literal("sendEmail"), accountId: v.id("comma_accounts"), text: v.string(), email: emailFields }),
 );
 

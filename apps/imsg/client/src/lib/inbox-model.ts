@@ -1,11 +1,11 @@
 import { agentAttention, WANTS_YOU, type AgentAttention } from "@shared/agent-attention";
-import { isSettled, matchesFilters } from "@shared/chat-state";
+import { computeCounts, isSettled, matchesFilters } from "@shared/chat-state";
 import { liveThoughtLine } from "@/components/agent/vendor/live-thought-line";
 import type { AgentChatSummary } from "./agent-api";
 import type { TodayPlan, TodaySectionKey } from "./today";
 import { conversationRoute } from "@shared/imessage";
 import { platformBadge, platformServiceBadges, PROFILES, type PlatformBadge } from "@shared/platform-profile";
-import type { ChatSummary, ConversationId, Platform, StateFilter, TypeFilter } from "@shared/types";
+import type { ChatSummary, ConversationId, Platform, StateCounts, StateFilter, TypeFilter } from "@shared/types";
 
 /** The two lenses the workspace owns: which queue, and whose conversations. */
 export interface InboxFilters {
@@ -46,6 +46,23 @@ export const LENSES: readonly { value: Lens; label: string; count: "turn" | "pla
   { value: "drafts", label: "Drafts", count: null },
   { value: "agents", label: "Agents", count: "plain" },
 ];
+
+/**
+ * The tab row's counts, each under its own People filter (`typeOf`), the one a click on the tab restores, so a count
+ * never depends on which tab is on screen. Today counts its plan's `toGo`.
+ */
+export function tabCounts(chats: readonly ChatSummary[], base: StateCounts, toGo: number, typeOf: (lens: Lens) => TypeFilter): StateCounts {
+  const byType = new Map<TypeFilter, StateCounts>();
+  const tabs: StateCounts = { ...base, today: toGo };
+  for (const { value } of LENSES) {
+    if (value === "today") continue;
+    const type = typeOf(value);
+    const counts = byType.get(type) ?? computeCounts([...chats], type);
+    byType.set(type, counts);
+    tabs[value] = counts[value];
+  }
+  return tabs;
+}
 
 export function lensOf(state: StateFilter): Lens | null {
   return state === "settled" ? null : state;

@@ -62,10 +62,16 @@ function settleWrite(chat: ChatSummary, settled: (reverse: () => Promise<void>) 
     // In Needs you only for its agent chats, it settles just those: a conversation settle's Undo would
     // undismiss both anchors and bring back a flag the user had already cleared.
     const agentsOnly = !chat.flags.unresponded && !chat.flags.waiting && !isSnoozed(chat);
-    const written = conversationState().then((state) => (agentsOnly ? state.settleAgents(chat.conversationId) : state.settle(chat.conversationId, anchor)));
+    const written: Promise<{ archived: Promise<unknown> | null }> = conversationState().then(async (state) => {
+      if (!agentsOnly) return await state.settle(chat.conversationId, anchor);
+      await state.settleAgents(chat.conversationId);
+      return { archived: null };
+    });
     emit(settlingListeners, chat.conversationId);
     try {
-      await written;
+      const { archived } = await written;
+      // A refused archive un-settles the thread in Convex; this says so.
+      archived?.catch((error: unknown) => showToast(`Gmail didn't archive ${chat.displayName}, so it's back in the inbox. ${error instanceof Error ? error.message : ""}`.trim()));
     } catch (error) {
       if (!opts.quiet) showToast(settleFailure(error));
       throw error;
@@ -82,13 +88,14 @@ function settleWrite(chat: ChatSummary, settled: (reverse: () => Promise<void>) 
  * Answers "busy" when this conversation already has a triage write outstanding,
  * so a caller never reports a settle that never happened.
  */
-export function settleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome> {
+export async function settleTriageChat(chat: ChatSummary): Promise<{ outcome: TriageWriteOutcome; undoToken: number }> {
   const undoToken = beginUndoAction();
   // The entry runs long after this write released the conversation, and it
   // takes no exclusion of its own. Undo must never be refused as busy.
-  return settleWrite(chat, (reverse) => commitUndoAction(undoToken, () => {
+  const outcome = await settleWrite(chat, (reverse) => commitUndoAction(undoToken, () => {
     reverse().catch(() => showToast("Couldn't undo the settle. Try again."));
   }));
+  return { outcome, undoToken };
 }
 
 export interface SettleBatch {
@@ -128,7 +135,7 @@ export async function settleAllChats(targets: readonly { chat: ChatSummary; anch
     return;
   }
   const failure = failed > 0 ? ` · ${failed} couldn't be settled` : "";
-  showToast(`Settled ${threads(settled)}${failure}`, { label: "Undo", hint: "⌘Z", onPress: () => void runUndo(undoToken) });
+  showToast(`Settled ${threads(settled)}${failure}`, { label: "Undo", hint: "⌘⇧Z", onPress: () => void runUndo(undoToken) });
 }
 
 /**
@@ -164,7 +171,7 @@ function unsettleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome> {
 export async function toggleSettleChat(chat: ChatSummary): Promise<void> {
   const action = settleActionFor(chat);
   if (action === "none") {
-    showToast("Nothing to settle — no messages yet");
+    showToast(chat.lastMessage ? "Nothing to settle — nothing here needs you" : "Nothing to settle — no messages yet");
     return;
   }
   try {
@@ -172,12 +179,12 @@ export async function toggleSettleChat(chat: ChatSummary): Promise<void> {
     // already have patched, so a second press inside that window would compute
     // the opposite action. Rejected there, and it has to say so. A press that
     // does nothing and reports nothing is the defect this gesture replaced.
-    const outcome =
-      action === "settle" ? await settleTriageChat(chat) : await unsettleTriageChat(chat);
+    const settled = action === "settle" ? await settleTriageChat(chat) : null;
+    const outcome = settled ? settled.outcome : await unsettleTriageChat(chat);
     if (outcome === "busy") {
       showToast("Still saving that change — try again in a moment");
-    } else if (action === "settle") {
-      showToast(`Settled ${chat.displayName}`, { label: "Undo", hint: "⌘Z", onPress: () => void undoLastTriageAction() });
+    } else if (settled) {
+      showToast(`Settled ${chat.displayName}`, { label: "Undo", hint: "⌘⇧Z", onPress: () => void runUndo(settled.undoToken) });
     } else {
       showToast(chat.lastMessage?.isFromMe ? "Un-settled — back in Waiting" : "Un-settled — back in Needs you");
     }

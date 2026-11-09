@@ -261,8 +261,11 @@ export class FakeBlueBubbles implements BlueBubbles {
     return Promise.resolve({ ok: true, value: sent });
   }
 
+  /** As BlueBubbles does: the chat's inbound messages are read from now on, so a later unread run starts after them. */
   markRead(chatGuid: string): Promise<Result<unknown>> {
     this.markReadCalls.push(chatGuid);
+    const list = this.messages.get(chatGuid);
+    if (list) this.messages.set(chatGuid, list.map((message) => (message.isFromMe || message.dateRead ? message : { ...message, dateRead: Date.now() })));
     return Promise.resolve({ ok: true, value: undefined });
   }
 

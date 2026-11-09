@@ -297,15 +297,14 @@ function PaletteRoot({
       }
       cursorRef.current.move(e.key === "ArrowDown" ? 1 : -1);
     };
-    // ⌘E settles the highlighted conversation, not the one open behind the palette. Window capture
-    // runs before the global dispatcher's document listener, so stopping it here keeps ⌘E single.
+    // ⌘E settles the highlighted conversation, never the one open behind the palette: on any other row it does
+    // nothing. Window capture runs before the global dispatcher's document listener, so stopping it here keeps ⌘E single.
     const onSettle = (e: KeyboardEvent): void => {
       if (e.key.toLowerCase() !== "e" || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
-      const item = flatRef.current[cursorRef.current.indexRef.current];
-      if (item?.kind !== "conversation" && item?.kind !== "group") return;
       e.preventDefault();
       e.stopPropagation();
-      void toggleSettleChat(item.chat);
+      const item = flatRef.current[cursorRef.current.indexRef.current];
+      if (item?.kind === "conversation" || item?.kind === "group") void toggleSettleChat(item.chat);
     };
     document.addEventListener("keydown", onKey, true);
     window.addEventListener("keydown", onSettle, true);

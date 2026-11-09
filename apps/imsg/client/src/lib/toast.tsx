@@ -8,6 +8,7 @@ import { useIsFocused } from "expo-router/react-navigation";
 import { Springs } from "@/constants/springs";
 import { CardShadow } from "@/constants/theme";
 import { Space, TypeRamp, Weight } from "@/constants/tokens";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 
 export interface ToastAction {
@@ -130,6 +131,8 @@ export function ToastHost({ children }: { readonly children: ReactNode }) {
   }));
 
   const action = toast?.action;
+  // A key hint is for a keyboard: the narrow layout is a phone's.
+  const { wide } = useLayoutMode();
   const pill = toast && (
     <Reanimated.View
       role="status"
@@ -150,7 +153,7 @@ export function ToastHost({ children }: { readonly children: ReactNode }) {
           style={({ hovered, pressed }) => [styles.action, (hovered || pressed) && { backgroundColor: c.toastActionHover }]}
         >
           <Text style={[styles.actionText, { color: c.toastAction }]}>{action.label}</Text>
-          {action.hint && <Text style={[styles.hint, { color: c.toastAction }]}>{action.hint}</Text>}
+          {wide && action.hint && <Text style={[styles.hint, { color: c.toastAction }]}>{action.hint}</Text>}
         </Pressable>
       )}
     </Reanimated.View>

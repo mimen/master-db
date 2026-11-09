@@ -1,6 +1,8 @@
 import * as Notifications from "expo-notifications";
 import { useEffect } from "react";
 
+import { publishBadgeCount } from "./badge-count";
+
 let badgeAllowed: Promise<boolean> | undefined;
 
 function allowBadge(): Promise<boolean> {
@@ -13,6 +15,7 @@ function allowBadge(): Promise<boolean> {
 /** Mirrors a count onto the home-screen icon. undefined (still loading) leaves the last badge in place. */
 export function useAppBadge(count: number | undefined): void {
   useEffect(() => {
+    publishBadgeCount(count);
     if (count === undefined) return;
     void allowBadge().then((allowed) => allowed && Notifications.setBadgeCountAsync(count)).catch(() => undefined);
   }, [count]);

@@ -37,3 +37,26 @@ describe("rowAfter", () => {
     expect(rowAfter.markUnread(row({ unreadCount: 0, flags: { ...row().flags, unread: false } })).flags.unread).toBe(true);
   });
 });
+
+describe("optimistic", () => {
+  test("a settle changes an email thread's row in Mail's list too, before Convex answers", async () => {
+    const { getFunctionName } = await import("convex/server");
+    const { optimistic } = await import("./conversation-state");
+    const pages = new Map<string, { page: Row[]; isDone: boolean; continueCursor: string }>([
+      ["comma/queries:listConversations", { page: [row({ _id: "chat-1" } as Partial<Row>)], isDone: true, continueCursor: "" }],
+      ["comma/queries:listEmailThreads", { page: [row({ _id: "thread-1" } as Partial<Row>)], isDone: true, continueCursor: "" }],
+    ]);
+    type Ref = Parameters<typeof getFunctionName>[0];
+    const store = {
+      getQuery: () => undefined,
+      getAllQueries: (ref: Ref) => {
+        const value = pages.get(getFunctionName(ref));
+        return value ? [{ args: { paginationOpts: { numItems: 50, cursor: null } }, value }] : [];
+      },
+      setQuery: (ref: Ref, _args: unknown, value: { page: Row[]; isDone: boolean; continueCursor: string }) => { pages.set(getFunctionName(ref), value); },
+    };
+    optimistic.settle(store as never, { conversationId: "thread-1" as never, anchor: "m1" });
+    expect(pages.get("comma/queries:listEmailThreads")!.page[0]!.flags).toMatchObject({ unresponded: false, waiting: false });
+    expect(pages.get("comma/queries:listConversations")!.page[0]!.flags.unresponded, "another conversation is untouched").toBe(true);
+  });
+});

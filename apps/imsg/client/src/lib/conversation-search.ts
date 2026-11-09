@@ -14,7 +14,7 @@ import type { ConversationId } from "@shared/types";
 export type DeepSearchState =
   | { readonly kind: "idle" }
   | { readonly kind: "pending"; readonly query: string }
-  | { readonly kind: "ready"; readonly query: string; readonly conversations: ReadonlySet<ConversationId> }
+  | { readonly kind: "ready"; readonly query: string; readonly conversations: ReadonlySet<ConversationId>; readonly mail?: number }
   | { readonly kind: "failed"; readonly query: string };
 
 export interface ConversationSearchState {
@@ -26,7 +26,7 @@ export type ConversationSearchAction =
   | { readonly type: "set-query"; readonly value: string }
   | { readonly type: "clear" }
   | { readonly type: "deep-pending"; readonly query: string }
-  | { readonly type: "deep-ready"; readonly query: string; readonly conversations: ReadonlySet<ConversationId> }
+  | { readonly type: "deep-ready"; readonly query: string; readonly conversations: ReadonlySet<ConversationId>; readonly mail?: number }
   | { readonly type: "deep-failed"; readonly query: string };
 
 export const INITIAL_CONVERSATION_SEARCH: ConversationSearchState = {
@@ -72,7 +72,7 @@ export function conversationSearchReducer(
     case "deep-ready":
       // A late response for an old query is dropped, not applied.
       return action.query === normalizeSearchQuery(state.query)
-        ? { ...state, deepSearch: { kind: "ready", query: action.query, conversations: action.conversations } }
+        ? { ...state, deepSearch: { kind: "ready", query: action.query, conversations: action.conversations, mail: action.mail ?? 0 } }
         : state;
     case "deep-failed":
       return action.query === normalizeSearchQuery(state.query)
@@ -82,6 +82,11 @@ export function conversationSearchReducer(
 }
 
 const NO_MATCHES: ReadonlySet<ConversationId> = new Set();
+
+/** How many email threads match the CURRENT query: Mail has them, the Messages list does not. */
+export function mailMatches(state: ConversationSearchState): number {
+  return state.deepSearch.kind === "ready" && state.deepSearch.query === normalizeSearchQuery(state.query) ? state.deepSearch.mail ?? 0 : 0;
+}
 
 /** Deep-match conversations that are valid for the CURRENT query — empty otherwise. */
 export function usableDeepMatches(state: ConversationSearchState): ReadonlySet<ConversationId> {
