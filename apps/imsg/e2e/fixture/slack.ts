@@ -28,8 +28,15 @@ const DANA = { address: "slack:U0DANA", name: "Dana" };
 type Receipt = { id: string; status: "pending" | "sent" | "failed" | "unknown"; clientKey: string; updatedAt: number; error?: string; result?: CommandResult; resultGuid?: string };
 type Row = {
   guid: string; text: string; isFromMe: boolean; dateCreated: number; edited: boolean; retracted: boolean; sender?: typeof SAM;
-  mentionsMe?: boolean; clientKey?: string; sendState?: "sending" | "failed"; reactions: string[];
+  mentionsMe?: boolean; clientKey?: string; sendState?: "sending" | "failed"; reactions: string[]; files?: File[];
 };
+/** A file on a message as listMessages serves it once convex/comma/slackFiles.ts has run: a URL only where it stored a copy. */
+type File = ReturnType<typeof slackFile>;
+const slackFile = (messageGuid: string, id: string, filename: string, mimeType: string, totalBytes: number, stored: { width?: number; height?: number; url?: string } = {}) => ({
+  _id: `${messageGuid}:${id}`, _creationTime: FIXTURE_NOW, platform: "slack" as const, accountId: ACCOUNT, guid: `${messageGuid}:${id}`, messageGuid,
+  conversationId: "", mimeType, filename, totalBytes, hideAttachment: false, sourceVersion: 0,
+  ...(stored.width ? { width: stored.width, height: stored.height } : {}), thumbUrl: null, originalUrl: stored.url ?? null,
+});
 /** One Slack conversation: its ref, and for a thread whether Milad follows it. Rows hold its messages, a thread's root aside. */
 type Conversation = { key: string; ref: SlackConversationRef; name: string; following?: boolean; rows: Row[] };
 
@@ -69,8 +76,8 @@ export function createSlackFixture(receipts: Map<string, Receipt>) {
     return {
       _id: row.guid, _creationTime: row.dateCreated, platform: "slack" as const, accountId: ACCOUNT, guid: row.guid,
       conversationId: conversation.key, dateCreated: row.dateCreated, isFromMe: row.isFromMe, ...(row.isFromMe ? {} : { sender: row.sender ?? SAM }),
-      text: row.text, edited: row.edited, retracted: row.retracted, isGroupEvent: false, mentions: [], attachmentGuids: [],
-      attachments: [], reactions: row.reactions.map(reaction), sourceVersion: 1,
+      text: row.text, edited: row.edited, retracted: row.retracted, isGroupEvent: false, mentions: [], attachmentGuids: (row.files ?? []).map((file) => file.guid),
+      attachments: (row.files ?? []).map((file) => ({ ...file, conversationId: conversation.key })), reactions: row.reactions.map(reaction), sourceVersion: 1,
       ...(row.clientKey ? { clientKey: row.clientKey } : {}), ...(row.sendState ? { sendState: row.sendState } : {}),
       ...(thread && replyCount ? { replyCount, thread: { conversationId: thread.key, replyCount } } : {}),
     };
@@ -189,6 +196,7 @@ export function createSlackFixture(receipts: Map<string, Receipt>) {
     listed: () => [...conversations.values()].map(view).filter((row) => row.kind !== "thread" || row.flags.unresponded || row.flags.pinned || row.flags.unread)
       .sort((a, b) => b.lastMessageAt - a.lastMessageAt),
     messages: (key: string) => messagesOf(conversations.get(key)!),
+    attachment: (guid: string) => all().flatMap(({ row }) => row.files ?? []).find((file) => file.guid === guid) ?? null,
     enqueue,
     channels: () => CHANNELS.map((channel) => ({ ...channel, following: following.includes(channel.id) })),
     follow: (channel: string, value: boolean) => {
@@ -197,6 +205,19 @@ export function createSlackFixture(receipts: Map<string, Receipt>) {
     seed: () => {
       reset();
       add({ type: "im", channel: "D1" }, SAM.name, [inbound(slack.messageGuid("D1", "1787250000.000100"), "Are we still on for the load-in at 4?", 1)]);
+    },
+    /** The DM, and Sam's message with a flyer, a rider and a file Slack wouldn't hand the token. */
+    seedFiles: () => {
+      reset();
+      const guid = slack.messageGuid("D1", "1787250100.000100");
+      add({ type: "im", channel: "D1" }, SAM.name, [
+        inbound(slack.messageGuid("D1", "1787250000.000100"), "Are we still on for the load-in at 4?", 2),
+        inbound(guid, "Flyer and rider for Saturday", 1, SAM, { files: [
+          slackFile(guid, "F1", "flyer.png", "image/png", 4096, { width: 1200, height: 900, url: "/__fixture/slack-file/flyer.png" }),
+          slackFile(guid, "F2", "rider.pdf", "application/pdf", 52_000, { url: "/__fixture/slack-file/rider.pdf" }),
+          slackFile(guid, "F3", "partner-deck.key", "application/octet-stream", 8_200_000),
+        ] }),
+      ]);
     },
     /** #bookings, opted in: a thread that mentions Milad, one he isn't in, and one he answered last. */
     seedChannel: () => {

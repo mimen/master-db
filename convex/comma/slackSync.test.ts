@@ -449,6 +449,130 @@ describe("backfill", () => {
   });
 });
 
+describe("files", () => {
+  const attachments = (t: T) => t.run((ctx) => ctx.db.query("comma_attachments").collect());
+  const listed = async (as: Awaited<ReturnType<typeof connected>>["as"], conversationId: Id<"comma_conversations">) =>
+    (await as.query(api.comma.queries.listMessages, { conversationId, paginationOpts })).page;
+
+  test("an image lands inline from storage, read with the token, and the lightbox finds it by its guid", async () => {
+    const { t, as } = await connected();
+    slack.channel({ id: "D1", type: "im", user: SAM });
+    const ts = ago(1);
+    const flyer = slack.file("F1", "flyer.png", "image/png", 2048, { original_w: 1080, original_h: 1350, thumb_720: "https://files.slack.com/thumb/F1" });
+    await post(t, eventCallback("Ev1", messageEvent("D1", "im", { subtype: "file_share", user: SAM, text: "", ts, files: [flyer] })));
+    await settle(t);
+    const [message] = await messages(t);
+    const guid = `D1:${ts}:F1`;
+    expect(message).toMatchObject({ attachmentGuids: [guid] });
+    const [row] = await listed(as, message!.conversationId);
+    expect(row!.attachments).toEqual([expect.objectContaining({
+      guid, platform: "slack", filename: "flyer.png", mimeType: "image/png", width: 1080, height: 1350, totalBytes: 2048,
+      originalUrl: expect.any(String), thumbUrl: null,
+    })]);
+    expect(slack.calls.filter((call) => call.method === "files")).toEqual([{ method: "files", params: { url: flyer.url_private }, token: TOKEN }]);
+    expect(await as.query(api.comma.media.attachmentMedia, { guid })).toMatchObject({ originalUrl: expect.any(String) });
+  });
+
+  test("a large image also stores Slack's thumbnail, and one over the cap keeps only the thumbnail", async () => {
+    const { t, as } = await connected();
+    slack.channel({ id: "D1", type: "im", user: SAM });
+    const thumb = (id: string) => {
+      slack.files.set(`https://files.slack.com/thumb/${id}`, { bytes: new Uint8Array(64), type: "image/jpeg" });
+      return { thumb_720: `https://files.slack.com/thumb/${id}` };
+    };
+    const big = slack.file("F1", "big.jpg", "image/jpeg", 2 * 1024 * 1024, thumb("F1"));
+    const huge = { ...slack.file("F2", "huge.jpg", "image/jpeg", 64), size: 30 * 1024 * 1024, ...thumb("F2") };
+    await post(t, eventCallback("Ev1", messageEvent("D1", "im", { subtype: "file_share", user: SAM, text: "", ts: ago(1), files: [big, huge] })));
+    await settle(t);
+    const [message] = await messages(t);
+    const [row] = await listed(as, message!.conversationId);
+    expect(row!.attachments.map((a) => [a.filename, a.originalUrl !== null, a.thumbUrl !== null]).sort()).toEqual([["big.jpg", true, true], ["huge.jpg", false, true]]);
+    expect(slack.calls.filter((call) => call.method === "files").map((call) => call.params.url)).not.toContain(huge.url_private);
+  });
+
+  test("a non-image file is stored for its tile to open", async () => {
+    const { t, as } = await connected();
+    slack.channel({ id: "D1", type: "im", user: SAM });
+    const rider = slack.file("F1", "rider.pdf", "application/pdf", 4096);
+    await post(t, eventCallback("Ev1", messageEvent("D1", "im", { subtype: "file_share", user: SAM, text: "signed copy", ts: ago(1), files: [rider] })));
+    await settle(t);
+    const [message] = await messages(t);
+    const [row] = await listed(as, message!.conversationId);
+    expect(row).toMatchObject({ text: "signed copy" });
+    expect(row!.attachments).toEqual([expect.objectContaining({ filename: "rider.pdf", mimeType: "application/pdf", originalUrl: expect.any(String) })]);
+  });
+
+  test("a file the token can't read keeps its row with no storage, and a deleted file is no attachment at all", async () => {
+    const { t, as } = await connected();
+    slack.channel({ id: "D1", type: "im", user: SAM });
+    const files = [
+      // Slack answers a URL the token can't read with its sign-in page.
+      { id: "F1", name: "private.key", mimetype: "application/octet-stream", size: 10, url_private: "https://files.slack.com/files-pri/other/private.key" },
+      // Slack Connect: no URLs until files.info.
+      { id: "F2", name: "partner.png", mimetype: "image/png", file_access: "check_file_info" },
+      { id: "F3", mode: "tombstone" },
+    ];
+    await post(t, eventCallback("Ev1", messageEvent("D1", "im", { subtype: "file_share", user: SAM, text: "here", ts: ago(1), files })));
+    await settle(t);
+    const [message] = await messages(t);
+    const [row] = await listed(as, message!.conversationId);
+    expect(row).toMatchObject({ text: "here" });
+    expect(row!.attachments.map((a) => [a.filename, a.originalUrl, a.thumbUrl])).toEqual([["private.key", null, null], ["partner.png", null, null]]);
+    expect(await t.run((ctx) => ctx.db.system.query("_storage").collect())).toEqual([]);
+  });
+
+  test("an edit that drops a file hides it", async () => {
+    const { t, as } = await connected();
+    slack.channel({ id: "D1", type: "im", user: SAM });
+    const ts = ago(3);
+    const [a, b] = [slack.file("F1", "a.pdf", "application/pdf", 8), slack.file("F2", "b.pdf", "application/pdf", 8)];
+    await post(t, eventCallback("Ev1", messageEvent("D1", "im", { subtype: "file_share", user: SAM, text: "two", ts, files: [a, b] })));
+    await post(t, eventCallback("Ev2", { type: "message", subtype: "message_changed", channel: "D1", channel_type: "im",
+      message: { user: SAM, text: "one", ts, edited: { ts: ago(2) }, files: [a, { id: "F2", mode: "tombstone" }] } }));
+    await settle(t);
+    const [message] = await messages(t);
+    expect(message).toMatchObject({ attachmentGuids: [`D1:${ts}:F1`] });
+    expect((await listed(as, message!.conversationId))[0]!.attachments.map((x) => x.filename)).toEqual(["a.pdf"]);
+  });
+
+  test("the files backfill gives messages stored before files their attachments, in DMs and threads, and leaves the rest alone", async () => {
+    const { t, accountId, as } = await connected();
+    const root = ago(30);
+    const dm = slack.channel({ id: "D1", type: "im", user: SAM, messages: [{ ts: ago(40), user: SAM, text: "flyer attached" }, { ts: ago(35), user: SAM, text: "thoughts?" }] });
+    const channel = slack.channel({ id: "C1", type: "channel", name: "bookings", messages: [
+      { ts: root, user: SAM, text: "<@U066UCP4FS6> rider?", reply_count: 1 },
+      { ts: ago(20), user: DANA, text: "here it is", thread_ts: root },
+    ] });
+    // Stored as Comma stored Slack before it kept files.
+    await t.mutation(internal.comma.slackSync.ingestBatch, { accountId, users: [], conversations: [
+      { ref: { type: "im", channel: "D1" }, members: [SAM], messages: dm.messages.map(({ ts, user, text }) => ({ ts, user, text })) },
+      { ref: { type: "thread", channel: "C1", threadTs: root }, name: "bookings", messages: channel.messages.map(({ ts, user, text, thread_ts }) => ({ ts, user, text, ...(thread_ts ? { threadTs: thread_ts } : {}) })) },
+    ] });
+    const before = await messages(t);
+    dm.messages[0]!.files = [slack.file("F1", "flyer.png", "image/png", 512)];
+    channel.messages[1]!.files = [slack.file("F2", "rider.pdf", "application/pdf", 512)];
+    slack.calls.length = 0;
+
+    expect(await t.mutation(internal.comma.slackSync.startFilesBackfill, { accountId })).toEqual({ channels: 1, threads: 1 });
+    await settle(t);
+
+    expect((await attachments(t)).map((a) => [a.guid, a.originalStorageId !== undefined]).sort()).toEqual([
+      [`C1:${channel.messages[1]!.ts}:F2`, true], [`D1:${dm.messages[0]!.ts}:F1`, true],
+    ]);
+    const after = await messages(t);
+    expect(after.map(({ guid, text, sourceVersion, conversationId }) => ({ guid, text, sourceVersion, conversationId })))
+      .toEqual(before.map(({ guid, text, sourceVersion, conversationId }) => ({ guid, text, sourceVersion, conversationId })));
+    const dmRow = after.find((message) => message.text === "flyer attached")!;
+    expect((await listed(as, dmRow.conversationId)).find((row) => row.guid === dmRow.guid)!.attachments).toHaveLength(1);
+    expect(fetched().filter((method) => method === "conversations.history" || method === "conversations.replies")).toEqual(["conversations.history", "conversations.replies"]);
+
+    slack.calls.length = 0;
+    await t.mutation(internal.comma.slackSync.startFilesBackfill, { accountId });
+    await settle(t);
+    expect(fetched().filter((method) => method === "files"), "a second run downloads nothing again").toEqual([]);
+  });
+});
+
 describe("the backstop cron", () => {
   test("is registered every 15 minutes", () => {
     expect((crons as unknown as { crons: Record<string, { schedule: unknown }> }).crons["comma-slack-backstop"]?.schedule)

@@ -5,7 +5,7 @@ import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { httpAction, internalMutation, type MutationCtx } from "../_generated/server";
 import { jsonResponse } from "../beeper/sync/auth";
-import { slackMessage, slackUser } from "../schema/comma/validators";
+import { slackFile, slackMessage, slackUser } from "../schema/comma/validators";
 
 import { publishExecutorStatus } from "./bridgeState";
 import { slack, type SlackConversationRef } from "./conversationIdentity";
@@ -26,6 +26,7 @@ import { countReplies } from "./slackSync";
  */
 
 export type SlackMessage = Infer<typeof slackMessage>;
+export type SlackFile = Infer<typeof slackFile>;
 export type SlackUser = Infer<typeof slackUser>;
 
 const channelType = v.union(v.literal("im"), v.literal("mpim"), v.literal("channel"), v.literal("group"));
@@ -78,7 +79,23 @@ export function parseSlackMessage(raw: unknown): SlackMessage | null {
   const editedTs = isObject(raw.edited) ? text(raw.edited.ts) : undefined;
   const sent = isObject(raw.metadata) && raw.metadata.event_type === COMMA_SEND_EVENT && isObject(raw.metadata.event_payload)
     ? text(raw.metadata.event_payload.clientKey) : undefined;
-  return { ts, user, text: text(raw.text) ?? "", ...(threadTs ? { threadTs } : {}), ...(editedTs ? { editedTs } : {}), ...(sent ? { clientKey: sent } : {}) };
+  const files = Array.isArray(raw.files) ? raw.files.flatMap(parseSlackFile) : [];
+  return {
+    ts, user, text: text(raw.text) ?? "", ...(threadTs ? { threadTs } : {}), ...(editedTs ? { editedTs } : {}), ...(sent ? { clientKey: sent } : {}),
+    ...(files.length ? { files } : {}),
+  };
+}
+
+const count = (value: unknown): number | undefined => (typeof value === "number" && Number.isFinite(value) ? value : undefined);
+
+/** A deleted file is a tombstone with nothing to show. A Slack Connect file Slack won't share has no URLs. */
+function parseSlackFile(raw: unknown): SlackFile[] {
+  if (!isObject(raw) || !text(raw.id) || raw.mode === "tombstone") return [];
+  const fields = {
+    name: text(raw.name) || text(raw.title), mimeType: text(raw.mimetype), size: count(raw.size), width: count(raw.original_w),
+    height: count(raw.original_h), url: text(raw.url_private), thumbUrl: text(raw.thumb_720) ?? text(raw.thumb_480) ?? text(raw.thumb_360),
+  };
+  return [{ id: text(raw.id)!, ...Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)) }];
 }
 
 /**

@@ -141,7 +141,12 @@ function Attachments({ message, conversationId, mine, paneWidth = 0 }: { message
         if (audio && (url || message.sendState)) {
           return <AudioBubble key={att.guid} guid={att.guid} conversationId={conversationId} url={url} mine={mine} sending={message.sendState !== undefined} />;
         }
-        if (!url && !(att.mimeType?.startsWith("image/") && thumbnail)) return <MediaUnavailable key={att.guid} onMac={att.onMac} />;
+        if (!url && !(att.mimeType?.startsWith("image/") && thumbnail)) {
+          // A Slack file Convex couldn't download still says what it was.
+          return message.platform === "slack"
+            ? <FileCard key={att.guid} filename={att.filename ?? "Attachment"} bytes={att.totalBytes} />
+            : <MediaUnavailable key={att.guid} onMac={att.onMac} />;
+        }
         if (isVideo(att)) {
           return (
             <VideoBubble
