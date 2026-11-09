@@ -168,7 +168,9 @@ export function sendRoute(conversation: Routable): CommaRoute {
   }
   if (conversation.platform !== "slack") return routeThrough(conversation, primaryChat(conversation));
   if (!conversation.slack || !conversation.accountId) throw new Error("Slack conversation has no channel");
-  return { platform: "slack", accountId: conversation.accountId, ...conversation.slack };
+  // Pick the route's fields: a thread's `slack` also carries `following`, which the route validator rejects.
+  const { channel, threadTs } = conversation.slack;
+  return { platform: "slack", accountId: conversation.accountId, channel, ...(threadTs ? { threadTs } : {}) };
 }
 
 /** A route through the service asked for: the primary chat if it carries it, else the best sibling that does. */

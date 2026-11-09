@@ -878,7 +878,11 @@ export declare const api: {
           payload:
             | {
                 email?: {
-                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    storageId: Id<"_storage">;
+                  }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -945,7 +949,11 @@ export declare const api: {
             | {
                 accountId: Id<"comma_accounts">;
                 email: {
-                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    storageId: Id<"_storage">;
+                  }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -1546,7 +1554,11 @@ export declare const api: {
           payload:
             | {
                 email?: {
-                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    storageId: Id<"_storage">;
+                  }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -1613,7 +1625,11 @@ export declare const api: {
             | {
                 accountId: Id<"comma_accounts">;
                 email: {
-                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    storageId: Id<"_storage">;
+                  }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -2725,7 +2741,11 @@ export declare const api: {
           error?: string;
           payload?: {
             email?: {
-              attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+              attachments?: Array<{
+                filename: string;
+                mimeType: string;
+                storageId: Id<"_storage">;
+              }>;
               cc: Array<string>;
               subject: string;
               to: Array<string>;
@@ -2953,7 +2973,11 @@ export declare const api: {
           conversationId: Id<"comma_conversations">;
           payload: {
             email?: {
-              attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+              attachments?: Array<{
+                filename: string;
+                mimeType: string;
+                storageId: Id<"_storage">;
+              }>;
               cc: Array<string>;
               subject: string;
               to: Array<string>;
@@ -5624,7 +5648,6 @@ export declare const internal: {
             | {
                 conversationId: Id<"comma_conversations">;
                 filename?: string;
-                gmail?: { contentId?: string; inline: boolean; partId: string };
                 guid: string;
                 height?: number;
                 hideAttachment: boolean;
@@ -5656,7 +5679,6 @@ export declare const internal: {
                 accountId?: Id<"comma_accounts">;
                 conversationId: Id<"comma_conversations">;
                 filename?: string;
-                gmail?: { contentId?: string; inline: boolean; partId: string };
                 guid: string;
                 height?: number;
                 hideAttachment: boolean;
@@ -5978,7 +6000,11 @@ export declare const internal: {
           payload:
             | {
                 email?: {
-                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    storageId: Id<"_storage">;
+                  }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -6045,7 +6071,11 @@ export declare const internal: {
             | {
                 accountId: Id<"comma_accounts">;
                 email: {
-                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    storageId: Id<"_storage">;
+                  }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -7157,7 +7187,11 @@ export declare const internal: {
           payload:
             | {
                 email?: {
-                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    storageId: Id<"_storage">;
+                  }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -7224,7 +7258,11 @@ export declare const internal: {
             | {
                 accountId: Id<"comma_accounts">;
                 email: {
-                  attachments?: Array<{ filename: string; mimeType: string; storageId: Id<"_storage"> }>;
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    storageId: Id<"_storage">;
+                  }>;
                   cc: Array<string>;
                   subject: string;
                   to: Array<string>;
@@ -8017,7 +8055,12 @@ export declare const internal: {
             | { channel: string; kind: "deleted"; ts: string }
             | {
                 kind: "user";
-                user: { email?: string; id: string; image?: string; name: string };
+                user: {
+                  email?: string;
+                  id: string;
+                  image?: string;
+                  name: string;
+                };
               }
             | {
                 at: number;
@@ -8171,7 +8214,12 @@ export declare const internal: {
               | { channel: string; type: "im" | "mpim" | "channel" }
               | { channel: string; threadTs: string; type: "thread" };
           }>;
-          users: Array<{ email?: string; id: string; image?: string; name: string }>;
+          users: Array<{
+            email?: string;
+            id: string;
+            image?: string;
+            name: string;
+          }>;
         },
         { skipped: number; written: number }
       >;
