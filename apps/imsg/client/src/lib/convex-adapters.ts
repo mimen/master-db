@@ -33,6 +33,7 @@ export function conversationToChat(
     contactsAvailable: row.contactsAvailable,
     isSpam: row.isSpam,
     ...(row.gmail?.bulk ? { bulk: true } : {}),
+    ...(row.gmail?.subject ? { subject: row.gmail.subject } : {}),
     lastMessage: row.lastMessage ?? null,
     unreadCount: row.unreadCount,
     firstUnreadAt: row.unreadCount ? row.unread?.firstAt ?? null : null,

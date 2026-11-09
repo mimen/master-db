@@ -24,6 +24,7 @@ import { FIXTURE_NOW } from "./world";
  */
 
 const ACCOUNT = "account-gmail" as GenericId<"comma_accounts">;
+const PERSONAL = "account-gmail-personal" as GenericId<"comma_accounts">;
 const MILAD = { address: "milad@afternoonumbrellafriends.com", name: null };
 const MINUTE = 60_000;
 
@@ -47,6 +48,8 @@ export const mailFileUrl = (storageId: string) => `/__fixture/mail-file/${storag
 type Thread = {
   key: string; subject: string; known: boolean; bulk: boolean; participant: Address; mail: Mail[];
   inInbox: boolean; state: ChatState | undefined; archiveError?: string;
+  /** In the personal mailbox, once both are connected. */
+  personal?: boolean;
   /** Messages Gmail labels UNREAD, as gmailSync counts them. */
   unread?: number;
 };
@@ -165,7 +168,7 @@ function conversation(thread: Thread) {
   const lastMessage = { guid: message(thread, last).guid, text: last.text, dateCreated: lastMessageAt, isFromMe: last.fromMe === true, senderName: last.from.name, hasAttachments: false };
   const { flags, unreadCount } = conversationFlags({ platform: "gmail", kind: "emailThread" }, thread.state, lastMessage, lastMessageAt, thread.unread ?? 0);
   return {
-    _id: fixtureConversationId(guidOf(thread)), _creationTime: FIXTURE_NOW, platform: "gmail" as const, accountId: ACCOUNT,
+    _id: fixtureConversationId(guidOf(thread)), _creationTime: FIXTURE_NOW, platform: "gmail" as const, accountId: thread.personal ? PERSONAL : ACCOUNT,
     conversationKey: gmail.conversationKey(thread.key), kind: "emailThread" as const, isGroup: true,
     gmail: { threadId: thread.key, subject: thread.subject, inInbox: thread.inInbox, bulk: thread.bulk, ...(thread.unread ? { unread: thread.unread } : {}), ...(thread.archiveError ? { archiveError: thread.archiveError } : {}) },
     displayName: thread.known ? thread.participant.name! : thread.participant.name ?? thread.participant.address, rawDisplayName: "",
@@ -305,6 +308,10 @@ export function createMailFixture(receipts: Map<string, Receipt>) {
     sendEmail,
     attachment: (guid: string) => threads.flatMap((thread) => thread.mail.flatMap((mail) => (mail.files ?? []).map((file, index) => attachmentOf(thread, mail, file, index))))
       .find((row) => row.guid === guid) ?? null,
+    /** The newsletter arrives at the personal address, as the second mailbox would hold it. */
+    splitMailboxes: () => {
+      for (const thread of threads) if (thread.key === "t-weekly") thread.personal = true;
+    },
     seedInvoice: () => {
       if (!find("mail:t-invoice")) threads = [...threads, invoiceThread()];
     },
