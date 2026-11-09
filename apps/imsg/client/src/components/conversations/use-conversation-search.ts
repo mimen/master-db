@@ -2,11 +2,12 @@ import { useEffect, useMemo, useReducer, useRef } from "react";
 import type { TextInput } from "react-native";
 import type { ConversationId } from "@shared/types";
 
-import { api } from "@/lib/api";
+import { api, type SearchHit } from "@/lib/api";
 import {
   conversationSearchReducer,
   hasEveryWord,
   INITIAL_CONVERSATION_SEARCH,
+  mailMatches,
   normalizeSearchQuery,
   usableDeepMatches,
   type DeepSearchState,
@@ -26,6 +27,8 @@ export interface ConversationSearchController {
   readonly deepSearch: DeepSearchState;
   /** Deep-match GUIDs valid for the CURRENT query (empty otherwise). */
   readonly deepMatches: ReadonlySet<ConversationId>;
+  /** Email threads matching the query, which Mail lists and this list does not. */
+  readonly mailMatches: number;
   /** Changes exactly when the rendered view changes (lens or query) — the
    * pane watches this to start each new view from the top. */
   readonly viewKey: string;
@@ -68,12 +71,13 @@ export function useConversationSearch(args: {
     const q = normalizedQuery;
     const handle = setTimeout(() => {
       dispatch({ type: "deep-pending", query: q });
-      api
-        .search(q)
-        .then((messages) => {
+      // Email lists in Mail, not here: searched apart, so a busy mailbox never crowds out the list's own hits.
+      const matching = (messages: readonly SearchHit[]) => new Set(messages.filter((m) => hasEveryWord(m.text, q)).map((m) => m.conversationId));
+      Promise.all([api.search(q, { exceptPlatform: "gmail" }), api.search(q, { platform: "gmail" }).catch(() => [])])
+        .then(([messages, mail]) => {
           // The reducer drops results tagged with a query that is no longer
           // current, so a late landing can never pollute a newer view.
-          dispatch({ type: "deep-ready", query: q, conversations: new Set(messages.filter((m) => hasEveryWord(m.text, q)).map((m) => m.conversationId)) });
+          dispatch({ type: "deep-ready", query: q, conversations: matching(messages), mail: matching(mail).size });
         })
         .catch(() => dispatch({ type: "deep-failed", query: q }));
     }, 250);
@@ -90,6 +94,7 @@ export function useConversationSearch(args: {
       active,
       deepSearch: state.deepSearch,
       deepMatches,
+      mailMatches: mailMatches(state),
       viewKey: `${filters.state}|${filters.type}|${normalizedQuery}`,
       inputRef,
       setQuery(value) {

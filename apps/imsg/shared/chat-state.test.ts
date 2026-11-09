@@ -265,6 +265,16 @@ describe("settleActionFor", () => {
     expect(settleActionFor(makeChat({ flags: makeFlags({ unread: true, waiting: true }) }))).toBe("settle");
   });
 
+  test("a quiet Slack channel wants nothing, so it is neither settled nor togglable", () => {
+    const channel = makeChat({
+      kind: "channel", route: { platform: "slack", accountId: "acct" as never, slack: { channel: "C1" } }, flags: makeFlags(),
+    });
+    expect(isSettled(channel)).toBe(false);
+    expect(settleActionFor(channel)).toBe("none");
+    const mentioned = { ...channel, lastMessage: { ...channel.lastMessage!, mentionsMe: true } };
+    expect(isSettled(mentioned), "a settled mention is settled").toBe(true);
+  });
+
   test("a conversation with no messages has nothing to toggle either way", () => {
     expect(settleActionFor(makeChat({ lastMessage: null, flags: makeFlags() }))).toBe("none");
   });

@@ -54,6 +54,8 @@ export function conversationRow(chat: ChatSummary): Conversation {
     lastMessageAt: chat.lastMessage?.dateCreated ?? 0, isSpam: chat.isSpam,
     hasGroupPhoto: chat.hasGroupPhoto ?? false, groupPhotoUrl: chat.groupPhotoUrl ?? null, updatedAt: FIXTURE_NOW,
     flags: chat.flags, unreadCount: chat.unreadCount,
+    // Where the unread run starts, as the bridge stores it on the conversation.
+    ...(chat.unreadCount && chat.firstUnreadAt ? { unread: { count: chat.unreadCount, firstAt: chat.firstUnreadAt } } : {}),
     ...(chat.later ? { later: chat.later } : {}),
     ...(chat.crm ? { crm: chat.crm } : {}),
   };

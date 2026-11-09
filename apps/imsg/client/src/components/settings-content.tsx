@@ -303,7 +303,7 @@ function AccountsGroup(): JSX.Element | null {
         name="Gmail"
         account={accounts.find((account) => account.platform === "gmail" && account.gmailApp !== "personal")}
         about="Read your AUF mailbox in Comma's Mail."
-        reading="Comma reads your inbox. Replying and archiving from Comma are coming."
+        reading="Comma reads your inbox, and replies, forwards and archives from it."
         start={() => startGmailConnect({})}
         stop={(accountId) => disconnectGmail({ accountId })}
       />

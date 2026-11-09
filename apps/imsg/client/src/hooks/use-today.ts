@@ -4,7 +4,7 @@ import { todayWindow } from "@shared/today";
 import type { ChatSummary } from "@shared/types";
 import { conversationToChat } from "@/lib/convex-adapters";
 import { commaApi, todayApi } from "@/lib/convex-api";
-import { inLens } from "@/lib/mail-lens";
+import { inLens, regularSenders } from "@/lib/mail-lens";
 import { toTodayView, type TodayMode, type TodayView } from "@/lib/today";
 
 interface TodayContextValue {
@@ -16,6 +16,8 @@ interface TodayContextValue {
   request: (mode: TodayMode) => Promise<void>;
   /** The Mail workspace's People lens, which Today ranks beside the Messages directory. */
   mail: readonly ChatSummary[];
+  /** The mailing lists whose images load without asking, read off the same inbox threads. */
+  regularSenders: ReadonlySet<string>;
 }
 
 const TodayContext = createContext<TodayContextValue | null>(null);
@@ -39,24 +41,26 @@ export function TodayProvider({ children }: { readonly children: ReactNode }) {
   const convex = useConvex();
   // Idempotent while a build is queued or running, so a double press is harmless.
   const request = useCallback(async (mode: TodayMode) => { await convex.mutation(todayApi.requestBuild, { day, dayStart: start, mode }); }, [convex, day, start]);
-  const mail = useTodayMail();
-  const value = useMemo(() => ({ day, dayStart: start, view, request, mail }), [day, start, view, request, mail]);
+  const { mail, regular } = useTodayMail();
+  const value = useMemo(() => ({ day, dayStart: start, view, request, mail, regularSenders: regular }), [day, start, view, request, mail, regular]);
   return createElement(TodayContext.Provider, { value }, children);
 }
 
 const NO_MAIL: readonly ChatSummary[] = [];
 
 // ponytail: the newest 50 inbox threads, as the Mail list starts; a People thread past them stays in Mail until it is newer.
-function useTodayMail(): readonly ChatSummary[] {
+function useTodayMail(): { mail: readonly ChatSummary[]; regular: ReadonlySet<string> } {
   const { isAuthenticated } = useConvexAuth();
   const { results } = usePaginatedQuery(commaApi.listEmailThreads, isAuthenticated ? {} : "skip", { initialNumItems: 50 });
-  return useMemo(() => {
+  const mail = useMemo(() => {
     const people = results.filter((row) => inLens(row, "people"));
     return people.length ? people.map(conversationToChat) : NO_MAIL;
   }, [results]);
+  const regular = useMemo(() => regularSenders(results), [results]);
+  return { mail, regular };
 }
 
-const OUTSIDE: TodayContextValue = { day: "", dayStart: 0, view: undefined, request: async () => undefined, mail: NO_MAIL };
+const OUTSIDE: TodayContextValue = { day: "", dayStart: 0, view: undefined, request: async () => undefined, mail: NO_MAIL, regularSenders: new Set() };
 
 export function useToday(): TodayContextValue {
   return useContext(TodayContext) ?? OUTSIDE;

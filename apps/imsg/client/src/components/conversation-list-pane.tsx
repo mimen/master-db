@@ -1,5 +1,6 @@
 import type { ChatSummary, ConversationId, StateCounts } from "@shared/types";
 import { useConvexAuth, useQuery } from "convex/react";
+import { router } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -52,6 +53,7 @@ import {
   platformsInUse,
   tagsInUse,
   planChats,
+  tabCounts,
   viewName,
   type InboxFilters,
   type InboxRow,
@@ -73,6 +75,7 @@ import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
 import { planToday, settleAllTargets, todayHeader, type TodaySectionKey } from "@/lib/today";
 import { InfoTip, TodayHeaderCard } from "./today-header";
 import { isListMode, requestFocus, subscribeListMode } from "@/lib/keyboard/controller";
+import { shortcutFor } from "@/lib/keyboard/registry";
 import { nextLeaving, withLeaving, type LeavingRow } from "@/lib/leaving-rows";
 import { useSyncExternalStore } from "react";
 
@@ -103,6 +106,8 @@ interface ConversationListPaneProps {
   /** The last chat-list fetch failed; the list is the saved copy. */
   offline: boolean;
   wide: boolean;
+  /** The Messages workspace is in front, so its lens chords are live. */
+  active?: boolean;
   selectedId?: ConversationId;
   /** The open conversation the workspace keeps in its slot after it is handled (desktop). */
   held?: ConversationId | null;
@@ -123,6 +128,7 @@ export function ConversationListPane({
   loading,
   offline,
   wide,
+  active = true,
   selectedId,
   held = null,
   onFiltersChange,
@@ -138,7 +144,7 @@ export function ConversationListPane({
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const store = useSyncExternalStore(subscribeInboxFilters, inboxFilterSnapshot, inboxFilterSnapshot);
-  useEffect(() => { void hydrateInboxFilters(); }, []);
+
   // Refinements belong to the lens; People is the workspace's type lens, remembered per lens too.
   const refinements: Refinements = store.byLens[filters.state]?.refinements ?? DEFAULT_REFINEMENTS;
   const setRefinements = useCallback((next: Refinements) => {
@@ -152,6 +158,14 @@ export function ConversationListPane({
     const remembered = lensFilters(lens, DEFAULT_INBOX_FILTERS.type);
     search.applyFilters({ state: lens, type: remembered.type });
   }, [search]);
+  // Once the remembered filters load, the lens on screen takes its own People filter, before anything can save over it.
+  const selectLensRef = useRef(selectLens);
+  const lensRef = useRef(filters.state);
+  useEffect(() => {
+    selectLensRef.current = selectLens;
+    lensRef.current = filters.state;
+  });
+  useEffect(() => { void hydrateInboxFilters().then(() => selectLensRef.current(lensRef.current)); }, []);
   const openView = useCallback((view: SavedView) => {
     setLensFilters(view.state, { type: view.type, refinements: view.refinements });
     search.applyFilters({ state: view.state, type: view.type });
@@ -163,9 +177,9 @@ export function ConversationListPane({
       if (view) openView(view);
     }
   }, [store.pending, openView]);
-  // ⌘1..⌘7 switch lenses. Editable-safe: a chord never types.
+  // ⌘1..⌘7 switch lenses while Messages is in front. Editable-safe: a chord never types.
   useEffect(() => {
-    if (Platform.OS !== "web" || !wide) return;
+    if (Platform.OS !== "web" || !wide || !active) return;
     const onKey = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
       const lens = LENSES[Number(event.key) - 1];
@@ -175,7 +189,7 @@ export function ConversationListPane({
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [wide, selectLens]);
+  }, [wide, active, selectLens]);
   // The "Has a scheduled message" refinement drops a cancelled or sent row on the tap, like the footer count.
   const scheduledRows = usePendingScheduled(useQuery(commaApi.listScheduled, {}));
   const scheduled = useMemo(() => new Set((scheduledRows ?? [])
@@ -247,7 +261,10 @@ export function ConversationListPane({
     if (section) void settleAllChats(settleAllTargets(view, section.rows.map((row) => row.chat)));
   }, []);
   const onToday = filters.state === "today";
-  const lensCounts = useMemo(() => (counts ? { ...counts, today: plan.toGo } : null), [counts, plan.toGo]);
+  // Each tab counts what it would show: its own remembered People filter, the one a click on it restores.
+  const lensCounts = useMemo(() => counts && tabCounts(allChats, counts, plan.toGo,
+    (lens) => lens === filters.state ? filters.type : store.byLens[lens]?.type ?? DEFAULT_INBOX_FILTERS.type),
+  [counts, plan.toGo, allChats, filters.state, filters.type, store.byLens]);
   useAppBadge(today.view === undefined ? undefined : plan.toGo);
   // Explicitly memoised: full passes over every conversation, plus a per-chat
   // participant scan while searching.
@@ -257,7 +274,10 @@ export function ConversationListPane({
   );
   // Today's rows count folded sections too; the other lenses count what their filter lets through.
   const todayRows = useMemo(() => planChats(plan), [plan]);
-  const lensTotal = useMemo(() => onToday ? todayRows.length : filterInbox(allChats, filters, "", undefined, browseIds).length, [onToday, todayRows, allChats, filters, browseIds]);
+  // The lens as Also include widens it, before the narrowing controls, so what shows never outnumbers it.
+  const lensTotal = useMemo(() => onToday ? todayRows.length
+    : filterInbox(allChats, filters, "", undefined, browseIds, { ...refine, refinements: { ...DEFAULT_REFINEMENTS, include: refine.refinements.include } }).length,
+  [onToday, todayRows, allChats, filters, browseIds, refine]);
   const lensShowing = onToday ? planChats(shownPlan).length : deskModel.listChats.length;
   const toggleCounts = useMemo(
     () => onToday ? checkboxCounts(todayRows, { ...filters, state: "all" }, undefined, refine) : checkboxCounts(allChats, filters, browseIds, refine),
@@ -302,6 +322,12 @@ export function ConversationListPane({
   }
   const leaving = seen.leaving;
   const rows = useMemo(() => withLeaving(modelRows, leaving, rowKey), [modelRows, leaving]);
+  // j/k scroll by rendered index, and a row still folding away sits in the list ahead of the ones after it.
+  const keyboardModel = useMemo(() => {
+    if (leaving.size === 0) return deskModel;
+    const at = new Map(rows.map((row, index) => [rowKey(row), index]));
+    return { ...deskModel, navigationEntries: deskModel.navigationEntries.map((entry) => ({ ...entry, index: at.get(rowKey(deskModel.rows[entry.index]!)) ?? entry.index })) };
+  }, [deskModel, rows, leaving]);
   // The thread's "2 of 41" and auto-advance read the order this list renders.
   useEffect(() => publishRenderedOrder(deskModel.listChats), [deskModel.listChats]);
   useEffect(() => () => publishRenderedOrder(null), []);
@@ -366,7 +392,7 @@ export function ConversationListPane({
 
   useConversationListKeyboard({
     enabled: wide,
-    model: deskModel,
+    model: keyboardModel,
     selectedId,
     viewport,
     search,
@@ -381,7 +407,7 @@ export function ConversationListPane({
       inputRef={search.inputRef}
       onChangeText={search.setQuery}
       onClear={() => search.clear()}
-      shortcut="⌘K"
+      shortcut={shortcutFor("list.focusSearch")}
     />
   );
 
@@ -489,7 +515,18 @@ export function ConversationListPane({
                   <View style={styles.phoneSearch}>{searchField}</View>
                 </View>
               )}
-                            {lensOf(filters.state) === null && !search.active ? (
+                            {search.active && search.mailMatches > 0 ? (
+                <Pressable
+                  accessibilityRole="link"
+                  onPress={() => router.push({ pathname: "/search", params: { query: search.normalizedQuery } })}
+                  style={({ hovered }: { hovered?: boolean }) => [styles.mailMatches, hovered && { backgroundColor: theme.rowHover }]}
+                >
+                  <Text style={[styles.lensNote, { color: theme.textSecondary, fontSize: type.secondary }]}>
+                    {search.mailMatches} {search.mailMatches === 1 ? "match" : "matches"} in Mail →
+                  </Text>
+                </Pressable>
+              ) : null}
+              {lensOf(filters.state) === null && !search.active ? (
                 <Text style={[styles.lensNote, { color: theme.textSecondary, fontSize: type.secondary }]}>Settled</Text>
               ) : null}
               {onToday && !search.active ? (
@@ -522,8 +559,8 @@ export function ConversationListPane({
                   onOpenChat(chat);
                   requestFocus("composer");
                 }}
-                onSeeAllWaiting={() => search.applyFilters({ ...filters, state: "waiting" })}
-                onGoToNeedsReply={() => search.applyFilters({ ...filters, state: "unresponded" })}
+                onSeeAllWaiting={() => selectLens("waiting")}
+                onGoToNeedsReply={() => selectLens("unresponded")}
               />
             ) : (
               <View style={styles.empty}>
@@ -659,6 +696,7 @@ function TodaySectionHeader({ row, onToggleFold, onSettleAll }: {
 }
 
 const styles = StyleSheet.create({
+  mailMatches: { borderRadius: 8, paddingBottom: 6 },
   todayGroup: { paddingBottom: 5, paddingHorizontal: 10, paddingTop: 14 },
   todayTop: { alignItems: "baseline", flexDirection: "row", gap: 8, justifyContent: "space-between" },
   todayTitleRow: { alignItems: "center", flexDirection: "row", flexShrink: 1, gap: 6 },

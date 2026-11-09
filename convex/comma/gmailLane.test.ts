@@ -377,9 +377,24 @@ describe("archive from Comma", () => {
     expect(await clears()).toEqual([]);
   });
 
-  test("a failed archive unsettles the thread and shows Gmail's error, which the next settle clears", async () => {
-    const { t, as, conversationId, thread, state, clears } = await connected();
-    google.on("POST", /\/threads\/[^/]+\/modify$/, () => ({ status: 403, body: { error: { code: 403, status: "PERMISSION_DENIED" } } }));
+  test("a reply that lands between the settle and the archive stays in the inbox, and the thread comes back", async () => {
+    const { t, as, conversationId, thread, echo } = await connected();
+    await as.mutation(api.comma.triage.settle, { conversationId });
+    google.deliver({
+      id: "m2", threadId: "t-doors", labelIds: ["INBOX", "UNREAD"], text: "Actually, can we do 9?",
+      headers: { From: `Sam Lee <${SAM}>`, To: MAILBOX, Subject: "Re: Doors", "Message-ID": "<sam-2@venue.test>" },
+    });
+    await settle(t);
+    expect(inThread("t-doors").map((message) => [message.id, message.labelIds.includes("INBOX")])).toEqual([["m0", false], ["m1", false], ["m2", true]]);
+    await echo();
+    expect((await thread())!.gmail).toMatchObject({ inInbox: true });
+    const { page } = await as.query(api.comma.queries.listEmailThreads, { paginationOpts: { numItems: 10, cursor: null } });
+    expect(page.find((row) => row._id === conversationId)).toMatchObject({ flags: { unresponded: true } });
+  });
+
+  test("a failed archive unsettles the thread and shows Gmail's error through a sync, until the next settle clears it", async () => {
+    const { t, as, conversationId, thread, state, clears, echo } = await connected();
+    google.on("POST", /\/messages\/batchModify$/, () => ({ status: 403, body: { error: { code: 403, status: "PERMISSION_DENIED" } } }));
     await as.mutation(api.comma.triage.settle, { conversationId });
     await settle(t);
     expect((await state())?.dismissedUnrespondedGuid).toBeUndefined();
@@ -387,10 +402,12 @@ describe("archive from Comma", () => {
     expect((await thread())!.gmail).toMatchObject({ inInbox: true, archiveError: "Gmail didn't archive this: Google answered 403: PERMISSION_DENIED" });
     const { page } = await as.query(api.comma.queries.listEmailThreads, { paginationOpts: { numItems: 10, cursor: null } });
     expect(page[0]).toMatchObject({ gmail: { archiveError: "Gmail didn't archive this: Google answered 403: PERMISSION_DENIED" }, flags: { unresponded: true } });
+    google.relabel("t-doors", { remove: ["UNREAD"] });
+    await echo();
+    expect((await thread())!.gmail?.archiveError, "a sync keeps the refusal on screen").toBe("Gmail didn't archive this: Google answered 403: PERMISSION_DENIED");
 
-    google.on("POST", /\/threads\/[^/]+\/modify$/, (call) => {
-      const threadId = decodeURIComponent(call.url.pathname.split("/").slice(-2)[0]!);
-      google.relabel(threadId, { remove: ["INBOX"] });
+    google.on("POST", /\/messages\/batchModify$/, () => {
+      google.relabel("t-doors", { remove: ["INBOX"] });
       return { body: {} };
     });
     await as.mutation(api.comma.triage.settle, { conversationId });

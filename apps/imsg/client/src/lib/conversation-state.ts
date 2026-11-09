@@ -41,8 +41,11 @@ export const rowAfter = {
   },
 };
 
+/** Messages lists conversations, Mail and Today's mail rows list email threads; one id is in one of them. */
 function patchRow(store: OptimisticLocalStore, conversationId: ConversationId, update: (row: Row) => Row): void {
-  optimisticallyUpdateValueInPaginatedQuery(store, commaApi.listConversations, {}, (row) => (row._id === conversationId ? update(row) : row));
+  for (const list of [commaApi.listConversations, commaApi.listEmailThreads]) {
+    optimisticallyUpdateValueInPaginatedQuery(store, list, {}, (row) => (row._id === conversationId ? update(row) : row));
+  }
 }
 
 /** Today reads its done gaps and Settled today off the clear log. A null `at` takes the conversation's clear back. */
@@ -80,8 +83,10 @@ export const optimistic = {
 /** Writes against one conversation. */
 export function conversationStateVia(client: ConversationStateClient) {
   return {
-    async settle(conversationId: ConversationId, anchor: string | undefined): Promise<void> {
-      await client.mutation(triageApi.settle, { conversationId, ...(anchor !== undefined ? { anchor } : {}) }, { optimisticUpdate: optimistic.settle });
+    /** An email thread's settle also archives it in Gmail: `archived` rejects when Gmail refused, which un-settled it again. */
+    async settle(conversationId: ConversationId, anchor: string | undefined): Promise<{ archived: Promise<unknown> | null }> {
+      const archive = await client.mutation(triageApi.settle, { conversationId, ...(anchor !== undefined ? { anchor } : {}) }, { optimisticUpdate: optimistic.settle });
+      return { archived: archive ? watchCommandVia(client, archive, "archive") : null };
     },
     async unsettle(conversationId: ConversationId): Promise<void> {
       await client.mutation(triageApi.unsettle, { conversationId }, { optimisticUpdate: optimistic.unsettle });

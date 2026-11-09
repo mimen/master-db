@@ -75,18 +75,6 @@ export function foldQuotes(doc: Document): number {
   return quotes.length;
 }
 
-/** How many inbox threads make a sender one the user gets regularly. */
-const REGULAR_THREADS = 3;
-
-/** Senders on at least REGULAR_THREADS of these threads, lowercased. */
-export function regularSenders(threads: readonly { participants: readonly { address: string }[] }[]): Set<string> {
-  const counts = new Map<string, number>();
-  for (const thread of threads) {
-    for (const address of new Set(thread.participants.map((participant) => participant.address.toLowerCase()))) counts.set(address, (counts.get(address) ?? 0) + 1);
-  }
-  return new Set([...counts].flatMap(([address, count]) => count >= REGULAR_THREADS ? [address] : []));
-}
-
 /**
  * Which messages a thread opens expanded: the newest, and the unread ones. Gmail counts a thread's UNREAD messages
  * (gmailSync.ts) without naming them, and they are the newest it received, so those are the newest `unread` not sent by

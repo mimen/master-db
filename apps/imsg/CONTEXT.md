@@ -82,9 +82,8 @@ workspace is known. On Slack, Comma sends, replies in a thread, reacts (any numb
 schedules; mentions and attachments grey with "Not in Comma's Slack yet". Gmail's attention follows iMessage's; its
 screening says bulk for mail sent to a list (a List-Unsubscribe or List-Id header, `Precedence: bulk`, `Auto-Submitted`,
 a Promotions, Social, Updates or Forums label, or a no-reply sender), which stays out of People and Today. On Gmail,
-Comma sends, replies and schedules; an email send carries its To, Cc and subject (`email` on the send), and Convex refuses one
-with no recipients. Attachments grey with "Not in Comma's Gmail yet", and reply suggestions stay off for
-email. For routes,
+Comma sends, replies, forwards, archives and schedules, and an email carries attachments; an email send carries its To, Cc
+and subject (`email` on the send), and Convex refuses one with no recipients. Reply suggestions stay off for email. For routes,
 each feature (reactions and which
 tapbacks, reply, edit, unsend, typing, mentions, scheduling, calls, attachments, FaceTime links, group management,
 deleting) lists the services that carry it, whether it exists only in a group, and whether BlueBubbles needs its

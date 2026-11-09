@@ -43,7 +43,9 @@ for (const scheme of ["light", "dark"] as const) {
       await expect(status).toHaveAttribute("aria-live", "polite");
       await expect(status).toHaveCSS("background-color", scheme === "light" ? "rgb(23, 23, 26)" : "rgb(237, 237, 239)");
       await expect(status.getByText(/^Settled /)).toHaveCSS("color", scheme === "light" ? "rgb(255, 255, 255)" : "rgb(23, 23, 26)");
-      await expect(status).toContainText("⌘Z");
+      // The Undo chord is ⌘⇧Z, since ⌘Z in the composer is text undo; a phone layout shows no key hint.
+      if (size.name === "desktop") await expect(status).toContainText("⌘⇧Z");
+      else await expect(status).not.toContainText("⌘");
       const list = page.getByTestId("thread-message-list");
       const chrome = await page.getByTestId("thread-composer-chrome").boundingBox();
       const listWithToast = await list.boundingBox();

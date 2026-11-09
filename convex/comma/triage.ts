@@ -68,10 +68,12 @@ export type TriageSource = { by: "user" } | { by: "mailbox"; quiet: boolean };
 const USER: TriageSource = { by: "user" };
 
 /** Queues the user's settle or unsettle of an email thread for Gmail, and clears the last refusal's error. */
-async function writeBack(ctx: MutationCtx, conversation: Doc<"comma_conversations">, source: TriageSource, kind: "archive" | "unarchive"): Promise<void> {
-  if (conversation.platform !== "gmail" || source.by !== "user") return;
+async function writeBack(ctx: MutationCtx, conversation: Doc<"comma_conversations">, source: TriageSource,
+  payload: { kind: "archive"; anchor: string } | { kind: "unarchive" }): Promise<Id<"comma_outbox"> | null> {
+  if (conversation.platform !== "gmail" || source.by !== "user") return null;
   if (conversation.gmail?.archiveError) await ctx.db.patch(conversation._id, { gmail: { ...conversation.gmail, archiveError: undefined } });
-  await enqueueCommand(ctx, { clientKey: `${kind}-${conversation._id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, conversationId: conversation._id, payload: { kind } });
+  const { id } = await enqueueCommand(ctx, { clientKey: `${payload.kind}-${conversation._id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, conversationId: conversation._id, payload });
+  return id;
 }
 
 /** A settle is Done: it ends a snooze and clears what resurfaced. A follow-up still waiting outlives it. */
@@ -84,8 +86,9 @@ async function handledDeferrals(ctx: MutationCtx, conversationId: ConversationId
 /**
  * Settles the conversation on its last message, the one every client shows and computeFlags compares. With an
  * anchor, a different last message rejects the settle, so a message the user has not seen is never dismissed.
+ * Returns the archive an email thread's settle queued for Gmail, which the client watches for a refusal.
  */
-export async function settleConversation(ctx: MutationCtx, conversationId: ConversationId, anchor?: string, source = USER): Promise<void> {
+export async function settleConversation(ctx: MutationCtx, conversationId: ConversationId, anchor?: string, source = USER): Promise<Id<"comma_outbox"> | null> {
   const conversation = await conversationOf(ctx, conversationId);
   const last = conversation.lastMessage;
   if (!last) throw new ConvexError("chat has no last message");
@@ -96,7 +99,7 @@ export async function settleConversation(ctx: MutationCtx, conversationId: Conve
   });
   if (source.by === "user" || !source.quiet) await logClear(ctx, conversationId, last.guid, "dismiss", Date.now());
   await settleConversationChats(ctx, conversationId);
-  await writeBack(ctx, conversation, source, "archive");
+  return await writeBack(ctx, conversation, source, { kind: "archive", anchor: last.guid });
 }
 
 /** Clears both anchors, since the opposite one can hold a stale dismissal, and takes back the settle's clear. */
@@ -111,7 +114,7 @@ export async function unsettleConversation(ctx: MutationCtx, conversationId: Con
   }
   if (row) await ctx.db.patch(row._id, { dismissedUnrespondedGuid: undefined, dismissedWaitingGuid: undefined, updatedAt: Date.now() });
   await reopenConversationChats(ctx, conversationId);
-  await writeBack(ctx, conversation, source, "unarchive");
+  await writeBack(ctx, conversation, source, { kind: "unarchive" });
 }
 
 export async function setConversationFlag(ctx: MutationCtx, conversationId: ConversationId,
@@ -175,11 +178,10 @@ const conversationId = v.id("comma_conversations");
 
 export const settle = mutation({
   args: { conversationId, anchor: v.optional(v.string()) },
-  returns: v.null(),
+  returns: v.union(v.id("comma_outbox"), v.null()),
   handler: async (ctx, args) => {
     await assertAllowed(ctx);
-    await settleConversation(ctx, args.conversationId, args.anchor);
-    return null;
+    return await settleConversation(ctx, args.conversationId, args.anchor);
   },
 });
 

@@ -229,6 +229,8 @@ export interface ChatSummary {
     isFromMe: boolean;
     senderName: string | null;
     hasAttachments: boolean;
+    /** The message names the user, which is all a Slack channel wants of them. */
+    mentionsMe?: boolean;
   } | null;
   unreadCount: number;
   /** Epoch ms of the oldest genuine unread inbound message, or null when unavailable. */

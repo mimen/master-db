@@ -111,6 +111,16 @@ export class FakeGmail {
       this.relabel(threadId, { add: addLabelIds, remove: removeLabelIds });
       return { body: { id: threadId } };
     });
+    this.on("POST", /\/users\/me\/messages\/batchModify$/, (call) => {
+      const { ids = [], addLabelIds = [], removeLabelIds = [] } = call.json as { ids?: string[]; addLabelIds?: string[]; removeLabelIds?: string[] };
+      const messages = this.mail.filter((message) => ids.includes(message.id));
+      if (messages.length !== ids.length) return { status: 404, body: { error: { code: 404, status: "NOT_FOUND" } } };
+      for (const message of messages) {
+        message.labelIds = [...new Set([...message.labelIds.filter((label) => !removeLabelIds.includes(label)), ...addLabelIds])];
+      }
+      for (const threadId of new Set(messages.map((message) => message.threadId))) this.record(threadId);
+      return { body: {} };
+    });
     this.on("GET", /\/users\/me\/settings\/sendAs$/, () => ({ body: { sendAs: [{ sendAsEmail: MAILBOX }, { sendAsEmail: ALIAS }] } }));
   }
 

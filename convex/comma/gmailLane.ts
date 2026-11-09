@@ -239,9 +239,8 @@ export async function executeGmail(ctx: ActionCtx, row: OutboxRow): Promise<Comm
       return await sendEmail(ctx, row, gmailRoute.accountId, gmailRoute.threadId, token);
     case "archive":
     case "unarchive": {
-      const labels = { [payload.kind === "archive" ? "removeLabelIds" : "addLabelIds"]: ["INBOX"] };
       // Moving a label twice changes nothing, so any error fails the row and Comma takes its settle back.
-      await googleApi(`${GMAIL_API}/threads/${encodeURIComponent(gmailRoute.threadId)}/modify`, { token, json: labels })
+      await relabelInbox(token, gmailRoute.threadId, payload.kind === "archive" ? payload.anchor ?? null : undefined)
         .catch((error: unknown) => {
           throw new NotSentError(error instanceof Error ? error.message : String(error));
         });
@@ -250,6 +249,21 @@ export async function executeGmail(ctx: ActionCtx, row: OutboxRow): Promise<Comm
     default:
       throw new NotSentError(`Gmail can't run ${payload.kind}`);
   }
+}
+
+/**
+ * Unarchives the whole thread (`anchor` undefined), or archives it up to `anchor`, so a reply that arrived after the
+ * settle stays in the inbox. An anchor Gmail does not hold (null, or a send not yet landed) archives every message.
+ */
+async function relabelInbox(token: string, threadId: string, anchor: string | null | undefined): Promise<void> {
+  const thread = `${GMAIL_API}/threads/${encodeURIComponent(threadId)}`;
+  if (anchor === undefined) {
+    await googleApi(`${thread}/modify`, { token, json: { addLabelIds: ["INBOX"] } });
+    return;
+  }
+  const ids = ((await googleApi<RawThread>(`${thread}?format=minimal`, { token })).messages ?? []).map((message) => message.id);
+  const through = anchor === null ? -1 : ids.indexOf(anchor);
+  await googleApi(`${GMAIL_API}/messages/batchModify`, { token, json: { ids: through < 0 ? ids : ids.slice(0, through + 1), removeLabelIds: ["INBOX"] } });
 }
 
 /** A sent message, written as the thread's next read would write it. Replying lifts a thread out of bulk mail. */
@@ -277,7 +291,12 @@ export async function applyGmailResult(ctx: MutationCtx, row: OutboxRow): Promis
   }
   if (route?.platform !== "gmail" || !conversationId) return;
   if (payload.kind === "send" && result?.kind === "send" && "gmail" in result) await landGmailSend(ctx, route.accountId, conversationId, result.gmail, row.clientKey);
-  if (payload.kind === "archive" || payload.kind === "unarchive") await setInbox(ctx, conversationId, payload.kind === "unarchive");
+  if (payload.kind === "unarchive") await setInbox(ctx, conversationId, true);
+  // A message after the anchor is still in the inbox, and so is the thread.
+  if (payload.kind === "archive") {
+    const conversation = await ctx.db.get(conversationId);
+    await setInbox(ctx, conversationId, payload.anchor !== undefined && conversation?.lastMessage !== undefined && conversation.lastMessage.guid !== payload.anchor);
+  }
 }
 
 /** Gmail is the source of truth, so a refused archive takes Comma's settle back, and a refused unarchive settles again. */

@@ -583,7 +583,7 @@ export declare const api: {
           after?: number;
           around?: number;
           before?: number;
-          conversationId: Id<"comma_conversations">;
+          conversationId: string;
         },
         Array<{
           _creationTime: number;
@@ -944,7 +944,7 @@ export declare const api: {
             | { kind: "leaveGroup" }
             | { chatGuid: string; kind: "deleteChat" }
             | { kind: "createFaceTimeLink" }
-            | { kind: "archive" }
+            | { anchor?: string; kind: "archive" }
             | { kind: "unarchive" }
             | {
                 accountId: Id<"comma_accounts">;
@@ -1620,7 +1620,7 @@ export declare const api: {
             | { kind: "leaveGroup" }
             | { chatGuid: string; kind: "deleteChat" }
             | { kind: "createFaceTimeLink" }
-            | { kind: "archive" }
+            | { anchor?: string; kind: "archive" }
             | { kind: "unarchive" }
             | {
                 accountId: Id<"comma_accounts">;
@@ -2260,7 +2260,7 @@ export declare const api: {
       getConversation: FunctionReference<
         "query",
         "public",
-        { conversationId: Id<"comma_conversations"> },
+        { conversationId: string },
         {
           _creationTime: number;
           _id: Id<"comma_conversations">;
@@ -2583,7 +2583,7 @@ export declare const api: {
         "query",
         "public",
         {
-          conversationId: Id<"comma_conversations">;
+          conversationId: string;
           paginationOpts: {
             cursor: string | null;
             endCursor?: string | null;
@@ -2850,6 +2850,7 @@ export declare const api: {
         "public",
         {
           conversationId?: Id<"comma_conversations">;
+          exceptPlatform?: "imessage" | "slack" | "gmail";
           from?: "me" | "them";
           platform?: "imessage" | "slack" | "gmail";
           query: string;
@@ -3225,7 +3226,7 @@ export declare const api: {
         "mutation",
         "public",
         { anchor?: string; conversationId: Id<"comma_conversations"> },
-        null
+        Id<"comma_outbox"> | null
       >;
       unsettle: FunctionReference<
         "mutation",
@@ -6066,7 +6067,7 @@ export declare const internal: {
             | { kind: "leaveGroup" }
             | { chatGuid: string; kind: "deleteChat" }
             | { kind: "createFaceTimeLink" }
-            | { kind: "archive" }
+            | { anchor?: string; kind: "archive" }
             | { kind: "unarchive" }
             | {
                 accountId: Id<"comma_accounts">;
@@ -7253,7 +7254,7 @@ export declare const internal: {
             | { kind: "leaveGroup" }
             | { chatGuid: string; kind: "deleteChat" }
             | { kind: "createFaceTimeLink" }
-            | { kind: "archive" }
+            | { anchor?: string; kind: "archive" }
             | { kind: "unarchive" }
             | {
                 accountId: Id<"comma_accounts">;

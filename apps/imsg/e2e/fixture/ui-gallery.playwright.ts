@@ -69,7 +69,7 @@ test("settling shows a bottom toast whose Undo restores the conversation", async
   await expect(undo).toBeVisible();
   const toast = page.getByRole("status").filter({ has: undo });
   await expect(toast.getByText(`Settled ${name}`, { exact: true })).toBeVisible();
-  await expect(toast.getByText("⌘Z", { exact: true })).toBeVisible();
+  await expect(toast.getByText("⌘⇧Z", { exact: true })).toBeVisible();
   const box = await undo.boundingBox();
   expect(box!.y).toBeGreaterThan(820 / 2);
   await page.screenshot({ path: `${OUT}/toast-undo.png`, animations: "disabled" });

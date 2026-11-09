@@ -21,7 +21,9 @@ import {
   narrowToday,
   parseServiceFilter,
   serviceOptions,
+  tabCounts,
 } from "./inbox-model";
+import { computeCounts } from "@shared/chat-state";
 import type { TodayPlan } from "./today";
 
 const NOW = new Date(2026, 9, 4, 15, 0).getTime();
@@ -515,5 +517,20 @@ describe("service filter", () => {
     const rcs = chatAt("rcs", 1, { route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "RCS;-;+1555" } }, flags: replyFlags });
     const model = deriveInboxModel([rcs], needsReply, "", undefined, undefined, ctx({ service: "imessage:SMS" }));
     expect(model.listChats.map((c) => c.conversationId)).toEqual([rcs.conversationId]);
+  });
+});
+
+describe("tabCounts", () => {
+  test("each tab counts under its own People filter, whichever tab is on screen", () => {
+    const owed = { ...makeChat().flags, unresponded: true };
+    const chats = [
+      makeChat({ conversationId: cid("known"), flags: owed }),
+      makeChat({ conversationId: cid("stranger"), known: false, flags: owed }),
+    ];
+    const onScreen = computeCounts(chats, "known");
+    const tabs = tabCounts(chats, onScreen, 7, (lens) => (lens === "unresponded" ? "all" : "known"));
+    expect(tabs.unresponded, "Needs you remembers Everyone").toBe(2);
+    expect(tabs.all, "All keeps Known").toBe(1);
+    expect(tabs.today).toBe(7);
   });
 });

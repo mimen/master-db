@@ -2,10 +2,9 @@ import { Tabs } from "expo-router";
 import { Platform, StyleSheet } from "react-native";
 
 import { PhoneTabBar } from "@/components/phone-tab-bar";
-import { useChats } from "@/hooks/use-chats";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
-import { DEFAULT_INBOX_FILTERS } from "@/lib/inbox-model";
+import { useBadgeCount } from "@/lib/badge-count";
 import { WORKSPACES } from "@/lib/workspaces";
 
 /**
@@ -16,8 +15,8 @@ import { WORKSPACES } from "@/lib/workspaces";
 export default function TabsLayout() {
   const { wide } = useLayoutMode();
   const theme = useTheme();
-  const { counts } = useChats("unresponded", DEFAULT_INBOX_FILTERS.type);
-  const needsReply = counts?.unresponded ?? 0;
+  // The badge every surface shows: Today's "to go".
+  const needsReply = useBadgeCount() ?? 0;
 
   return (
     <Tabs

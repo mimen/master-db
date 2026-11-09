@@ -326,8 +326,8 @@ export function createMailFixture(receipts: Map<string, Receipt>) {
     settle: (key: string) => {
       const thread = find(key)!;
       thread.state = settleState(thread);
-      writeBack(thread, "archive");
-      return null;
+      // Production's settle answers with the archive it queued, which the client watches for a refusal.
+      return writeBack(thread, "archive");
     },
     unsettle: (key: string) => {
       const thread = find(key)!;
