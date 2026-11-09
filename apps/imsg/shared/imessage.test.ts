@@ -18,6 +18,11 @@ test("a one-to-one conversation's handle comes from its participant, then its ch
   expect(dmAddress({ ...chat, isGroup: true, participants: [] })).toBeNull();
 });
 
+test("a cached row whose iMessage route lost its chat GUID has no handle instead of crashing", () => {
+  const route = { platform: "imessage" as const, accountId: null, imessage: { chatGuid: undefined as unknown as string } };
+  expect(dmAddress({ isGroup: false, route, participants: [] })).toBeNull();
+});
+
 test("a conversation's route keeps RCS apart from SMS for its profile", () => {
   expect(conversationRoute({ isGroup: false, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "RCS;-;+16199813959" } } })).toEqual({ platform: "imessage", service: "RCS", isGroup: false });
   expect(conversationRoute({ isGroup: true, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "any;+;x" } } })).toEqual({ platform: "imessage", service: "iMessage", isGroup: true });

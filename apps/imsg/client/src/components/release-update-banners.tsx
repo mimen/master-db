@@ -1,6 +1,7 @@
 import { shellUpdateAvailable, webUpdateAvailable } from "@shared/release-identity";
 import { useEffect, useState, useSyncExternalStore, type JSX, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 
 import { useSpring } from "@/constants/springs";
@@ -23,6 +24,8 @@ export function ReleaseUpdateBanners(): JSX.Element | null {
   const webReady = webUpdateAvailable(snapshot);
   const shellReady = shellUpdateAvailable(snapshot);
   const nativeUpdate = useNativeUpdate();
+  // Below the status bar and the iPhone's Dynamic Island, where the chip can be tapped.
+  const { top } = useSafeAreaInsets();
   const restartFailed = shellReady && failedStagedSha === snapshot.shell.stagedSha;
 
   if (!webReady && !shellReady && !nativeUpdate.ready) return null;
@@ -36,7 +39,7 @@ export function ReleaseUpdateBanners(): JSX.Element | null {
     <View
       accessibilityLiveRegion="polite"
       pointerEvents="box-none"
-      style={styles.stack}
+      style={[styles.stack, { top: top + 10 }]}
       testID="release-update-banners"
     >
       {webReady && (
@@ -123,7 +126,6 @@ const styles = StyleSheet.create({
     left: 0,
     position: "absolute",
     right: 0,
-    top: 10,
     zIndex: 1000,
   },
   banner: {
