@@ -12,6 +12,7 @@ import { normalizeModules } from "../test-utils.vitest";
 import { sealCredentials } from "./credentials";
 import { eventCallback, FakeSlack, MILAD, signedEvent, stubSlackEnv, TEAM, TOKEN } from "./fakeSlack.vitest";
 import { parseSlackPayload, parseSlackUser, slackRef } from "./slackEvents";
+import { isSlackFileUrl } from "./slackFiles";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 const paginationOpts = { numItems: 50, cursor: null };
@@ -479,6 +480,32 @@ describe("files", () => {
   const attachments = (t: T) => t.run((ctx) => ctx.db.query("comma_attachments").collect());
   const listed = async (as: Awaited<ReturnType<typeof connected>>["as"], conversationId: Id<"comma_conversations">) =>
     (await as.query(api.comma.queries.listMessages, { conversationId, paginationOpts })).page;
+
+  test("only Slack's own file hosts are ones the token may be sent to", () => {
+    expect(["https://files.slack.com/files-pri/T1-F1/a.png", "https://files.slack.com/files-tmb/T1-F1/a_720.png", "https://acme.enterprise.slack.com/files/a.png"].map(isSlackFileUrl))
+      .toEqual([true, true, true]);
+    expect(["https://drive.example.test/deck", "http://files.slack.com/files-pri/T1-F1/a.png", "https://files.slack.com.example.test/a.png",
+      "https://notslack.com/a.png", "not a url"].map(isSlackFileUrl)).toEqual([false, false, false, false, false]);
+  });
+
+  test("a file hosted outside Slack is never asked for, so the token never leaves Slack, and it stays a tile", async () => {
+    const { t, as } = await connected();
+    slack.channel({ id: "D1", type: "im", user: SAM });
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      asked.push(String(input));
+      return await slack.fetch(input, init);
+    });
+    const files = [{ id: "F1", name: "deck.pdf", mimetype: "application/pdf", size: 10, mode: "external", url_private: "https://drive.example.test/deck",
+      thumb_720: "https://drive.example.test/deck-thumb" }];
+    await post(t, eventCallback("Ev1", messageEvent("D1", "im", { subtype: "file_share", user: SAM, text: "the deck", ts: ago(1), files })));
+    await settle(t);
+    expect(asked.filter((url) => url.includes("drive.example.test"))).toEqual([]);
+    const [message] = await messages(t);
+    const [row] = await listed(as, message!.conversationId);
+    expect(row!.attachments.map((a) => [a.filename, a.originalUrl, a.thumbUrl])).toEqual([["deck.pdf", null, null]]);
+    expect(await t.run((ctx) => ctx.db.system.query("_storage").collect())).toEqual([]);
+  });
 
   test("an image lands inline from storage, read with the token, and the lightbox finds it by its guid", async () => {
     const { t, as } = await connected();
