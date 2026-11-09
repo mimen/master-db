@@ -382,20 +382,13 @@ export function Composer({
     replacePending([]);
   }, [conversationId, replacePending]);
 
-  // An edit borrows the field; the draft it covered comes back when the edit is sent or cancelled.
-  const wasEditing = useRef(false);
   useEffect(() => {
     if (editing) {
-      wasEditing.current = true;
       suggestionAttribution.current = null;
       setText(editing.text);
       setSelection({ start: editing.text.length, end: editing.text.length });
       setMentions([]);
-    } else if (wasEditing.current) {
-      wasEditing.current = false;
-      loadRemoteDraft(getDraft(conversationId));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs as an edit starts and ends, not on a conversation switch.
   }, [editing]);
 
   // Suggestion shelf drops text in here for editing; never auto-sends.

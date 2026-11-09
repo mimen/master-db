@@ -5,7 +5,6 @@ import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 
 import { expect, test } from "../fixtures/desk";
-import { FIXTURE_NOW } from "./world";
 
 const evidence = process.env.VERIFY_IMSG_EVIDENCE ?? mkdtempSync(join(tmpdir(), "imsg-send-recovery-"));
 const FAILED_TOAST = "Couldn't send. Check the Mac mini connection.";
@@ -150,25 +149,86 @@ test("send-recovery: the alternates stand aside while the field holds text, so a
   await expect(alternates).toContainText("⌥1");
 });
 
-test("send-recovery: editing a message borrows the field, and the draft under it comes back", async ({ desk }) => {
+test("send-recovery: Send later stays live while an attachment uploads", async ({ desk }) => {
   const page = desk.page;
-  // The server's clock is pinned to FIXTURE_NOW; the page's matches, so the message is still inside its edit window.
-  await page.addInitScript((fixtureNow) => {
-    const realNow = Date.now.bind(Date);
-    const offset = fixtureNow - realNow();
-    Date.now = () => realNow() + offset;
-  }, FIXTURE_NOW);
+  await desk.request.post("/__fixture/latency", { data: { name: "outbox:sendAttachment", delayMs: 4_000 } });
   const thread = await openAlex(page);
-  const composer = page.getByPlaceholder("iMessage");
-  await composer.fill("see you at load-in");
-  await composer.press("Enter");
-  await expect(thread.getByText("see you at load-in", { exact: true })).toBeVisible();
-  await composer.fill("a half-written thought");
-  await thread.getByText("see you at load-in", { exact: true }).click({ button: "right" });
-  await page.getByRole("menu").getByRole("menuitem", { name: "Edit" }).click();
-  await expect(page.getByPlaceholder("Edit message")).toHaveValue("see you at load-in");
-  await page.getByRole("button", { name: "Cancel editing" }).click();
-  await expect(composer).toHaveValue("a half-written thought");
+  await drop(thread, ["slow.txt"]);
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await page.getByPlaceholder("iMessage").fill("and one more thing");
+  await expect(page.getByRole("button", { name: "Send later" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await desk.request.post("/__fixture/latency", { data: { name: "outbox:sendAttachment", delayMs: null } });
+});
+
+test("send-recovery: a Not sent scheduled message can be cancelled", async ({ desk }) => {
+  const page = desk.page;
+  await page.route("**/__fixture/convex", async (route) => {
+    const body = route.request().postDataJSON() as { name: string };
+    if (body.name !== "comma/queries:listScheduled") return route.continue();
+    const response = await route.fetch();
+    const rows = (await response.json()) as { status: string; error?: string }[];
+    await route.fulfill({ response, json: rows.map((row) => ({ ...row, status: "failed", error: "The Mac was asleep" })) });
+  });
+  await openAlex(page);
+  await page.getByRole("button", { name: /^Scheduled/ }).click();
+  await expect(page.getByText("Not sent. The Mac was asleep")).toBeVisible();
+  await page.getByRole("button", { name: /^Cancel scheduled message to / }).click();
+  await expect(page.getByText("Not sent. The Mac was asleep")).toHaveCount(0);
+});
+
+test.describe("slack", () => {
+  const INBOUND = "Are we still on for the load-in at 4?";
+
+  async function openDm(page: Page, desk: { request: import("@playwright/test").APIRequestContext }): Promise<Locator> {
+    await desk.request.post("/__fixture/slack", { data: { seed: true } });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.getByTestId("conversation-row").filter({ hasText: INBOUND }).click();
+    await expect(page.getByPlaceholder("Message Sam Lee")).toBeVisible();
+    return page.getByTestId("thread-view");
+  }
+
+  test("send-recovery: a refused Slack edit says so without a minutes count", async ({ desk }) => {
+    const page = desk.page;
+    await page.route("**/__fixture/convex", async (route) => {
+      const body = route.request().postDataJSON() as { name: string };
+      if (body.name !== "comma/outbox:getCommand") return route.continue();
+      const response = await route.fetch();
+      const receipt = await response.json();
+      if (receipt?.result?.kind === "edit") Object.assign(receipt, { status: "failed", error: "cant_update_message", result: undefined });
+      await route.fulfill({ response, json: receipt });
+    });
+    const thread = await openDm(page, desk);
+    const composer = page.getByPlaceholder("Message Sam Lee");
+    await composer.fill("edit me later");
+    await composer.press("Enter");
+    await thread.getByText("edit me later", { exact: true }).click({ button: "right" });
+    await page.getByRole("menu").getByRole("menuitem", { name: "Edit" }).click();
+    await page.getByPlaceholder("Edit message").fill("edited");
+    await page.getByPlaceholder("Edit message").press("Enter");
+    await expect(page.getByText("Couldn't edit the message. Try again.")).toBeVisible();
+    await expect(page.getByText(/Infinity/)).toHaveCount(0);
+  });
+
+  test("send-recovery: Send later keeps the reply it was written as", async ({ desk }) => {
+    const page = desk.page;
+    const scheduled: { payload?: { replyToGuid?: string; text?: string } }[] = [];
+    page.on("request", (request) => {
+      if (!request.url().endsWith("/__fixture/convex")) return;
+      const body = request.postDataJSON() as { name: string; args: { payload?: { replyToGuid?: string; text?: string } } };
+      if (body.name === "comma/scheduledSends:schedule") scheduled.push(body.args);
+    });
+    const thread = await openDm(page, desk);
+    await thread.getByText(INBOUND, { exact: true }).click({ button: "right" });
+    await page.getByRole("menu").getByRole("menuitem", { name: "Reply" }).click();
+    await page.getByPlaceholder("Message Sam Lee").fill("yes, 4 works");
+    await page.getByRole("button", { name: "Send later" }).click();
+    await page.getByRole("menuitem", { name: "In 1 hour" }).click();
+    await expect.poll(() => scheduled.map((call) => [call.payload?.text, call.payload?.replyToGuid ?? null]))
+      .toEqual([["yes, 4 works", expect.stringMatching(/^D1:/)]]);
+    await expect(page.getByText(/^Replying to:/)).toHaveCount(0);
+  });
 });
 
 test.describe("mail", () => {
