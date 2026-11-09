@@ -33,7 +33,7 @@ import { openChatInfo } from "@/lib/chat-info";
 import { conversationRoute as threadRoute, selectChat } from "@/lib/selection";
 import { openPersonPane } from "@/lib/person-pane";
 import { conversationRoute, hasSendError } from "@shared/imessage";
-import { keyEmoji, PROFILES } from "@shared/platform-profile";
+import { keyEmoji, platformBadge, PROFILES } from "@shared/platform-profile";
 import type { Message, Participant } from "@shared/types";
 import { useMessages, type JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
@@ -53,6 +53,7 @@ import { BlurSwap } from "./motion/blur-swap";
 import { ThreadSkeleton } from "./thread-skeleton";
 import { FaceTimeButton } from "./facetime-button";
 import { IconButton } from "./ui/icon-button";
+import { SourceIcon } from "./service-label";
 import AiChat02Icon from "@hugeicons/core-free-icons/AiChat02Icon";
 import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
 import SidebarRightIcon from "@hugeicons/core-free-icons/SidebarRightIcon";
@@ -600,6 +601,9 @@ export function ThreadView({
               </>
             ) : null}
             <ThreadTitle name={headerChat.displayName} from={advancedFrom} color={theme.text} />
+            <View style={styles.titleSource}>
+              <SourceIcon badge={platformBadge(conversationRoute(headerChat))} size={15} />
+            </View>
             {headerChat.isGroup && headerChat.participants.length > 0 && !onClose && (
               <Text numberOfLines={1} style={[styles.peopleCount, { color: theme.textTertiary }]}>
                 {headerChat.participants.length + 1} people
@@ -1035,6 +1039,7 @@ const styles = StyleSheet.create({
   crumbSlash: { fontSize: 14, marginHorizontal: 8 },
   peopleCount: { flexShrink: 0, fontSize: 12.5, marginLeft: 12 },
   titleSwap: { flexShrink: 1, minWidth: 0 },
+  titleSource: { marginLeft: 6 },
   threadTitle: { ...toolbarTitle, flexShrink: 1 },
   vsep: { height: 16, marginHorizontal: 6, width: 1 },
   searchShelfAction: { alignItems: "center", borderRadius: 6, justifyContent: "center", minWidth: 22, paddingHorizontal: 5, paddingVertical: 3 },

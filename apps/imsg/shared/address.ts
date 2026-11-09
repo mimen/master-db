@@ -1,4 +1,5 @@
-import { dmAddress } from "./imessage";
+import { conversationRoute, dmAddress } from "./imessage";
+import { platformBadge } from "./platform-profile";
 import type { ChatSummary, ConversationId } from "./types";
 
 /**
@@ -144,27 +145,41 @@ export function matchesAnyAddress(candidate: string, known: readonly string[]): 
   return known.some((k) => addressesMatch(candidate, k));
 }
 
+/** What separates one row from another of the same name: the kind of handle it reaches, drawn as a glyph, and the handle. */
+export interface HandleTiebreak {
+  kind: "phone" | "email";
+  address: string;
+}
+
+export function tiebreakLabel(tiebreak: HandleTiebreak): string {
+  return `${tiebreak.kind === "phone" ? "Phone" : "Email"} ${tiebreak.address}`;
+}
+
 /**
- * For one-to-one chats whose display name repeats, the handle that tells them apart
- * (one person's second number, email, or SMS line). Keyed by conversation; absent means
- * the name is already unique and needs no label.
+ * For one-to-one chats whose display name repeats on one service (one person's second number or their email), the
+ * handle that tells them apart. A name repeated across services needs none: the service glyph already does. Keyed by
+ * conversation; absent means the row needs no tiebreak.
  */
 export function disambiguators(
   chats: readonly Pick<ChatSummary, "conversationId" | "displayName" | "isGroup" | "participants" | "route">[],
-): Map<ConversationId, string> {
-  const byName = new Map<string, typeof chats[number][]>();
+): Map<ConversationId, HandleTiebreak> {
+  const bySource = new Map<string, typeof chats[number][]>();
   for (const chat of chats) {
     if (chat.isGroup) continue;
-    const list = byName.get(chat.displayName) ?? [];
+    const key = `${platformBadge(conversationRoute(chat)).label}\n${chat.displayName}`;
+    const list = bySource.get(key) ?? [];
     list.push(chat);
-    byName.set(chat.displayName, list);
+    bySource.set(key, list);
   }
-  const labels = new Map<ConversationId, string>();
-  for (const list of byName.values()) {
+  const tiebreaks = new Map<ConversationId, HandleTiebreak>();
+  for (const list of bySource.values()) {
     if (list.length < 2) continue;
     for (const chat of list) {
-      labels.set(chat.conversationId, formatAddress(dmAddress(chat) ?? ""));
+      const handle = parseHandle(dmAddress(chat) ?? "");
+      if (handle?.kind === "phone" || handle?.kind === "email") {
+        tiebreaks.set(chat.conversationId, { kind: handle.kind, address: HANDLES[handle.kind].format(handle.address) });
+      }
     }
   }
-  return labels;
+  return tiebreaks;
 }

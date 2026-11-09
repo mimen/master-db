@@ -20,14 +20,20 @@ export type Feature =
   | "schedule" | "call" | "faceTimeLink" | "attachments" | "voiceMemo" | "contactCard"
   | "rename" | "participants" | "leaveGroup" | "deleteChat";
 
-/** How a route draws beside a name: its label and the theme colour of its dot. */
+/** How a route draws beside a name: its glyph in its theme colour. The label is what a screen reader says for it. */
 export interface PlatformBadge {
   readonly label: string;
   readonly color: "accent" | "sms" | "icon";
+  readonly glyph: "bubble" | "slack" | "mail" | "dot";
+}
+
+/** What a screen reader says for a source glyph. The personal mailbox is named; the work one is plain Gmail. */
+export function sourceLabel(badge: PlatformBadge, personal = false): string {
+  return badge.glyph === "mail" && personal ? `${badge.label}, personal` : badge.label;
 }
 
 /** A handle no route reaches, such as an Instagram username. */
-export const UNREACHED_BADGE: PlatformBadge = { label: "Other", color: "icon" };
+export const UNREACHED_BADGE: PlatformBadge = { label: "Other", color: "icon", glyph: "dot" };
 
 interface FeatureRule {
   services: readonly RouteService[];
@@ -98,9 +104,9 @@ export interface PlatformProfile extends PlatformRules {
   features: Record<Feature, FeatureRule>;
 }
 
-const IMESSAGE_BADGE: PlatformBadge = { label: "iMessage", color: "accent" };
+const IMESSAGE_BADGE: PlatformBadge = { label: "iMessage", color: "accent", glyph: "bubble" };
 // RCS draws as SMS: BlueBubbles reports its messages as SMS.
-const SMS_BADGE: PlatformBadge = { label: "SMS", color: "sms" };
+const SMS_BADGE: PlatformBadge = { label: "SMS", color: "sms", glyph: "bubble" };
 
 export const IMESSAGE_PROFILE = {
   name: "iMessage",
@@ -156,7 +162,7 @@ const SLACK_SOON: readonly Feature[] = ["mentions", "attachments"];
 /** Milad's Slack workspace, as Milad through a user token. */
 export const SLACK_PROFILE: PlatformProfile = {
   name: "Slack",
-  badges: { Slack: { label: "Slack", color: "icon" } },
+  badges: { Slack: { label: "Slack", color: "icon", glyph: "slack" } },
   // Slack's default lets a member edit or delete their own message at any time.
   editWindowMs: Infinity,
   unsendWindowMs: Infinity,
@@ -195,7 +201,7 @@ const GMAIL_SOON: readonly Feature[] = ["attachments"];
 /** Milad's Google Workspace mailbox. The email composer replaces the chat composer. */
 export const GMAIL_PROFILE: PlatformProfile = {
   name: "Gmail",
-  badges: { Gmail: { label: "Gmail", color: "icon" } },
+  badges: { Gmail: { label: "Gmail", color: "icon", glyph: "mail" } },
   editWindowMs: 0,
   unsendWindowMs: 0,
   unsendLabel: "Undo send",

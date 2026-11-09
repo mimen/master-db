@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, useWindowDimensions, View } from "react-native";
 import Reanimated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
 
+import { SourceIcon } from "./service-label";
 import { Dropdown, type DropdownOption } from "./ui/dropdown";
 import { Springs } from "@/constants/springs";
 import { useTheme } from "@/hooks/use-theme";
@@ -137,6 +138,8 @@ export interface FilterPanelProps {
   showing: number;
   total: number;
   lensLabel: string;
+  /** Today keeps the build's order and has its own Settled section, so Sort and Also include are left out. */
+  today?: boolean;
 }
 
 /** The filter controls, as the desktop popover or the phone sheet. Every change applies live. */
@@ -166,7 +169,7 @@ export function ConversationFiltersPanel(props: FilterPanelProps) {
         options={PEOPLE_ORDER.map((value) => ({ value, label: PEOPLE_LABELS[value] }))}
         onChange={props.onTypeChange} />
       <Field label="Service" icon="chatbubble-outline" phone={phone} value={r.service}
-        options={serviceOptions(props.platforms).map(({ value, label, badge }) => ({ value, label, dot: badge ? theme[badge.color] : undefined }))}
+        options={serviceOptions(props.platforms).map(({ value, label, badge }) => ({ value, label, icon: badge ? <SourceIcon badge={badge} decorative /> : undefined }))}
         onChange={(service) => set({ service })} />
       <Field label="Time" icon="time-outline" phone={phone} value={r.time}
         options={TIMES.map((value) => ({ value, label: TIME_LABELS[value] }))}
@@ -174,9 +177,11 @@ export function ConversationFiltersPanel(props: FilterPanelProps) {
       <Field label="Priority" icon="star-outline" phone={phone} value={r.priority}
         options={PRIORITIES.map((value) => ({ value, label: PRIORITY_LABELS[value] }))}
         onChange={(priority) => set({ priority })} />
-      <Field label="Sort" icon="swap-vertical-outline" phone={phone} value={r.oldestFirst ? "oldest" : "newest"}
-        options={[{ value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" }]}
-        onChange={(order) => set({ oldestFirst: order === "oldest" })} />
+      {props.today ? null : (
+        <Field label="Sort" icon="swap-vertical-outline" phone={phone} value={r.oldestFirst ? "oldest" : "newest"}
+          options={[{ value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" }]}
+          onChange={(order) => set({ oldestFirst: order === "oldest" })} />
+      )}
       {/* The shared dropdown picks one value, so Tags narrows to a single tag. */}
       <Field label="Tags" icon="pricetag-outline" phone={phone} value={r.tags[0] ?? ANY_TAG}
         options={[{ value: ANY_TAG, label: "Any tag" }, ...props.tags.map((value) => ({ value, label: value }))]}
@@ -224,7 +229,7 @@ export function ConversationFiltersPanel(props: FilterPanelProps) {
           </View>
           {controls}
           {toggles("Only show", ONLY_KEYS)}
-          {toggles("Also include", INCLUDE_KEYS)}
+          {props.today ? null : toggles("Also include", INCLUDE_KEYS)}
           <View style={styles.popFooter}>
             <Pressable accessibilityRole="button" onPress={props.onClearAll} hitSlop={6} style={NO_SELECT}>
               <Text style={[styles.footerClear, { color: theme.textSecondary }]}>Clear all</Text>
@@ -260,7 +265,7 @@ export function ConversationFiltersPanel(props: FilterPanelProps) {
         <ScrollView contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled">
           {controls}
           {toggles("Only show", ONLY_KEYS)}
-          {toggles("Also include", INCLUDE_KEYS)}
+          {props.today ? null : toggles("Also include", INCLUDE_KEYS)}
         </ScrollView>
         <Pressable accessibilityRole="button" onPress={onClose} style={[styles.showButton, { backgroundColor: theme.switchOn }]}>
           <Text style={[styles.showLabel, { color: theme.background }]}>

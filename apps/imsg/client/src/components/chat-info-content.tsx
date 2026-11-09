@@ -41,7 +41,7 @@ import { mediaApi } from "@/lib/media-api";
 import { MediaUnavailable } from "./media";
 import { CenteredSpinner } from "./empty-state";
 import { ListRow } from "./list-row";
-import { ServiceLabel } from "./service-label";
+import { SourceIcon } from "./service-label";
 import { TriageGeometry } from "@/constants/triage-theme";
 import { useTheme } from "@/hooks/use-theme";
 import type { ThemeColors } from "@/components/ui/interaction";
@@ -353,7 +353,7 @@ export function ChatInfoContent({
                 >
                   <Text style={[styles.handleKind, { color: theme.textTertiary, fontSize: type.caption }]}>{p.address.includes("@") ? "email" : "phone"}</Text>
                   <Text numberOfLines={1} style={[styles.handleValue, { color: theme.text, fontSize: type.body }]}>{formatAddress(p.address)}</Text>
-                  {badge && <ServiceLabel badge={badge} size={type.caption} />}
+                  {badge && <SourceIcon badge={badge} />}
                 </Pressable>
                 </ContextMenuArea>
               );
@@ -380,7 +380,7 @@ export function ChatInfoContent({
                   leading={<PersonAvatar address={p.address} name={p.name ?? formatAddress(p.address)} size={36} />}
                   title={p.name ?? formatAddress(p.address)}
                   subtitle={p.name ? formatAddress(p.address) : undefined}
-                  trailing={badge ? <ServiceLabel badge={badge} size={type.caption} /> : undefined}
+                  trailing={badge ? <SourceIcon badge={badge} /> : undefined}
                 />
                 </ContextMenuArea>
               );

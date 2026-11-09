@@ -2,8 +2,9 @@ import { Redirect, router, Stack, useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { formatAddress } from "@shared/address";
-import { dmAddress } from "@shared/imessage";
+import { formatAddress, parseHandle } from "@shared/address";
+import { conversationRoute, dmAddress } from "@shared/imessage";
+import { platformBadge } from "@shared/platform-profile";
 import type { ChatSummary, ConversationId } from "@shared/types";
 import { useAgentEnabled } from "@/hooks/use-agent";
 import { useConversation } from "@/hooks/use-chat-directory";
@@ -12,6 +13,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { ChatAvatar, PersonAvatar } from "@/components/avatar";
 import { ThreadView } from "@/components/lazy-surfaces";
 import { FaceTimeButton } from "@/components/facetime-button";
+import { SourceIcon } from "@/components/service-label";
 import { openAgentPane } from "@/lib/agent-pane";
 import { openThreadSearch } from "@/lib/thread-search";
 import { goBackOrHome } from "@/lib/back-navigation";
@@ -20,18 +22,23 @@ import type { JumpTarget } from "@/hooks/use-messages";
 function HeaderTitle({ chat, maxWidth }: { chat: ChatSummary | null | undefined; maxWidth: number }) {
   const theme = useTheme();
   const address = chat ? dmAddress(chat) : null;
+  // A Slack user id reads as nothing; the glyph says Slack.
+  const shownAddress = address && parseHandle(address)?.kind !== "slack" ? formatAddress(address) : null;
   return (
     <View style={[headerStyles.container, { maxWidth }]}>
       {chat ? <ChatAvatar chat={chat} size={32} /> : <PersonAvatar address={null} name="" size={32} />}
       <View style={headerStyles.identityText}>
-        <Text numberOfLines={1} style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>
-          {chat?.displayName ?? ""}
-        </Text>
+        <View style={headerStyles.nameRow}>
+          <Text numberOfLines={1} style={[headerStyles.name, { color: theme.text }]}>
+            {chat?.displayName ?? ""}
+          </Text>
+          {chat ? <SourceIcon badge={platformBadge(conversationRoute(chat))} size={14} /> : null}
+        </View>
         {chat?.isGroup && chat.participants.length > 0 && (
           <Text style={{ color: theme.textSecondary, fontSize: 11 }}>{chat.participants.length} people</Text>
         )}
-        {address && (
-          <Text numberOfLines={1} style={{ color: theme.textSecondary, fontSize: 11 }}>{formatAddress(address)}</Text>
+        {shownAddress && (
+          <Text numberOfLines={1} style={{ color: theme.textSecondary, fontSize: 11 }}>{shownAddress}</Text>
         )}
       </View>
     </View>
@@ -46,6 +53,16 @@ const headerStyles = StyleSheet.create({
   },
   identityText: {
     flexShrink: 1,
+  },
+  nameRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 5,
+  },
+  name: {
+    flexShrink: 1,
+    fontSize: 15,
+    fontWeight: "600",
   },
 });
 
