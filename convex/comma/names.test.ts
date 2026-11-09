@@ -30,6 +30,11 @@ describe("resolveConversationNames", () => {
     expect(unnamed).toMatchObject({ displayName: "Alex Rivera, (619) 555-0999", known: true });
   });
 
+  test("the user's own Slack DM reads as You, not as Slack", () => {
+    expect(resolveConversationNames({ platform: "slack", isGroup: false, displayName: "Slack", participants: [] }, []).displayName).toBe("You");
+    expect(resolveConversationNames({ platform: "imessage", isGroup: false, displayName: "Stored", participants: [] }, []).displayName).toBe("Stored");
+  });
+
   test("a group stored before rawDisplayName existed keeps its stored name", () => {
     const participants = [{ address: "+16195550101", name: null }, { address: "+16195550103", name: null }];
     const names = resolveConversationNames({ isGroup: true, displayName: "Old Title", participants }, [alex, sam]);
