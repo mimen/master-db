@@ -21,7 +21,7 @@ const RISE = 10;
 
 interface Toast {
   readonly message: string;
-  readonly action?: ToastAction;
+  readonly actions: readonly ToastAction[];
 }
 
 const ToastContext = createContext<{
@@ -38,8 +38,8 @@ const PLAIN_MS = 2200;
 const ACTION_MS = 5000;
 
 /** Fire-and-forget feedback; safe to call from anywhere. */
-export function showToast(message: string, action?: ToastAction): void {
-  listener?.({ message, action });
+export function showToast(message: string, action?: ToastAction | readonly ToastAction[]): void {
+  listener?.({ message, actions: action === undefined ? [] : "label" in action ? [action] : action });
 }
 
 export function ToastAnchor({ children, active }: { readonly children: ReactNode; readonly active: boolean }) {
@@ -101,7 +101,7 @@ export function ToastHost({ children }: { readonly children: ReactNode }) {
       setToast(next);
       setShown(true);
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => setShown(false), next.action ? ACTION_MS : PLAIN_MS);
+      timer.current = setTimeout(() => setShown(false), next.actions.length ? ACTION_MS : PLAIN_MS);
     };
     return () => {
       listener = null;
@@ -129,17 +129,18 @@ export function ToastHost({ children }: { readonly children: ReactNode }) {
     transform: [{ translateY: shown ? Math.max(0, 1 - progress.value) * RISE : 0 }],
   }));
 
-  const action = toast?.action;
+  const actions = toast?.actions ?? [];
   const pill = toast && (
     <Reanimated.View
       role="status"
       accessibilityLiveRegion="polite"
-      pointerEvents={action && shown ? "box-none" : "none"}
+      pointerEvents={actions.length && shown ? "box-none" : "none"}
       style={[styles.toast, { backgroundColor: c.toastBg }, motion]}
     >
       <Text style={[styles.text, { color: c.toastText }]}>{toast.message}</Text>
-      {action && (
+      {actions.map((action) => (
         <Pressable
+          key={action.label}
           accessibilityRole="button"
           accessibilityLabel={action.label}
           onPress={() => {
@@ -152,7 +153,7 @@ export function ToastHost({ children }: { readonly children: ReactNode }) {
           <Text style={[styles.actionText, { color: c.toastAction }]}>{action.label}</Text>
           {action.hint && <Text style={[styles.hint, { color: c.toastAction }]}>{action.hint}</Text>}
         </Pressable>
-      )}
+      ))}
     </Reanimated.View>
   );
   return (

@@ -4,7 +4,7 @@ import { fromBridgeMessage } from "@shared/imessage";
 import { NOT_SENT_AFTER_MS, NOT_SENT_ERROR } from "@shared/pending-send";
 import type { BridgeMessage, ChatSummary, ConversationId } from "@shared/types";
 import type { CommandReceipt } from "./command-results";
-import { pendingSends, resetPendingSendsForTests, SendCancelledError, withPendingSends, type KeptSend, type SendClient, type SendStore } from "./pending-sends";
+import { onSendFailure, pendingSends, resetPendingSendsForTests, SendCancelledError, withPendingSends, type KeptSend, type SendClient, type SendStore } from "./pending-sends";
 
 const ALEX = "conv-alex" as ConversationId;
 const alex = { conversationId: ALEX, isGroup: false, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: "iMessage;-;+16195550101" } } };
@@ -58,6 +58,7 @@ function outbox(connected = true) {
   const connection = new Set<() => void>();
   const calls: string[] = [];
   let online = connected;
+  let refusals: Error[] = [];
   const insert = (clientKey: string, payload: unknown) => {
     const row = rows.get(clientKey) ?? { commandId: `cmd-${clientKey}`, clientKey, status: "pending", updatedAt: 0, payload } as never;
     rows.set(clientKey, row);
@@ -67,7 +68,11 @@ function outbox(connected = true) {
     mutation: async (ref: unknown, args: Record<string, unknown>) => {
       const name = getFunctionName(ref as never);
       calls.push(`${name}:${String(args.clientKey)}`);
-      if (name === "comma/outbox:enqueue") return insert(String(args.clientKey), args.payload);
+      if (name === "comma/outbox:enqueue") {
+        const refusal = refusals.shift();
+        if (refusal) throw refusal;
+        return insert(String(args.clientKey), args.payload);
+      }
       const row = rows.get(String(args.clientKey));
       if (name === "comma/pendingSends:cancelSend") {
         if (row && row.status !== "pending") return false;
@@ -95,6 +100,10 @@ function outbox(connected = true) {
     client,
     calls,
     rows,
+    /** The next enqueue is refused by Convex, the way an unsupported route or a lost login is. */
+    refuseNext(error: Error) {
+      refusals.push(error);
+    },
     setOnline(next: boolean) {
       online = next;
       for (const callback of [...connection]) callback();
@@ -163,6 +172,80 @@ describe("a send while Convex is reachable", () => {
     box.finish(keyOf(), { status: "claimed" });
     expect(await pendingSends.cancel(ALEX, pendingSends.read(ALEX)[0]!, box.client)).toBe(false);
     expect(shown()).toEqual([[`temp-${keyOf()}`, "queued"]]);
+  });
+});
+
+describe("a send that did not go out", () => {
+  test("Convex refusing it at enqueue leaves a key Retry can queue again, not one retrySend refuses", async () => {
+    const box = outbox();
+    box.refuseNext(new Error("Unauthorized"));
+    const failed = pendingSends.send(alex, { text: "hi" }, box.client).catch((error: unknown) => error);
+    expect((await failed as Error).message).toBe("Unauthorized");
+    const key = keyOf();
+    expect(shown()).toEqual([[`temp-${key}`, "failed"]]);
+
+    const retried = pendingSends.retry(ALEX, pendingSends.read(ALEX)[0]!, box.client);
+    await flush();
+    expect(box.calls).toEqual([`comma/outbox:enqueue:${key}`, `comma/outbox:enqueue:${key}`]);
+    box.finish(key, sent("REAL"));
+    expect((await retried).guid).toBe("REAL");
+  });
+
+  test("tells the failure listeners once, with the stranded bubble Retry takes, and not for a send the user cancelled", async () => {
+    const box = outbox();
+    const heard: Array<[ConversationId, string | undefined, string]> = [];
+    const stop = onSendFailure(({ conversationId, bubble }) => heard.push([conversationId, bubble.sendState, bubble.guid]));
+    const failed = pendingSends.send(alex, { text: "hi" }, box.client).catch(() => undefined);
+    await flush();
+    const key = keyOf();
+    box.finish(key, { status: "failed", error: "offline" });
+    await failed;
+    expect(heard).toEqual([[ALEX, "failed", `temp-${key}`]]);
+
+    const cancelled = pendingSends.send(alex, { text: "two" }, box.client).catch(() => undefined);
+    await flush();
+    await pendingSends.cancel(ALEX, pendingSends.read(ALEX).at(-1)!, box.client);
+    await cancelled;
+    expect(heard).toHaveLength(1);
+    stop();
+  });
+
+  test("Discard takes a failed send off the thread", async () => {
+    const box = outbox();
+    const failed = pendingSends.send(alex, { text: "hi" }, box.client).catch(() => undefined);
+    await flush();
+    box.finish(keyOf(), { status: "failed", error: "offline" });
+    await failed;
+    box.rows.clear();
+    expect(await pendingSends.cancel(ALEX, pendingSends.read(ALEX)[0]!, box.client)).toBe(true);
+    expect(shown()).toEqual([]);
+  });
+});
+
+describe("a Slack reply sent from the channel", () => {
+  const CHANNEL = "conv-bookings" as ConversationId;
+  const bookings = { conversationId: CHANNEL, isGroup: true, route: { platform: "slack" as const, accountId: "acct", slack: { channel: "C1" } } } as unknown as Pick<ChatSummary, "conversationId" | "route" | "isGroup">;
+
+  test("lands in the thread's conversation, so the channel keeps no copy of it", async () => {
+    const box = outbox();
+    const landed = pendingSends.send(bookings, { text: "on it", replyTo: { guid: "C1:100.1", text: "who's on load-in?", isFromMe: false } }, box.client);
+    await flush();
+    const key = pendingSends.read(CHANNEL)[0]!.clientKey!;
+    box.finish(key, { status: "sent", result: { kind: "send", guid: "C1:200.2", slack: { ts: "200.2", threadTs: "100.1", user: "U1", text: "on it" } } as never });
+    expect((await landed).guid).toBe("C1:200.2");
+    expect(pendingSends.read(CHANNEL)).toEqual([]);
+  });
+
+  test("a reply inside the thread's own conversation stays there", async () => {
+    const THREAD = "conv-thread" as ConversationId;
+    const thread = { conversationId: THREAD, isGroup: true, route: { platform: "slack" as const, accountId: "acct", slack: { channel: "C1", threadTs: "100.1" } } } as unknown as Pick<ChatSummary, "conversationId" | "route" | "isGroup">;
+    const box = outbox();
+    const landed = pendingSends.send(thread, { text: "same", replyTo: { guid: "C1:150.5", text: "earlier", isFromMe: false } }, box.client);
+    await flush();
+    const key = pendingSends.read(THREAD)[0]!.clientKey!;
+    box.finish(key, { status: "sent", result: { kind: "send", guid: "C1:300.3", slack: { ts: "300.3", threadTs: "100.1", user: "U1", text: "same" } } as never });
+    await landed;
+    expect(pendingSends.read(THREAD).map((m) => m.guid)).toEqual(["C1:300.3"]);
   });
 });
 

@@ -6,6 +6,7 @@ import { internalAction, internalMutation, type ActionCtx, type MutationCtx } fr
 import { gmailMessageValue, type CommandResult, type CommaRoute } from "../schema/comma/validators";
 
 import { gmail } from "./conversationIdentity";
+import { EMAIL_FILES_LIMIT, MAX_EMAIL_FILES_BYTES } from "./enqueue";
 import { findByKey } from "./conversationLookup";
 import { GMAIL_API, GMAIL_UPLOAD, googleApi, GoogleApiError } from "./gmailApi";
 import { parseAddresses, parseGmailMessage, type EmailAddress, type RawGmailMessage } from "./gmailMessage";
@@ -32,7 +33,6 @@ type Header = { name: string; value: string };
 type RawThread = { messages?: (RawGmailMessage & { payload?: { headers?: Header[] } })[] };
 
 /** Gmail's own cap on what one email's files add up to. */
-export const MAX_EMAIL_FILES_BYTES = 25 * 1024 * 1024;
 
 /** Waits before each retry of a rate-limited request. A backfill can hold the mailbox's per-user quota for a while. */
 const RATE_LIMIT_WAITS_MS = [2_000, 5_000, 10_000];
@@ -164,7 +164,7 @@ async function storedFiles(ctx: ActionCtx, payload: SendKind): Promise<Stored[]>
     const blob = await ctx.storage.get(attachment.storageId);
     if (!blob) throw new NotSentError(`${attachment.filename} is no longer stored`);
     total += blob.size;
-    if (total > MAX_EMAIL_FILES_BYTES) throw new NotSentError("The files are over Gmail's 25 MB limit");
+    if (total > MAX_EMAIL_FILES_BYTES) throw new NotSentError(EMAIL_FILES_LIMIT);
     files.push({ ...attachment, bytes: new Uint8Array(await blob.arrayBuffer()) });
   }
   return files;

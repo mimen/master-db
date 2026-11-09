@@ -63,7 +63,6 @@ import {
   type PendingAttachmentAsset,
 } from "@/lib/attachments";
 import { appleMapsLocationUrl, webLocationBlockReason } from "@/lib/message-actions";
-import { burstGate } from "@/lib/burst-gate";
 import { formatRecordingClock, type VoiceMemoEnd, voiceMemoOutcome } from "@/lib/voice-memo";
 import { PersonAvatar } from "./avatar";
 import { OverlayShell } from "./overlay-shell";
@@ -107,8 +106,6 @@ interface PendingAttachment extends PendingAttachmentAsset {
   voice?: true;
 }
 
-/** One toast per burst of failed sends, shared across composers and chats. */
-const sendFailureToast = burstGate(5_000);
 /** Matches MorphSendButton's check hold. */
 const SENT_HOLD_MS = 900;
 
@@ -174,14 +171,14 @@ function GhostText({ text, shown, card, fontSize, color, onHeight }: {
 }
 
 
-/** A voice memo on its way: the audio bubble draws now, and plays once the recorder hands over its file. */
-function tempVoiceMessage(chat: Pick<ChatSummary, "route" | "isGroup">, filename: string): Message {
-  const temp = draftBubble(chat, { text: "" });
+/** An attachment on its way: its bubble draws now. A voice memo's plays once the recorder hands over its file. */
+function tempAttachmentMessage(chat: Pick<ChatSummary, "route" | "isGroup">, file: { name: string; mime: string; uri: string | null }, caption = ""): Message {
+  const temp = draftBubble(chat, { text: caption });
   return {
     ...temp,
     // An upload on its way, past cancelling.
     sendState: "sending",
-    attachments: [{ guid: `${temp.guid}-audio`, mimeType: "audio/mp4", filename, originalUrl: null, width: null, height: null, totalBytes: null }],
+    attachments: [{ guid: `${temp.guid}-file`, mimeType: file.mime, filename: file.name, originalUrl: file.uri, width: null, height: null, totalBytes: null }],
   };
 }
 
@@ -301,6 +298,8 @@ export function Composer({
   const showSheet = useActionSheet();
   const [keyboardUp, setKeyboardUp] = useState(false);
   const [text, setText] = useState(() => getDraft(conversationId));
+  const textRef = useRef(text);
+  textRef.current = text;
   const [inputHeight, setInputHeight] = useState(IOS_INPUT_MIN_HEIGHT);
   const [selection, setSelection] = useState({ start: text.length, end: text.length });
   const onSelection = (next: { start: number; end: number }): void =>
@@ -383,19 +382,26 @@ export function Composer({
     replacePending([]);
   }, [conversationId, replacePending]);
 
+  // An edit borrows the field; the draft it covered comes back when the edit is sent or cancelled.
+  const wasEditing = useRef(false);
   useEffect(() => {
     if (editing) {
+      wasEditing.current = true;
       suggestionAttribution.current = null;
       setText(editing.text);
       setSelection({ start: editing.text.length, end: editing.text.length });
       setMentions([]);
+    } else if (wasEditing.current) {
+      wasEditing.current = false;
+      loadRemoteDraft(getDraft(conversationId));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs as an edit starts and ends, not on a conversation switch.
   }, [editing]);
 
   // Suggestion shelf drops text in here for editing; never auto-sends.
   useEffect(
     () =>
-      onFillComposer((fill) => {
+      onFillComposer(conversationId, (fill) => {
         setText(fill.text);
         setSelection({ start: fill.text.length, end: fill.text.length });
         setMentions([]);
@@ -527,56 +533,69 @@ export function Composer({
       const rollback = onEdit(editing.guid, { kind: "edit", text: trimmed });
       clearText();
       onClearEditing();
-      runCommand(conversationId, { kind: "edit", messageGuid: editing.guid, text: trimmed }).catch(() => {
+      runCommand(conversationId, { kind: "edit", messageGuid: editing.guid, text: trimmed }).catch((error: unknown) => {
         rollback();
-        showToast(`Couldn't edit. Messages can only be edited for ${config.editWindowMs / 60_000} minutes.`);
+        showToast(messagingCommandError(error, Number.isFinite(config.editWindowMs)
+          ? `Couldn't edit. Messages can only be edited for ${config.editWindowMs / 60_000} minutes.`
+          : "Couldn't edit the message. Try again."));
       });
       return;
     }
 
     setTyping(false);
 
-    // Send staged attachments first (plain text rides the first one as a
-    // caption). A real mention stays a separate attributed text message because
-    // BlueBubbles' attachment subject field cannot carry mention runs.
+    // Send staged attachments first (plain text rides the first one as a caption). A mention or a reply goes as its own
+    // text message after them: BlueBubbles' attachment subject carries neither mention runs nor a reply target.
     if (staged.length > 0) {
       const attachments = staged;
-      const caption = outgoingMentions.length === 0 ? trimmed || undefined : undefined;
+      const textApart = trimmed.length > 0 && (outgoingMentions.length > 0 || replyTo !== null);
+      const caption = textApart ? undefined : trimmed || undefined;
       replacePending([]);
       clearText();
-      setDraft(conversationId, "");
       setBusy(true);
       // Confirm on touch-up, not on upload completion — Apple plays the whoosh
       // when you commit, and a confirmation that waits on the network reads as lag.
       playSend();
       hapticSend();
       setSendStatus("sending");
+      let sent = 0;
+      let textSent = false;
       try {
-        for (let i = 0; i < attachments.length; i++) {
-          const attachment = attachments[i];
-          if (attachment) await uploadAsset(attachment, i === 0 ? caption : undefined);
+        for (const attachment of attachments) {
+          await uploadAsset(attachment, sent === 0 ? caption : undefined);
+          sent++;
         }
-        if (trimmed && outgoingMentions.length > 0) {
-          const mentionMessage = await api.sendText(conversationId, {
+        if (textApart) {
+          const textMessage = await api.sendText(conversationId, {
             text: trimmed,
             replyToGuid: replyTo?.guid,
-            mentions: outgoingMentions,
+            ...(outgoingMentions.length ? { mentions: outgoingMentions } : {}),
           });
+          textSent = true;
           onSent(
-            (mentionMessage.mentions ?? []).length > 0
-              ? mentionMessage
-              : { ...mentionMessage, mentions: outgoingMentions },
+            (textMessage.mentions ?? []).length > 0 || outgoingMentions.length === 0
+              ? textMessage
+              : { ...textMessage, mentions: outgoingMentions },
           );
         }
+        setDraft(conversationId, "");
         onClearReply();
         setSendStatus("sent");
         // No playSend() here — confirmation already fired on touch-up above.
       } catch (error) {
         setSendStatus("idle");
         hapticFailure();
+        // What did not go out comes back: the files still to send, and the text unless it already went.
+        stage(attachments.slice(sent));
+        const textLeft = (caption !== undefined && sent === 0) || (textApart && !textSent);
+        if (textLeft && textRef.current.trim().length === 0) {
+          setText(trimmed);
+          setMentions(outgoing.mentions);
+          setSelection({ start: trimmed.length, end: trimmed.length });
+        }
         showToast(messagingCommandError(error, `Couldn't send the attachment. ${checkExecutor}`));
       } finally {
-        for (const attachment of attachments) cleanupPendingAttachment(attachment);
+        for (const attachment of attachments.slice(0, sent)) cleanupPendingAttachment(attachment);
         setBusy(false);
       }
       return;
@@ -601,29 +620,43 @@ export function Composer({
       setSendStatus("sent");
     } catch (error) {
       setSendStatus("idle");
-      if (error instanceof SendCancelledError) return;
-      hapticFailure();
-      if (sendFailureToast()) showToast(messagingCommandError(error, `Couldn't send. ${checkExecutor}`));
+      // pendingSends toasts the failure, with Retry and Open, wherever the user has gone.
+      if (!(error instanceof SendCancelledError)) hapticFailure();
     }
   };
 
   sendRef.current = () => void send();
 
+  /** The bubble draws on the tap and becomes the sent message; one that fails comes off the thread and back to staging. */
   const uploadAsset = async (att: PendingAttachment, caption?: string) => {
-    if (att.contact) {
-      onSent(await api.sendContactCard(conversationId, att.contact, caption));
-      return;
+    const temp = tempAttachmentMessage({ ...chat, isGroup }, { name: att.name, mime: att.mime, uri: att.contact ? null : att.uri }, caption);
+    onOptimistic(temp);
+    try {
+      onSettled(temp.guid, att.contact
+        ? await api.sendContactCard(conversationId, att.contact, caption)
+        : await uploadAndSendAttachment(conversationId, {
+          ...(att.storageId ? { storageId: att.storageId } : { uri: att.uri }), filename: att.name, mimeType: att.mime,
+          caption, isAudioMessage: att.voice === true,
+        }));
+    } catch (error) {
+      onWithdraw(temp.guid);
+      throw error;
     }
-    onSent(await uploadAndSendAttachment(conversationId, {
-      ...(att.storageId ? { storageId: att.storageId } : { uri: att.uri }), filename: att.name, mimeType: att.mime,
-      caption, isAudioMessage: att.voice === true,
-    }));
   };
 
   // Attachments are staged as drafts above the composer; nothing sends until
   // the user hits the send button.
+  const canRef = useRef(can);
+  canRef.current = can;
   const stage = useCallback(
-    (assets: PendingAttachment[]): void => {
+    (offered: PendingAttachment[]): void => {
+      // Every way in (the + sheet, drop, paste, an agent's draft) meets the route's attachment support.
+      const refused = reasonOf(canRef.current("attachments"));
+      const assets = refused ? offered.filter((asset) => asset.contact || asset.voice) : offered;
+      if (assets.length < offered.length) {
+        for (const asset of offered) if (!assets.includes(asset)) cleanupPendingAttachment(asset);
+        showToast(refused!);
+      }
       if (assets.length === 0) return;
       const merged = mergePendingAttachments(pendingRef.current, assets);
       for (const rejected of merged.rejected) cleanupPendingAttachment(rejected);
@@ -858,7 +891,7 @@ ${url}` : url;
     const outcome = voiceMemoOutcome(end, Date.now() - startedAt);
     // The bubble goes up on the release; the web recorder only hands over its file a beat later.
     const filename = `voice-${Date.now()}.m4a`;
-    const temp = outcome === "send" ? tempVoiceMessage({ ...chat, isGroup }, filename) : null;
+    const temp = outcome === "send" ? tempAttachmentMessage({ ...chat, isGroup }, { name: filename, mime: "audio/mp4", uri: null }) : null;
     if (temp) {
       onOptimistic(temp);
       setBusy(true);
@@ -888,6 +921,14 @@ ${url}` : url;
   };
 
   // ------------------------------------------------------- scheduled send
+  const scheduleLater = (scheduledText: string, at: number) => {
+    const outgoing = trimMentionAnnotations(scheduledText, mentions);
+    return api.schedule(chat, {
+      text: outgoing.text,
+      ...(replyTo ? { replyToGuid: replyTo.guid } : {}),
+      ...(can("mentions")?.ok && outgoing.mentions.length ? { mentions: outgoing.mentions } : {}),
+    }, at);
+  };
   const openScheduleSheet = () => {
     const trimmed = text.trim();
     if (!trimmed || pending.length > 0) return;
@@ -896,19 +937,27 @@ ${url}` : url;
       showToast(schedule.reason);
       return;
     }
+    // BlueBubbles schedules text alone, so a reply or a mention would go out as plain text.
+    if (chat.route.platform === "imessage" && (replyTo || mentions.length > 0)) {
+      showToast(`Send later can't keep ${replyTo ? "a reply" : "a mention"} on iMessage yet. Send it now instead.`);
+      return;
+    }
     const actions = [
       ...scheduleOptions().map((option) => ({
         label: option.label,
         onPress: () => {
           // Clears and confirms on the tap; a failure puts the text back with the error.
+          const restore = { text, mentions };
+          void scheduleLater(trimmed, option.at).catch((error: unknown) => {
+            setText(restore.text);
+            setMentions(restore.mentions);
+            setDraft(conversationId, restore.text);
+            showToast(messagingCommandError(error, "Couldn't schedule the message. Try again."));
+          });
           clearText();
           setDraft(conversationId, "");
+          onClearReply();
           showToast(`Scheduled ${option.label.toLowerCase()}`);
-          api.schedule(chat, trimmed, option.at).catch(() => {
-            setText(trimmed);
-            setDraft(conversationId, trimmed);
-            showToast("Couldn't schedule the message. Try again.");
-          });
         },
       })),
       {
@@ -1015,7 +1064,7 @@ ${url}` : url;
   const sendControl = (canSend || sendStatus !== "idle") && !recording ? (
     <View ref={sendBtnRef}>
       {/* New text brings the arrow straight back, so a second send never waits on the first. */}
-      <MorphSendButton status={canSend ? "idle" : sendStatus} disabled={busy && sendStatus === "idle"} onPress={() => { void send(); inputRef.current?.focus(); }} color={sendColor} />
+      <MorphSendButton status={canSend ? "idle" : sendStatus} onPress={() => { void send(); inputRef.current?.focus(); }} color={sendColor} />
     </View>
   ) : (
     <Pressable
@@ -1169,9 +1218,10 @@ ${url}` : url;
         anchor={scheduleAnchor}
         onClose={() => setCustomScheduleOpen(false)}
         onSubmit={async (scheduledText, sendAt) => {
-          await api.schedule(chat, scheduledText, sendAt);
+          await scheduleLater(scheduledText, sendAt);
           clearText();
           setDraft(conversationId, "");
+          onClearReply();
           showToast("Message scheduled");
         }}
       />
@@ -1304,9 +1354,9 @@ ${url}` : url;
               ref={scheduleBtnRef}
               accessibilityRole="button"
               accessibilityLabel="Send later"
-              accessibilityState={{ disabled: !canSchedule || busy || recording }}
+              accessibilityState={{ disabled: !canSchedule || recording }}
               onPress={openScheduleSheet}
-              disabled={!canSchedule || busy || recording}
+              disabled={!canSchedule || recording}
               style={({ hovered, pressed }) => [styles.toolChip, { opacity: canSchedule ? 1 : 0.5 }, canSchedule && (hovered || pressed) && { backgroundColor: theme.rowHover }]}
             >
               <Ionicons name="time-outline" size={15} color={theme.icon} />
@@ -1332,7 +1382,6 @@ ${url}` : url;
                 accessibilityRole="button"
                 accessibilityLabel="Send later"
                 onPress={openScheduleSheet}
-                disabled={busy}
                 hitSlop={6}
                 style={({ hovered, pressed }) => [styles.scheduleCaret, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
               >
@@ -1343,7 +1392,8 @@ ${url}` : url;
           </View>
         </View>
       )}
-      <SuggestionAlternates state={replySuggestions} wide={card} />
+      {/* Picking one replaces the field, so they stand aside while it holds text. */}
+      {text.length === 0 && <SuggestionAlternates state={replySuggestions} wide={card} />}
     </View>
   );
 }

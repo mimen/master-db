@@ -1,4 +1,4 @@
-import type { ReplySuggestion, SuggestionModel } from "@shared/types";
+import type { ConversationId, ReplySuggestion, SuggestionModel } from "@shared/types";
 
 export interface SuggestionAttribution {
   suggestion: ReplySuggestion;
@@ -14,17 +14,21 @@ export interface ComposerFill {
 }
 
 type Listener = (fill: ComposerFill) => void;
-const listeners: Listener[] = [];
+const listeners: { conversationId: ConversationId; listener: Listener }[] = [];
 
-/** Fill the active composer. Supplying attribution enables local edit learning. */
-export function fillComposer(text: string, attribution: SuggestionAttribution | null = null): void {
-  listeners[listeners.length - 1]?.({ text, attribution });
+/**
+ * Fill the composer of `conversationId`: a Slack thread open beside its channel mounts two. Supplying attribution
+ * enables local edit learning.
+ */
+export function fillComposer(conversationId: ConversationId, text: string, attribution: SuggestionAttribution | null = null): void {
+  listeners.findLast((entry) => entry.conversationId === conversationId)?.listener({ text, attribution });
 }
 
-export function onFillComposer(cb: Listener): () => void {
-  listeners.push(cb);
+export function onFillComposer(conversationId: ConversationId, listener: Listener): () => void {
+  const entry = { conversationId, listener };
+  listeners.push(entry);
   return () => {
-    const index = listeners.lastIndexOf(cb);
+    const index = listeners.lastIndexOf(entry);
     if (index >= 0) listeners.splice(index, 1);
   };
 }

@@ -1,3 +1,4 @@
+import type { MentionAnnotation } from "@shared/mentions";
 import { messageToMessage } from "./convex-adapters";
 import { scheduledSendsApi } from "./convex-api";
 import { runCommand } from "./convex-commands";
@@ -73,9 +74,9 @@ export const api = {
   leaveGroup: messagingApi.leaveGroup,
   deleteChat: messagingApi.deleteChat,
   /** iMessage schedules in BlueBubbles; Slack and Gmail in Convex, which sends at the time. */
-  async schedule(chat: Pick<ChatSummary, "conversationId" | "route">, text: string, sendAt: number): Promise<void> {
-    if (chat.route.platform === "imessage") await runCommand(chat.conversationId, { kind: "schedule", text, sendAt });
-    else await convexClient.mutation(scheduledSendsApi.schedule, { conversationId: chat.conversationId, payload: { kind: "send", text }, sendAt });
+  async schedule(chat: Pick<ChatSummary, "conversationId" | "route">, message: { text: string; replyToGuid?: string; mentions?: MentionAnnotation[] }, sendAt: number): Promise<void> {
+    if (chat.route.platform === "imessage") await runCommand(chat.conversationId, { kind: "schedule", text: message.text, sendAt });
+    else await convexClient.mutation(scheduledSendsApi.schedule, { conversationId: chat.conversationId, payload: { kind: "send", ...message }, sendAt });
   },
   async updateScheduled(item: ScheduledItem, text: string, sendAt: number): Promise<void> {
     if (item.bbId === undefined) await convexClient.mutation(scheduledSendsApi.edit, { scheduledId: commaScheduledId(item), text, sendAt });

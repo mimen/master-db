@@ -24,6 +24,7 @@ import { ClientAuthProvider } from "@/lib/convex-auth";
 import { LightboxProvider } from "@/lib/lightbox";
 import { pendingSends } from "@/lib/pending-sends";
 import { releaseStatus } from "@/lib/release-status";
+import { installSendFailureToast } from "@/lib/send-failure-toast";
 import { hydrateSettings } from "@/lib/settings";
 import { hydrateSidebarWidth } from "@/lib/sidebar-width";
 import { ToastHost } from "@/lib/toast";
@@ -39,6 +40,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   useEffect(() => {
     void hydrateDrafts();
+    const stopSendFailures = installSendFailureToast();
     void pendingSends.restore().catch(() => undefined);
     void hydrateSettings();
     void hydrateSidebarWidth();
@@ -54,6 +56,7 @@ export default function RootLayout() {
           onRelease: releaseStatus.setDeployedWeb,
         });
     return () => {
+      stopSendFailures();
       stopWeb();
       stopShell();
       stopFileDrops();

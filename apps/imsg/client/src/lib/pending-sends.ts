@@ -253,6 +253,35 @@ function landedFrom(bubble: Message, result: ResultFor<"send">): Message {
   return { ...sent, guid: result.guid, dateCreated: "slack" in result ? Math.round(Number(result.slack.ts) * 1000) : result.gmail.internalDate };
 }
 
+export interface SendFailure {
+  conversationId: ConversationId;
+  /** The stranded bubble, as Retry and Discard take it. */
+  bubble: Message;
+  error: unknown;
+}
+
+const failureListeners = new Set<(failure: SendFailure) => void>();
+
+/** Hears every send that did not go out, wherever the user has gone since; a send the user cancelled is not one. */
+export function onSendFailure(listener: (failure: SendFailure) => void): () => void {
+  failureListeners.add(listener);
+  return () => failureListeners.delete(listener);
+}
+
+function strand(conversationId: ConversationId, bubble: Message, sendState: Extract<PendingSendState, "failed" | "notSent">, error: unknown): void {
+  const left = stranded(bubble, sendState);
+  pendingSends.settle(conversationId, bubble.guid, left);
+  for (const listener of failureListeners) listener({ conversationId, bubble: left, error });
+}
+
+/**
+ * A Slack reply sent from its channel lands in the replied message's thread, which is another conversation, so the
+ * channel keeps no copy of it. A reply inside the thread answers a message other than the thread's root.
+ */
+function landedElsewhere(bubble: Message, result: ResultFor<"send">): boolean {
+  return "slack" in result && result.slack.threadTs !== undefined && bubble.replyToGuid?.endsWith(`:${result.slack.threadTs}`) === true;
+}
+
 /** Waits for Convex, runs `queue`, and settles the bubble with what the platform made of it. */
 async function deliver(conversationId: ConversationId, bubble: Message, client: SendClient,
   queue: () => Promise<ResultFor<"send">>): Promise<Message> {
@@ -261,27 +290,40 @@ async function deliver(conversationId: ConversationId, bubble: Message, client: 
   if (cancelled.has(clientKey)) throw new SendCancelledError();
   if (!ok) {
     neverQueued.add(clientKey);
-    const notSent = stranded(bubble, "notSent");
-    if (kept.has(clientKey)) keep(conversationId, notSent);
-    pendingSends.settle(conversationId, bubble.guid, notSent);
-    throw new Error(NOT_SENT_ERROR);
+    const error = new Error(NOT_SENT_ERROR);
+    if (kept.has(clientKey)) keep(conversationId, stranded(bubble, "notSent"));
+    strand(conversationId, bubble, "notSent", error);
+    throw error;
   }
   try {
-    const landed = landedFrom(bubble, await queue());
-    pendingSends.settle(conversationId, bubble.guid, landed);
+    const result = await queue();
+    const landed = landedFrom(bubble, result);
+    if (landedElsewhere(bubble, result)) pendingSends.retain(conversationId, (m) => m.guid !== bubble.guid);
+    else pendingSends.settle(conversationId, bubble.guid, landed);
     return landed;
   } catch (error) {
     if (cancelled.has(clientKey)) throw new SendCancelledError();
-    pendingSends.settle(conversationId, bubble.guid, stranded(bubble, error instanceof Error && error.message === NOT_SENT_ERROR ? "notSent" : "failed"));
+    strand(conversationId, bubble, error instanceof Error && error.message === NOT_SENT_ERROR ? "notSent" : "failed", error);
     throw error;
   } finally {
     forget(clientKey);
   }
 }
 
-/** Queues a send under its own key, and stops keeping it on the device the moment Convex has it. */
-const queueSend = (client: SendClient, conversationId: ConversationId, bubble: Message) => () =>
-  runCommandVia(client, conversationId, payloadOf(bubble), { clientKey: bubble.clientKey, onQueued: () => forget(bubble.clientKey!) });
+/**
+ * Queues a send under its own key, and stops keeping it on the device the moment Convex has it. One Convex refused at
+ * enqueue has no command, so Retry queues it again under the same key.
+ */
+const queueSend = (client: SendClient, conversationId: ConversationId, bubble: Message) => async () => {
+  const clientKey = bubble.clientKey!;
+  let queued = false;
+  try {
+    return await runCommandVia(client, conversationId, payloadOf(bubble), { clientKey, onQueued: () => { queued = true; forget(clientKey); } });
+  } catch (error) {
+    if (!queued) neverQueued.add(clientKey);
+    throw error;
+  }
+};
 
 const payloadOf = (bubble: Message) => ({
   kind: "send" as const,
@@ -434,6 +476,7 @@ export function resetPendingSendsForTests(device: SendStore): void {
   holding.clear();
   neverQueued.clear();
   cancelled.clear();
+  failureListeners.clear();
   for (const { release } of kept.values()) release?.();
   kept.clear();
   store = Promise.resolve(device);

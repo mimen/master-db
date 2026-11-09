@@ -16,7 +16,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { useSuggestionMode, useSuggestionModel } from "@/lib/settings";
 import { useActionSheet } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
-import { alternateIndexForKey, suggestionSlots, type SuggestionSlots } from "@/lib/suggestion-slots";
+import { alternateIndexForKey, shelfTakesKeys, suggestionSlots, type SuggestionSlots } from "@/lib/suggestion-slots";
 import { TAPBACK_EMOJI } from "@/lib/tapbacks";
 import type { ConversationId, EventSuggestion, ReplySuggestion, ReplySuggestions, SuggestionModel } from "@shared/types";
 
@@ -179,7 +179,7 @@ export function useReplySuggestions(
       confirmReaction(suggestion, result);
       return;
     }
-    fillComposer(suggestion.text, {
+    fillComposer(conversationId, suggestion.text, {
       suggestion,
       selectedModel: result.selectedModel,
       servedModel: result.servedModel,
@@ -215,6 +215,7 @@ export function SuggestionAlternates({ state, wide }: { state: ReplySuggestionsS
   const current = useRef({ apply, alternates });
   current.current = { apply, alternates };
   const listening = Platform.OS === "web" && wide && alternates.length > 0;
+  const rowRef = useRef<View>(null);
 
   useEffect(() => {
     if (!listening || typeof window === "undefined") return;
@@ -222,6 +223,9 @@ export function SuggestionAlternates({ state, wide }: { state: ReplySuggestionsS
       const index = alternateIndexForKey(keyEvent);
       const suggestion = index === null ? undefined : current.current.alternates[index];
       if (!suggestion) return;
+      const pane = (rowRef.current as unknown as HTMLElement | null)?.closest?.(PANE);
+      const active = document.activeElement;
+      if (!shelfTakesKeys({ inThisPane: pane?.contains(active) === true, inAnyPane: active?.closest(PANE) != null, panes: document.querySelectorAll(PANE).length })) return;
       // Option+digit would otherwise type ¡ ™ £ into the field.
       keyEvent.preventDefault();
       current.current.apply(suggestion);
@@ -254,6 +258,7 @@ export function SuggestionAlternates({ state, wide }: { state: ReplySuggestionsS
   }
 
   return (
+    <View ref={rowRef}>
     <Row>
       {event && (
         <Alternate
@@ -294,8 +299,11 @@ export function SuggestionAlternates({ state, wide }: { state: ReplySuggestionsS
         </Pressable>
       </Reanimated.View>
     </Row>
+    </View>
   );
 }
+
+const PANE = '[data-testid="thread-view"]';
 
 const SKELETON_WIDTHS = [132, 96, 156] as const;
 

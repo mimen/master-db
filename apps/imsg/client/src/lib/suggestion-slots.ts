@@ -61,3 +61,11 @@ export function alternateIndexForKey(event: { altKey: boolean; metaKey: boolean;
   const index = Number(match[1]) - 1;
   return index < MAX_ALTERNATES ? index : null;
 }
+
+/**
+ * Whether a shelf takes ⌥N. A Slack thread open beside its channel mounts a shelf in each pane, so only the pane
+ * holding focus does; with focus in neither, a lone pane still does.
+ */
+export function shelfTakesKeys(focus: { inThisPane: boolean; inAnyPane: boolean; panes: number }): boolean {
+  return focus.inThisPane || (!focus.inAnyPane && focus.panes <= 1);
+}
