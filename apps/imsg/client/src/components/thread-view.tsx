@@ -237,9 +237,13 @@ export function ThreadView({
     setSearchOpen(false);
     setSearchText("");
   }, [conversationId]);
+  // A read covers every message dated up to it, which is how Convex judges it too.
+  const readUntil = useRef(-Infinity);
   useEffect(() => {
     // Preview (glide-mode j/k) must not mark read; activation ("reply") does.
-    if (exists && !previewOnly) readChat(conversationId).catch(() => undefined);
+    if (!exists || previewOnly) return;
+    readUntil.current = Date.now();
+    readChat(conversationId).catch(() => undefined);
   }, [conversationId, exists, previewOnly]);
 
   useEffect(() => {
@@ -315,7 +319,8 @@ export function ThreadView({
   }, [beginDayChipScroll, conversationId, endDayChipScroll, messages.length]);
 
   useEffect(() => {
-    if (readObserver.current.observe(conversationId, [...messages, ...newestMessages], exists && !previewOnly)) {
+    if (readObserver.current.observe(conversationId, [...messages, ...newestMessages], exists && !previewOnly, readUntil.current)) {
+      readUntil.current = Date.now();
       readChat(conversationId).catch(() => undefined);
     }
   }, [conversationId, exists, messages, newestMessages, previewOnly]);

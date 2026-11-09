@@ -2,14 +2,15 @@ import type { ChatSummary, ConversationId, Message } from "@shared/types";
 
 /**
  * Observe new inbound GUIDs once per mounted thread. Opening the thread reads it, so the first page adds nothing, and
- * neither does a fetch filling in messages older than the newest seen: only an arrival after it does.
+ * neither does a fetch filling in messages older than the newest seen, or any message the last read (`readUntil`)
+ * already covered: only an arrival after both does.
  */
 export function createInboundReadObserver() {
   let chat: ConversationId | null = null;
   let newestSeen = -Infinity;
   const seen = new Set<string>();
   return {
-    observe(conversationId: ConversationId, messages: readonly Message[], active: boolean): boolean {
+    observe(conversationId: ConversationId, messages: readonly Message[], active: boolean, readUntil = -Infinity): boolean {
       if (chat !== conversationId) {
         chat = conversationId;
         newestSeen = -Infinity;
@@ -18,7 +19,7 @@ export function createInboundReadObserver() {
       const inbound = messages.filter((message) => !message.isFromMe && !message.isGroupEvent && !message.retracted);
       if (!active || inbound.length === 0) return false;
       const first = seen.size === 0;
-      const added = !first && inbound.some((message) => !seen.has(message.guid) && message.dateCreated >= newestSeen);
+      const added = !first && inbound.some((message) => !seen.has(message.guid) && message.dateCreated >= newestSeen && message.dateCreated > readUntil);
       for (const message of inbound) {
         seen.add(message.guid);
         newestSeen = Math.max(newestSeen, message.dateCreated);

@@ -61,6 +61,13 @@ test("a fetch filling in messages under the newest one the sidebar showed does n
   expect(reads.observe(cid("chat"), [message("earlier", false, 700), message("cached-newest", false, 900)], true)).toBe(false);
 });
 
+test("messages the open's read already covered do not mark the thread read again when they load", () => {
+  const reads = createInboundReadObserver();
+  expect(reads.observe(cid("chat"), [message("cached", false, 100)], true, 1000)).toBe(false);
+  expect(reads.observe(cid("chat"), [message("cached", false, 100), message("landed-before-open", false, 900)], true, 1000)).toBe(false);
+  expect(reads.observe(cid("chat"), [message("landed-before-open", false, 900), message("after-open", false, 1100)], true, 1000)).toBe(true);
+});
+
 test("preview threads do not consume inbound GUIDs; retractions do not mark read", () => {
   const reads = createInboundReadObserver();
   reads.observe(cid("chat"), [message("initial")], true);

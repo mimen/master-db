@@ -60,8 +60,8 @@ export class FakeGmail {
   watches: { topicName: string }[] = [];
   /** Every message users.messages.send took, as its RFC 822 text, with the threadId it was sent into and whether it came through the upload endpoint. */
   readonly sent: { raw: string; threadId?: string; upload: boolean }[] = [];
-  /** Gmail mints a new attachment id on every read; the fake does too, so a stale one fails. */
-  private reads = 0;
+  /** Gmail mints a new attachment id on every read of a message; the fake does too, so a stale one fails. A read of another message leaves it valid. */
+  private readonly reads = new Map<string, number>();
   /** Gmail sets its own Message-ID on a send instead of keeping Comma's. */
   replacesMessageId = false;
   stopped = false;
@@ -97,7 +97,7 @@ export class FakeGmail {
       const [, id, , attachmentId] = call.url.pathname.split("/").slice(-4).map(decodeURIComponent);
       const [read, index] = (attachmentId ?? "").split(".").slice(1).map(Number);
       const file = this.mail.find((message) => message.id === id)?.files?.[index ?? -1];
-      if (!file || read !== this.reads) return { status: 404, body: { error: { code: 404, status: "NOT_FOUND" } } };
+      if (!file || read !== this.reads.get(id ?? "")) return { status: 404, body: { error: { code: 404, status: "NOT_FOUND" } } };
       return { body: { size: file.data.length, data: b64text(file.data) } };
     });
     this.on("GET", /\/users\/me\/messages\/[^/]+$/, (call) => {
@@ -203,13 +203,13 @@ export class FakeGmail {
   }
 
   private serialize(message: FakeMail, format: string | null, wanted: Set<string>) {
-    if (format === "full") this.reads++;
+    if (format === "full") this.reads.set(message.id, (this.reads.get(message.id) ?? 0) + 1);
     const text = (message.text !== undefined ? [{ mimeType: "text/plain", body: { data: b64text(message.text) } }] : [])
       .concat(message.html !== undefined ? [{ mimeType: "text/html", body: { data: b64text(message.html) } }] : []);
     const files = (message.files ?? []).map((file, index) => ({
       partId: String(index + 1), mimeType: file.mimeType, filename: file.filename,
       headers: file.contentId ? [{ name: "Content-ID", value: `<${file.contentId}>` }] : [],
-      body: file.inlineData ? { size: file.data.length, data: b64text(file.data) } : { size: file.data.length, attachmentId: `att.${this.reads}.${index}` },
+      body: file.inlineData ? { size: file.data.length, data: b64text(file.data) } : { size: file.data.length, attachmentId: `att.${this.reads.get(message.id) ?? 0}.${index}` },
     }));
     const parts = files.length
       ? [{ partId: "0", mimeType: "multipart/alternative", parts: text.map((part, index) => ({ ...part, partId: `0.${index}` })) }, ...files]
