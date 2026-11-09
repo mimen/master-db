@@ -9,7 +9,7 @@ Settings has a row for each: **Gmail** and **Personal Gmail**. Connect names the
 
 The scopes are `openid email https://www.googleapis.com/auth/gmail.modify`, listed once in `GMAIL_SCOPES` (`convex/comma/googleAuth.ts`). The consent screen must list the same scopes. `gmail.modify` reads mail and labels, sends, and archives.
 
-Comma's Gmail lane (`convex/comma/gmailLane.ts`) sends a reply as RFC 822 with the replied message's Message-ID in In-Reply-To and References and the thread's id, so it threads in Gmail. Its own Message-ID is `<comma.<clientKey>@<mailbox domain>>`. When a send's answer is lost, Comma searches for that Message-ID at 20 seconds and 2 minutes, then for a Sent message in the thread with the same subject and text, so the send lands without going out twice. Settling a thread in Comma removes its Inbox label; unsettling adds it back. If Gmail refuses, Comma takes the settle back and shows Gmail's error above the thread.
+Comma's Gmail lane (`convex/comma/gmailLane.ts`) sends a reply as RFC 822 with the replied message's Message-ID in In-Reply-To and References and the thread's id, so it threads in Gmail. It sets its own Message-ID, `<comma.<clientKey>@<mailbox domain>>`, but Gmail replaced it with its own on both the Workspace and the gmail.com mailbox when this was checked on 2026-11-09. When a send's answer is lost, Comma searches for that Message-ID at 20 seconds and 2 minutes, then for a Sent message in the thread with the same subject and text. The text match is the check that finds it in practice, so the send lands without going out twice. Settling a thread in Comma removes its Inbox label; unsettling adds it back. If Gmail refuses, Comma takes the settle back and shows Gmail's error above the thread.
 
 How the mailbox reaches Comma:
 
@@ -73,7 +73,7 @@ Run these in order. Comma's production is the Convex deployment `dev:shiny-gerbi
 9. Check the result:
    - Send the mailbox a message from another account. It shows in Mail within a minute.
    - Archive a thread in Gmail. Comma settles it.
-   - Reply to that message from Comma's Mail reader. The reply shows in Gmail's own thread, not as a new conversation, and its headers (Gmail's **Show original**) carry `In-Reply-To` and a `Message-ID` starting `<comma.`.
+   - Reply to that message from Comma's Mail reader. The reply shows in Gmail's own thread, not as a new conversation, and its headers (Gmail's **Show original**) carry an `In-Reply-To` naming the message it answered.
    - Archive a thread from Comma. It leaves Gmail's Inbox, and Comma's cleared count rises by one, not two.
    - Open Mail. A newsletter shows only under All inbox, never under People.
    - Send the mailbox an HTML message with a `<script>` and a 1×1 remote image. The reader shows neither, and holds other remote images until **Load images**.
