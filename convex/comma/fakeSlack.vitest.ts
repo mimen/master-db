@@ -17,6 +17,7 @@ export type FakeUser = { id: string; name: string; email?: string; is_bot?: bool
 export type FakeMessage = {
   ts: string; user: string; text: string; thread_ts?: string; reply_count?: number; edited?: { ts: string }; subtype?: string;
   metadata?: { event_type: string; event_payload: Record<string, unknown> }; reactions?: { name: string; users: string[] }[];
+  files?: Record<string, unknown>[];
 };
 export type FakeChannel = { id: string; type: "im" | "mpim" | "channel"; name?: string; user?: string; members?: string[]; messages: FakeMessage[] };
 
@@ -35,6 +36,8 @@ export class FakeSlack {
   readonly marks = new Map<string, string>();
   /** Keeps message metadata on posts. Slack's handling of it on user-token posts is unconfirmed, so tests try both. */
   keepsMetadata = true;
+  /** What files.slack.com serves, by URL. Any other URL, or a wrong token, gets Slack's sign-in page, as Slack answers. */
+  readonly files = new Map<string, { bytes: Uint8Array<ArrayBuffer>; type: string }>();
   private clock = 1_800_000_000;
 
   /** A ts after every other this fake has made, as Slack's are. */
@@ -169,6 +172,7 @@ export class FakeSlack {
 
   readonly fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+    if (url.host === "files.slack.com") return this.download(url, new Headers(init?.headers).get("Authorization"));
     if (url.host !== "slack.com") throw new Error(`FakeSlack: unexpected fetch to ${url.href}`);
     const method = url.pathname.replace(/^\/api\//, "");
     const params = Object.fromEntries(new URLSearchParams(String(init?.body ?? "")));
@@ -185,6 +189,20 @@ export class FakeSlack {
     if (method !== "oauth.v2.access" && token !== TOKEN) return Response.json({ ok: false, error: "invalid_auth" });
     return Response.json(handler(params, token));
   };
+
+  /** Adds a file at `https://files.slack.com/files-pri/<id>/<name>`, and returns the file object a message carries. */
+  file(id: string, name: string, type: string, bytes: number, fields: Record<string, unknown> = {}): { url_private: string } & Record<string, unknown> {
+    const url = `https://files.slack.com/files-pri/${TEAM.id}-${id}/${name}`;
+    this.files.set(url, { bytes: new Uint8Array(bytes).fill(1), type });
+    return { id, name, mimetype: type, size: bytes, url_private: url, ...fields };
+  }
+
+  private download(url: URL, auth: string | null): Response {
+    this.calls.push({ method: "files", params: { url: url.href }, token: auth?.replace(/^Bearer /, "") ?? null });
+    const file = this.files.get(url.href);
+    if (!file || auth !== `Bearer ${TOKEN}`) return new Response("<html>Sign in to Slack</html>", { headers: { "Content-Type": "text/html; charset=utf-8" } });
+    return new Response(file.bytes, { headers: { "Content-Type": file.type, "Content-Length": String(file.bytes.length) } });
+  }
 
   install(): this {
     vi.stubGlobal("fetch", this.fetch);

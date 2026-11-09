@@ -8,8 +8,9 @@ import { aiExecutorStatus } from "./bridgeState";
 import { findAttachment } from "./conversationLookup";
 import { attachmentName, attachmentOnDisk, isAssociated, type AccountScope } from "./messageShape";
 
-/** Clients and the bridge name an attachment by its iMessage guid alone. ponytail: pass a scope when a second platform's media renders. */
+/** Clients and the bridge name an attachment by its guid alone. A Slack guid holds its message's channel and ts, so never meets an iMessage one. */
 const IMESSAGE_ANY: AccountScope = { platform: "imessage", accountId: null };
+const SLACK_ANY: AccountScope = { platform: "slack", accountId: null };
 
 function visibleGuids(attachments: CommaAttachmentDoc[]): Set<string> {
   const groups = new Map<string, CommaAttachmentDoc[]>();
@@ -44,7 +45,7 @@ export const attachmentMedia = query({
   returns: v.union(v.object(mediaUrls), v.null()),
   handler: async (ctx, { guid }) => {
     await assertAllowed(ctx);
-    const attachment = await findAttachment(ctx, IMESSAGE_ANY, guid);
+    const attachment = await findAttachment(ctx, IMESSAGE_ANY, guid) ?? await findAttachment(ctx, SLACK_ANY, guid);
     return attachment && !attachment.hideAttachment ? urls(ctx, attachment) : null;
   },
 });

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { extractLinkPreview, parsePublicPreviewUrl } from "../../shared/link-preview";
 import type { Hono } from "hono";
 import type { GenericId, Infer } from "convex/values";
@@ -508,6 +510,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     uploads.set(storageId, { bytes });
     return c.json({ storageId });
   });
+  // What convex/comma/slackFiles.ts stored for the Slack files the fixture seeds.
+  app.get("/__fixture/slack-file/:name", (c) => c.req.param("name") === "flyer.png"
+    ? new Response(readFileSync(new URL("./assets/run-of-show.png", import.meta.url)), { headers: { "Content-Type": "image/png" } })
+    : new Response("%PDF-1.4 fixture rider", { headers: { "Content-Type": "application/pdf" } }));
   app.get("/__fixture/slack-connected", (c) => c.html("<p>Slack is connected. You can close this tab.</p>"));
   app.get("/__fixture/gmail-connected", (c) => c.html("<p>Gmail is connected. You can close this tab.</p>"));
   app.get("/__fixture/media/:guid", (c) => {
@@ -621,7 +627,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
       return `upload-${String(args.storageId)}`;
     },
     "comma/media:attachmentMedia": async (args) => {
-      const found = await attachment(String(args.guid));
+      const found = await attachment(String(args.guid)) ?? slackWorld.attachment(String(args.guid));
       return found ? { guid: found.guid, thumbUrl: found.thumbUrl, originalUrl: found.originalUrl } : null;
     },
     "comma/media:attachmentChatGuid": async (args) => (await attachment(String(args.guid)))?.conversationId ?? null,
@@ -892,8 +898,9 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
   // Seeds the Slack DM or the #bookings channel and its threads (connecting Slack), and makes the next Slack send's
   // answer get lost, so it ends unknown until the check finds it.
   app.post("/__fixture/slack", async (c) => {
-    const body = await c.req.json<{ seed?: boolean; seedChannel?: boolean; loseNextAnswerMs?: number }>();
+    const body = await c.req.json<{ seed?: boolean; seedFiles?: boolean; seedChannel?: boolean; loseNextAnswerMs?: number }>();
     if (body.seed) slackWorld.seed();
+    if (body.seedFiles) slackWorld.seedFiles();
     if (body.seedChannel) {
       slackWorld.seedChannel();
       Object.assign(slackAccount, { connected: true, ever: true });

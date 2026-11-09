@@ -965,6 +965,16 @@ export declare const api: {
                 slack: {
                   clientKey?: string;
                   editedTs?: string;
+                  files?: Array<{
+                    height?: number;
+                    id: string;
+                    mimeType?: string;
+                    name?: string;
+                    size?: number;
+                    thumbUrl?: string;
+                    url?: string;
+                    width?: number;
+                  }>;
                   text: string;
                   threadTs?: string;
                   ts: string;
@@ -1558,6 +1568,16 @@ export declare const api: {
                 slack: {
                   clientKey?: string;
                   editedTs?: string;
+                  files?: Array<{
+                    height?: number;
+                    id: string;
+                    mimeType?: string;
+                    name?: string;
+                    size?: number;
+                    thumbUrl?: string;
+                    url?: string;
+                    width?: number;
+                  }>;
                   text: string;
                   threadTs?: string;
                   ts: string;
@@ -5832,6 +5852,16 @@ export declare const internal: {
                 slack: {
                   clientKey?: string;
                   editedTs?: string;
+                  files?: Array<{
+                    height?: number;
+                    id: string;
+                    mimeType?: string;
+                    name?: string;
+                    size?: number;
+                    thumbUrl?: string;
+                    url?: string;
+                    width?: number;
+                  }>;
                   text: string;
                   threadTs?: string;
                   ts: string;
@@ -6308,6 +6338,16 @@ export declare const internal: {
                 slack: {
                   clientKey?: string;
                   editedTs?: string;
+                  files?: Array<{
+                    height?: number;
+                    id: string;
+                    mimeType?: string;
+                    name?: string;
+                    size?: number;
+                    thumbUrl?: string;
+                    url?: string;
+                    width?: number;
+                  }>;
                   text: string;
                   threadTs?: string;
                   ts: string;
@@ -6895,6 +6935,16 @@ export declare const internal: {
                 slack: {
                   clientKey?: string;
                   editedTs?: string;
+                  files?: Array<{
+                    height?: number;
+                    id: string;
+                    mimeType?: string;
+                    name?: string;
+                    size?: number;
+                    thumbUrl?: string;
+                    url?: string;
+                    width?: number;
+                  }>;
                   text: string;
                   threadTs?: string;
                   ts: string;
@@ -7497,6 +7547,16 @@ export declare const internal: {
                 message: {
                   clientKey?: string;
                   editedTs?: string;
+                  files?: Array<{
+                    height?: number;
+                    id: string;
+                    mimeType?: string;
+                    name?: string;
+                    size?: number;
+                    thumbUrl?: string;
+                    url?: string;
+                    width?: number;
+                  }>;
                   text: string;
                   threadTs?: string;
                   ts: string;
@@ -7524,6 +7584,33 @@ export declare const internal: {
         null
       >;
     };
+    slackFiles: {
+      downloadFiles: FunctionReference<
+        "action",
+        "internal",
+        {
+          accountId: Id<"comma_accounts">;
+          downloads: Array<{
+            attachmentId: Id<"comma_attachments">;
+            mimeType?: string;
+            size?: number;
+            thumbUrl?: string;
+            url?: string;
+          }>;
+        },
+        null
+      >;
+      storeFile: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          attachmentId: Id<"comma_attachments">;
+          originalStorageId?: Id<"_storage">;
+          thumbStorageId?: Id<"_storage">;
+        },
+        null
+      >;
+    };
     slackLane: {
       findSend: FunctionReference<
         "action",
@@ -7538,6 +7625,16 @@ export declare const internal: {
           candidates: Array<{
             clientKey?: string;
             editedTs?: string;
+            files?: Array<{
+              height?: number;
+              id: string;
+              mimeType?: string;
+              name?: string;
+              size?: number;
+              thumbUrl?: string;
+              url?: string;
+              width?: number;
+            }>;
             text: string;
             threadTs?: string;
             ts: string;
@@ -7603,6 +7700,16 @@ export declare const internal: {
             messages: Array<{
               clientKey?: string;
               editedTs?: string;
+              files?: Array<{
+                height?: number;
+                id: string;
+                mimeType?: string;
+                name?: string;
+                size?: number;
+                thumbUrl?: string;
+                url?: string;
+                width?: number;
+              }>;
               text: string;
               threadTs?: string;
               ts: string;
@@ -7626,6 +7733,16 @@ export declare const internal: {
           message: {
             clientKey?: string;
             editedTs?: string;
+            files?: Array<{
+              height?: number;
+              id: string;
+              mimeType?: string;
+              name?: string;
+              size?: number;
+              thumbUrl?: string;
+              url?: string;
+              width?: number;
+            }>;
             text: string;
             threadTs?: string;
             ts: string;
@@ -7655,6 +7772,12 @@ export declare const internal: {
         "internal",
         { accountId: Id<"comma_accounts"> },
         null
+      >;
+      startFilesBackfill: FunctionReference<
+        "mutation",
+        "internal",
+        { accountId: Id<"comma_accounts"> },
+        { channels: number; threads: number }
       >;
       unknownUsers: FunctionReference<
         "query",

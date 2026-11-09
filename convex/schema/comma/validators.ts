@@ -626,9 +626,16 @@ export const slackRef = v.union(
 /** `image` is the profile picture the user set; a Slack default avatar parses as none. */
 export const slackUser = v.object({ id: v.string(), name: v.string(), email: v.optional(v.string()), image: v.optional(v.string()) });
 
+/** A file on a Slack message. Its URLs answer only with the user token; Slack leaves them out when it won't share the file. */
+export const slackFile = v.object({
+  id: v.string(), name: v.optional(v.string()), mimeType: v.optional(v.string()), size: v.optional(v.number()),
+  width: v.optional(v.number()), height: v.optional(v.number()), url: v.optional(v.string()), thumbUrl: v.optional(v.string()),
+});
+
 /** One Slack message as Comma keeps it. `clientKey` is a Comma send's own, read back from the message's metadata. */
 export const slackMessage = v.object({
   ts: v.string(), threadTs: v.optional(v.string()), user: v.string(), text: v.string(), editedTs: v.optional(v.string()), clientKey: v.optional(v.string()),
+  files: v.optional(v.array(slackFile)),
 });
 
 /** One Gmail message as ingest writes it: gmailMessage.ts's parse of what Gmail returned or what Comma sent. */

@@ -14,6 +14,7 @@ import { schedulePersonSummaries } from "./personSummaries";
 import { slackApi, SlackApiError, type SlackParams } from "./slackApi";
 import { slackToken } from "./slackAuth";
 import { mentions, parseSlackMessage, parseSlackUser, selfUserId, type SlackMessage, type SlackUser } from "./slackEvents";
+import { slackAttachmentGuid, writeSlackFiles } from "./slackFiles";
 import { slackNames, unknownSlackUsers, upsertSlackUsers } from "./slackPeople";
 import { slackDisplayText, slackModelText } from "./slackText";
 import { logReplies } from "./triage";
@@ -148,21 +149,31 @@ export async function writeSlackBatch(ctx: MutationCtx, accountId: Id<"comma_acc
     const conversationId = await upsertConversation(ctx, account, self, home);
     for (const message of home.messages) {
       const display = slackDisplayText(message.text, (id) => names.get(id));
+      const files = message.files ?? [];
+      const guid = slack.messageGuid(home.ref.channel, message.ts);
+      const attachmentGuids = files.map((file) => slackAttachmentGuid(guid, file.id));
       const row = {
-        platform: "slack" as const, accountId, conversationId, guid: slack.messageGuid(home.ref.channel, message.ts),
+        platform: "slack" as const, accountId, conversationId, guid,
         dateCreated: tsMs(message.ts), isFromMe: message.user === self, sender: { address: `slack:${message.user}`, name: null },
         text: display.text, mentions: display.mentions, mentionsMe: mentions(message.text, self),
         ...toModelText({ text: message.text, ts: message.ts, ...(message.threadTs ? { thread_ts: message.threadTs } : {}) }),
         edited: message.editedTs !== undefined, ...(message.editedTs ? { dateEdited: tsMs(message.editedTs) } : {}),
-        retracted: false, isGroupEvent: false, attachmentGuids: [], sourceVersion: message.editedTs ? tsMs(message.editedTs) : 0,
+        retracted: false, isGroupEvent: false, attachmentGuids, sourceVersion: message.editedTs ? tsMs(message.editedTs) : 0,
         ...(message.clientKey ? { clientKey: message.clientKey } : {}),
       };
       const existing = await findMessage(ctx, scope, row.guid);
       const moved = existing !== null && existing.conversationId !== conversationId;
       if (existing && (existing.retracted || (!moved && existing.sourceVersion >= row.sourceVersion))) {
+        // A message stored before Comma kept Slack's files gets them from any later read, which the files backfill relies on.
+        if (!existing.retracted && files.length && !existing.attachmentGuids.length) {
+          await ctx.db.patch(existing._id, { attachmentGuids });
+          await writeSlackFiles(ctx, accountId, existing.conversationId, guid, files);
+          touched.add(existing.conversationId);
+        }
         skipped++;
         continue;
       }
+      if (files.length || existing?.attachmentGuids.length) await writeSlackFiles(ctx, accountId, conversationId, guid, files);
       if (existing) {
         await ctx.db.patch(existing._id, { ...MODEL_TEXT_UNSET, ...row });
         touched.add(existing.conversationId);
@@ -272,7 +283,8 @@ const BACKFILL_DAYS = 90;
 const STEP_MS = 1_500;
 const TIER2_STEP_MS = 3_500;
 
-type Channel = { id: string; type: "im" | "mpim" | "channel"; name?: string; members?: string[] };
+/** `oldest`, in Slack seconds, overrides the run's for this channel. */
+type Channel = { id: string; type: "im" | "mpim" | "channel"; name?: string; members?: string[]; oldest?: string };
 /** A thread to read whole, and the conversation its read lands through: its DM, group DM or channel, or the thread itself. */
 type Thread = { channel: string; ts: string; into: "im" | "mpim" | "channel" | "thread" };
 export type BackfillState = {
@@ -302,7 +314,10 @@ async function writeSync(ctx: MutationCtx, accountId: Id<"comma_accounts">, key:
   else await ctx.db.insert("comma_sync_state", { accountId, key, ...fields, updatedAt: Date.now() });
 }
 
-async function startRun(ctx: MutationCtx, accountId: Id<"comma_accounts">, key: string, fields: Pick<BackfillState, "step" | "optedIn" | "channels" | "channelOnly" | "usersOnly">) {
+async function startRun(
+  ctx: MutationCtx, accountId: Id<"comma_accounts">, key: string,
+  fields: Pick<BackfillState, "step" | "optedIn" | "channels" | "channelOnly" | "usersOnly"> & Partial<Pick<BackfillState, "threads">>,
+) {
   const now = Date.now();
   const state: BackfillState = { run: String(now), oldest: String(Math.floor((now - BACKFILL_DAYS * 86_400_000) / 1000)), threads: [], ...fields };
   await writeSync(ctx, accountId, key, { cursor: JSON.stringify(state) });
@@ -339,6 +354,35 @@ export async function startChannelBackfill(ctx: MutationCtx, accountId: Id<"comm
     step: "history", optedIn: [channel.id], channels: [{ id: channel.id, type: "channel", name: channel.name }], channelOnly: true,
   });
 }
+
+/**
+ * Re-reads every Slack conversation Comma holds from its oldest stored message, so messages stored before Comma kept
+ * Slack's files get them. Same steps and pacing as the backfill, under `slack:backfill:files`. A channel no longer
+ * followed is left out: reading it again would import what its unfollow stopped.
+ */
+export const startFilesBackfill = internalMutation({
+  args: { accountId: v.id("comma_accounts") },
+  returns: v.object({ channels: v.number(), threads: v.number() }),
+  handler: async (ctx, { accountId }) => {
+    const account = await ctx.db.get(accountId);
+    if (account?.platform !== "slack") throw new Error("Not a Slack account");
+    const channels: Channel[] = [];
+    const threads: Thread[] = [];
+    for await (const conversation of ctx.db.query("comma_conversations")
+      .withIndex("by_platform_account_key", (q) => q.eq("platform", "slack").eq("accountId", accountId))) {
+      if (!conversation.slack) continue;
+      const first = await ctx.db.query("comma_messages").withIndex("by_conversation_date", (q) => q.eq("conversationId", conversation._id)).first();
+      if (!first) continue;
+      const ref = slackRefOf(conversation);
+      if (ref.type === "thread") threads.push({ channel: ref.channel, ts: ref.threadTs, into: "thread" });
+      else if (ref.type !== "channel" || account.slackChannels?.includes(ref.channel)) {
+        channels.push({ id: ref.channel, type: ref.type, oldest: (first.dateCreated / 1000 - 1).toFixed(6) });
+      }
+    }
+    await startRun(ctx, accountId, `${BACKFILL_KEY}:files`, { step: "history", optedIn: [], channels, threads, channelOnly: true });
+    return { channels: channels.length, threads: threads.length };
+  },
+});
 
 export const backfillState = internalQuery({
   args: { accountId: v.id("comma_accounts"), key: v.optional(v.string()) },
@@ -419,14 +463,15 @@ export async function backfillStep(ctx: ActionCtx, token: string, accountId: Id<
       if (!channel) return state.channelOnly ? { ...state, step: "replies", cursor: undefined } : { ...state, step: "search", cursor: undefined, query: 0, page: 1 };
       const members = channel.type === "mpim" && !channel.members
         ? await orSkip(async () => (await channelInfo(token, channel.id)).members ?? [], []) : channel.members;
-      const result = await orSkip(() => page("conversations.history", { channel: channel.id, oldest: state.oldest, cursor: state.cursor }, token),
+      const result = await orSkip(() => page("conversations.history", { channel: channel.id, oldest: channel.oldest ?? state.oldest, cursor: state.cursor }, token),
         { messages: [], raw: [], cursor: undefined });
       const ref: SlackConversationRef = { type: channel.type, channel: channel.id };
       await ingest(ctx, token, accountId, [{ ref, ...(channel.name ? { name: channel.name } : {}), ...(members ? { members } : {}), messages: result.messages }]);
       // Every thread in a DM, group DM or opted-in channel is read whole; elsewhere search finds the ones Milad is in.
+      const queued = new Set(state.threads.map((thread) => `${thread.channel}:${thread.ts}`));
       const threads = result.raw.flatMap((raw): Thread[] => {
         const root = raw as { ts?: string; reply_count?: number };
-        return root.ts && root.reply_count ? [{ channel: channel.id, ts: root.ts, into: channel.type }] : [];
+        return root.ts && root.reply_count && !queued.has(`${channel.id}:${root.ts}`) ? [{ channel: channel.id, ts: root.ts, into: channel.type }] : [];
       });
       const updated = { ...channel, ...(members ? { members } : {}) };
       return result.cursor

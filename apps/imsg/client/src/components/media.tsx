@@ -155,15 +155,16 @@ export function AudioBubble({ guid, conversationId, url, mine, sending = false }
   );
 }
 
-/** A non-media attachment: a download glyph, its name, and its size when known. */
-export function FileCard({ filename, bytes, onPress }: { filename: string; bytes: number | null; onPress: () => void }) {
+/** A non-media attachment: a download glyph, its name, and its size when known. With no `onPress` there is no copy to open, and it says so. */
+export function FileCard({ filename, bytes, onPress }: { filename: string; bytes: number | null; onPress?: () => void }) {
   const theme = useTheme();
-  const action = Platform.OS === "web" ? "Click to download" : "Tap to download";
+  const action = !onPress ? "Unavailable" : Platform.OS === "web" ? "Click to download" : "Tap to download";
   const detail = bytes !== null && bytes > 0 ? `${formatFileSize(bytes)}. ${action}` : action;
   return (
     <Pressable
-      accessibilityRole="link"
+      accessibilityRole={onPress ? "link" : "text"}
       accessibilityLabel={`${filename}, ${detail}`}
+      disabled={!onPress}
       onPress={onPress}
       style={({ hovered, pressed }) => [
         styles.file,
@@ -172,7 +173,7 @@ export function FileCard({ filename, bytes, onPress }: { filename: string; bytes
       ]}
     >
       <View style={[styles.fileGlyph, { backgroundColor: theme.field }]}>
-        <Ionicons name="arrow-down" size={18} color={theme.text} />
+        <Ionicons name={onPress ? "arrow-down" : "document-outline"} size={18} color={onPress ? theme.text : theme.textSecondary} />
       </View>
       <View style={styles.fileText}>
         <Text numberOfLines={1} style={[styles.fileName, { color: theme.text }]}>{filename}</Text>
