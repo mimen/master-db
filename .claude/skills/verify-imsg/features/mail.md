@@ -23,5 +23,5 @@ The drive is `apps/imsg/e2e/fixture/mail.playwright.ts`. CI runs it with every f
 
 ## Gotchas
 
-- Run the suite on a private port (`IMSG_FIXTURE_PORT=8471`). The config reuses any server on its port, and another worktree's fixture server serves that worktree's build.
+- Run the suite on a private port (`IMSG_FIXTURE_PORT=8471`). The config fails on a port another server holds, since another worktree's fixture server serves that worktree's build; `IMSG_FIXTURE_REUSE=1` reuses it deliberately.
 - Phones show the plain text, not the HTML (no WebView yet).

@@ -27,4 +27,4 @@ The drive is `apps/imsg/e2e/fixture/mail-send.playwright.ts`. CI runs it with ev
 ## Gotchas
 
 - Gmail's own threading cannot be seen here: no mailbox is connected. `convex/comma/gmailLane.test.ts` proves the In-Reply-To, References and threadId the send carries.
-- Run on a private port (`IMSG_FIXTURE_PORT=8471`); the config reuses any server on its port.
+- Run on a private port (`IMSG_FIXTURE_PORT=8471`); the config fails on a port another server holds unless `IMSG_FIXTURE_REUSE=1`.
