@@ -63,6 +63,7 @@ import { toolbarTitle } from "@/lib/header-font";
 import { TypingIndicator } from "./typing-indicator";
 import { useRouteSupport } from "@/hooks/use-route-support";
 import { gated, reasonOf } from "@/lib/route-support";
+import { isShown, registerEscapeCloser, requestFocus } from "@/lib/keyboard/controller";
 
 const GROUP_GAP_MS = 10 * 60 * 1000;
 const COLUMN_PAD = 32;
@@ -222,14 +223,24 @@ export function ThreadView({
     });
   }, []);
 
+  // Where the unread run began, as the conversation stood when it opened: the read below zeroes the live count, and
+  // with it the divider and the scroll to the oldest unread message.
+  const [opened, setOpened] = useState<{ conversationId: ConversationId; firstUnreadAt: number | null; unreadCount: number } | null>(null);
+  if (conversation !== undefined && opened?.conversationId !== conversationId) {
+    setOpened({ conversationId, firstUnreadAt: conversation?.firstUnreadAt ?? null, unreadCount: conversation?.unreadCount ?? 0 });
+  }
+  // Only a conversation that exists is read; a deep link to one that does not reads nothing.
+  const exists = conversation !== undefined && conversation !== null;
   useEffect(() => {
     setReplyTo(null);
     setEditing(null);
     setSearchOpen(false);
     setSearchText("");
+  }, [conversationId]);
+  useEffect(() => {
     // Preview (glide-mode j/k) must not mark read; activation ("reply") does.
-    if (!previewOnly) readChat(conversationId).catch(() => undefined);
-  }, [conversationId, previewOnly]);
+    if (exists && !previewOnly) readChat(conversationId).catch(() => undefined);
+  }, [conversationId, exists, previewOnly]);
 
   useEffect(() => {
     if (headerChat) {
@@ -252,6 +263,18 @@ export function ThreadView({
 
   // Header search buttons open the in-thread search shelf via a signal bus.
   useEffect(() => onOpenThreadSearch(() => setSearchOpen(true)), []);
+  // Esc closes the find bar before anything else, its own field included.
+  useEffect(() => {
+    if (!searchOpen) return;
+    return registerEscapeCloser(() => {
+      if (!isShown(paneRef.current)) return false;
+      setSearchOpen(false);
+      setSearchText("");
+      setHighlightGuid(null);
+      requestFocus("composer");
+      return true;
+    });
+  }, [searchOpen]);
 
 
   // Web: RNW's inverted-list wheel handling is broken (reversed / inert), so
@@ -292,12 +315,13 @@ export function ThreadView({
   }, [beginDayChipScroll, conversationId, endDayChipScroll, messages.length]);
 
   useEffect(() => {
-    if (readObserver.current.observe(conversationId, [...messages, ...newestMessages], !previewOnly)) {
+    if (readObserver.current.observe(conversationId, [...messages, ...newestMessages], exists && !previewOnly)) {
       readChat(conversationId).catch(() => undefined);
     }
-  }, [conversationId, messages, newestMessages, previewOnly]);
+  }, [conversationId, exists, messages, newestMessages, previewOnly]);
 
-  const firstUnreadAt = headerChat?.firstUnreadAt ?? null;
+  const openedHere = opened?.conversationId === conversationId ? opened : null;
+  const firstUnreadAt = openedHere?.firstUnreadAt ?? null;
   const previousRows = useRef(new Map<string, Row>());
   const rows = useMemo<Row[]>(() => {
     const visible = messages.filter((m) => !m.isGroupEvent || m.text);
@@ -548,7 +572,7 @@ export function ThreadView({
   );
 
   const desk = headerChat !== null;
-  const unreadCount = headerChat?.unreadCount ?? 1;
+  const unreadCount = openedHere?.unreadCount || 1;
   const renderItem = useCallback(({ item }: { item: Row }) => (
     <ThreadRow
       row={item}

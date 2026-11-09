@@ -82,6 +82,23 @@ export default function ChatScreen(): React.JSX.Element | null {
       ? { guid: params.targetGuid, dateCreated: Number(params.targetDate) }
       : null;
   if (wide) return null;
+  if (chat === null) {
+    return (
+      <>
+        <Stack.Screen options={{ headerTitle: "", headerLeft: () => (
+          <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => goBackOrHome(router)} hitSlop={8} style={{ paddingHorizontal: 4 }}>
+            <Ionicons name="chevron-back" size={26} color={theme.accent} />
+          </Pressable>
+        ) }} />
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12, backgroundColor: theme.background }}>
+          <Text style={{ color: theme.textSecondary }}>Conversation not found</Text>
+          <Pressable accessibilityRole="button" onPress={() => goBackOrHome(router)} hitSlop={8}>
+            <Text style={{ color: theme.accent, fontSize: 15, fontWeight: "600" }}>Back</Text>
+          </Pressable>
+        </View>
+      </>
+    );
+  }
   // An email Today ranks reads in the Mail reader.
   if (chat?.route.platform === "gmail") return <Redirect href={{ pathname: "/mail", params: { thread: chat.conversationId } }} />;
   // Room left of the action pill: ~70pt for the back button, ~44pt per action, ~32pt of pill padding.

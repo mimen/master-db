@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { presentActions } from "./action-presentation";
 
-test("today's pending-send menu reads as the mockup: icons, shortcuts, one note, two separators", () => {
+test("today's pending-send menu reads as the mockup: icons, no shortcut nothing binds, one note, two separators", () => {
   const out = presentActions([
     { label: "Reply" },
     { label: "Copy" },
@@ -11,12 +11,12 @@ test("today's pending-send menu reads as the mockup: icons, shortcuts, one note,
     { label: "Delete for Me" },
   ]);
   expect(out).toEqual([
-    { label: "Reply", icon: "arrow-undo-outline", shortcut: "⌘R", note: undefined, separatorBefore: false },
-    { label: "Copy", icon: "copy-outline", shortcut: "⌘C", note: undefined, separatorBefore: false },
+    { label: "Reply", icon: "arrow-undo-outline", shortcut: undefined, note: undefined, separatorBefore: false },
+    { label: "Copy", icon: "copy-outline", shortcut: undefined, note: undefined, separatorBefore: false },
     { label: "Forward", icon: "arrow-redo-outline", shortcut: undefined, note: undefined, separatorBefore: false },
     { label: "Edit", icon: "pencil-outline", shortcut: undefined, note: undefined, separatorBefore: true },
     { label: "Unsend", icon: "arrow-undo-circle-outline", shortcut: undefined, note: "Available once it's sent", separatorBefore: false },
-    { label: "Delete for Me", icon: "trash-outline", shortcut: "⌫", note: undefined, separatorBefore: true },
+    { label: "Delete for Me", icon: "trash-outline", shortcut: undefined, note: undefined, separatorBefore: true },
   ]);
 });
 
@@ -42,8 +42,8 @@ test("labels outside the table render bare", () => {
   ]);
 });
 
-test("a handle copy keeps the copy icon but not the message's ⌘C", () => {
+test("a handle copy and a message copy share the copy icon, and neither claims a shortcut", () => {
   const [handle, message] = presentActions([{ label: "Copy Maya's number" }, { label: "Copy" }]);
   expect(handle).toMatchObject({ icon: "copy-outline", shortcut: undefined });
-  expect(message).toMatchObject({ icon: "copy-outline", shortcut: "⌘C" });
+  expect(message).toMatchObject({ icon: "copy-outline", shortcut: undefined });
 });

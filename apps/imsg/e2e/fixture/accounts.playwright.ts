@@ -38,7 +38,7 @@ test("Settings connects Gmail in a new tab and disconnects it after a confirm", 
   await expect(consent.getByText("Gmail is connected. You can close this tab.")).toBeVisible();
   await consent.close();
 
-  await expect(page.getByText("milad@afternoonumbrellafriends.com. Comma reads your inbox. Replying and archiving from Comma are coming.")).toBeVisible();
+  await expect(page.getByText("milad@afternoonumbrellafriends.com. Comma reads your inbox, and replies, forwards and archives from it.")).toBeVisible();
   await page.screenshot({ path: "/tmp/comma-settings-gmail-connected.png", animations: "disabled" });
   // Slack's row is untouched by Gmail's.
   await expect(page.getByRole("button", { name: "Connect Slack", exact: true })).toBeVisible();

@@ -49,6 +49,31 @@ export function getListAdapter(): ListAdapter | null {
   return listAdapter;
 }
 
+// ------------------------------------------------------------- Esc closers
+/**
+ * Surfaces Esc closes before a workspace's own ladder runs: the find bar, an empty email composer. The newest open
+ * closes first. A closer returns false when it has nothing to close, or sits in a workspace that is not showing.
+ */
+const escapeClosers: (() => boolean)[] = [];
+
+export function registerEscapeCloser(close: () => boolean): () => void {
+  escapeClosers.push(close);
+  return () => {
+    const at = escapeClosers.lastIndexOf(close);
+    if (at >= 0) escapeClosers.splice(at, 1);
+  };
+}
+
+/** Whether a web node is on screen: a hidden workspace is display:none, which leaves it no offsetParent. */
+export function isShown(node: unknown): boolean {
+  return (node as { offsetParent?: Element | null } | null)?.offsetParent != null;
+}
+
+export function runEscapeClosers(): boolean {
+  for (let i = escapeClosers.length - 1; i >= 0; i--) if (escapeClosers[i]!()) return true;
+  return false;
+}
+
 // ------------------------------------------------------------ focus targets
 /** A focus target's live element; on web a DOM node, on native a component with focus(). */
 type FocusTarget = () => { focus(): void } | null | undefined;

@@ -192,6 +192,18 @@ describe("Comma read queries", () => {
     expect(await guids("imessage")).toEqual(["imessage", "legacy"]);
   });
 
+  test("search can leave one platform out, so a busy mailbox never crowds the sidebar's 50 hits", async () => {
+    const t = authed();
+    await t.run(async (ctx) => {
+      const id = await ctx.db.insert("comma_conversations", conversation("one", 1));
+      for (let i = 0; i < 50; i++) await ctx.db.insert("comma_messages", { ...message(id, `gmail-${i}`, 10 + i), platform: "gmail" as const });
+      await ctx.db.insert("comma_messages", { ...message(id, "imessage", 1), platform: "imessage" as const });
+      await ctx.db.insert("comma_messages", { ...message(id, "slack", 2), platform: "slack" as const });
+    });
+    const hits = await t.query(api.comma.queries.searchMessages, { query: "comet", exceptPlatform: "gmail" });
+    expect(hits.map((row) => row.guid).sort()).toEqual(["imessage", "slack"]);
+  });
+
   test("sender search filters inside the full-text index before the limit", async () => {
     // Depends on isFromMe landing in search_text.filterFields on the sibling schema branch.
     const searchRef = makeFunctionReference("comma/queries:searchMessages") as ApiFromModules<{
@@ -516,4 +528,13 @@ test("the Unknown lens fails open until Apple contacts reach the identity graph"
   await t.run((ctx) => ctx.db.insert("identities", { kind: "phone", source: "apple_contact", value: "+16195557777", normalized: "+16195557777",
     is_self: false, message_count: 0, chat_count: 0, created_at: "x", updated_at: "x" }));
   expect(await available()).toBe(true);
+});
+
+describe("a conversation id from a deep link", () => {
+  test("one that is not an id reads as no conversation, not a validation error", async () => {
+    const t = authed();
+    expect(await t.query(api.comma.queries.getConversation, { conversationId: "does-not-exist" })).toBeNull();
+    expect(await t.query(api.comma.queries.listMessages, { conversationId: "does-not-exist", paginationOpts })).toMatchObject({ page: [], isDone: true });
+    expect(await t.query(api.comma.history.messageWindow, { conversationId: "does-not-exist", around: 1 })).toEqual([]);
+  });
 });

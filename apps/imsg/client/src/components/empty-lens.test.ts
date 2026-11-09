@@ -41,7 +41,7 @@ test("Unread points at what still needs a reply and drops the sentence at zero",
     line2: "You've opened every message. 41 conversations still need a reply.",
     sectionTitle: "Your turn the longest",
     footer: "Go to Needs you",
-    footerHint: "⌘1",
+    footerHint: "⌘2",
   });
   expect(emptyLensCopy("unread", { unresponded: 1 }).line2).toBe("You've opened every message. 1 conversation still needs a reply.");
   expect(emptyLensCopy("unread", { unresponded: 0 }).line2).toBe("You've opened every message.");

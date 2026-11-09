@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
+import { LENSES as TABS } from "@/lib/inbox-model";
 import { compactAge, LATE_AFTER_MS, waitingLongest, yourTurnLongest, type AgedChat } from "@/lib/turn-age";
 
 import { ChatAvatar } from "./avatar";
@@ -64,7 +65,7 @@ const LENSES = {
     total: (_chats: readonly ChatSummary[], counts: EmptyLensCounts) => counts.unresponded,
     rowTrailing: "age",
     footer: "Go to Needs you",
-    footerHint: "⌘1",
+    footerHint: `⌘${TABS.findIndex((tab) => tab.value === "unresponded") + 1}`,
     footerAction: "onGoToNeedsReply",
   },
 } as const satisfies Record<EmptyLensKind, {

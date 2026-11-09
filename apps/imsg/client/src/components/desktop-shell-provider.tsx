@@ -35,6 +35,7 @@ import { onOpenAgentPane } from "@/lib/agent-pane";
 import { useMailSelection } from "@/lib/mail-selection";
 import { onOpenChatInfo } from "@/lib/chat-info";
 import { DEFAULT_INBOX_FILTERS } from "@/lib/inbox-model";
+import { lensFilters } from "@/lib/palette/saved-views";
 import { WANTS_YOU } from "@shared/agent-attention";
 import type { ConversationId } from "@shared/types";
 import {
@@ -53,7 +54,7 @@ import { conversationRoute } from "@/lib/selection";
 import { onOpenScheduledPane } from "@/lib/scheduled-pane";
 import { onOpenSettingsPane } from "@/lib/settings-pane";
 import { installNativeMenuBridge } from "@/lib/desktop-shell";
-import { setKeyboardRuntime } from "@/lib/keyboard/controller";
+import { runEscapeClosers, setKeyboardRuntime } from "@/lib/keyboard/controller";
 import { installKeyboardDispatcher } from "@/lib/keyboard/dispatcher";
 
 function desktopProjection(
@@ -268,7 +269,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   useEffect(() => {
     if (!shellOwnsRoute || activeWorkspace !== "contacts") return;
     const closeContactsPanel = (): boolean => {
-      if (closeTopSurface()) return true;
+      if (closeTopSurface() || runEscapeClosers()) return true;
       if (!state.utility) return false;
       dispatch({ type: "utility/closed" });
       if (projection?.kind === "utility") router.replace(workspacePath(activeWorkspace));
@@ -434,7 +435,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
                 accessibilityElementsHidden={activeWorkspace !== "mail"}
                 importantForAccessibility={activeWorkspace === "mail" ? "auto" : "no-hide-descendants"}
               >
-                {mailVisited ? <MailWorkspace wide /> : null}
+                {mailVisited ? <MailWorkspace wide active={shellOwnsRoute && activeWorkspace === "mail"} /> : null}
               </View>
             </View>
             {utilityPane}
@@ -465,7 +466,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
                   messagesActions.current?.applyState(next);
                   dispatch({
                     type: "messages/filters-changed",
-                    filters: { state: next, type: messagesRail.type },
+                    filters: { state: next, type: lensFilters(next, DEFAULT_INBOX_FILTERS.type).type },
                   });
                   if (activeWorkspace !== "messages") router.replace("/");
                 }}

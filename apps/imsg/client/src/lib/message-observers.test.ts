@@ -40,18 +40,25 @@ test("reconnection suppresses unseen catch-up then resumes live sound", () => {
 test("mounted reads follow new inbound GUIDs and ignore edits and outbound", () => {
   const reads = createInboundReadObserver();
   expect(reads.observe(cid("chat"), [], true)).toBe(false);
-  expect(reads.observe(cid("chat"), [message("initial")], true)).toBe(true);
+  expect(reads.observe(cid("chat"), [message("initial")], true), "the open already read the first page").toBe(false);
   expect(reads.observe(cid("chat"), [message("initial"), message("new")], true)).toBe(true);
   expect(reads.observe(cid("chat"), [message("initial"), message("new")], true)).toBe(false);
   expect(reads.observe(cid("chat"), [message("outbound", true)], true)).toBe(false);
-  expect(reads.observe(cid("other"), [message("other-initial")], true)).toBe(true);
+  expect(reads.observe(cid("other"), [message("other-initial")], true)).toBe(false);
+  expect(reads.observe(cid("other"), [message("other-initial"), message("other-new")], true)).toBe(true);
 });
 
 test("an older page loading into the thread does not mark it read again", () => {
   const reads = createInboundReadObserver();
-  expect(reads.observe(cid("chat"), [message("newest", false, 500)], true)).toBe(true);
+  expect(reads.observe(cid("chat"), [message("newest", false, 500)], true)).toBe(false);
   expect(reads.observe(cid("chat"), [message("older", false, 100), message("newest", false, 500)], true)).toBe(false);
   expect(reads.observe(cid("chat"), [message("older", false, 100), message("newest", false, 500), message("arrived", false, 900)], true)).toBe(true);
+});
+
+test("a fetch filling in messages under the newest one the sidebar showed does not mark the thread read again", () => {
+  const reads = createInboundReadObserver();
+  expect(reads.observe(cid("chat"), [message("cached-newest", false, 900)], true)).toBe(false);
+  expect(reads.observe(cid("chat"), [message("earlier", false, 700), message("cached-newest", false, 900)], true)).toBe(false);
 });
 
 test("preview threads do not consume inbound GUIDs; retractions do not mark read", () => {

@@ -1,7 +1,8 @@
 import type { GenericId } from "convex/values";
 import { describe, expect, test } from "bun:test";
 
-import { EMAIL_SANDBOX, emailDocument, messageFiles, openByDefault, regularSenders, threadFiles } from "./mail";
+import { EMAIL_SANDBOX, emailDocument, messageFiles, openByDefault, threadFiles } from "./mail";
+import { regularSenders } from "./mail-lens";
 import { inLens } from "./mail-lens";
 
 describe("inLens", () => {

@@ -43,7 +43,7 @@ const isTriage = (payload: CommaOutboxPayload): payload is TriagePayload => TRIA
 
 async function triageCore(ctx: MutationCtx, conversationId: Id<"comma_conversations">, payload: TriagePayload): Promise<void> {
   switch (payload.kind) {
-    case "settle": return await settleConversation(ctx, conversationId, payload.messageGuid);
+    case "settle": await settleConversation(ctx, conversationId, payload.messageGuid); return;
     case "unsettle": return await unsettleConversation(ctx, conversationId);
     case "pin": return await setConversationFlag(ctx, conversationId, { pinned: payload.value });
     case "mute": return await setConversationFlag(ctx, conversationId, { mutedUnresponded: payload.value });
