@@ -137,8 +137,12 @@ export class MessageWriter {
   }
 }
 
+/** Reads of a live message before it is dropped. RetryWork's backoff spreads them over about half a minute. */
+const UNREADABLE_READS = 6;
+
 export class LiveBridge {
   private messages = new Map<string, BBMessage>();
+  private unreadable = new Map<string, number>();
   readonly presence: PresenceBridge;
   private refreshRevision = 1;
   private refreshedRevision = 0;
@@ -154,20 +158,40 @@ export class LiveBridge {
         await writer.refreshChats();
         this.refreshedRevision = revision;
       }
-      const queued = [...this.messages.values()];
+      const read: BBMessage[] = [];
       const hydrated: BBMessage[] = [];
-      for (const message of queued) {
-        const fetched = bbValue(await writer.deps.bb.messageWithReactions(message.guid))
-          .find((row) => row.guid === message.guid);
-        if (!fetched) throw new Error(`Message ${message.guid} not yet readable`);
-        hydrated.push({ ...fetched, ...message });
-      }
-      const rows = await writer.postMessages(hydrated);
-      if (queued.length) await writer.deps.ingest.post("sync", { key: "continuous", lastEventAt: this.lastEventAt ?? undefined });
-      onMessages?.(rows);
-      for (const message of queued) {
+      const unread: string[] = [];
+      for (const message of [...this.messages.values()]) {
+        let fetched: BBMessage | undefined;
+        try {
+          fetched = bbValue(await writer.deps.bb.messageWithReactions(message.guid)).find((row) => row.guid === message.guid);
+        } catch (error) {
+          console.warn(`comma bridge live: reading ${message.guid}: ${String(error)}`);
+        }
+        if (fetched) {
+          this.unreadable.delete(message.guid);
+          read.push(message);
+          hydrated.push({ ...fetched, ...message });
+          continue;
+        }
+        // A message BlueBubbles can't read yet is read again, but never holds up the rest. Reconcile picks up one dropped here.
+        const reads = (this.unreadable.get(message.guid) ?? 0) + 1;
+        if (reads < UNREADABLE_READS) {
+          this.unreadable.set(message.guid, reads);
+          unread.push(message.guid);
+          continue;
+        }
+        console.error(`comma bridge live: dropping ${message.guid}, unreadable after ${reads} reads`);
+        this.unreadable.delete(message.guid);
         if (this.messages.get(message.guid) === message) this.messages.delete(message.guid);
       }
+      const rows = await writer.postMessages(hydrated);
+      if (read.length) await writer.deps.ingest.post("sync", { key: "continuous", lastEventAt: this.lastEventAt ?? undefined });
+      onMessages?.(rows);
+      for (const message of read) {
+        if (this.messages.get(message.guid) === message) this.messages.delete(message.guid);
+      }
+      if (unread.length) throw new Error(`Messages not yet readable: ${unread.join(", ")}`);
     }));
     this.unsubscribe = writer.deps.bb.onEvent((event) => {
       this.presence.observe(event);

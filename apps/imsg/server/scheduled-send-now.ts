@@ -11,6 +11,11 @@ export interface ScheduledSendNowSeam {
   ): Promise<Result<BBScheduledMessage>>;
 }
 
+/** Whether BlueBubbles has sent this row or is sending it. Moving its time again would send it a second time. */
+export function scheduledAlreadySent(scheduled: BBScheduledMessage): boolean {
+  return scheduled.status === "complete" || scheduled.status === "in-progress";
+}
+
 const claimsBySeam = new WeakMap<ScheduledSendNowSeam, Set<number>>();
 
 /**
@@ -40,6 +45,7 @@ export class ScheduledSendNow {
       if (!listed.ok) return listed;
       const scheduled = listed.value.find((item) => Number(item.id) === id);
       if (!scheduled) return { ok: false, error: "scheduled message not found" };
+      if (scheduledAlreadySent(scheduled)) return { ok: false, error: "scheduled message was already sent" };
       if (scheduled.type !== "send-message") return { ok: false, error: "unsupported schedule type" };
       const chatGuid = scheduled.payload.chatGuid?.trim();
       const text = scheduled.payload.message?.trim();

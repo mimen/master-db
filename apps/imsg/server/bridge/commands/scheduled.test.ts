@@ -138,3 +138,16 @@ test("failed mirror publication cannot produce a successful scheduling receipt",
   await expect(scheduledHandlers.schedule.execute(h.ctx, { kind: "schedule", text: "later", sendAt })).rejects.toThrow("ingest offline");
   expect(h.bb.scheduledCreates).toHaveLength(1);
 });
+
+test("a scheduled message that already went out, or is going out, is never moved again by Edit or Send now", async () => {
+  for (const status of ["complete", "in-progress"] as const) {
+    const h = await harness();
+    const [row] = (await h.bb.listScheduledMessages() as { ok: true; value: { status?: string }[] }).value;
+    row!.status = status;
+    await expect(scheduledHandlers.editScheduled.execute(h.ctx, { kind: "editScheduled", bbId: 7, text: "again", sendAt })).rejects.toThrow("already sent");
+    await expect(scheduledHandlers.sendScheduledNow.execute(h.ctx, { kind: "sendScheduledNow", bbId: 7 })).rejects.toThrow("already sent");
+    expect(await new ScheduledSendNow(h.bb).send(7)).toEqual({ ok: false, error: "scheduled message was already sent" });
+    expect(h.bb.scheduledUpdates).toEqual([]);
+    expect(h.ingest.calls).toEqual([]);
+  }
+});

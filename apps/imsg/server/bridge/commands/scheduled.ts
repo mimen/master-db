@@ -1,6 +1,6 @@
 import type { BBScheduledMessage } from "../../bb-types";
 import { mapScheduledMessage } from "../../scheduled";
-import { ScheduledSendNow } from "../../scheduled-send-now";
+import { scheduledAlreadySent, ScheduledSendNow } from "../../scheduled-send-now";
 import { publishScheduled } from "../scheduled-mirror";
 import { accept, requireChat, type IMessageContext, type HandlerMap } from "./types";
 
@@ -29,6 +29,7 @@ export const scheduledHandlers = {
   } },
   editScheduled: { execute: async (ctx, payload) => {
     const target = await scheduledTarget(ctx, payload.bbId);
+    if (scheduledAlreadySent(target)) throw new Error("scheduled message was already sent");
     const result = await ctx.commands.schedule({ ...payload, chatGuid: target.payload.chatGuid }, payload.bbId);
     if (!result.ok) throw new Error(result.error);
     return { kind: "editScheduled", scheduled: await scheduledResult(ctx, result.value) };
