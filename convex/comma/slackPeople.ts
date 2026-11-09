@@ -10,6 +10,7 @@ import type { SlackUser } from "./slackEvents";
  * Slack users in the identity graph. Each is a `slack` identity keyed `slack:U…`. A user whose Slack email is exactly
  * a person's email joins that person, which is how a Slack DM and an iMessage chat end up under one person. Anyone
  * else gets a person of their own, named from Slack and marked auto-clustered, until a merge joins them to someone.
+ * The user's profile picture rides on the identity as `img_url`, and the person's aggregates carry it as `avatar_url`.
  */
 
 const SOURCE = "slack";
@@ -26,12 +27,12 @@ export async function upsertSlackUsers(ctx: MutationCtx, users: readonly SlackUs
     let identity = await slackIdentity(ctx, user.id);
     if (!identity) {
       const id = await ctx.db.insert("identities", {
-        kind: "slack", value, normalized: value, network: SOURCE, display_name: user.name, message_count: 0, chat_count: 0,
+        kind: "slack", value, normalized: value, network: SOURCE, display_name: user.name, img_url: user.image, message_count: 0, chat_count: 0,
         is_self: false, source: SOURCE, first_seen_at: now, last_seen_at: now, created_at: now, updated_at: now,
       });
       identity = (await ctx.db.get(id))!;
-    } else if (identity.display_name !== user.name) {
-      await ctx.db.patch(identity._id, { display_name: user.name, updated_at: now });
+    } else if (identity.display_name !== user.name || identity.img_url !== user.image) {
+      await ctx.db.patch(identity._id, { display_name: user.name, img_url: user.image, updated_at: now });
     }
     let personId = identity.person_id;
     if (!personId) {

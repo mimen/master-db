@@ -295,7 +295,9 @@ export function personAggregatePatch(person: Doc<"people">, all: Doc<"identities
   const emails = new Set<string>();
   let messageCount = 0;
   let isSelf = false;
+  let avatarUrl: string | undefined;
   for (const i of all) {
+    if (i.kind === "slack") avatarUrl ??= i.img_url;
     if (i.normalized.includes("@")) emails.add(i.normalized);
     // A Slack identity's key is its user id, which is neither a phone nor an email.
     else if (i.normalized && i.kind !== "slack") phones.add(i.normalized);
@@ -323,6 +325,7 @@ export function personAggregatePatch(person: Doc<"people">, all: Doc<"identities
     person.identity_count === all.length &&
     person.message_count === messageCount &&
     person.is_self === isSelf &&
+    person.avatar_url === avatarUrl &&
     person.primary_handle === nextPrimaryHandle;
   if (unchanged) return null;
 
@@ -342,6 +345,7 @@ export function personAggregatePatch(person: Doc<"people">, all: Doc<"identities
     identity_count: all.length,
     message_count: messageCount,
     is_self: isSelf,
+    avatar_url: avatarUrl,
     updated_at: now,
   };
 }

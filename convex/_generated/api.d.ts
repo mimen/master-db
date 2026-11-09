@@ -7506,7 +7506,7 @@ export declare const internal: {
             | { channel: string; kind: "deleted"; ts: string }
             | {
                 kind: "user";
-                user: { email?: string; id: string; name: string };
+                user: { email?: string; id: string; image?: string; name: string };
               }
             | {
                 at: number;
@@ -7613,7 +7613,7 @@ export declare const internal: {
               | { channel: string; type: "im" | "mpim" | "channel" }
               | { channel: string; threadTs: string; type: "thread" };
           }>;
-          users: Array<{ email?: string; id: string; name: string }>;
+          users: Array<{ email?: string; id: string; image?: string; name: string }>;
         },
         { skipped: number; written: number }
       >;
@@ -7638,6 +7638,7 @@ export declare const internal: {
         null
       >;
       pruneEvents: FunctionReference<"mutation", "internal", {}, null>;
+      refreshUsers: FunctionReference<"mutation", "internal", {}, number>;
       saveBackfill: FunctionReference<
         "mutation",
         "internal",

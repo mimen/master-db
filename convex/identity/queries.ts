@@ -125,7 +125,7 @@ export const whoIs = query({
       // `person` is the raw Doc<"people">, so is_favorite/priority already
       // ride along automatically — only `tags`/`events` need to be joined in
       // separately (private CRM layer, see convex/identity/crm.ts).
-      person: { ...person, photoUrl: person.photoStorageId ? await ctx.storage.getUrl(person.photoStorageId) : null },
+      person: { ...person, photoUrl: person.photoStorageId ? await ctx.storage.getUrl(person.photoStorageId) : person.avatar_url ?? null },
       tags,
       events,
       identities: identities.map((i) => ({
@@ -238,7 +238,7 @@ export const listPeople = query({
     for (const p of named) {
       out.push({
         _id: p._id,
-        photoUrl: p.photoStorageId ? await ctx.storage.getUrl(p.photoStorageId) : null,
+        photoUrl: p.photoStorageId ? await ctx.storage.getUrl(p.photoStorageId) : p.avatar_url ?? null,
         display_name: p.display_name,
         first_name: p.first_name,
         last_name: p.last_name,
