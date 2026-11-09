@@ -30,6 +30,7 @@ test("navigation: each style lists every view, ⌘N follows its order, and help 
 
   // Sidebar list, the default: every view is a row, Snoozed among them, with counts beside their own names.
   const views = page.getByRole("tablist").filter({ has: page.getByRole("tab", { name: /^Snoozed/ }) });
+  await expect(views.getByRole("tab")).toHaveCount(9);
   expect(await names(views.getByRole("tab"))).toEqual(["Today", "To review", "Waiting", "Unread", "Snoozed", "Drafts", "Agents", "All", "Settled"]);
   await expect(page.getByRole("tab", { name: /^To review, \d+$/ })).toBeVisible();
   await page.keyboard.press("Meta+5");
