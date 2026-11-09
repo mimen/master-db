@@ -14,16 +14,19 @@ export class GoogleApiError extends Error {
 
 export const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me";
 
-type Init = { token?: string; method?: "GET" | "POST"; form?: Record<string, string>; json?: unknown };
+export const GMAIL_UPLOAD = "https://gmail.googleapis.com/upload/gmail/v1/users/me";
 
-export async function googleApi<T>(url: string, { token, method = "GET", form, json }: Init = {}): Promise<T> {
+/** `raw`: a body sent as is, such as a media upload. */
+type Init = { token?: string; method?: "GET" | "POST"; form?: Record<string, string>; json?: unknown; raw?: { contentType: string; body: string } };
+
+export async function googleApi<T>(url: string, { token, method = "GET", form, json, raw }: Init = {}): Promise<T> {
   const response = await fetch(url, {
-    method: form || json !== undefined ? "POST" : method,
+    method: form || json !== undefined || raw ? "POST" : method,
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(form ? { "Content-Type": "application/x-www-form-urlencoded" } : json !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(form ? { "Content-Type": "application/x-www-form-urlencoded" } : json !== undefined ? { "Content-Type": "application/json" } : raw ? { "Content-Type": raw.contentType } : {}),
     },
-    ...(form ? { body: new URLSearchParams(form) } : json !== undefined ? { body: JSON.stringify(json) } : {}),
+    ...(form ? { body: new URLSearchParams(form) } : json !== undefined ? { body: JSON.stringify(json) } : raw ? { body: raw.body } : {}),
   });
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { error?: string | { status?: string; errors?: { reason?: string }[] } } | null;

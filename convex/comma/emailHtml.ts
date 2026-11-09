@@ -3,9 +3,9 @@ import { defaultTreeAdapter, html as HTML, parse, serialize, type DefaultTreeAda
 /**
  * Email HTML is hostile input. `cleanEmailHtml` rebuilds it from an allowlist on the server, before any client sees
  * it: no scripts, handlers, forms, frames or <base>, links open in a new tab, tracking pixels go, and remote images
- * are held back as `data-comma-src` until the reader asks for them. The reader also shows the result in a sandboxed
- * iframe under a CSP that blocks remote loads, so either layer alone stops a script. parse5 parses the way browsers
- * do, so what is checked here is what a browser would build.
+ * are held back as `data-comma-src` until the reader asks for them; an inline `cid:` image becomes `data-comma-cid`.
+ * The reader also shows the result in a sandboxed iframe under a CSP that blocks remote loads, so either layer alone
+ * stops a script. parse5 parses the way browsers do, so what is checked here is what a browser would build.
  */
 
 type Node = DefaultTreeAdapterMap["node"];
@@ -66,6 +66,8 @@ function cleanElement(element: Element, counts: Counts): boolean {
     const src = attr(element, "src")?.trim() ?? "";
     if (isPixel(element)) return false;
     if (DATA_IMAGE.test(src)) kept.push({ name: "src", value: src });
+    // An inline attachment. The reader swaps in its stored bytes as a data: URL, which the CSP already allows.
+    else if (/^cid:/i.test(src)) kept.push({ name: "data-comma-cid", value: src.slice(4) });
     else if (/^https?:/i.test(src)) {
       kept.push({ name: "data-comma-src", value: src });
       counts.blockedImages++;

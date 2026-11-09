@@ -5,9 +5,11 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalMutation, type ActionCtx, type MutationCtx } from "../_generated/server";
 import { gmailMessageValue, type CommandResult, type CommaRoute } from "../schema/comma/validators";
 
-import { GMAIL_API, googleApi, GoogleApiError } from "./gmailApi";
+import { gmail } from "./conversationIdentity";
+import { findByKey } from "./conversationLookup";
+import { GMAIL_API, GMAIL_UPLOAD, googleApi, GoogleApiError } from "./gmailApi";
 import { parseAddresses, parseGmailMessage, type EmailAddress, type RawGmailMessage } from "./gmailMessage";
-import { gmailAccount, insertGmailMessages } from "./gmailSync";
+import { gmailAccount, insertGmailMessages, writeGmailThread } from "./gmailSync";
 import { gmailToken } from "./googleAuth";
 import { NotSentError } from "./laneRegistry";
 import { completePendingSend } from "./pendingSends";
@@ -16,15 +18,21 @@ import { settleConversation, unsettleConversation } from "./triage";
 /**
  * The Gmail lane: Convex runs each command against the Gmail API as Milad (laneRegistry.ts). A send goes out as an RFC
  * 822 message whose In-Reply-To, References and threadId thread it in Gmail, and whose Message-ID is built from the
- * send's clientKey. The sent message lands from Gmail's answer in applyGmailResult. A send whose outcome is unknown is
- * looked for by that Message-ID, never sent again. Archive and unarchive are Comma's settle and unsettle written back.
+ * send's clientKey. Files from storage go out as multipart/mixed through the upload endpoint. `sendEmail` starts a new
+ * thread (a new email or a forward), and its message lands as a new conversation. The sent message lands from Gmail's
+ * answer in applyGmailResult. A send whose outcome is unknown is looked for by that Message-ID, never sent again.
+ * Archive and unarchive are Comma's settle and unsettle written back.
  */
 
 type OutboxRow = Doc<"comma_outbox">;
 type GmailRoute = Extract<CommaRoute, { platform: "gmail" }>;
 type GmailMessageValue = Infer<typeof gmailMessageValue>;
+type SendKind = Extract<OutboxRow["payload"], { kind: "send" | "sendEmail" }>;
 type Header = { name: string; value: string };
 type RawThread = { messages?: (RawGmailMessage & { payload?: { headers?: Header[] } })[] };
+
+/** Gmail's own cap on what one email's files add up to. */
+export const MAX_EMAIL_FILES_BYTES = 25 * 1024 * 1024;
 
 /** Waits before each retry of a rate-limited request. A backfill can hold the mailbox's per-user quota for a while. */
 const RATE_LIMIT_WAITS_MS = [2_000, 5_000, 10_000];
@@ -75,9 +83,11 @@ const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "
 /** The simple HTML part beside the plain text: the same words, each line kept. */
 export const htmlBody = (text: string) => `<div dir="ltr">${escapeHtml(text).replace(/\r?\n/g, "<br>")}</div>`;
 
+export type OutgoingFile = { filename: string; mimeType: string; bytes: Uint8Array };
+
 export type OutgoingEmail = {
   from: EmailAddress; to: EmailAddress[]; cc: EmailAddress[]; subject: string; text: string;
-  messageId: string; inReplyTo?: string; references?: string; date: Date;
+  messageId: string; inReplyTo?: string; references?: string; date: Date; files?: OutgoingFile[];
 };
 
 /** The headers a sent email carries: encoded on the wire, and decoded, as Gmail reads them back, on the message Comma lands. */
@@ -94,22 +104,42 @@ function emailHeaders(email: OutgoingEmail, wire: boolean): Header[] {
   ];
 }
 
-/** The whole message as users.messages.send takes it: plain text and its HTML part, each base64 in UTF-8. */
+const wrap = (bytes: Uint8Array) => base64(bytes).replace(/.{76}/g, "$&\r\n");
+/** A filename as a quoted parameter, in RFC 2231 form as well when it is not ASCII. */
+function filenameParams(name: string): string {
+  const flat = name.replace(/[\r\n"\\]+/g, " ").trim() || "attachment";
+  return /^[\x20-\x7e]*$/.test(flat) ? `filename="${flat}"` : `filename="${headerText(flat, true)}"; filename*=UTF-8''${encodeURIComponent(flat)}`;
+}
+
+/**
+ * The whole message as users.messages.send takes it: plain text and its HTML part, each base64 in UTF-8, and with
+ * files, those two inside multipart/mixed, each file a base64 attachment part after them.
+ */
 export function rfc822(email: OutgoingEmail): string {
   const boundary = `comma-${email.messageId.replace(/[^A-Za-z0-9]/g, "").slice(0, 40)}`;
   const part = (type: string, body: string) => [
-    `--${boundary}`, `Content-Type: ${type}; charset="UTF-8"`, "Content-Transfer-Encoding: base64", "",
-    base64(utf8(body)).replace(/.{76}/g, "$&\r\n"),
+    `--${boundary}`, `Content-Type: ${type}; charset="UTF-8"`, "Content-Transfer-Encoding: base64", "", wrap(utf8(body)),
   ].join("\r\n");
+  const alternative = [`Content-Type: multipart/alternative; boundary="${boundary}"`, "",
+    part("text/plain", email.text), part("text/html", htmlBody(email.text)), `--${boundary}--`, ""].join("\r\n");
+  const headers = [...emailHeaders(email, true).map((header) => `${header.name}: ${header.value}`), "MIME-Version: 1.0"];
+  if (!email.files?.length) return [...headers, alternative].join("\r\n");
+  const mixed = `${boundary}-mixed`;
   return [
-    ...emailHeaders(email, true).map((header) => `${header.name}: ${header.value}`),
-    "MIME-Version: 1.0", `Content-Type: multipart/alternative; boundary="${boundary}"`, "",
-    part("text/plain", email.text), part("text/html", htmlBody(email.text)), `--${boundary}--`, "",
+    ...headers, `Content-Type: multipart/mixed; boundary="${mixed}"`, "", `--${mixed}`, alternative,
+    ...email.files.flatMap((file) => [
+      `--${mixed}`, `Content-Type: ${file.mimeType.replace(/[\r\n;"]/g, "") || "application/octet-stream"}; ${filenameParams(file.filename).replace("filename", "name")}`,
+      `Content-Disposition: attachment; ${filenameParams(file.filename)}`, "Content-Transfer-Encoding: base64", "", wrap(file.bytes),
+    ]),
+    `--${mixed}--`, "",
   ].join("\r\n");
 }
 
-/** The message Comma sent, as a read of it would parse, so it lands as its echo will. */
-function sentMessage(email: OutgoingEmail, sent: { id: string; threadId: string; labelIds?: string[] }): GmailMessageValue {
+/**
+ * The message Comma sent, as a read of it would parse, so it lands as its echo will. Its files are the stored ones it
+ * was built from, numbered as Gmail numbers the parts after the text.
+ */
+function sentMessage(email: OutgoingEmail, sent: { id: string; threadId: string; labelIds?: string[] }, files: readonly Stored[]): GmailMessageValue {
   const parsed = parseGmailMessage({
     id: sent.id, threadId: sent.threadId, labelIds: sent.labelIds ?? ["SENT"], internalDate: String(email.date.getTime()),
     snippet: email.text.slice(0, 200),
@@ -119,7 +149,35 @@ function sentMessage(email: OutgoingEmail, sent: { id: string; threadId: string;
     ] },
   });
   // A message Milad wrote is never bulk mail, whatever his address looks like.
-  return { ...parsed, bulk: false, text: email.text };
+  return { ...parsed, bulk: false, text: email.text, attachments: files.map((file, index) => ({
+    partId: String(index + 1), filename: file.filename, mimeType: file.mimeType, size: file.bytes.length, inline: false, storageId: file.storageId,
+  })) };
+}
+
+type Stored = OutgoingFile & { storageId: Id<"_storage"> };
+
+/** The payload's files, read from storage. Nothing has been sent yet, so a missing file or a total over Gmail's cap fails the send. */
+async function storedFiles(ctx: ActionCtx, payload: SendKind): Promise<Stored[]> {
+  const files: Stored[] = [];
+  let total = 0;
+  for (const attachment of payload.email?.attachments ?? []) {
+    const blob = await ctx.storage.get(attachment.storageId);
+    if (!blob) throw new NotSentError(`${attachment.filename} is no longer stored`);
+    total += blob.size;
+    if (total > MAX_EMAIL_FILES_BYTES) throw new NotSentError("The files are over Gmail's 25 MB limit");
+    files.push({ ...attachment, bytes: new Uint8Array(await blob.arrayBuffer()) });
+  }
+  return files;
+}
+
+/** users.messages.send: the JSON form for text alone, the upload endpoint for a message carrying files, which can be large. */
+async function deliver(raw: string, threadId: string | undefined, token: string, upload: boolean) {
+  type Sent = { id: string; threadId: string; labelIds?: string[] };
+  if (!upload) return await call<Sent>(`${GMAIL_API}/messages/send`, { token, json: { raw: base64url(raw), ...(threadId ? { threadId } : {}) } });
+  const boundary = `comma-upload-${crypto.randomUUID()}`;
+  const body = [`--${boundary}`, "Content-Type: application/json; charset=UTF-8", "", JSON.stringify(threadId ? { threadId } : {}),
+    `--${boundary}`, "Content-Type: message/rfc822", "", raw, `--${boundary}--`, ""].join("\r\n");
+  return await call<Sent>(`${GMAIL_UPLOAD}/messages/send?uploadType=multipart`, { token, raw: { contentType: `multipart/related; boundary=${boundary}`, body } });
 }
 
 const headerOf = (headers: readonly Header[] | undefined, name: string) =>
@@ -141,10 +199,11 @@ async function threading(token: string, threadId: string, replyToGuid: string | 
   return { inReplyTo: parentId, references };
 }
 
-async function sendEmail(ctx: ActionCtx, row: OutboxRow, route: GmailRoute, token: string): Promise<CommandResult> {
+/** A reply into `threadId`, or with none, the first message of a new thread. */
+async function sendEmail(ctx: ActionCtx, row: OutboxRow, accountId: Id<"comma_accounts">, threadId: string | undefined, token: string): Promise<CommandResult> {
   const { payload } = row;
-  if (payload.kind !== "send" || !payload.email) throw new NotSentError("An email needs someone to send it to");
-  const [address] = await ctx.runQuery(internal.comma.gmailSync.selfHandles, { accountId: route.accountId });
+  if ((payload.kind !== "send" && payload.kind !== "sendEmail") || !payload.email) throw new NotSentError("An email needs someone to send it to");
+  const [address] = await ctx.runQuery(internal.comma.gmailSync.selfHandles, { accountId });
   if (!address) throw new NotSentError("Gmail is not connected");
   const to = parseAddresses(payload.email.to.join(", "));
   const cc = parseAddresses(payload.email.cc.join(", "));
@@ -153,31 +212,36 @@ async function sendEmail(ctx: ActionCtx, row: OutboxRow, route: GmailRoute, toke
     .catch(() => ({ sendAs: [] }));
   const name = sendAs.sendAs?.find((alias) => alias.sendAsEmail.toLowerCase() === address)?.displayName || null;
   // ponytail: always sends from the mailbox's own address; a reply to mail sent to an alias should send from that alias.
+  const files = await storedFiles(ctx, payload);
   const email: OutgoingEmail = {
-    from: { address, name }, to, cc, subject: payload.email.subject, text: payload.text,
-    messageId: messageIdOf(row.clientKey, address), date: new Date(), ...await threading(token, route.threadId, payload.replyToGuid),
+    from: { address, name }, to, cc, subject: payload.email.subject, text: payload.text, files,
+    messageId: messageIdOf(row.clientKey, address), date: new Date(),
+    ...threadId && payload.kind === "send" ? await threading(token, threadId, payload.replyToGuid) : {},
   };
-  const sent = await call<{ id: string; threadId: string; labelIds?: string[] }>(`${GMAIL_API}/messages/send`, {
-    token, json: { raw: base64url(rfc822(email)), threadId: route.threadId },
-  });
-  if (!sent.id) throw new Error("Gmail confirmed the send without its id");
-  return { kind: "send", guid: sent.id, gmail: sentMessage(email, { ...sent, threadId: sent.threadId || route.threadId }) };
+  const sent = await deliver(rfc822(email), threadId, token, files.length > 0);
+  if (!sent.id || !(sent.threadId || threadId)) throw new Error("Gmail confirmed the send without its id");
+  const gmail = sentMessage(email, { ...sent, threadId: sent.threadId || threadId! }, files);
+  return payload.kind === "send" ? { kind: "send", guid: sent.id, gmail } : { kind: "sendEmail", guid: sent.id, gmail };
 }
 
 export async function executeGmail(ctx: ActionCtx, row: OutboxRow): Promise<CommandResult> {
   const { route, payload } = row;
-  if (route?.platform !== "gmail") throw new NotSentError("Not a Gmail command");
+  const gmailRoute = route?.platform === "gmail" ? route : undefined;
+  const accountId = payload.kind === "sendEmail" ? payload.accountId : gmailRoute?.accountId;
+  if (!accountId) throw new NotSentError("Not a Gmail command");
   if (payload.kind === "markRead") return { kind: "markRead", ok: true };
-  const token = await gmailToken(ctx, route.accountId).catch(() => null);
+  const token = await gmailToken(ctx, accountId).catch(() => null);
   if (!token) throw new NotSentError("Gmail is not connected");
+  if (payload.kind === "sendEmail") return await sendEmail(ctx, row, accountId, undefined, token);
+  if (!gmailRoute) throw new NotSentError("Not a Gmail command");
   switch (payload.kind) {
     case "send":
-      return await sendEmail(ctx, row, route, token);
+      return await sendEmail(ctx, row, gmailRoute.accountId, gmailRoute.threadId, token);
     case "archive":
     case "unarchive": {
       const labels = { [payload.kind === "archive" ? "removeLabelIds" : "addLabelIds"]: ["INBOX"] };
       // Moving a label twice changes nothing, so any error fails the row and Comma takes its settle back.
-      await googleApi(`${GMAIL_API}/threads/${encodeURIComponent(route.threadId)}/modify`, { token, json: labels })
+      await googleApi(`${GMAIL_API}/threads/${encodeURIComponent(gmailRoute.threadId)}/modify`, { token, json: labels })
         .catch((error: unknown) => {
           throw new NotSentError(error instanceof Error ? error.message : String(error));
         });
@@ -202,9 +266,15 @@ async function setInbox(ctx: MutationCtx, conversationId: Id<"comma_conversation
   if (conversation?.gmail) await ctx.db.patch(conversationId, { gmail: { ...conversation.gmail, inInbox, archiveError } });
 }
 
-/** What a confirmed Gmail command changes in Convex, before Gmail's history says so. */
+/** What a confirmed Gmail command changes in Convex, before Gmail's history says so. A new thread's row learns its conversation. */
 export async function applyGmailResult(ctx: MutationCtx, row: OutboxRow): Promise<void> {
   const { route, payload, conversationId, result } = row;
+  if (payload.kind === "sendEmail" && result?.kind === "sendEmail") {
+    await writeGmailThread(ctx, payload.accountId, result.gmail.threadId, [result.gmail], true);
+    const thread = await findByKey(ctx, { platform: "gmail", accountId: payload.accountId }, gmail.conversationKey(result.gmail.threadId));
+    if (thread) await ctx.db.patch(row._id, { conversationId: thread._id });
+    return;
+  }
   if (route?.platform !== "gmail" || !conversationId) return;
   if (payload.kind === "send" && result?.kind === "send" && "gmail" in result) await landGmailSend(ctx, route.accountId, conversationId, result.gmail, row.clientKey);
   if (payload.kind === "archive" || payload.kind === "unarchive") await setInbox(ctx, conversationId, payload.kind === "unarchive");

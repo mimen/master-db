@@ -29,7 +29,12 @@ export type GmailMessage = {
   blockedImages?: number;
   /** What every model reads (gmailModelText). */
   model: ModelText;
+  /** Its attachment parts; empty for a metadata read. */
+  attachments: GmailAttachment[];
 };
+
+/** A MIME part with a filename. `inline`: the HTML body shows it through `cid:`, so the reader draws it there. */
+export type GmailAttachment = { partId: string; filename: string; mimeType: string; size: number; contentId?: string; inline: boolean };
 
 /** The headers bulk screening and the reader need; a metadata read asks for exactly these. */
 export const METADATA_HEADERS = ["From", "To", "Cc", "Subject", "List-Unsubscribe", "List-Id", "Precedence", "Auto-Submitted"] as const;
@@ -38,7 +43,10 @@ const TEXT_LIMIT = 20_000;
 /** Above this the reader shows the plain text; a Convex document holds at most 1 MiB. */
 const HTML_LIMIT = 300_000;
 
-type Part = { mimeType?: string; body?: { data?: string }; parts?: Part[]; headers?: { name: string; value: string }[] };
+export type Part = {
+  partId?: string; mimeType?: string; filename?: string; body?: { data?: string; attachmentId?: string; size?: number };
+  parts?: Part[]; headers?: { name: string; value: string }[];
+};
 export type RawGmailMessage = { id: string; threadId: string; internalDate?: string; labelIds?: string[]; snippet?: string; payload?: Part };
 
 /** Gmail's base64url body data as text. */
@@ -82,12 +90,42 @@ export function isBulk(headers: Map<string, string>, labelIds: readonly string[]
   return labelIds.some((label) => BULK_LABELS.has(label)) || BULK_SENDER.test(from.split("@")[0] ?? "");
 }
 
-function bodies(part: Part | undefined, found: { text?: string; html?: string } = {}): { text?: string; html?: string } {
+type Found = { text?: string; html?: string; files: Part[] };
+
+/** The first plain and HTML bodies, and every part with a filename, which Gmail serves as an attachment. */
+function bodies(part: Part | undefined, found: Found = { files: [] }): Found {
   if (!part) return found;
+  if (part.filename && part.partId !== undefined && (part.body?.attachmentId || part.body?.data)) {
+    found.files.push(part);
+    return found;
+  }
   if (part.body?.data && part.mimeType === "text/plain" && found.text === undefined) found.text = decodeBody(part.body.data);
   if (part.body?.data && part.mimeType === "text/html" && found.html === undefined) found.html = decodeBody(part.body.data);
   for (const child of part.parts ?? []) bodies(child, found);
   return found;
+}
+
+/** The part a partId names, for the download to read its current attachmentId or inline data. */
+export function findPart(part: Part | undefined, partId: string): Part | undefined {
+  if (!part) return undefined;
+  if (part.partId === partId) return part;
+  for (const child of part.parts ?? []) {
+    const found = findPart(child, partId);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+const contentIdOf = (part: Part) => part.headers?.find((header) => header.name.toLowerCase() === "content-id")?.value.trim().replace(/^<|>$/g, "");
+
+function attachmentsOf(files: Part[], html: string | undefined): GmailAttachment[] {
+  return files.map((part) => {
+    const contentId = contentIdOf(part);
+    return {
+      partId: part.partId!, filename: part.filename!, mimeType: part.mimeType || "application/octet-stream", size: part.body?.size ?? 0,
+      ...(contentId ? { contentId } : {}), inline: contentId !== undefined && html !== undefined && html.includes(`cid:${contentId}`),
+    };
+  });
 }
 
 export function parseGmailMessage(raw: RawGmailMessage): GmailMessage {
@@ -95,7 +133,7 @@ export function parseGmailMessage(raw: RawGmailMessage): GmailMessage {
   const labelIds = raw.labelIds ?? [];
   const from = parseAddresses(headers.get("from"))[0] ?? { address: "unknown@unknown.invalid", name: null };
   const bulk = isBulk(headers, labelIds, from.address);
-  const found = bulk ? {} : bodies(raw.payload);
+  const found = bulk ? { files: [] } : bodies(raw.payload);
   const cleaned = found.html !== undefined ? cleanEmailHtml(found.html) : undefined;
   const text = (found.text ?? (found.html !== undefined ? htmlToText(found.html) : raw.snippet ?? "")).slice(0, TEXT_LIMIT);
   const subject = headers.get("subject")?.trim() ?? "";
@@ -106,6 +144,7 @@ export function parseGmailMessage(raw: RawGmailMessage): GmailMessage {
     snippet: decodeEntities(raw.snippet ?? ""), bulk, text: body,
     ...(cleaned && cleaned.html.length <= HTML_LIMIT ? { html: cleaned.html, blockedImages: cleaned.blockedImages } : {}),
     model: gmailModelText({ text: body, html: found.html, subject, threadId: raw.threadId }),
+    attachments: attachmentsOf(found.files, found.html),
   };
 }
 

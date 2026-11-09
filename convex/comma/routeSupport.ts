@@ -59,6 +59,8 @@ export function unsupportedReason(route: CommaRoute, isGroup: boolean, payload: 
     // ponytail: a mail thread spends no model calls; turn on once suggestions read email well.
     if (payload.kind === "suggestions") return "Reply suggestions aren't on for email";
     if (payload.kind === "send" && !payload.email?.to.length && !payload.email?.cc.length) return "An email needs someone to send it to";
+    // Files ride on the email itself (the composer's attachments), never as a message of their own.
+    if (payload.kind === "sendAttachment") return "Attach files in the email composer";
   }
   const supported = routeSupport(route, isGroup, payload);
   if (!supported) return "That only works in a group conversation";

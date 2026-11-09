@@ -10,7 +10,9 @@ import type { CommaOutboxPayload } from "../schema/comma/validators";
 import { normalizeModules } from "../test-utils.vitest";
 
 import { sealCredentials } from "./credentials";
-import { FakeGmail, MAILBOX, parseRfc822, REFRESH_TOKEN, stubGmailEnv } from "./fakeGmail.vitest";
+import { forwardSubject, forwardText, mailboxText, replyRecipients, replySubject } from "../../apps/imsg/shared/email-reply";
+
+import { ALIAS, FakeGmail, MAILBOX, parseRfc822, REFRESH_TOKEN, stubGmailEnv } from "./fakeGmail.vitest";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 const SAM = "sam@venue.test";
@@ -135,6 +137,116 @@ describe("sending email", () => {
     expect(await run("f1", reply("hi"))).toMatchObject({ status: "failed", error: "Google answered 400: INVALID_ARGUMENT" });
     expect((await messages()).map((row) => row.sendState)).toEqual([undefined, undefined, "failed"]);
     expect(google.gmailCalls("/messages").filter((call) => call.method === "GET")).toEqual([]);
+  });
+});
+
+describe("files, reply all and forward", () => {
+  const store = (t: Awaited<ReturnType<typeof connected>>["t"], text: string, type: string) =>
+    t.run(async (ctx) => await ctx.storage.store(new Blob([text], { type })));
+
+  test("a reply with files goes out as multipart/mixed through the upload endpoint, and lands with them, once", async () => {
+    const { t, run, messages } = await connected();
+    const storageId = await store(t, "%PDF-1.7 rider", "application/pdf");
+    const payload = reply("Rider attached.");
+    if (payload.kind !== "send") throw new Error("a send");
+    payload.email!.attachments = [{ storageId, filename: "Rider ü.pdf", mimeType: "application/pdf" }];
+    expect(await run("a1", payload)).toMatchObject({ status: "sent", resultGuid: "sent-1" });
+
+    expect(google.sent).toHaveLength(1);
+    expect(google.sent[0]).toMatchObject({ upload: true, threadId: "t-doors" });
+    const { headers, parts, files } = parseRfc822(google.sent[0]!.raw);
+    expect(headers["Content-Type"]).toMatch(/^multipart\/mixed; boundary=/);
+    expect(headers["In-Reply-To"]).toBe("<sam-1@venue.test>");
+    expect(parts["text/plain"]).toBe("Rider attached.");
+    expect(files).toEqual([{
+      filename: "=?UTF-8?B?UmlkZXIgw7wucGRm?=", mimeType: "application/pdf", text: "%PDF-1.7 rider",
+      disposition: `attachment; filename="=?UTF-8?B?UmlkZXIgw7wucGRm?="; filename*=UTF-8''Rider%20%C3%BC.pdf`,
+    }]);
+
+    const landed = (await messages()).slice(-1)[0]!;
+    expect(landed.attachmentGuids).toEqual(["sent-1:1"]);
+    const rows = await t.run((ctx) => ctx.db.query("comma_attachments").collect());
+    expect(rows.map((row) => [row.guid, row.filename, row.originalStorageId])).toEqual([["sent-1:1", "Rider ü.pdf", storageId]]);
+    // Gmail's echo of the send is already held, files and all.
+    await t.action(internal.comma.gmailSync.backstop, {});
+    await settle(t);
+    expect((await t.run((ctx) => ctx.db.query("comma_attachments").collect())).length).toBe(1);
+  });
+
+  test("a text-only reply keeps the JSON send, and a file no longer stored fails the send before anything goes out", async () => {
+    const { t, run } = await connected();
+    expect(await run("a2", reply("No files."))).toMatchObject({ status: "sent" });
+    expect(google.sent[0]!.upload).toBe(false);
+    const storageId = await store(t, "gone", "text/plain");
+    await t.run((ctx) => ctx.storage.delete(storageId));
+    const payload = reply("Missing.");
+    if (payload.kind !== "send") throw new Error("a send");
+    payload.email!.attachments = [{ storageId, filename: "gone.txt", mimeType: "text/plain" }];
+    expect(await run("a3", payload)).toMatchObject({ status: "failed", error: "gone.txt is no longer stored" });
+    expect(google.sent).toHaveLength(1);
+  });
+
+  test("reply all goes To the sender and everyone on To, Cc its Cc, without the mailbox's own addresses, each once", async () => {
+    google.deliver({
+      id: "m2", threadId: "t-doors", labelIds: ["INBOX"], internalDate: Date.now() - 30_000, text: "Adding Dana.",
+      headers: { From: `Sam Lee <${SAM}>`, To: `${MAILBOX}, Dana Ortiz <dana@venue.test>`, Cc: `pat@agency.test, ${ALIAS}, Sam Lee <${SAM}>`,
+        Subject: "Re: Doors", "Message-ID": "<sam-2@venue.test>" },
+    });
+    const { t, as, accountId, run, messages } = await connected();
+    await t.run((ctx) => ctx.db.patch(accountId, { selfHandles: [MAILBOX, ALIAS] }));
+    const self = new Set((await as.query(api.comma.accounts.listAccounts, {})).find((account) => account._id === accountId)!.selfHandles);
+    const source = (await messages()).find((row) => row.guid === "m2")!;
+    const { to, cc } = replyRecipients({ isFromMe: source.isFromMe, ...source.gmail! }, "replyAll", self);
+    expect(await run("ra1", { kind: "send", text: "All set.", replyToGuid: "m2",
+      email: { to: to.map(mailboxText), cc: cc.map(mailboxText), subject: replySubject("Re: Doors") } })).toMatchObject({ status: "sent" });
+    const { headers } = parseRfc822(google.sent[0]!.raw);
+    expect(headers).toMatchObject({ To: `"Sam Lee" <${SAM}>, "Dana Ortiz" <dana@venue.test>`, Cc: "pat@agency.test", "In-Reply-To": "<sam-2@venue.test>" });
+  });
+
+  test("a forward starts a new thread from the same mailbox with the original quoted and its files, and the thread lands", async () => {
+    google.deliver({
+      id: "m-inv", threadId: "t-doors", labelIds: ["INBOX"], internalDate: Date.now() - 30_000, text: "Invoice for Saturday attached.",
+      headers: { From: `Sam Lee <${SAM}>`, To: MAILBOX, Subject: "Re: Doors", "Message-ID": "<sam-inv@venue.test>" },
+      files: [{ filename: "invoice.pdf", mimeType: "application/pdf", data: "%PDF invoice" }, { filename: "map.png", mimeType: "image/png", data: "PNG" }],
+    });
+    const { t, as, accountId, outbox, messages } = await connected();
+    await settle(t);
+    const original = (await messages()).find((row) => row.guid === "m-inv")!;
+    const files = (await t.run((ctx) => ctx.db.query("comma_attachments").collect())).filter((row) => row.messageGuid === "m-inv" && row.filename === "invoice.pdf");
+    const text = forwardText("Carlos, for the books.", { isFromMe: false, ...original.gmail!, date: original.dateCreated, subject: "Re: Doors", text: original.text }, "UTC");
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "fw1", payload: {
+      kind: "sendEmail", accountId, text,
+      email: { to: ["Carlos <carlos@books.test>"], cc: [], subject: forwardSubject("Re: Doors"),
+        attachments: files.map((row) => ({ storageId: row.originalStorageId!, filename: row.filename!, mimeType: row.mimeType! })) },
+    } });
+    await settle(t);
+
+    expect(google.sent).toHaveLength(1);
+    expect(google.sent[0]).toMatchObject({ upload: true });
+    expect(google.sent[0]!.threadId).toBeUndefined();
+    const { headers, parts, files: sentFiles } = parseRfc822(google.sent[0]!.raw);
+    expect(headers).toMatchObject({ From: `"Milad Imen" <${MAILBOX}>`, To: `"Carlos" <carlos@books.test>`, Subject: "Fwd: Re: Doors" });
+    expect(headers["In-Reply-To"]).toBeUndefined();
+    expect(parts["text/plain"]).toMatch(/^Carlos, for the books\.\n\n---------- Forwarded message ---------\nFrom: Sam Lee <sam@venue\.test>\nDate: .+\nSubject: Re: Doors\nTo: milad@afternoonumbrellafriends\.com\n\nInvoice for Saturday attached\.$/);
+    expect(sentFiles.map((file) => [file.filename, file.text])).toEqual([["invoice.pdf", "%PDF invoice"]]);
+
+    const row = await outbox("fw1");
+    expect(row).toMatchObject({ status: "sent", resultGuid: "sent-1" });
+    const forwarded = await t.run((ctx) => ctx.db.get(row.conversationId!));
+    expect(forwarded).toMatchObject({ platform: "gmail", accountId, gmail: { threadId: "thread-sent-1", subject: "Fwd: Re: Doors" }, lastMessage: { guid: "sent-1", isFromMe: true } });
+    const landed = await t.run(async (ctx) => (await ctx.db.query("comma_attachments").collect()).filter((a) => a.messageGuid === "sent-1"));
+    expect(landed.map((a) => [a.filename, a.conversationId])).toEqual([["invoice.pdf", row.conversationId]]);
+  });
+
+  test("Convex refuses a new email with no recipients or from a mailbox that is not one", async () => {
+    const { t, as, accountId } = await connected();
+    const email = { to: [], cc: [], subject: "Hi" };
+    await expect(as.mutation(api.comma.outbox.enqueue, { clientKey: "ne1", payload: { kind: "sendEmail", accountId, text: "hi", email } }))
+      .rejects.toThrow("An email needs someone to send it to");
+    const slack = await t.run((ctx) => ctx.db.insert("comma_accounts", { platform: "slack", externalId: "T1", label: "AUF", selfHandles: [], health: "ok", createdAt: 2 }));
+    await expect(as.mutation(api.comma.outbox.enqueue, { clientKey: "ne2", payload: { kind: "sendEmail", accountId: slack, text: "hi", email: { ...email, to: ["a@b.test"] } } }))
+      .rejects.toThrow("Choose a mailbox to send from");
+    expect(google.sent).toEqual([]);
   });
 });
 

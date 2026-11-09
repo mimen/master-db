@@ -89,6 +89,8 @@ export const listAccounts = query({
     _id: v.id("comma_accounts"), platform, label: v.string(), health: accountHealth, connected: v.boolean(), createdAt: v.number(),
     /** A mailbox's Google app, and when its grant ends where Google ends grants. */
     gmailApp: v.optional(gmailApp), reconnectBy: v.optional(v.number()),
+    /** A mailbox's own addresses, which a reply all leaves out. */
+    selfHandles: v.optional(v.array(v.string())),
   })),
   handler: async (ctx) => {
     await assertAllowed(ctx);
@@ -98,7 +100,7 @@ export const listAccounts = query({
         _id: account._id, platform: account.platform, label: account.label, health: account.health, createdAt: account.createdAt,
         // The iMessage account has no token: the Mini's bridge is its connection.
         connected: account.platform === "imessage" || account.credentials !== undefined,
-        ...(account.platform === "gmail" ? { gmailApp: account.gmailGrant?.app ?? "workspace" as const } : {}),
+        ...(account.platform === "gmail" ? { gmailApp: account.gmailGrant?.app ?? "workspace" as const, selfHandles: account.selfHandles } : {}),
         ...(ends !== undefined ? { reconnectBy: ends } : {}),
       };
     });
