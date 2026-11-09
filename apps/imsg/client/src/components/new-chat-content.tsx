@@ -26,7 +26,7 @@ import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
 import { type AirtableHumanRow } from "@/lib/identity";
 import { useAirtableSearch } from "@/hooks/use-airtable-search";
 import { PersonAvatar } from "./avatar";
-import { ServiceDot, ServiceLabel } from "./service-label";
+import { ServiceDot, SourceIcon } from "./service-label";
 import { useTheme } from "@/hooks/use-theme";
 import type { ThemeColors } from "@/components/ui/interaction";
 
@@ -195,7 +195,7 @@ export function NewChatContent({
               name={item.contact.name}
               query={needle}
               handle={item.contact.name === handle ? undefined : handle}
-              trailing={badge ? <ServiceLabel badge={badge} size={12} /> : undefined}
+              trailing={badge ? <SourceIcon badge={badge} /> : undefined}
             />
           );
         }}

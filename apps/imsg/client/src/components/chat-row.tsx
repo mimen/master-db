@@ -1,6 +1,9 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import Svg, { Path } from "react-native-svg";
+import { tiebreakLabel, type HandleTiebreak } from "@shared/address";
 import { settleActionFor } from "@shared/chat-state";
+import { conversationRoute } from "@shared/imessage";
+import { platformBadge, sourceLabel } from "@shared/platform-profile";
 import type { ChatSummary } from "@shared/types";
 import { memo, useCallback, useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -34,6 +37,7 @@ import { useWebContextMenu } from "@/lib/use-web-context-menu";
 
 import { AgentBadge } from "./agent-badge";
 import { ChatAvatar } from "./avatar";
+import { HandleIcon, SourceIcon } from "./service-label";
 import { RowPan } from "./lazy-surfaces";
 import { FAVORITE_GOLD } from "@/constants/theme";
 
@@ -107,6 +111,7 @@ function SwipeAction({
 function ChatRowInner({
   chat,
   handle,
+  personal = false,
   selected,
   keyboardFocused = false,
   onOpen,
@@ -115,8 +120,10 @@ function ChatRowInner({
   leaving = false,
 }: {
   chat: ChatSummary;
-  /** The handle that separates this row from another with the same name. */
-  handle?: string;
+  /** The handle that separates this row from another of the same name on the same service. */
+  handle?: HandleTiebreak;
+  /** A thread in the personal mailbox rather than the work one. */
+  personal?: boolean;
   selected: boolean;
   /** Glide-mode cursor: the persimmon ring on the selected row while navigating. */
   keyboardFocused?: boolean;
@@ -158,6 +165,8 @@ function ChatRowInner({
     : [snippet, last ? formatListTimestamp(last.dateCreated) : null];
   if (today?.rank != null) spoken.unshift(`number ${today.rank} today`);
   if (today?.reason) spoken.push(today.reason);
+  const source = platformBadge(conversationRoute(chat));
+  spoken.push(sourceLabel(source, personal), handle ? tiebreakLabel(handle) : null);
 
   const contextRef = useWebContextMenu<typeof Pressable>((anchor) => openMenu(chat, anchor));
 
@@ -245,11 +254,8 @@ function ChatRowInner({
             <Text numberOfLines={1} style={[styles.name, { color: theme.text, fontSize: compact ? 13 : 17 }]}>
               {chat.displayName}
             </Text>
-            {handle && (
-              <Text numberOfLines={1} style={[styles.handle, { color: theme.textSecondary }]}>
-                {handle}
-              </Text>
-            )}
+            <SourceIcon badge={source} personal={personal} size={compact ? 13 : 15} decorative />
+            {handle ? <HandleIcon tiebreak={handle} size={compact ? 12 : 14} decorative /> : null}
             {/* Private CRM layer (favorite/priority). Mirrors the star on favorited contacts. */}
             {chat.crm?.is_favorite && (
               <Ionicons name="star" size={12} color={FAVORITE_GOLD} accessibilityLabel="Favorite" style={styles.favoriteStar} />
@@ -438,12 +444,6 @@ const styles = StyleSheet.create({
   },
   favoriteStar: {
     flexShrink: 0,
-  },
-  // Shrinks before the name does: the name is what the row is, the handle only separates it.
-  handle: {
-    flexShrink: 2,
-    fontSize: 12,
-    minWidth: 0,
   },
   agentTitle: {
     fontWeight: "600",

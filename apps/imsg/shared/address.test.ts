@@ -3,6 +3,7 @@ import type { ConversationId } from "./types";
 import {
   addressesMatch,
   disambiguators,
+  type HandleTiebreak,
   formatAddress,
   formatPhone,
   handleMatchKey,
@@ -111,17 +112,17 @@ test("matchesAnyAddress checks a candidate against a whole list", () => {
 describe("disambiguators", () => {
   const dm = (guid: string, displayName: string, address: string) =>
     ({ conversationId: `c-${guid}` as ConversationId, route: { platform: "imessage" as const, accountId: null, imessage: { chatGuid: guid } }, displayName, isGroup: false, participants: [{ address, name: displayName }] });
-  test("labels only DMs whose display name repeats, with each one's own handle", () => {
+  test("marks DMs whose name repeats on one service with their handle's kind; a name repeated across services needs none", () => {
     const chats = [
       dm("iMessage;-;+19259976370", "Sprout Imen", "+19259976370"),
       dm("SMS;-;+19253759404", "Sprout Imen", "+19253759404"),
       dm("iMessage;-;miladmaaan@gmail.com", "Sprout Imen", "miladmaaan@gmail.com"),
       dm("iMessage;-;+16195550101", "Alex Rivera", "+16195550101"),
+      dm("SMS;-;+16195550101", "Alex Rivera", "+16195550101"),
     ];
-    expect(disambiguators(chats)).toEqual(new Map<ConversationId, string>([
-      ["c-iMessage;-;+19259976370" as ConversationId, "(925) 997-6370"],
-      ["c-SMS;-;+19253759404" as ConversationId, "(925) 375-9404"],
-      ["c-iMessage;-;miladmaaan@gmail.com" as ConversationId, "miladmaaan@gmail.com"],
+    expect(disambiguators(chats)).toEqual(new Map<ConversationId, HandleTiebreak>([
+      ["c-iMessage;-;+19259976370" as ConversationId, { kind: "phone", address: "(925) 997-6370" }],
+      ["c-iMessage;-;miladmaaan@gmail.com" as ConversationId, { kind: "email", address: "miladmaaan@gmail.com" }],
     ]));
   });
 

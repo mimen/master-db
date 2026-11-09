@@ -5,10 +5,10 @@ import { platformBadge } from "./platform-profile";
 
 test("a chat GUID's badge: RCS draws green as SMS does, and an unknown service sends as iMessage", () => {
   const badge = (chatGuid: string) => platformBadge(chatGuidRoute(chatGuid));
-  expect(badge("RCS;-;+16199813959")).toEqual({ label: "SMS", color: "sms" });
-  expect(badge("SMS;+;group-1")).toEqual({ label: "SMS", color: "sms" });
-  expect(badge("iMessage;+;chat123")).toEqual({ label: "iMessage", color: "accent" });
-  expect(badge("any;-;x")).toEqual({ label: "iMessage", color: "accent" });
+  expect(badge("RCS;-;+16199813959")).toEqual({ label: "SMS", color: "sms", glyph: "bubble" });
+  expect(badge("SMS;+;group-1")).toEqual({ label: "SMS", color: "sms", glyph: "bubble" });
+  expect(badge("iMessage;+;chat123")).toEqual({ label: "iMessage", color: "accent", glyph: "bubble" });
+  expect(badge("any;-;x")).toEqual({ label: "iMessage", color: "accent", glyph: "bubble" });
 });
 
 test("a one-to-one conversation's handle comes from its participant, then its chat", () => {

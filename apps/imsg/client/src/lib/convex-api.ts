@@ -8,6 +8,7 @@ const today = anyApi.comma.today as unknown as typeof api.comma.today;
 export const todayApi = { get: today.get, requestBuild: today.requestBuild };
 export const pendingSendsApi = anyApi.comma.pendingSends as unknown as typeof api.comma.pendingSends;
 export const triageApi = anyApi.comma.triage as unknown as typeof api.comma.triage;
+export const accountsApi = anyApi.comma.accounts as unknown as typeof api.comma.accounts;
 export const scheduledSendsApi = anyApi.comma.scheduledSends as unknown as typeof api.comma.scheduledSends;
 
 /** Include public foundation functions whose module differs from comma/queries. */

@@ -18,6 +18,7 @@ import {
   viewName,
   type RefineContext,
   type Refinements,
+  narrowToday,
   parseServiceFilter,
   serviceOptions,
 } from "./inbox-model";
@@ -450,6 +451,28 @@ describe("Today lens", () => {
     expect(open.navigationEntries.map((e) => e.chat.conversationId as string)).toEqual(["low", "pinned", "folded"]);
   });
 
+  test("a Service filter narrows the rows, drops an emptied section, and leaves the plan's counts alone", () => {
+    const slack = makeChat({ conversationId: cid("slack"), route: { platform: "slack", accountId: "account-slack" as never, slack: { channel: "D1" } }, flags: { ...makeChat().flags, unresponded: true } });
+    const mail = makeChat({ conversationId: cid("mail"), route: { platform: "gmail", accountId: "account-gmail" as never, gmail: { threadId: "t1" } }, flags: { ...makeChat().flags, unresponded: true } });
+    const mixed: TodayPlan = {
+      ...plan, toGo: 4,
+      sections: [{ key: "new", label: "New since", detail: null, tone: "fresh", foldable: false, rows: [row(mail, null), row(slack, null)] }, ...plan.sections],
+    };
+    const only = (service: Refinements["service"]) => narrowToday(mixed, "known", { ...refine, refinements: { ...DEFAULT_REFINEMENTS, service } });
+    expect(only("gmail").sections.map((s) => [s.label, s.rows.map((r) => r.chat.conversationId as string)])).toEqual([["New since", ["mail"]]]);
+    expect(only("gmail").toGo).toBe(4);
+    expect(only("imessage").sections.map((s) => s.label)).toEqual(["Friday", "Below the line"]);
+    expect(only("any")).toBe(mixed);
+    const model = deriveInboxModel([], { state: "today", type: "known" }, "", undefined, undefined, refine, { plan: only("slack"), openFolds: new Set() });
+    expect(model.listChats.map((c) => c.conversationId as string)).toEqual(["slack"]);
+  });
+
+  test("People narrows Today too: One-to-one leaves the groups out", () => {
+    const group = makeChat({ conversationId: cid("group"), isGroup: true, kind: "group", flags: { ...makeChat().flags, unresponded: true } });
+    const withGroup: TodayPlan = { ...plan, sections: [{ ...plan.sections[0]!, rows: [row(low, 1), row(group, 2)] }] };
+    expect(narrowToday(withGroup, "dm", refine).sections[0]?.rows.map((r) => r.chat.conversationId as string)).toEqual(["low"]);
+  });
+
   test("search supersedes the plan", () => {
     const model = deriveInboxModel([pinned, low], { state: "today", type: "known" }, "low", undefined, undefined, refine, { plan, openFolds: new Set() });
     expect(model.rows.map((r) => (r.kind === "chat" ? r.chat.conversationId : r.label))).toEqual(["Conversations", "low"]);
@@ -469,8 +492,15 @@ describe("service filter", () => {
 
   test("with Slack beside iMessage, each platform heads its services", () => {
     expect(serviceOptions(["slack", "imessage"]).map((option) => option.value)).toEqual(
-      ["any", "imessage", "imessage:iMessage", "imessage:SMS", "slack", "slack:Slack"]);
-    expect(parseServiceFilter("slack:Slack")).toBe("slack:Slack");
+      ["any", "imessage", "imessage:iMessage", "imessage:SMS", "slack"]);
+    expect(parseServiceFilter("slack:Slack")).toBe("slack");
+  });
+
+  test("Gmail is offered when mail is present, each option carrying the glyph its rows draw", () => {
+    expect(serviceOptions(["imessage", "slack", "gmail"]).map((option) => [option.value, option.label, option.badge?.glyph])).toEqual([
+      ["any", "Any service", undefined], ["imessage", "iMessage & SMS", "bubble"], ["imessage:iMessage", "iMessage", "bubble"],
+      ["imessage:SMS", "SMS", "bubble"], ["slack", "Slack", "slack"], ["gmail", "Gmail", "mail"],
+    ]);
   });
 
   test("a filter stored before platforms reads as iMessage's service, and anything unknown as any", () => {

@@ -2,6 +2,7 @@ import { formatAddress } from "../../apps/imsg/shared/address";
 import { nameTerms, personName, type NamedPerson } from "../identity/names";
 
 interface StoredConversation<P extends { address: string }> {
+  platform?: string;
   isGroup: boolean;
   displayName: string;
   rawDisplayName?: string;
@@ -12,7 +13,7 @@ interface StoredConversation<P extends { address: string }> {
  * Names a conversation from the identity graph at read time, so a rename shows wherever the
  * conversation does. `people[i]` is the person participant i resolves to. A group chat's own name
  * stays as the chat carries it; only rows stored before the Mini sent `rawDisplayName` fall back
- * to the stored `displayName`.
+ * to the stored `displayName`. A Slack DM with no one else in it is the user's own, so it reads as "You".
  */
 export function resolveConversationNames<P extends { address: string }>(
   conversation: StoredConversation<P>,
@@ -24,7 +25,7 @@ export function resolveConversationNames<P extends { address: string }>(
   const displayName = conversation.isGroup
     ? conversation.rawDisplayName === undefined ? conversation.displayName
       : conversation.rawDisplayName.trim() || participants.map(label).join(", ")
-    : first ? label(first) : conversation.displayName;
+    : first ? label(first) : conversation.platform === "slack" ? "You" : conversation.displayName;
   return {
     displayName,
     participants,

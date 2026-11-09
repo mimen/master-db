@@ -114,17 +114,23 @@ export interface ServiceOption {
 const PLATFORMS = Object.keys(PROFILES) as Platform[];
 
 /**
- * The Service dropdown over the platforms the inbox holds: each platform, then its services. A lone platform lists
- * only its services, as "Any service" already covers it. An inbox with no conversations yet lists iMessage's.
+ * The Service dropdown over the platforms the inbox holds: each platform, then its services when it has more than one.
+ * A lone platform lists only its services, as "Any service" already covers it. An inbox with no conversations yet lists
+ * iMessage's.
  */
 export function serviceOptions(present: readonly Platform[]): ServiceOption[] {
   const platforms = present.length ? PLATFORMS.filter((platform) => present.includes(platform)) : ["imessage" as const];
   return [
     { value: "any", label: "Any service" },
-    ...platforms.flatMap((platform): ServiceOption[] => [
-      ...(platforms.length > 1 ? [{ value: platform, label: PROFILES[platform].name }] : []),
-      ...platformServiceBadges(platform).map((badge) => ({ value: `${platform}:${badge.label}` as const, label: badge.label, badge })),
-    ]),
+    ...platforms.flatMap((platform): ServiceOption[] => {
+      const badges = platformServiceBadges(platform);
+      const services = badges.map((badge) => ({ value: `${platform}:${badge.label}` as const, label: badge.label, badge }));
+      if (platforms.length === 1) return services;
+      if (badges.length === 1) return [{ value: platform, label: PROFILES[platform].name, badge: badges[0] }];
+      // Named by what it covers, so it never reads the same as its first service.
+      const label = badges.map((badge) => badge.label).join(" & ");
+      return [{ value: platform, label, badge: { label, color: "icon", glyph: badges[0]?.glyph ?? "dot" } }, ...services];
+    }),
   ];
 }
 
@@ -142,7 +148,9 @@ export function serviceFilterLabel(value: ServiceFilter): string {
 /** A stored Service filter. One saved before platforms names a bare iMessage service ("SMS"). */
 export function parseServiceFilter(raw: unknown): ServiceFilter {
   if (raw === "iMessage" || raw === "SMS") return `imessage:${raw}`;
-  return SERVICE_OPTIONS.find((option) => option.value === raw)?.value ?? "any";
+  const exact = SERVICE_OPTIONS.find((option) => option.value === raw)?.value;
+  // A one-service platform is listed by its platform alone, so one stored by its service ("slack:Slack") reads as that.
+  return exact ?? (typeof raw === "string" ? SERVICE_OPTIONS.find((option) => option.value === raw.split(":")[0])?.value : undefined) ?? "any";
 }
 export const TIME_LABELS: Record<TimeRange, string> = {
   any: "Any time",
@@ -436,6 +444,28 @@ function groupByAttention(chats: readonly ChatSummary[], now: number, oldestFirs
   });
   // Also include can widen the lens with conversations that have no agent chat.
   return [...groups, ...groupByAge(chats.filter((chat) => chat.agent === undefined), now, oldestFirst)];
+}
+
+/**
+ * Today under its lens's People and narrowing controls, so a Service filter shows only that service's rows. Also include
+ * and Sort stay off: Today has its own Settled section and keeps the build's order. The counts stay the whole plan's,
+ * so the tab and the app badge never hide work behind a forgotten filter.
+ */
+export function narrowToday(plan: TodayPlan, type: TypeFilter, refine: RefineContext): TodayPlan {
+  const keep = (chat: ChatSummary) => matchesFilters(chat, "all", type) && narrows(chat, refine.refinements, refine.now);
+  let dropped = false;
+  const sections = plan.sections.flatMap((section) => {
+    const rows = section.rows.filter((row) => keep(row.chat));
+    if (rows.length === section.rows.length) return [section];
+    dropped = true;
+    return rows.length ? [{ ...section, rows }] : [];
+  });
+  return dropped ? { ...plan, sections } : plan;
+}
+
+/** Every conversation the plan shows, folded sections included. */
+export function planChats(plan: TodayPlan): ChatSummary[] {
+  return plan.sections.flatMap((section) => section.rows.map((row) => row.chat));
 }
 
 /** Today keeps the build's order: no queueOrder or age grouping touches a ranked row. */

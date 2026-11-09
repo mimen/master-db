@@ -14,7 +14,7 @@ import { platformBadge } from "@shared/platform-profile";
 
 import { ChatAvatar } from "./avatar";
 import { CenteredSpinner, EmptyState } from "./empty-state";
-import { ServiceLabel } from "./service-label";
+import { SourceIcon } from "./service-label";
 import { useTheme } from "@/hooks/use-theme";
 
 export interface ForwardContentProps {
@@ -86,7 +86,7 @@ export function ForwardContent({ onClose, onOpenChat }: ForwardContentProps): Re
             >
               <ChatAvatar chat={item} size={28} />
               <Text numberOfLines={1} style={[styles.name, { color: theme.text }]}>{item.displayName}</Text>
-              <ServiceLabel badge={platformBadge(conversationRoute(item))} size={12} />
+              <SourceIcon badge={platformBadge(conversationRoute(item))} />
             </Pressable>
           )}
         />

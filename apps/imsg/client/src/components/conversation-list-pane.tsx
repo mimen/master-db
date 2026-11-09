@@ -1,12 +1,12 @@
 import type { ChatSummary, ConversationId, StateCounts } from "@shared/types";
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { FlashList } from "@shopify/flash-list";
 
 
-import { disambiguators } from "@shared/address";
+import { disambiguators, type HandleTiebreak } from "@shared/address";
 import { TODAY_SETTLE_GROUP } from "@shared/today";
 import { ChatRow } from "./chat-row";
 import { FilterChipRow, LensTabs } from "./conversation-filters";
@@ -36,7 +36,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { useToday } from "@/hooks/use-today";
 import { useAppBadge } from "@/lib/app-badge";
 import { useType } from "@/hooks/use-type";
-import { commaApi } from "@/lib/convex-api";
+import { accountsApi, commaApi } from "@/lib/convex-api";
 import { usePendingScheduled } from "@/lib/pending-scheduled";
 import {
   activeChips,
@@ -48,8 +48,10 @@ import {
   filterInbox,
   LENSES,
   lensOf,
+  narrowToday,
   platformsInUse,
   tagsInUse,
+  planChats,
   viewName,
   type InboxFilters,
   type InboxRow,
@@ -226,6 +228,8 @@ export function ConversationListPane({
   const heldSection = heldAt?.conversationId === held ? heldAt.section : undefined;
   const todayChats = useMemo(() => (today.mail.length ? [...allChats, ...today.mail] : allChats), [allChats, today.mail]);
   const plan = useMemo(() => planToday(today.view, todayChats, { held, heldSection }), [today.view, todayChats, held, heldSection]);
+  // What Today lists and Settle all reaches, under the filters. The tab, the badge and the header count the whole plan.
+  const shownPlan = useMemo(() => narrowToday(plan, filters.type, refine), [plan, filters.type, refine]);
   if ((heldAt?.conversationId ?? null) !== held) {
     setHeldAt(held === null ? null : { conversationId: held, section: plan.sections.find((section) => section.rows.some((row) => row.chat.conversationId === held))?.key });
   }
@@ -235,8 +239,8 @@ export function ConversationListPane({
     if (!next.delete(key)) next.add(key);
     return next;
   }), []);
-  const planRef = useRef({ plan, view: today.view });
-  useEffect(() => { planRef.current = { plan, view: today.view }; });
+  const planRef = useRef({ plan: shownPlan, view: today.view });
+  useEffect(() => { planRef.current = { plan: shownPlan, view: today.view }; });
   const settleSection = useCallback((key: TodaySectionKey) => {
     const { plan: current, view } = planRef.current;
     const section = current.sections.find((candidate) => candidate.key === key);
@@ -248,14 +252,25 @@ export function ConversationListPane({
   // Explicitly memoised: full passes over every conversation, plus a per-chat
   // participant scan while searching.
   const deskModel = useMemo(
-    () => deriveInboxModel(allChats, filters, search.query, search.deepMatches, browseIds, refine, onToday ? { plan, openFolds } : undefined),
-    [allChats, filters, search.query, search.deepMatches, browseIds, refine, onToday, plan, openFolds],
+    () => deriveInboxModel(allChats, filters, search.query, search.deepMatches, browseIds, refine, onToday ? { plan: shownPlan, openFolds } : undefined),
+    [allChats, filters, search.query, search.deepMatches, browseIds, refine, onToday, shownPlan, openFolds],
   );
-  const lensTotal = useMemo(() => filterInbox(allChats, filters, "", undefined, browseIds).length, [allChats, filters, browseIds]);
-  const toggleCounts = useMemo(() => checkboxCounts(allChats, filters, browseIds, refine), [allChats, filters, browseIds, refine]);
+  // Today's rows count folded sections too; the other lenses count what their filter lets through.
+  const todayRows = useMemo(() => planChats(plan), [plan]);
+  const lensTotal = useMemo(() => onToday ? todayRows.length : filterInbox(allChats, filters, "", undefined, browseIds).length, [onToday, todayRows, allChats, filters, browseIds]);
+  const lensShowing = onToday ? planChats(shownPlan).length : deskModel.listChats.length;
+  const toggleCounts = useMemo(
+    () => onToday ? checkboxCounts(todayRows, { ...filters, state: "all" }, undefined, refine) : checkboxCounts(allChats, filters, browseIds, refine),
+    [onToday, todayRows, allChats, filters, browseIds, refine],
+  );
   const tags = useMemo(() => tagsInUse(allChats), [allChats]);
-  const platforms = useMemo(() => platformsInUse(allChats), [allChats]);
-  const chips = activeChips(filters, refinements);
+  // Today lists mail beside the messages, so its Service menu offers Gmail.
+  const platforms = useMemo(() => platformsInUse(onToday ? todayChats : allChats), [onToday, todayChats, allChats]);
+  const { isAuthenticated } = useConvexAuth();
+  const accounts = useQuery(accountsApi.listAccounts, isAuthenticated ? {} : "skip");
+  const personalMail = useMemo(() => new Set((accounts ?? []).flatMap((account) => account.gmailApp === "personal" ? [account._id as string] : [])), [accounts]);
+  // Today ignores Sort and Also include, so their chips would claim a filter that isn't there.
+  const chips = activeChips(filters, refinements).filter((chip) => !onToday || !(chip.key === "order" || chip.key.startsWith("include-")));
   const lensLabel = LENSES.find((lens) => lens.value === filters.state)?.label ?? "Settled";
   const clearAll = useCallback(() => {
     setLensFilters(filters.state, { type: DEFAULT_INBOX_FILTERS.type, refinements: DEFAULT_REFINEMENTS });
@@ -334,6 +349,7 @@ export function ConversationListPane({
         onCollapsed={dropLeaving}
         labelColor={theme.textTertiary}
         handle={row.kind === "chat" ? handles.get(row.chat.conversationId) : undefined}
+        personal={row.kind === "chat" && row.chat.route.accountId !== null && personalMail.has(row.chat.route.accountId)}
         selected={row.kind === "chat" && wide && selectedId === row.chat.conversationId}
         keyboardFocused={row.kind === "chat" && wide && glide && selectedId === row.chat.conversationId}
         onOpen={openRow}
@@ -342,7 +358,7 @@ export function ConversationListPane({
         onSettleAll={settleSection}
       />
     ),
-    [theme.textTertiary, leaving, dropLeaving, handles, wide, glide, selectedId, openRow, filters.state, toggleFold, settleSection],
+    [theme.textTertiary, leaving, dropLeaving, handles, personalMail, wide, glide, selectedId, openRow, filters.state, toggleFold, settleSection],
   );
   // Needs you and Unread show what happened and the next step once they empty; other lenses
   // and searches keep the plain line.
@@ -478,12 +494,12 @@ export function ConversationListPane({
               {onToday && !search.active ? (
                 <TodayHeaderCard header={todayHeader(today.view, plan)} dayStart={today.view?.dayStart ?? today.dayStart} onRequest={(mode) => void today.request(mode)} />
               ) : null}
-              {!search.active && !onToday ? (
+              {!search.active && (!onToday || chips.length > 0) ? (
                 <FilterChipRow
                   chips={chips}
-                  views={store.views}
+                  views={onToday ? [] : store.views}
                   phone={!wide}
-                  countLine={`${deskModel.listChats.length} of ${lensTotal} match`}
+                  countLine={`${lensShowing} of ${lensTotal} match`}
                   onRemove={removeChip}
                   onClearAll={clearAll}
                   onOpenView={openView}
@@ -529,9 +545,10 @@ export function ConversationListPane({
         tags={tags}
         platforms={platforms}
         counts={toggleCounts}
-        showing={deskModel.listChats.length}
+        showing={lensShowing}
         total={lensTotal}
         lensLabel={lensLabel}
+        today={onToday}
       />
     </SidebarFrame>
   );
@@ -542,12 +559,13 @@ export function ConversationListPane({
  * One list cell. Memoized with primitive props so a click or a lens switch re-renders only the
  * cells whose row, selection or leave state changed, not all ~700 mounted ones.
  */
-const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, handle, selected, keyboardFocused, onOpen, agentLens, onToggleFold, onSettleAll }: {
+const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, handle, personal, selected, keyboardFocused, onOpen, agentLens, onToggleFold, onSettleAll }: {
   readonly row: InboxRow;
   readonly gone: boolean;
   readonly onCollapsed: (key: string) => void;
   readonly labelColor: string;
-  readonly handle: string | undefined;
+  readonly handle: HandleTiebreak | undefined;
+  readonly personal: boolean;
   readonly selected: boolean;
   readonly keyboardFocused: boolean;
   readonly onOpen: (chat: ChatSummary) => void;
@@ -567,7 +585,7 @@ const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, 
             </View>
           )
         ) : (
-          <ChatRow chat={row.chat} handle={handle} selected={selected} keyboardFocused={keyboardFocused} onOpen={onOpen} agentLens={agentLens} today={row.today} leaving={gone} />
+          <ChatRow chat={row.chat} handle={handle} personal={personal} selected={selected} keyboardFocused={keyboardFocused} onOpen={onOpen} agentLens={agentLens} today={row.today} leaving={gone} />
         )}
       </Collapse>
     </View>

@@ -67,6 +67,36 @@ test("Today ranks a People email beside Messages; it opens in the Mail reader, a
   await expect(page.getByTestId("email-reader").getByRole("heading", { name: "Load-in for Saturday" })).toBeVisible();
 });
 
+test("the Service filter narrows Today, Gmail included, while the tab keeps counting the whole plan", async ({ desk }) => {
+  const { page } = desk;
+  await openToday(page);
+  const rows = page.getByTestId("conversation-row");
+  await expect(rows.filter({ hasText: "Load-in is at 6 pm" })).toBeVisible();
+  const total = await todayCount(page);
+  const service = async (name: string) => {
+    await page.getByRole("button", { name: /^Service, / }).click();
+    await page.getByRole("option", { name, exact: true }).click();
+  };
+
+  await page.getByRole("button", { name: /^Filter conversations/ }).click();
+  await service("Gmail");
+  await page.getByRole("button", { name: "Close filters" }).click({ position: { x: 1200, y: 800 } });
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText("Load-in is at 6 pm");
+  await expect(rows.first()).toHaveAttribute("aria-label", /, Gmail$/);
+  expect(await todayCount(page), "the tab counts the plan, not the filter").toBe(total);
+  await expect(page.getByRole("button", { name: "Remove filter Gmail" })).toBeVisible();
+
+  await page.getByRole("button", { name: /^Filter conversations/ }).click();
+  await service("iMessage");
+  await page.getByRole("button", { name: "Close filters" }).click({ position: { x: 1200, y: 800 } });
+  await expect(rows.filter({ hasText: "Load-in is at 6 pm" })).toHaveCount(0);
+  await expect(rows.filter({ hasText: "Alex Rivera" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Remove filter iMessage" }).click();
+  await expect(rows.filter({ hasText: "Load-in is at 6 pm" })).toBeVisible();
+});
+
 test("Regenerate from scratch is one menu away and starts a new session", async ({ desk }) => {
   const { page } = desk;
   const builds: unknown[] = [];
