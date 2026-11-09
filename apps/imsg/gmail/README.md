@@ -11,6 +11,14 @@ The scopes are `openid email https://www.googleapis.com/auth/gmail.modify`, list
 
 Comma's Gmail lane (`convex/comma/gmailLane.ts`) sends a reply as RFC 822 with the replied message's Message-ID in In-Reply-To and References and the thread's id, so it threads in Gmail. It sets its own Message-ID, `<comma.<clientKey>@<mailbox domain>>`, but Gmail replaced it with its own on both the Workspace and the gmail.com mailbox when this was checked on 2026-11-09. When a send's answer is lost, Comma searches for that Message-ID at 20 seconds and 2 minutes, then for a Sent message in the thread with the same subject and text. The text match is the check that finds it in practice, so the send lands without going out twice. Settling a thread in Comma removes its Inbox label; unsettling adds it back. If Gmail refuses, Comma takes the settle back and shows Gmail's error above the thread.
 
+Attachments come and go with the mail:
+
+- Ingest records each attachment part of a full read as a `comma_attachments` row, and `comma/gmailFiles:downloadFiles` copies it into Convex storage with `users.messages.attachments.get`, up to 20 MB a file. Gmail's attachment ids change between reads, so the download re-reads the message and finds each part by its partId. A larger file keeps its row and shows as a tile with its name. Bulk mail is read as headers only, so its files are never fetched.
+- An image the HTML shows through `cid:` stays out of the file tiles. The cleaner turns its `src` into `data-comma-cid`, and the reader swaps in the stored bytes as a `data:` URL, which the frame's CSP already allows. The sandbox and the CSP are unchanged.
+- A send can carry stored files (`email.attachments`, by storage id): an upload from **Attach**, or a file already in the thread. It goes out as multipart/mixed through the upload endpoint, at most 25 MB in all.
+- Each message has its own **Reply**, **Reply all** and **Forward**. Reply all leaves out the mailbox's own addresses (`selfHandles`). **Reply all with attachments** opens reply all with every distinct file in the thread checked. **Forward** and **New email** send `sendEmail`, which starts a new thread from a mailbox; New email picks the mailbox under From.
+- Messages stored before attachments have none until the files backfill re-reads their threads. It has not been run. Start it once with `CONVEX_DEPLOYMENT=dev:shiny-gerbil-853 bunx convex run comma/gmailSync:startFilesBackfill '{}'` after the functions deploy. Re-reading a thread writes nothing twice.
+
 How the mailbox reaches Comma:
 
 - `users.watch` publishes every mailbox change to a Pub/Sub topic. A push subscription posts each change to `POST /comma/gmail/push` with a Google-signed OIDC token for a service account. Convex checks the signature, issuer, audience and service-account email, then schedules a history sync from the stored historyId (`convex/comma/gmailPush.ts`, `gmailSync.ts`).

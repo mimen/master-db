@@ -32,6 +32,7 @@ import { useAgentToasts } from "@/hooks/use-agent-toasts";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { onOpenAgentPane } from "@/lib/agent-pane";
+import { useMailSelection } from "@/lib/mail-selection";
 import { onOpenChatInfo } from "@/lib/chat-info";
 import { DEFAULT_INBOX_FILTERS } from "@/lib/inbox-model";
 import { WANTS_YOU } from "@shared/agent-attention";
@@ -126,6 +127,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   if (activeWorkspace === "mail" && !mailVisited) setMailVisited(true);
   const shellOwnsRoute = wide && projection !== null;
   const agentEnabled = useAgentEnabled();
+  const mailSelection = useMailSelection();
   const agentOpen = useRef(false);
   // A pane hidden by a stale runner or the setting closes for real, so Esc and ⌘W are not spent on it.
   const agentHidden = state.utility?.kind === "agent" && !agentEnabled;
@@ -212,7 +214,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
     });
     const stopAgent = onOpenAgentPane(() => {
       if (agentOpen.current) return;
-      dispatch({ type: "utility/toggled", utility: { kind: "agent", workspace: "messages" } });
+      dispatch({ type: "utility/toggled", utility: { kind: "agent", workspace: activeWorkspace === "mail" ? "mail" : "messages" } });
     });
     return () => {
       stopAgent();
@@ -305,7 +307,9 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
     [store, closeTopSurface, closeUtility, dispatch, openHelp, openPalette, registerMessagesActions, reportMessagesRail],
   );
   const utilityIsGlobal = state.utility?.kind === "scheduled" || state.utility?.kind === "settings";
-  const agentConversation = agentEnabled ? state.messages.selection?.conversationId : undefined;
+  // In Mail the pane follows the open email thread, fed the same way a chat feeds it.
+  const agentConversation = !agentEnabled ? undefined
+    : activeWorkspace === "mail" ? mailSelection ?? undefined : state.messages.selection?.conversationId;
   const utility =
     shellOwnsRoute && state.utility && (utilityIsGlobal || state.utility.workspace === activeWorkspace) &&
     (state.utility.kind !== "agent" || agentConversation !== undefined)

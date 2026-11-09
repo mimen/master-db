@@ -1,13 +1,25 @@
+import type { GenericId } from "convex/values";
+
 /**
- * The Mail workspace's pure rules for the document an email's cleaned HTML renders in, and for replies. Convex cleans
- * the HTML (convex/comma/emailHtml.ts); the reader shows it in an iframe with no scripts, under a CSP that blocks every
- * remote load until the user asks for images, so either layer alone keeps a script out. The lenses are in mail-lens.ts.
+ * The Mail workspace's pure rules for the document an email's cleaned HTML renders in, and for the files a reply all
+ * or forward carries; who a reply goes to is shared/email-reply.ts. Convex cleans the HTML (convex/comma/emailHtml.ts);
+ * the reader shows it in an iframe with no scripts, under a CSP that blocks every remote load until the user asks for
+ * images, so either layer alone keeps a script out. The lenses are in mail-lens.ts.
  */
 
-/** The iframe's whole document. `images`: the user asked for this message's remote images. */
-export function emailDocument(html: string, { images }: { images: boolean }): string {
+const DATA_IMAGE = /^data:image\/(png|gif|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/;
+
+/**
+ * The iframe's whole document. `images`: the user asked for this message's remote images. `inline`: data: URLs for
+ * the message's own `cid:` images by Content-ID, which load under the CSP as any data: image does.
+ */
+export function emailDocument(html: string, { images, inline = {} }: { images: boolean; inline?: Readonly<Record<string, string>> }): string {
   const csp = `default-src 'none'; style-src 'unsafe-inline'; font-src data:; img-src data:${images ? " https: http:" : ""}`;
-  const body = images ? html.replace(/ data-comma-src="/g, ' src="') : html;
+  const remote = images ? html.replace(/ data-comma-src="/g, ' src="') : html;
+  const body = remote.replace(/ data-comma-cid="([^"]*)"/g, (attribute, cid: string) => {
+    const url = inline[cid.replace(/&amp;/g, "&")];
+    return url && DATA_IMAGE.test(url) ? ` src="${url}"` : attribute;
+  });
   return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}">` +
     "<style>html,body{margin:0;background:#fff;color:#1d1d1f;font:14px/1.5 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;" +
     "overflow-wrap:anywhere}body{display:flow-root}img{max-width:100%;height:auto}table{max-width:100%}pre{white-space:pre-wrap}" +
@@ -78,50 +90,33 @@ export function openByDefault(messages: readonly { _id: string; isFromMe: boolea
   return { open: new Set([...unreadIds, ...(newest ? [newest] : [])]), target };
 }
 
-export interface MailAddress {
-  address: string;
-  name: string | null;
+/** A file an email carries, as the reader and composer hold it. */
+export interface MailFile {
+  storageId: GenericId<"_storage">;
+  filename: string;
+  mimeType: string;
+  size: number | null;
 }
 
-/** The message a reply answers, as the reader holds it. */
-export interface ReplySource {
-  isFromMe: boolean;
-  from: MailAddress;
-  to: readonly MailAddress[];
-  cc: readonly MailAddress[];
+type StoredAttachment = {
+  filename?: string; mimeType?: string; totalBytes?: number; originalStorageId?: GenericId<"_storage">; gmail?: { inline: boolean };
+};
+
+/** A message's files a reply all or forward can carry again: stored, and not an image the body shows inline. */
+export function messageFiles(message: { attachments: readonly StoredAttachment[] }): MailFile[] {
+  return message.attachments.flatMap((attachment) => attachment.originalStorageId && !attachment.gmail?.inline ? [{
+    storageId: attachment.originalStorageId, filename: attachment.filename ?? "attachment",
+    mimeType: attachment.mimeType ?? "application/octet-stream", size: attachment.totalBytes ?? null,
+  }] : []);
 }
 
-export type ReplyMode = "reply" | "replyAll";
-
-export interface EmailFields {
-  to: string;
-  cc: string;
-  subject: string;
-}
-
-/** An address as a person types it into To: `Name <a@b.c>`, the name quoted when it holds a separator. */
-export function formatAddress({ address, name }: MailAddress): string {
-  if (!name) return address;
-  return /[,;<>"]/.test(name) ? `"${name.replace(/["\\]/g, "\\$&")}" <${address}>` : `${name} <${address}>`;
-}
-
-/**
- * The To, Cc and subject a reply starts with, as Gmail fills them. Reply answers the sender, or, on the user's own
- * message, its recipients. Reply all adds everyone else on it, never the user.
- */
-export function replyFields(source: ReplySource, mode: ReplyMode, subject: string, self: ReadonlySet<string>): EmailFields {
-  const seen = new Set(self);
-  const keep = (addresses: readonly MailAddress[]) => addresses.filter(({ address }) => {
-    const key = address.toLowerCase();
+/** Every distinct file in a thread, oldest first. The same file sent twice (a name and size seen before) counts once. */
+export function threadFiles(messages: readonly { attachments: readonly StoredAttachment[] }[]): MailFile[] {
+  const seen = new Set<string>();
+  return messages.flatMap(messageFiles).filter((file) => {
+    const key = `${file.filename}\u0000${file.size ?? ""}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
-  const first = source.isFromMe ? source.to : [source.from];
-  const to = keep(mode === "replyAll" ? [...first, ...(source.isFromMe ? [] : source.to)] : first);
-  const cc = mode === "replyAll" ? keep(source.cc) : [];
-  return { to: to.map(formatAddress).join(", "), cc: cc.map(formatAddress).join(", "), subject: /^re:/i.test(subject.trim()) ? subject.trim() : `Re: ${subject.trim()}` };
 }
-
-/** Whether a To or Cc field names at least one address. Convex reads the addresses out of the text. */
-export const hasRecipient = (fields: Pick<EmailFields, "to" | "cc">) => /@/.test(fields.to) || /@/.test(fields.cc);

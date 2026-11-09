@@ -54,10 +54,10 @@ export type DesktopUtility =
       readonly kind: "settings";
       readonly workspace: WorkspaceId;
     }
-  /** Bound to whichever conversation is open, so it follows the selection instead of naming one. */
+  /** Bound to whichever conversation is open in its workspace, so it follows the selection instead of naming one. */
   | {
       readonly kind: "agent";
-      readonly workspace: "messages";
+      readonly workspace: "messages" | "mail";
     };
 
 export type DesktopRouteOverlay =

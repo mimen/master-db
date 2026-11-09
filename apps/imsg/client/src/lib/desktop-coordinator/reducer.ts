@@ -53,7 +53,7 @@ function commitRoute(
   const keptUtility =
     state.utility?.kind === "scheduled" || state.utility?.kind === "settings"
       ? { ...state.utility, workspace: route.workspace }
-      : state.utility?.kind === "agent" && route.workspace === "messages"
+      : state.utility?.kind === "agent" && route.workspace === state.utility.workspace
         ? state.utility
         : null;
   const base: DesktopShellState = {

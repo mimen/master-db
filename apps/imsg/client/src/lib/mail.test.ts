@@ -1,6 +1,7 @@
+import type { GenericId } from "convex/values";
 import { describe, expect, test } from "bun:test";
 
-import { EMAIL_SANDBOX, emailDocument, formatAddress, hasRecipient, openByDefault, regularSenders, replyFields } from "./mail";
+import { EMAIL_SANDBOX, emailDocument, messageFiles, openByDefault, regularSenders, threadFiles } from "./mail";
 import { inLens } from "./mail-lens";
 
 describe("inLens", () => {
@@ -62,31 +63,30 @@ describe("emailDocument", () => {
   });
 });
 
-describe("replyFields", () => {
-  const me = { address: "milad@auf.test", name: "Milad" };
-  const sam = { address: "sam@venue.test", name: "Sam Lee" };
-  const pat = { address: "pat@agency.test", name: null };
-  const dana = { address: "dana@venue.test", name: "Ortiz, Dana" };
-  const self = new Set(["milad@auf.test"]);
-  const inbound = { isFromMe: false, from: sam, to: [me, dana], cc: [pat] };
+const id = (value: string) => value as GenericId<"_storage">;
 
-  test("reply answers the sender; reply all adds everyone else on the message, never the user", () => {
-    expect(replyFields(inbound, "reply", "Doors", self)).toEqual({ to: "Sam Lee <sam@venue.test>", cc: "", subject: "Re: Doors" });
-    expect(replyFields(inbound, "replyAll", "Doors", self)).toEqual({
-      to: 'Sam Lee <sam@venue.test>, "Ortiz, Dana" <dana@venue.test>', cc: "pat@agency.test", subject: "Re: Doors",
-    });
+describe("files a reply all or forward carries", () => {
+  const pdf = { filename: "invoice.pdf", mimeType: "application/pdf", totalBytes: 900, originalStorageId: id("s1"), gmail: { inline: false } };
+  const logo = { filename: "logo.png", mimeType: "image/png", totalBytes: 40, originalStorageId: id("s2"), gmail: { inline: true } };
+  const pending = { filename: "big.zip", mimeType: "application/zip", totalBytes: 9e7 };
+
+  test("a message's stored files, without the images its body shows inline or a file never stored", () => {
+    expect(messageFiles({ attachments: [pdf, logo, pending] })).toEqual([{ storageId: id("s1"), filename: "invoice.pdf", mimeType: "application/pdf", size: 900 }]);
   });
 
-  test("on the user's own message, reply goes back to its recipients, and a subject that is already a reply keeps its prefix", () => {
-    const outbound = { isFromMe: true, from: me, to: [sam], cc: [pat, me] };
-    expect(replyFields(outbound, "reply", "RE: Doors", self)).toEqual({ to: "Sam Lee <sam@venue.test>", cc: "", subject: "RE: Doors" });
-    expect(replyFields(outbound, "replyAll", "Doors", self)).toEqual({ to: "Sam Lee <sam@venue.test>", cc: "pat@agency.test", subject: "Re: Doors" });
+  test("a thread's files, oldest first, the same file sent again counted once", () => {
+    const sheet = { ...pdf, filename: "sheet.xlsx", originalStorageId: id("s3") };
+    expect(threadFiles([{ attachments: [pdf] }, { attachments: [{ ...pdf, originalStorageId: id("s4") }, sheet] }]).map((file) => String(file.storageId))).toEqual(["s1", "s3"]);
   });
+});
 
-  test("an address and a quoted name format as typed, and a field needs an address to send", () => {
-    expect(formatAddress(dana)).toBe('"Ortiz, Dana" <dana@venue.test>');
-    expect(formatAddress(pat)).toBe("pat@agency.test");
-    expect(hasRecipient({ to: "Sam", cc: "" })).toBe(false);
-    expect(hasRecipient({ to: "", cc: "pat@agency.test" })).toBe(true);
+describe("inline images", () => {
+  const html = '<p>Hi</p><img alt="Logo" data-comma-cid="logo@venue"><img data-comma-cid="other">';
+
+  test("a cid image draws from its data: URL, an unknown one or a URL that is not an image stays without a src", () => {
+    const doc = emailDocument(html, { images: false, inline: { "logo@venue": "data:image/png;base64,iVBORw0KGgo=", other: "javascript:alert(1)" } });
+    expect(doc).toContain('<img alt="Logo" src="data:image/png;base64,iVBORw0KGgo=">');
+    expect(doc).toContain('<img data-comma-cid="other">');
+    expect(doc).toContain(`img-src data:">`);
   });
 });
