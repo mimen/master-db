@@ -85,6 +85,26 @@ export function ErrorState({ title, message, onRetry }: ErrorStateProps) {
   );
 }
 
+/** A link to a conversation that no longer exists: say so, and offer the way back. */
+export function UnavailableState({ onBack }: { onBack: () => void }) {
+  const c = useTheme();
+  return (
+    <View testID="conversation-unavailable" style={styles.error}>
+      <Ionicons name="chatbubble-ellipses-outline" size={26} color={c.textTertiary} />
+      <Text role="heading" style={[styles.errorTitle, { color: c.text }]}>This conversation isn't available</Text>
+      <Text style={[styles.errorMessage, { color: c.textSecondary }]}>It may have been deleted, or the link is out of date.</Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onBack}
+        style={({ hovered, pressed }) => [styles.retry, { backgroundColor: hovered || pressed ? c.field : c.surface, borderColor: c.dividerStrong }]}
+      >
+        <Ionicons name="chevron-back" size={14} color={c.text} />
+        <Text style={[styles.retryText, { color: c.text }]}>Back</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",

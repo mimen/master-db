@@ -163,7 +163,7 @@ export function UnknownSenderBanner({ chat }: { readonly chat: ChatSummary }) {
       <View testID="unknown-sender-banner" style={[styles.banner, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
         <Ionicons name="person-add-outline" size={16} color={colors.icon} />
         <Text style={[styles.bannerText, { color: colors.text }]}>
-          <Text style={styles.bold}>{formatAddress(address)}</Text> isn't in your contacts.
+          <Text style={styles.bold}>{chat.displayName || formatAddress(address)}</Text> isn't in your contacts.
         </Text>
         <ContactsButton label="Add contact" onPress={() => setOpen((v) => !v)} />
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss" onPress={() => setDismissed(true)} hitSlop={8}>

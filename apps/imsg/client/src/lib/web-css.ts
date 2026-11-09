@@ -5,7 +5,7 @@ import { Colors } from "@/constants/theme";
 /**
  * Global web CSS enforced from the BUNDLE, not just the HTML shell, so a stale
  * cached PWA shell still gets these the moment the JS loads. Keyboard focus
- * draws one persimmon ring; text fields already show a caret, so they keep none,
+ * draws one blue ring; text fields already show a caret, so they keep none,
  * and full-bleed list rows inset theirs so the scroller does not clip it.
  * Inputs are 16px so iOS Safari never auto-zooms on focus.
  */

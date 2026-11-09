@@ -7,7 +7,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -45,6 +44,7 @@ import { SourceIcon } from "./service-label";
 import { TriageGeometry } from "@/constants/triage-theme";
 import { useTheme } from "@/hooks/use-theme";
 import type { ThemeColors } from "@/components/ui/interaction";
+import { Toggle } from "@/components/ui/toggle";
 
 const GRID_GAP = 4;
 const GRID_MAX = 6;
@@ -584,15 +584,7 @@ function ToggleRow({
     <View style={styles.toggleRow}>
       <Ionicons name={icon} size={17} color={onChange ? theme.icon : theme.disabled} />
       <Text style={[styles.toggleLabel, { color: onChange ? theme.text : theme.disabled, fontSize: type.body }]}>{label}</Text>
-      <Switch
-        accessibilityLabel={label}
-        value={value}
-        disabled={!onChange}
-        onValueChange={onChange}
-        trackColor={{ true: theme.text, false: theme.switchOff }}
-        thumbColor={value ? theme.surface : "#FFFFFF"}
-        {...({ activeThumbColor: theme.surface } as object)}
-      />
+      <Toggle accessibilityLabel={label} value={value} disabled={!onChange} onValueChange={onChange} />
     </View>
   );
 }

@@ -9,7 +9,7 @@ import { UnknownSenderBanner } from "@/components/contacts-add-panel";
 import { ConversationListPane } from "@/components/conversation-list-pane";
 import { useDesktopShellContext, useDesktopShellState } from "@/components/desktop-shell-context";
 import { DesktopSplit } from "@/components/desktop-split";
-import { EmptyState } from "@/components/empty-state";
+import { EmptyState, UnavailableState } from "@/components/empty-state";
 import { EmailReader, ThreadBeside, ThreadView } from "@/components/lazy-surfaces";
 import { useAgentEnabled } from "@/hooks/use-agent";
 import { useConversation } from "@/hooks/use-chat-directory";
@@ -61,7 +61,8 @@ export function MessagesWorkspace({
   const [state, setState] = useState<StateFilter>("today");
   const [type, setType] = useState<TypeFilter>(DEFAULT_INBOX_FILTERS.type);
   const [selectedId, setSelectedId] = useState<ConversationId | null>(null);
-  const selected = useConversation(selectedId) ?? null;
+  const selectedChat = useConversation(selectedId);
+  const selected = selectedChat ?? null;
   // "reply" focuses the composer and marks read; "preview" (glide j/k) does neither.
   const [selectionIntent, setSelectionIntent] = useState<"reply" | "preview">("reply");
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
@@ -396,6 +397,12 @@ export function MessagesWorkspace({
             />}
             <UnknownSenderBanner key={selected.conversationId} chat={selected} />
           </ThreadEnter>
+        ) : selectedId && selectedChat === null ? (
+          <UnavailableState onBack={() => {
+            setSelectedId(null);
+            dispatch({ type: "messages/chat-settled" });
+            router.replace("/");
+          }} />
         ) : (
           <EmptyState
             icon="chatbubble-ellipses-outline"

@@ -41,9 +41,10 @@ describe("Signal palette", () => {
     expect(Colors.light.thread).toBe("#F4F4F5");
   });
 
-  test("persimmon is the focus ring and lens bar, never the sent bubble", () => {
-    expect(Palette.light.focusRing).toBe("#E0500F");
-    expect(Palette.dark.focusRing).toBe("#FF7A40");
+  test("the focus ring is a calm blue, not the persimmon lens bar or the sent bubble", () => {
+    expect(Palette.light.focusRing).toBe("#3B82F6");
+    expect(Palette.light.focusRing).not.toBe(Palette.light.lensBar);
+    expect(Palette.dark.focusRing).toBe("#60A5FA");
     expect(Colors.light.bubbleMine).not.toBe(Palette.light.lensBar);
   });
 
