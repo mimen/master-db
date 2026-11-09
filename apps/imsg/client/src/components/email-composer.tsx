@@ -8,6 +8,7 @@ import { formatFileSize } from "@/components/message-meta";
 import { ScheduleEditor } from "@/components/schedule-editor";
 import { useTheme } from "@/hooks/use-theme";
 import { pressAnchor, useActionSheet } from "@/lib/action-sheet";
+import { CommandExecutionError, UnknownCommandError } from "@/lib/command-results";
 import { commaDraftsApi, scheduledSendsApi } from "@/lib/convex-api";
 import { runCommand } from "@/lib/convex-commands";
 import { formatReceiptTime } from "@/lib/format";
@@ -102,7 +103,9 @@ export function EmailComposer({ conversationId, accountId, mailboxes, start, sub
 
   const refused = (failure: unknown) => {
     setSending(false);
-    setError(messagingCommandError(failure, "Couldn't send the email."));
+    // The lane's refusal reads as the reply card's does.
+    setError(failure instanceof CommandExecutionError && !(failure instanceof UnknownCommandError)
+      ? `Couldn't send: ${failure.message}` : messagingCommandError(failure, "Couldn't send the email."));
   };
 
   const send = () => {
