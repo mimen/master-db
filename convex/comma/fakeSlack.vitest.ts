@@ -12,7 +12,8 @@ export const TOKEN = "xoxp-fake-milad";
 type Params = Record<string, string>;
 type Handler = (params: Params, token: string | null) => Record<string, unknown>;
 
-export type FakeUser = { id: string; name: string; email?: string; is_bot?: boolean };
+/** `image` is a picture the user set; without one the user has Slack's generated default. */
+export type FakeUser = { id: string; name: string; email?: string; is_bot?: boolean; image?: string };
 export type FakeMessage = {
   ts: string; user: string; text: string; thread_ts?: string; reply_count?: number; edited?: { ts: string }; subtype?: string;
   metadata?: { event_type: string; event_payload: Record<string, unknown> }; reactions?: { name: string; users: string[] }[];
@@ -200,7 +201,11 @@ export function stubSlackEnv(): void {
   vi.stubEnv("COMMA_TOKEN_KEY", `1:${btoa(String.fromCharCode(...new Uint8Array(32).fill(7)))}`);
 }
 
-const asUser = (user: FakeUser) => ({ id: user.id, name: user.name.toLowerCase(), is_bot: user.is_bot ?? false, profile: { display_name: user.name, ...(user.email ? { email: user.email } : {}) } });
+const DEFAULT_AVATAR = "https://secure.gravatar.com/avatar/0.jpg?s=192&d=https%3A%2F%2Fa.slack-edge.com%2Fava_0001-192.png";
+const asUser = (user: FakeUser) => ({ id: user.id, name: user.name.toLowerCase(), is_bot: user.is_bot ?? false, profile: {
+  display_name: user.name, ...(user.email ? { email: user.email } : {}),
+  is_custom_image: Boolean(user.image), image_72: user.image ?? DEFAULT_AVATAR, image_192: user.image ?? DEFAULT_AVATAR,
+} });
 const after = (messages: FakeMessage[], oldest?: string) => (oldest ? messages.filter((message) => Number(message.ts) > Number(oldest)) : messages);
 const newestFirst = (messages: FakeMessage[]) => [...messages].sort((a, b) => Number(b.ts) - Number(a.ts));
 

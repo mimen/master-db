@@ -81,13 +81,17 @@ export function parseSlackMessage(raw: unknown): SlackMessage | null {
   return { ts, user, text: text(raw.text) ?? "", ...(threadTs ? { threadTs } : {}), ...(editedTs ? { editedTs } : {}), ...(sent ? { clientKey: sent } : {}) };
 }
 
-/** A user object from `user_change` or `users.info`. The display name wins over the real name, as Slack shows it. */
+/**
+ * A user object from `user_change`, `users.info` or `users.list`. The display name wins over the real name, as Slack
+ * shows it. Only a picture the user set counts: Slack marks it `is_custom_image`, and its generated default is initials.
+ */
 export function parseSlackUser(raw: unknown): SlackUser | null {
   if (!isObject(raw) || !text(raw.id)) return null;
   const profile = isObject(raw.profile) ? raw.profile : {};
   const name = text(profile.display_name) || text(profile.real_name) || text(raw.real_name) || text(raw.name) || "Slack user";
   const email = text(profile.email);
-  return { id: text(raw.id)!, name, ...(email ? { email } : {}) };
+  const image = profile.is_custom_image === true ? text(profile.image_192) || text(profile.image_72) : undefined;
+  return { id: text(raw.id)!, name, ...(email ? { email } : {}), ...(image ? { image } : {}) };
 }
 
 type Payload = { type: "challenge"; challenge: string } | { type: "event"; eventId: string; teamId: string; event: SlackEvent | null };

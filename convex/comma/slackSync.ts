@@ -268,9 +268,9 @@ async function threadMessages(token: string, channel: string, ts: string): Promi
 const BACKFILL_KEY = "slack:backfill";
 const BACKSTOP_KEY = "slack:backstop";
 const BACKFILL_DAYS = 90;
-/** Slack's history and replies reads allow about 50 a minute; search allows 20. */
+/** Slack's history and replies reads allow about 50 a minute; users.list and search allow 20. */
 const STEP_MS = 1_500;
-const SEARCH_STEP_MS = 3_500;
+const TIER2_STEP_MS = 3_500;
 
 type Channel = { id: string; type: "im" | "mpim" | "channel"; name?: string; members?: string[] };
 /** A thread to read whole, and the conversation its read lands through: its DM, group DM or channel, or the thread itself. */
@@ -288,6 +288,8 @@ export type BackfillState = {
   page?: number;
   /** One channel opted in to: its history and its threads, with no search. */
   channelOnly?: boolean;
+  /** Re-reads users.list alone, so every Slack identity's name and picture are current. */
+  usersOnly?: boolean;
 };
 
 async function syncRow(ctx: Pick<QueryCtx, "db">, accountId: Id<"comma_accounts">, key: string) {
@@ -300,7 +302,7 @@ async function writeSync(ctx: MutationCtx, accountId: Id<"comma_accounts">, key:
   else await ctx.db.insert("comma_sync_state", { accountId, key, ...fields, updatedAt: Date.now() });
 }
 
-async function startRun(ctx: MutationCtx, accountId: Id<"comma_accounts">, key: string, fields: Pick<BackfillState, "step" | "optedIn" | "channels" | "channelOnly">) {
+async function startRun(ctx: MutationCtx, accountId: Id<"comma_accounts">, key: string, fields: Pick<BackfillState, "step" | "optedIn" | "channels" | "channelOnly" | "usersOnly">) {
   const now = Date.now();
   const state: BackfillState = { run: String(now), oldest: String(Math.floor((now - BACKFILL_DAYS * 86_400_000) / 1000)), threads: [], ...fields };
   await writeSync(ctx, accountId, key, { cursor: JSON.stringify(state) });
@@ -316,6 +318,18 @@ export const startBackfill = internalMutation({
     if (!account) return null;
     await startRun(ctx, accountId, BACKFILL_KEY, { step: "users", optedIn: account.slackChannels ?? [], channels: [] });
     return null;
+  },
+});
+
+/** Re-reads every connected workspace's users.list under `slack:backfill:users`, one paced page per step. Run by hand. */
+export const refreshUsers = internalMutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const accounts = (await ctx.db.query("comma_accounts").withIndex("by_platform_externalId", (q) => q.eq("platform", "slack")).collect())
+      .filter((account) => account.credentials);
+    for (const account of accounts) await startRun(ctx, account._id, `${BACKFILL_KEY}:users`, { step: "users", optedIn: [], channels: [], usersOnly: true });
+    return accounts.length;
   },
 });
 
@@ -354,7 +368,7 @@ export const backfill = internalAction({
     const token = await slackToken(ctx, accountId);
     if (!token) return null;
     let next = state;
-    let delay = state.step === "search" ? SEARCH_STEP_MS : STEP_MS;
+    let delay = state.step === "search" || state.step === "users" ? TIER2_STEP_MS : STEP_MS;
     try {
       next = await backfillStep(ctx, token, accountId, state);
     } catch (error) {
@@ -386,7 +400,8 @@ export async function backfillStep(ctx: ActionCtx, token: string, accountId: Id<
       const users = (result.members ?? []).filter((member) => !member.is_bot).map(parseSlackUser).filter((user) => user !== null);
       await ctx.runMutation(internal.comma.slackSync.ingestBatch, { accountId, users, conversations: [] });
       const cursor = nextCursor(result);
-      return cursor ? { ...state, cursor } : { ...state, step: "conversations", cursor: undefined };
+      if (cursor) return { ...state, cursor };
+      return { ...state, step: state.usersOnly ? "done" : "conversations", cursor: undefined };
     }
     case "conversations": {
       const result = await slackApi<{ channels?: { id: string; is_im?: boolean; is_mpim?: boolean; user?: string; name?: string }[] } & Cursored>(

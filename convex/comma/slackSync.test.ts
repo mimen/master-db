@@ -11,7 +11,7 @@ import { normalizeModules } from "../test-utils.vitest";
 
 import { sealCredentials } from "./credentials";
 import { eventCallback, FakeSlack, MILAD, signedEvent, stubSlackEnv, TEAM, TOKEN } from "./fakeSlack.vitest";
-import { parseSlackPayload, slackRef } from "./slackEvents";
+import { parseSlackPayload, parseSlackUser, slackRef } from "./slackEvents";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 const paginationOpts = { numItems: 50, cursor: null };
@@ -309,6 +309,78 @@ describe("people from Slack users", () => {
     await settle(t);
     const identity = await t.run((ctx) => ctx.db.query("identities").withIndex("by_kind_normalized", (q) => q.eq("kind", "slack").eq("normalized", `slack:${DANA}`)).first());
     expect(await t.run((ctx) => ctx.db.get(identity!.person_id!))).toMatchObject({ display_name: "Dana K" });
+  });
+});
+
+describe("Slack profile pictures", () => {
+  const DANA_PHOTO = "https://avatars.slack-edge.com/2026-01-01/dana_192.jpg";
+  const slackPerson = async (t: T, userId: string) => {
+    const identity = await t.run((ctx) => ctx.db.query("identities").withIndex("by_kind_normalized", (q) => q.eq("kind", "slack").eq("normalized", `slack:${userId}`)).first());
+    return await t.run((ctx) => ctx.db.get(identity!.person_id!));
+  };
+  const participantPhotos = async (as: Awaited<ReturnType<typeof connected>>["as"]) => Object.fromEntries(
+    (await as.query(api.comma.queries.listConversations, { paginationOpts })).page.flatMap((row) => row.participants.map((p) => [p.address, p.photoUrl])));
+
+  test("a picture the user set parses at 192px, falling back to 72px; Slack's generated default parses as none", () => {
+    const user = (profile: object) => parseSlackUser({ id: DANA, profile: { display_name: "Dana", ...profile } });
+    expect(user({ is_custom_image: true, image_72: "https://x/72.jpg", image_192: "https://x/192.jpg" })?.image).toBe("https://x/192.jpg");
+    expect(user({ is_custom_image: true, image_72: "https://x/72.jpg" })?.image).toBe("https://x/72.jpg");
+    expect(user({ is_custom_image: false, image_192: "https://secure.gravatar.com/avatar/0.jpg" })).toEqual({ id: DANA, name: "Dana" });
+    expect(user({ image_192: "https://secure.gravatar.com/avatar/0.jpg" })).toEqual({ id: DANA, name: "Dana" });
+  });
+
+  test("a Slack-only person shows their Slack picture; a matched contact's own photo wins over it; no picture is initials", async () => {
+    slack.users.set(SAM, { id: SAM, name: "Sam Lee", email: "sam@example.com", image: "https://avatars.slack-edge.com/sam_192.jpg" });
+    slack.users.set(DANA, { id: DANA, name: "Dana", image: DANA_PHOTO });
+    slack.users.set("U0BO", { id: "U0BO", name: "Bo" });
+    const { t, as } = await connected();
+    const contactPhoto = await t.run(async (ctx) => {
+      const photoStorageId = await ctx.storage.store(new Blob(["jpg"], { type: "image/jpeg" }));
+      const person_id = await ctx.db.insert("people", { display_name: "Samantha Lee", normalized_phones: [], normalized_emails: ["sam@example.com"],
+        identity_count: 1, message_count: 0, is_self: false, auto_clustered: false, created_at: "x", updated_at: "x", photoStorageId, photoHash: "a".repeat(64) });
+      await ctx.db.insert("identities", { person_id, kind: "email", value: "sam@example.com", normalized: "sam@example.com", source: "apple_contact",
+        is_self: false, message_count: 0, chat_count: 0, created_at: "x", updated_at: "x" });
+      return await ctx.storage.getUrl(photoStorageId);
+    });
+    slack.channel({ id: "G1", type: "mpim", members: [MILAD, SAM, DANA, "U0BO"] });
+    await post(t, eventCallback("Ev1", messageEvent("G1", "mpim", { user: DANA, text: "hey all", ts: ago(1) })));
+    await settle(t);
+    expect(await participantPhotos(as)).toEqual({ [`slack:${SAM}`]: contactPhoto, [`slack:${DANA}`]: DANA_PHOTO, "slack:U0BO": null });
+    expect(await slackPerson(t, SAM)).toMatchObject({ avatar_url: "https://avatars.slack-edge.com/sam_192.jpg" });
+  });
+
+  test("a profile change with a new picture replaces the old one, and going back to the default clears it", async () => {
+    slack.users.set(DANA, { id: DANA, name: "Dana", image: DANA_PHOTO });
+    const { t, as } = await connected();
+    slack.channel({ id: "D1", type: "im", user: DANA });
+    await post(t, eventCallback("Ev1", messageEvent("D1", "im", { user: DANA, text: "hi", ts: ago(1) })));
+    await settle(t);
+    expect(await participantPhotos(as)).toEqual({ [`slack:${DANA}`]: DANA_PHOTO });
+    const changed = (profile: object) => ({ type: "user_change", user: { id: DANA, name: "dana", profile: { display_name: "Dana", ...profile } } });
+    await post(t, eventCallback("Ev2", changed({ is_custom_image: true, image_192: "https://avatars.slack-edge.com/dana_new_192.jpg" })));
+    expect(await participantPhotos(as)).toEqual({ [`slack:${DANA}`]: "https://avatars.slack-edge.com/dana_new_192.jpg" });
+    await post(t, eventCallback("Ev3", changed({ is_custom_image: false, image_192: "https://secure.gravatar.com/avatar/0.jpg" })));
+    expect(await participantPhotos(as)).toEqual({ [`slack:${DANA}`]: null });
+    expect(await slackPerson(t, DANA)).not.toHaveProperty("avatar_url");
+  });
+
+  test("refreshUsers fills pictures for users already in the graph by re-reading users.list alone, page by page", async () => {
+    const { t, accountId } = await connected();
+    slack.channel({ id: "D1", type: "im", user: DANA });
+    await post(t, eventCallback("Ev1", messageEvent("D1", "im", { user: DANA, text: "hi", ts: ago(1) })));
+    await settle(t);
+    expect(await slackPerson(t, DANA)).not.toHaveProperty("avatar_url");
+    slack.users.set(DANA, { id: DANA, name: "Dana", image: DANA_PHOTO });
+    slack.pageSize = 1;
+    slack.rateLimitOnce.set("users.list", 2);
+    slack.calls.length = 0;
+    expect(await t.mutation(internal.comma.slackSync.refreshUsers, {})).toBe(1);
+    await settle(t);
+    expect(await slackPerson(t, DANA)).toMatchObject({ avatar_url: DANA_PHOTO });
+    expect(new Set(fetched())).toEqual(new Set(["users.list"]));
+    expect(fetched()).toHaveLength(slack.users.size + 1);
+    const row = await t.run((ctx) => ctx.db.query("comma_sync_state").withIndex("by_account_key", (q) => q.eq("accountId", accountId).eq("key", "slack:backfill:users")).unique());
+    expect(JSON.parse(row!.cursor!)).toMatchObject({ step: "done" });
   });
 });
 

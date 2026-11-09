@@ -623,7 +623,8 @@ export const slackRef = v.union(
   v.object({ type: v.literal("thread"), channel: v.string(), threadTs: v.string() }),
 );
 
-export const slackUser = v.object({ id: v.string(), name: v.string(), email: v.optional(v.string()) });
+/** `image` is the profile picture the user set; a Slack default avatar parses as none. */
+export const slackUser = v.object({ id: v.string(), name: v.string(), email: v.optional(v.string()), image: v.optional(v.string()) });
 
 /** One Slack message as Comma keeps it. `clientKey` is a Comma send's own, read back from the message's metadata. */
 export const slackMessage = v.object({

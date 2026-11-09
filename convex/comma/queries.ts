@@ -137,7 +137,7 @@ export async function withConversationState(
   const names = resolveConversationNames(conversation, people);
   const participants = await Promise.all(names.participants.map(async (participant, index) => {
     const person = people[index];
-    return { ...participant, photoUrl: person?.photoStorageId ? await read.storageUrl(person.photoStorageId) : null };
+    return { ...participant, photoUrl: person?.photoStorageId ? await read.storageUrl(person.photoStorageId) : person?.avatar_url ?? null };
   }));
   const crm = await conversationCrm(ctx, conversation, !conversation.isGroup && people.length === 1 ? people[0] ?? null : null, read);
   const lastMessage = conversation.lastMessage;

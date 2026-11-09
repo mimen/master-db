@@ -61,6 +61,9 @@ export const people = defineTable({
   not_duplicate_of: v.optional(v.array(v.id("people"))),
   photoStorageId: v.optional(v.id("_storage")),
   photoHash: v.optional(v.string()),
+  // A Slack profile picture's public URL, derived from the person's Slack identities. The contact photo
+  // above wins over it.
+  avatar_url: v.optional(v.string()),
 
   // Optional downstream links — Convex stays canonical, these just point out.
   airtable_human_id: v.optional(v.string()),
