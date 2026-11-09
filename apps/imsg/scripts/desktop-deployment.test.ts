@@ -1,7 +1,11 @@
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setDefaultTimeout } from "bun:test";
 import { afterEach, describe, expect, test } from "vitest";
+
+// These run the real deploy scripts as subprocesses; one took over 5s on a slow macOS runner.
+setDefaultTimeout(20_000);
 
 const scriptsDir = import.meta.dir;
 const releaseNeeded = join(scriptsDir, "desktop-release-needed.sh");

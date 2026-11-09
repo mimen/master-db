@@ -354,7 +354,7 @@ export const backfill = internalAction({
       for (const thread of page.threads ?? []) await readThread(ctx, token, accountId, thread.id, true, self);
       next = page.nextPageToken ? { ...state, pageToken: page.nextPageToken } : { run, steps: state.steps.slice(1) };
     } catch (error) {
-      if (!(error instanceof GoogleApiError && (error.status === 429 || error.status === 403 && error.code === "RESOURCE_EXHAUSTED"))) throw error;
+      if (!(error instanceof GoogleApiError && error.rateLimited)) throw error;
       delay = 30_000;
     }
     if (!(await ctx.runMutation(internal.comma.gmailSync.saveBackfill, { accountId, run, state: JSON.stringify(next) }))) return null;
