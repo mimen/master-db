@@ -212,7 +212,7 @@ async function applySlackReaction(ctx: MutationCtx, account: Doc<"comma_accounts
   const emoji = slackNameEmoji(event.name);
   const isFromMe = event.user === selfUserId(account);
   await applyReaction(ctx, {
-    platform: "slack", conversationId: message.conversationId, targetKey: messageKey("slack", message.guid), key: `emoji:${emoji}`, emoji,
+    platform: "slack", conversationId: message.conversationId, targetKey: messageKey("slack", account._id, message.guid), key: `emoji:${emoji}`, emoji,
     isFromMe, ...(isFromMe ? {} : { senderAddress: `slack:${event.user}` }), at: event.at, removed: event.removed,
   });
 }

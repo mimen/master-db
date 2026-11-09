@@ -13,7 +13,7 @@ import { gmail } from "./conversationIdentity";
 import { findByKey, findMessage } from "./conversationLookup";
 import { GMAIL_API, googleApi, GoogleApiError } from "./gmailApi";
 import { METADATA_HEADERS, parseGmailMessage, type EmailAddress, type RawGmailMessage } from "./gmailMessage";
-import { gmailToken } from "./googleAuth";
+import { gmailToken, pushTopic } from "./googleAuth";
 import { refreshLastMessage } from "./pendingSends";
 import { schedulePersonSummaries } from "./personSummaries";
 import { personForNormalized } from "./photos";
@@ -381,9 +381,10 @@ export const saveWatch = internalMutation({
   },
 });
 
-/** Asks Gmail to push the mailbox's changes to the Pub/Sub topic. Without GMAIL_PUSH_TOPIC, the backstop alone reads mail. */
+/** Asks Gmail to push the mailbox's changes to its app's Pub/Sub topic. Without one, the backstop alone reads mail. */
 export async function watchMailbox(ctx: ActionCtx, accountId: Id<"comma_accounts">): Promise<void> {
-  const topicName = process.env.GMAIL_PUSH_TOPIC;
+  const account = await ctx.runQuery(internal.comma.googleAuth.accountCredentials, { accountId });
+  const topicName = account ? pushTopic(account.app) : undefined;
   const token = topicName ? await gmailToken(ctx, accountId) : null;
   if (!topicName || !token) return;
   const watch = await googleApi<{ historyId: string; expiration: string }>(`${GMAIL_API}/watch`, { token, json: { topicName } });
@@ -399,12 +400,21 @@ export const watch = internalAction({
   },
 });
 
+/** Runs `work` for every connected mailbox. One mailbox failing does not keep the others from their turn. */
+async function eachMailbox(ctx: ActionCtx, work: (ctx: ActionCtx, accountId: Id<"comma_accounts">) => Promise<void>): Promise<void> {
+  const failures: unknown[] = [];
+  for (const accountId of await ctx.runQuery(internal.comma.gmailSync.mailboxes, {})) {
+    await work(ctx, accountId).catch((error: unknown) => failures.push(error));
+  }
+  if (failures.length) throw new AggregateError(failures, `${failures.length} mailbox(es) failed, first: ${String(failures[0])}`);
+}
+
 /** The daily cron: renews every mailbox's watch, days before it lapses. */
 export const renewWatches = internalAction({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
-    for (const accountId of await ctx.runQuery(internal.comma.gmailSync.mailboxes, {})) await watchMailbox(ctx, accountId);
+    await eachMailbox(ctx, watchMailbox);
     return null;
   },
 });
@@ -414,7 +424,7 @@ export const backstop = internalAction({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
-    for (const accountId of await ctx.runQuery(internal.comma.gmailSync.mailboxes, {})) await syncMailbox(ctx, accountId);
+    await eachMailbox(ctx, syncMailbox);
     return null;
   },
 });

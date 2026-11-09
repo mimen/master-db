@@ -5,7 +5,7 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { action, httpAction, internalMutation, internalQuery, type ActionCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
-import { oauthStateFields, platform, sealedCredentials } from "../schema/comma/validators";
+import { gmailApp, oauthStateFields, platform, sealedCredentials } from "../schema/comma/validators";
 
 import { ensureAccount } from "./accounts";
 import { publishExecutorStatus } from "./bridgeState";
@@ -89,12 +89,13 @@ export const stateIsLive = internalQuery({
 /** The state's row once, while it is live and the platform's; the row goes either way. */
 export const consumeState = internalMutation({
   args: { state: v.string(), platform },
-  returns: v.union(v.object({ verifier: v.optional(v.string()) }), v.null()),
+  returns: v.union(v.object({ verifier: v.optional(v.string()), gmailApp: v.optional(gmailApp) }), v.null()),
   handler: async (ctx, { state, platform }) => {
     const row = await ctx.db.query("comma_oauth_states").withIndex("by_state", (q) => q.eq("state", state)).unique();
     if (!row) return null;
     await ctx.db.delete(row._id);
-    return row.platform === platform && row.expiresAt > Date.now() ? { ...(row.verifier ? { verifier: row.verifier } : {}) } : null;
+    if (row.platform !== platform || row.expiresAt <= Date.now()) return null;
+    return { ...(row.verifier ? { verifier: row.verifier } : {}), ...(row.gmailApp ? { gmailApp: row.gmailApp } : {}) };
   },
 });
 

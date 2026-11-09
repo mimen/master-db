@@ -1,4 +1,5 @@
 import { PROFILES, TAPBACK_GLYPHS, tapbackKey } from "../../apps/imsg/shared/platform-profile";
+import type { Id } from "../_generated/dataModel";
 import type { CommaPlatform, CommaReaction, CommaReactionState, CommaTapback } from "../schema/comma/validators";
 
 /**
@@ -7,9 +8,9 @@ import type { CommaPlatform, CommaReaction, CommaReactionState, CommaTapback } f
  * the Convex reads and writes live in reactionStore.ts.
  */
 
-/** A message's id across platforms, so two platforms' message ids cannot collide. */
-export function messageKey(platform: CommaPlatform, guid: string): string {
-  return `${platform}:${guid}`;
+/** A message's id across platforms and accounts. A guid is unique only within its account: two mailboxes can share a Gmail id. */
+export function messageKey(platform: CommaPlatform, accountId: Id<"comma_accounts">, guid: string): string {
+  return `${platform}:${accountId}:${guid}`;
 }
 
 const TAPBACK_EMOJI: Readonly<Record<string, string>> = TAPBACK_GLYPHS;
@@ -34,6 +35,7 @@ export function sameReaction(a: Sender & { key: string }, b: Sender & { key: str
 /** The reaction an iMessage tapback row records, or null for any other row. */
 export function fromTapback(message: {
   platform?: CommaPlatform;
+  accountId: Id<"comma_accounts">;
   conversationId: CommaReactionState["conversationId"];
   isFromMe: boolean;
   sender?: { address: string };
@@ -47,7 +49,7 @@ export function fromTapback(message: {
   return {
     platform,
     conversationId: message.conversationId,
-    targetKey: messageKey(platform, tapback.targetGuid),
+    targetKey: messageKey(platform, message.accountId, tapback.targetGuid),
     key: tapbackKey(tapback.reaction, tapback.emoji),
     ...(emoji ? { emoji } : {}),
     isFromMe: message.isFromMe,

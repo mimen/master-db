@@ -1,6 +1,11 @@
 # Comma's Gmail connection
 
-Comma reads Milad's Google Workspace mailbox, `milad@afternoonumbrellafriends.com`, through an internal OAuth app in a Google Cloud project owned by the `afternoonumbrellafriends.com` organization. An internal app serves only that Workspace's users. Google does not review it, and its refresh tokens do not expire on a timer. A gmail.com mailbox cannot use an internal app; that is milestone G4.
+Comma reads two mailboxes, each through its own OAuth app:
+
+- The Google Workspace mailbox, `milad@afternoonumbrellafriends.com`, connects through an internal app in the Cloud project `comma-auf`, owned by the `afternoonumbrellafriends.com` organization. An internal app serves only that Workspace's users. Google does not review it, and its refresh tokens do not expire on a timer. Its client is `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+- The gmail.com mailbox, `miladmaaan@gmail.com`, cannot use an internal app. It connects through a second, external app in Testing mode, in its own project, `comma-personal`. A project has one consent-screen audience, so the external app cannot share the internal app's project. Google ends a Testing-mode grant 7 days after consent, so this mailbox needs a reconnect every week until Google verifies the app. Its client is `GOOGLE_PERSONAL_CLIENT_ID` and `GOOGLE_PERSONAL_CLIENT_SECRET`, and its push topic is `GMAIL_PERSONAL_PUSH_TOPIC`.
+
+Settings has a row for each: **Gmail** and **Personal Gmail**. Connect names the app, the OAuth state carries it to the callback, and the mailbox's account row stores it with the grant time (`gmailGrant`), so every refresh uses the same client. For the personal mailbox, Settings counts down to the weekly reconnect. With both connected, Mail shows a chip per mailbox (All, AUF, Personal), and a reply goes out from the mailbox its thread belongs to.
 
 The scopes are `openid email https://www.googleapis.com/auth/gmail.modify`, listed once in `GMAIL_SCOPES` (`convex/comma/googleAuth.ts`). The consent screen must list the same scopes. `gmail.modify` reads mail and labels, sends, and archives.
 
@@ -72,6 +77,51 @@ Run these in order. Comma's production is the Convex deployment `dev:shiny-gerbi
    - Archive a thread from Comma. It leaves Gmail's Inbox, and Comma's cleared count rises by one, not two.
    - Open Mail. A newsletter shows only under All inbox, never under People.
    - Send the mailbox an HTML message with a `<script>` and a 1×1 remote image. The reader shows neither, and holds other remote images until **Load images**.
+
+## The personal app (gmail.com)
+
+Run these after the Workspace setup above. The commands use the project id `comma-personal`; pick another if it is taken, and use it everywhere it appears.
+
+1. Create the project, outside any organization, and turn on the Gmail and Pub/Sub APIs:
+
+   ```bash
+   gcloud projects create comma-personal --name "Comma Personal"
+   gcloud services enable gmail.googleapis.com pubsub.googleapis.com --project comma-personal
+   ```
+
+2. In the Cloud console (<https://console.cloud.google.com/auth/overview?project=comma-personal>), set up the Google Auth Platform:
+   - **Branding**: app name `Comma`, support email `miladmaaan@gmail.com`.
+   - **Audience**: User type **External**, publishing status **Testing**. Under **Test users**, add `miladmaaan@gmail.com`. Only test users can consent while the app is in Testing.
+   - **Data access**: add the same scopes as the Workspace app: `openid`, `.../auth/userinfo.email` and `https://www.googleapis.com/auth/gmail.modify`.
+3. Under **Clients**, choose **Create client**, then **Web application**, and name it `Comma Convex`. Add exactly one authorized redirect URI, the same one as the Workspace app: `https://shiny-gerbil-853.convex.site/comma/oauth/google/callback`. Copy the client ID and client secret into a new 1Password item in `Sol` named `Comma Gmail Personal App`, and add the item to the credential map.
+4. Gmail publishes a mailbox's changes only to a topic in its OAuth app's project, so the personal mailbox needs its own topic. The push subscription lives in `comma-auf` and attaches to that topic across projects, so it pushes with the same service account and audience that Convex already checks:
+
+   ```bash
+   gcloud pubsub topics create comma-gmail --project comma-personal
+   gcloud pubsub topics add-iam-policy-binding comma-gmail --project comma-personal \
+     --member serviceAccount:gmail-api-push@system.gserviceaccount.com --role roles/pubsub.publisher
+   gcloud pubsub subscriptions create comma-gmail-personal-push --project comma-auf \
+     --topic projects/comma-personal/topics/comma-gmail \
+     --push-endpoint https://shiny-gerbil-853.convex.site/comma/gmail/push \
+     --push-auth-service-account comma-gmail-push@comma-auf.iam.gserviceaccount.com \
+     --push-auth-token-audience https://shiny-gerbil-853.convex.site/comma/gmail/push \
+     --ack-deadline 10
+   ```
+
+   Without the topic, the personal mailbox still syncs, through the 5-minute backstop alone.
+5. Set the Convex environment variables on production:
+
+   ```bash
+   export CONVEX_DEPLOYMENT=dev:shiny-gerbil-853
+   bunx convex env set GOOGLE_PERSONAL_CLIENT_ID "$(op read 'op://Sol/Comma Gmail Personal App/client id')"
+   bunx convex env set GOOGLE_PERSONAL_CLIENT_SECRET "$(op read 'op://Sol/Comma Gmail Personal App/client secret')"
+   bunx convex env set GMAIL_PERSONAL_PUSH_TOPIC projects/comma-personal/topics/comma-gmail
+   ```
+
+6. Connecting starts the backfill, so confirm with Milad first. In Comma, open **Settings**, then **Accounts**, then **Connect Personal Gmail**, and approve as `miladmaaan@gmail.com`. Google warns that the app is unverified; continue past the warning. Settings shows the mailbox with "Reconnect within 7 days".
+7. Check the result: send `miladmaaan@gmail.com` a message, and it shows in Mail under the **Personal** chip within a minute. Reply from Comma, and Gmail's **Show original** shows `From: miladmaaan@gmail.com`.
+
+Every week, Settings counts down. Choose **Reconnect** on **Personal Gmail** before the count ends. Reconnecting runs the same consent and restarts the 7 days. If the count ends first, the next refresh fails with `invalid_grant` and the mailbox shows **Reconnect**, as below. Mail already in Comma stays. New mail waits in Gmail, and the backfill that every connect starts reads it.
 
 ## When Google refuses the token
 

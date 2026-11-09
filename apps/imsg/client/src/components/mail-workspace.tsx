@@ -27,8 +27,9 @@ import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
 import { showToast } from "@/lib/toast";
 
 /**
- * The Mail workspace: a mailbox's inbox threads under two lenses, and a reader that shows each message as a card, with
- * Reply, Reply all and Archive. The email composer opens below the cards; an agent's draft opens it on its own.
+ * The Mail workspace: inbox threads under two lenses, and a reader that shows each message as a card, with Reply,
+ * Reply all and Archive. With two mailboxes connected, a chip row narrows the lenses to one. The email composer opens
+ * below the cards; an agent's draft opens it on its own.
  */
 
 type Thread = FunctionReturnType<typeof commaApi.listEmailThreads>["page"][number];
@@ -48,14 +49,40 @@ export function MailWorkspace({ wide }: { readonly wide: boolean }): JSX.Element
     if (routed) setSelectedId(routed as ConversationId);
   }, [routed]);
   const { results, status, loadMore } = usePaginatedQuery(commaApi.listEmailThreads, isAuthenticated ? {} : "skip", { initialNumItems: 50 });
-  const rows = useMemo(() => results.filter((row) => inLens(row, lens)), [results, lens]);
-  const more = results.length - rows.length;
+  const accounts = useQuery(accountsApi.listAccounts, isAuthenticated ? {} : "skip");
+  const mailboxes = (accounts ?? []).filter((account) => account.platform === "gmail" && account.connected);
+  const [chosen, setMailbox] = useState<string | null>(null);
+  const mailbox = mailboxes.length > 1 && mailboxes.some((account) => account._id === chosen) ? chosen : null;
+  // ponytail: narrows the loaded pages on the client; a server-side filter when one mailbox's threads sit pages deep.
+  const shown = useMemo(() => mailbox ? results.filter((row) => row.accountId === mailbox) : results, [results, mailbox]);
+  const rows = useMemo(() => shown.filter((row) => inLens(row, lens)), [shown, lens]);
+  const more = shown.length - rows.length;
+
+  const mailboxBar = mailboxes.length > 1 ? (
+    <View role="tablist" accessibilityLabel="Mailbox" style={styles.lenses}>
+      {[{ id: null, label: "All" }, ...mailboxes.map((account) => ({ id: account._id as string | null, label: account.gmailApp === "personal" ? "Personal" : "AUF" }))].map((option) => {
+        const on = option.id === mailbox;
+        return (
+          <Pressable
+            key={option.id ?? "all"}
+            role="tab"
+            aria-selected={on}
+            accessibilityLabel={option.label}
+            onPress={() => setMailbox(option.id)}
+            style={({ hovered }: { hovered?: boolean }) => [styles.lens, { backgroundColor: on ? theme.rowSelected : hovered ? theme.rowHover : "transparent" }]}
+          >
+            <Text numberOfLines={1} style={[styles.lensText, { color: on ? theme.text : theme.textSecondary }]}>{option.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  ) : null;
 
   const lensBar = (
     <View role="tablist" style={styles.lenses}>
       {LENSES.map((option) => {
         const on = option.id === lens;
-        const count = results.filter((row) => inLens(row, option.id)).length;
+        const count = shown.filter((row) => inLens(row, option.id)).length;
         return (
           <Pressable
             key={option.id}
@@ -75,6 +102,7 @@ export function MailWorkspace({ wide }: { readonly wide: boolean }): JSX.Element
   const heading = (
     <View>
       <Text accessibilityRole="header" style={[styles.headingTitle, { color: theme.text }]}>Mail</Text>
+      {mailboxBar}
       {lensBar}
     </View>
   );
@@ -93,6 +121,7 @@ export function MailWorkspace({ wide }: { readonly wide: boolean }): JSX.Element
           ListHeaderComponent={wide ? null : (
             <View style={{ paddingTop: SIDEBAR_TITLE_HEIGHT }}>
               <Text accessibilityRole="header" style={[styles.phoneTitle, { color: theme.text }]}>Mail</Text>
+              {mailboxBar}
               {lensBar}
             </View>
           )}

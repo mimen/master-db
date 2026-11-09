@@ -8,8 +8,8 @@ import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
 import { openCredentials } from "./credentials";
-import { ALIAS, FakeGmail, MAILBOX, REFRESH_TOKEN, stubGmailEnv } from "./fakeGmail.vitest";
-import { GMAIL_SCOPES, gmailToken } from "./googleAuth";
+import { ALIAS, FakeGmail, MAILBOX, PUSH_TOPIC, REFRESH_TOKEN, stubGmailEnv } from "./fakeGmail.vitest";
+import { GMAIL_SCOPES, gmailToken, TESTING_GRANT_MS } from "./googleAuth";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 
@@ -35,8 +35,10 @@ type T = Awaited<ReturnType<typeof setup>>["t"];
 const base64url = (bytes: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
 /** Settings' Connect, Google's consent (a code bound to the PKCE verifier Convex stored), then the callback. */
-async function connect(t: T, as: Awaited<ReturnType<typeof setup>>["as"], { scope = GMAIL_SCOPES.join(" "), verifier }: { scope?: string; verifier?: string } = {}) {
-  const authorize = new URL(await as.action(api.comma.googleAuth.startGmailConnect, {}));
+async function connect(t: T, as: Awaited<ReturnType<typeof setup>>["as"], { scope = GMAIL_SCOPES.join(" "), verifier, app }: {
+  scope?: string; verifier?: string; app?: "workspace" | "personal";
+} = {}) {
+  const authorize = new URL(await as.action(api.comma.googleAuth.startGmailConnect, app ? { app } : {}));
   const state = authorize.searchParams.get("state")!;
   const stored = await t.run((ctx) => ctx.db.query("comma_oauth_states").collect());
   google.codes.set("good-code", { verifier: verifier ?? stored[0]?.verifier, scope });
@@ -171,5 +173,79 @@ describe("access tokens", () => {
       credentials: { keyVersion: 1, iv: "x", ciphertext: "y" },
     }));
     expect(await t.query(internal.comma.googleAuth.accountCredentials, { accountId: slackId })).toBeNull();
+  });
+});
+
+describe("a gmail.com mailbox through the personal app", () => {
+  const PERSONAL = "miladmaaan@gmail.com";
+  const mailbox = (t: T, email: string) => t.run((ctx) => ctx.db.query("comma_accounts")
+    .withIndex("by_platform_externalId", (q) => q.eq("platform", "gmail").eq("externalId", email)).unique());
+
+  test("connects through the personal client, refreshes through it, and sits beside the workspace mailbox", async () => {
+    const { t, as } = await setup();
+    await connect(t, as);
+    google.mailbox = PERSONAL;
+    const before = Date.now();
+    const { authorize, callback } = await connect(t, as, { app: "personal" });
+    expect(callback.status).toBe(200);
+    expect(authorize.searchParams.get("client_id")).toBe("google-personal-client-id");
+    const exchanges = google.calls.filter((call) => call.form.grant_type === "authorization_code");
+    expect(exchanges.map((call) => call.form.client_secret)).toEqual(["google-client-secret", "google-personal-client-secret"]);
+
+    const personal = (await mailbox(t, PERSONAL))!;
+    const workspace = (await mailbox(t, MAILBOX))!;
+    expect(personal.gmailGrant?.app).toBe("personal");
+    expect(personal.gmailGrant!.grantedAt).toBeGreaterThanOrEqual(before);
+    expect(personal.gmailGrant!.grantedAt).toBeLessThanOrEqual(Date.now());
+    expect(workspace.gmailGrant?.app).toBe("workspace");
+
+    vi.advanceTimersByTime(58 * 60_000);
+    expect(await tokenFor(t, personal._id)).toBe(google.accessToken);
+    expect(await tokenFor(t, workspace._id)).toBe(google.accessToken);
+    const refreshes = google.calls.filter((call) => call.form.grant_type === "refresh_token");
+    expect(refreshes.map((call) => call.form.client_id)).toEqual(["google-personal-client-id", "google-client-id"]);
+  });
+
+  test("the mailbox watches its own app's topic, since Gmail pushes only within the app's project; with none, it waits for the backstop", async () => {
+    const { t, as } = await setup();
+    google.mailbox = PERSONAL;
+    await connect(t, as, { app: "personal" });
+    expect(google.watches).toEqual([]);
+    vi.stubEnv("GMAIL_PERSONAL_PUSH_TOPIC", "projects/comma-personal/topics/comma-gmail");
+    await t.action(internal.comma.gmailSync.renewWatches, {});
+    expect(google.watches).toEqual([{ topicName: "projects/comma-personal/topics/comma-gmail" }]);
+    expect(google.watches).not.toContainEqual({ topicName: PUSH_TOPIC });
+  });
+
+  test("Settings counts down to the weekly reconnect; the workspace mailbox has none", async () => {
+    const { t, as } = await setup();
+    await connect(t, as);
+    google.mailbox = PERSONAL;
+    await connect(t, as, { app: "personal" });
+    const listed = await as.query(api.comma.accounts.listAccounts, {});
+    const { grantedAt } = (await mailbox(t, PERSONAL))!.gmailGrant!;
+    expect(listed.find((row) => row.label === PERSONAL)).toMatchObject({ gmailApp: "personal", reconnectBy: grantedAt + TESTING_GRANT_MS });
+    const workspace = listed.find((row) => row.label === MAILBOX)!;
+    expect(workspace.gmailApp).toBe("workspace");
+    expect(workspace).not.toHaveProperty("reconnectBy");
+  });
+
+  test("once Google ends the grant, the next backstop shows Reconnect, and reconnecting restarts the countdown", async () => {
+    const { t, as } = await setup();
+    google.mailbox = PERSONAL;
+    await connect(t, as, { app: "personal" });
+    const first = (await mailbox(t, PERSONAL))!.gmailGrant!.grantedAt;
+    vi.advanceTimersByTime(TESTING_GRANT_MS);
+    google.refreshError = "invalid_grant";
+    await t.action(internal.comma.gmailSync.backstop, {});
+    expect((await mailbox(t, PERSONAL))!.health).toBe("needsAttention");
+    expect((await as.query(api.comma.accounts.listAccounts, {}))[0]).toMatchObject({ health: "needsAttention", connected: true });
+
+    google.refreshError = null;
+    const { authorize } = await connect(t, as, { app: "personal" });
+    expect(authorize.searchParams.get("client_id")).toBe("google-personal-client-id");
+    const { grantedAt } = (await mailbox(t, PERSONAL))!.gmailGrant!;
+    expect(grantedAt).toBeGreaterThanOrEqual(first + TESTING_GRANT_MS);
+    expect((await as.query(api.comma.accounts.listAccounts, {}))[0]).toMatchObject({ health: "ok", reconnectBy: grantedAt + TESTING_GRANT_MS });
   });
 });

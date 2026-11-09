@@ -6,7 +6,7 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { action, httpAction, internalMutation, internalQuery, type ActionCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
-import { sealedCredentials } from "../schema/comma/validators";
+import { gmailApp, sealedCredentials, type GmailApp } from "../schema/comma/validators";
 
 import { ensureAccount } from "./accounts";
 import { publishExecutorStatus } from "./bridgeState";
@@ -18,8 +18,8 @@ import { markConnection, page, randomHex, siteUrl, STATE_TTL_MS } from "./slackA
  * Connecting a Gmail mailbox as Milad, through Google OAuth with PKCE. Settings asks for Google's consent URL, Google
  * sends the browser back to GET /comma/oauth/google/callback, and the callback exchanges the code for a refresh token
  * and stores it sealed on the mailbox's account row. Access tokens last an hour and are refreshed in Convex when a call
- * needs one. The first mailbox is a Google Workspace one behind an internal OAuth app, whose refresh tokens do not
- * expire on a timer. Setup: apps/imsg/gmail/README.md.
+ * needs one. Each mailbox remembers which of two Google apps it connected through (GOOGLE_APPS), and refreshes
+ * through the same one. Setup: apps/imsg/gmail/README.md.
  */
 
 /** Reads mail and labels, and will send and archive in G2. Google classes it as restricted. */
@@ -34,10 +34,34 @@ const REFRESH_EARLY_MS = 2 * 60_000;
 
 export const googleRedirectUri = () => `${siteUrl()}/comma/oauth/google/callback`;
 
-function env(name: "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET"): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`${name} is not set`);
-  return value;
+/**
+ * The OAuth apps a mailbox connects through, by their env names. The Workspace app is internal to the AUF organization
+ * and its grants last. A gmail.com mailbox cannot use an internal app, so it uses an external app in Testing mode, in
+ * its own Cloud project. Gmail pushes only to a topic in the app's own project, so each app names its topic.
+ */
+const GOOGLE_APPS = {
+  workspace: { clientId: "GOOGLE_CLIENT_ID", clientSecret: "GOOGLE_CLIENT_SECRET", pushTopic: "GMAIL_PUSH_TOPIC" },
+  personal: { clientId: "GOOGLE_PERSONAL_CLIENT_ID", clientSecret: "GOOGLE_PERSONAL_CLIENT_SECRET", pushTopic: "GMAIL_PERSONAL_PUSH_TOPIC" },
+} as const satisfies Record<GmailApp, { clientId: string; clientSecret: string; pushTopic: string }>;
+
+/** The Pub/Sub topic the app's mailboxes push to, or undefined when only the backstop reads them. */
+export const pushTopic = (app: GmailApp): string | undefined => process.env[GOOGLE_APPS[app].pushTopic] || undefined;
+
+/** Google ends a Testing-mode app's grant this long after consent, until the app passes verification. */
+export const TESTING_GRANT_MS = 7 * 24 * 60 * 60_000;
+
+/** When Google ends the mailbox's grant, or undefined where grants last. */
+export function reconnectBy(grant: { app: GmailApp; grantedAt: number } | undefined): number | undefined {
+  return grant?.app === "personal" ? grant.grantedAt + TESTING_GRANT_MS : undefined;
+}
+
+function client(app: GmailApp): { client_id: string; client_secret: string } {
+  const read = (name: string) => {
+    const value = process.env[name];
+    if (!value) throw new Error(`${name} is not set`);
+    return value;
+  };
+  return { client_id: read(GOOGLE_APPS[app].clientId), client_secret: read(GOOGLE_APPS[app].clientSecret) };
 }
 
 const base64url = (bytes: ArrayBuffer | Uint8Array) =>
@@ -45,19 +69,20 @@ const base64url = (bytes: ArrayBuffer | Uint8Array) =>
 
 export type GmailCredentials = { refreshToken: string; accessToken: string; expiresAt: number };
 
-/** Settings' Connect: Google's consent URL, carrying a single-use state and the PKCE challenge. */
+/** Settings' Connect: Google's consent URL for the app, carrying a single-use state and the PKCE challenge. */
 export const startGmailConnect = action({
-  args: {},
+  args: { app: v.optional(gmailApp) },
   returns: v.string(),
-  handler: async (ctx) => {
+  handler: async (ctx, { app = "workspace" }) => {
     await assertAllowed(ctx);
+    const { client_id } = client(app);
     const state = randomHex(24);
     const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
     const challenge = base64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
-    await ctx.runMutation(internal.comma.slackAuth.saveState, { state, platform: "gmail", verifier, expiresAt: Date.now() + STATE_TTL_MS });
+    await ctx.runMutation(internal.comma.slackAuth.saveState, { state, platform: "gmail", verifier, gmailApp: app, expiresAt: Date.now() + STATE_TTL_MS });
     const authorize = new URL(AUTHORIZE_URL);
     authorize.search = new URLSearchParams({
-      client_id: env("GOOGLE_CLIENT_ID"), redirect_uri: googleRedirectUri(), response_type: "code", scope: GMAIL_SCOPES.join(" "),
+      client_id, redirect_uri: googleRedirectUri(), response_type: "code", scope: GMAIL_SCOPES.join(" "),
       // offline and consent: Google returns a refresh token on every connect, a reconnect included.
       access_type: "offline", prompt: "consent", include_granted_scopes: "true", state, code_challenge: challenge, code_challenge_method: "S256",
     }).toString();
@@ -75,10 +100,11 @@ export const handleGoogleCallback = httpAction(async (ctx, request) => {
   const saved = state ? await ctx.runMutation(internal.comma.slackAuth.consumeState, { state, platform: "gmail" }) : null;
   if (!saved?.verifier) return page(400, "This link has expired. Start again from Comma's Settings.");
   if (params.get("error") || !code) return page(400, `Gmail didn't connect: ${params.get("error") ?? "no code"}.`);
+  // A state saved before G4 named no app: the workspace one.
+  const app = saved.gmailApp ?? "workspace";
   try {
     const tokens = await googleApi<TokenResponse>(TOKEN_URL, { form: {
-      code, code_verifier: saved.verifier, client_id: env("GOOGLE_CLIENT_ID"), client_secret: env("GOOGLE_CLIENT_SECRET"),
-      redirect_uri: googleRedirectUri(), grant_type: "authorization_code",
+      code, code_verifier: saved.verifier, ...client(app), redirect_uri: googleRedirectUri(), grant_type: "authorization_code",
     } });
     const granted = new Set((tokens.scope ?? "").split(" "));
     if (!tokens.refresh_token || !granted.has(GMAIL_MODIFY)) {
@@ -93,7 +119,7 @@ export const handleGoogleCallback = httpAction(async (ctx, request) => {
       refreshToken: tokens.refresh_token, accessToken: tokens.access_token, expiresAt: Date.now() + tokens.expires_in * 1000,
     };
     await ctx.runMutation(internal.comma.googleAuth.connect, {
-      email, selfHandles: addresses, credentials: await sealCredentials(credentials, `gmail:${email}`),
+      email, selfHandles: addresses, credentials: await sealCredentials(credentials, `gmail:${email}`), app,
     });
     return page(200, "Gmail is connected. You can close this tab.");
   } catch (error) {
@@ -102,11 +128,11 @@ export const handleGoogleCallback = httpAction(async (ctx, request) => {
 });
 
 export const connect = internalMutation({
-  args: { email: v.string(), selfHandles: v.array(v.string()), credentials: sealedCredentials },
+  args: { email: v.string(), selfHandles: v.array(v.string()), credentials: sealedCredentials, app: gmailApp },
   returns: v.id("comma_accounts"),
-  handler: async (ctx, { email, selfHandles, credentials }) => {
+  handler: async (ctx, { email, selfHandles, credentials, app }) => {
     const { _id } = await ensureAccount(ctx, { platform: "gmail", externalId: email, label: email, selfHandles });
-    await ctx.db.patch(_id, { credentials, health: "ok" });
+    await ctx.db.patch(_id, { credentials, health: "ok", gmailGrant: { app, grantedAt: Date.now() } });
     await markConnection("gmail", ctx, _id, true);
     await ctx.scheduler.runAfter(0, internal.comma.gmailSync.startBackfill, { accountId: _id, resync: false });
     await ctx.scheduler.runAfter(0, internal.comma.gmailSync.watch, { accountId: _id });
@@ -116,10 +142,11 @@ export const connect = internalMutation({
 
 export const accountCredentials = internalQuery({
   args: { accountId: v.id("comma_accounts") },
-  returns: v.union(v.object({ externalId: v.string(), credentials: v.optional(sealedCredentials) }), v.null()),
+  returns: v.union(v.object({ externalId: v.string(), credentials: v.optional(sealedCredentials), app: gmailApp }), v.null()),
   handler: async (ctx, { accountId }) => {
     const account = await ctx.db.get(accountId);
-    return account?.platform === "gmail" ? { externalId: account.externalId, credentials: account.credentials } : null;
+    if (account?.platform !== "gmail") return null;
+    return { externalId: account.externalId, credentials: account.credentials, app: account.gmailGrant?.app ?? "workspace" };
   },
 });
 
@@ -134,7 +161,10 @@ export const saveCredentials = internalMutation({
   },
 });
 
-/** Google refused the refresh token (revoked, or the app's access removed): Settings shows Reconnect. */
+/**
+ * Google refused the refresh token (revoked, the app's access removed, or a Testing-mode grant past its 7 days):
+ * Settings shows Reconnect.
+ */
 export const needsReconnect = internalMutation({
   args: { accountId: v.id("comma_accounts"), code: v.string() },
   returns: v.null(),
@@ -148,10 +178,13 @@ export const needsReconnect = internalMutation({
   },
 });
 
-async function openGmail(ctx: Pick<ActionCtx, "runQuery">, accountId: Id<"comma_accounts">): Promise<{ email: string; credentials: GmailCredentials } | null> {
+async function openGmail(ctx: Pick<ActionCtx, "runQuery">, accountId: Id<"comma_accounts">): Promise<{ email: string; app: GmailApp; credentials: GmailCredentials } | null> {
   const account = await ctx.runQuery(internal.comma.googleAuth.accountCredentials, { accountId });
   if (!account?.credentials) return null;
-  return { email: account.externalId, credentials: await openCredentials(account.credentials, `gmail:${account.externalId}`) as GmailCredentials };
+  return {
+    email: account.externalId, app: account.app,
+    credentials: await openCredentials(account.credentials, `gmail:${account.externalId}`) as GmailCredentials,
+  };
 }
 
 /**
@@ -161,12 +194,12 @@ async function openGmail(ctx: Pick<ActionCtx, "runQuery">, accountId: Id<"comma_
 export async function gmailToken(ctx: Pick<ActionCtx, "runQuery" | "runMutation">, accountId: Id<"comma_accounts">): Promise<string | null> {
   const opened = await openGmail(ctx, accountId);
   if (!opened) return null;
-  const { email, credentials } = opened;
+  const { email, app, credentials } = opened;
   if (credentials.expiresAt - REFRESH_EARLY_MS > Date.now()) return credentials.accessToken;
   // ponytail: two actions refreshing at once each get a token and the last save wins; both stay valid at Google.
   try {
     const tokens = await googleApi<TokenResponse>(TOKEN_URL, { form: {
-      refresh_token: credentials.refreshToken, client_id: env("GOOGLE_CLIENT_ID"), client_secret: env("GOOGLE_CLIENT_SECRET"), grant_type: "refresh_token",
+      refresh_token: credentials.refreshToken, ...client(app), grant_type: "refresh_token",
     } });
     const next: GmailCredentials = {
       refreshToken: tokens.refresh_token ?? credentials.refreshToken, accessToken: tokens.access_token, expiresAt: Date.now() + tokens.expires_in * 1000,

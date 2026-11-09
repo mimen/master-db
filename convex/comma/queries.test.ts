@@ -8,6 +8,9 @@ import type { QueryCtx } from "../_generated/server";
 import { ALLOWED_EMAIL } from "../_lib/authed";
 import schema from "../schema";
 
+import { messageKey } from "./reactions";
+import { IMESSAGE_ACCOUNT } from "./conversationIdentity";
+import { ensureAccount } from "./accounts";
 import { listConversations, type searchMessages } from "./queries";
 import { commaModules } from "./testModules.vitest";
 
@@ -473,9 +476,9 @@ test("conversation and message names react to identity changes without a bridge 
       is_self: false, message_count: 0, chat_count: 0, created_at: "before", updated_at: "before" });
     const conversationId = await ctx.db.insert("comma_conversations", conversation("+16195551234", 1));
     await ctx.db.insert("comma_messages", { ...message(conversationId, "m", 1), sender: { address: "+16195551234 (smsfp)", name: "Old mirrored name" } });
-    await ctx.db.insert("comma_reactions", { platform: "imessage", conversationId, targetKey: "imessage:m", key: "like", emoji: "👍",
+    await ctx.db.insert("comma_reactions", { platform: "imessage", conversationId, targetKey: messageKey("imessage", (await ensureAccount(ctx, IMESSAGE_ACCOUNT))._id, "m"), key: "like", emoji: "👍",
       isFromMe: true, at: 1, removed: false });
-    await ctx.db.insert("comma_reactions", { platform: "imessage", conversationId, targetKey: "imessage:m", key: "😍", emoji: "😍",
+    await ctx.db.insert("comma_reactions", { platform: "imessage", conversationId, targetKey: messageKey("imessage", (await ensureAccount(ctx, IMESSAGE_ACCOUNT))._id, "m"), key: "😍", emoji: "😍",
       isFromMe: false, senderAddress: "+16195551234", at: 2, removed: false });
     return { personId, conversationId };
   });

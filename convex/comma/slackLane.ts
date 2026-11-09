@@ -163,7 +163,7 @@ export async function applySlackResult(ctx: MutationCtx, row: OutboxRow): Promis
     case "react": {
       const emoji = keyEmoji(payload.reaction);
       await applyReaction(ctx, {
-        platform: "slack", conversationId, targetKey: messageKey("slack", payload.messageGuid), key: payload.reaction,
+        platform: "slack", conversationId, targetKey: messageKey("slack", route.accountId, payload.messageGuid), key: payload.reaction,
         ...(emoji ? { emoji } : {}), isFromMe: true, at: row.createdAt, removed: payload.remove,
       });
       return;

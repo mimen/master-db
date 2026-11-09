@@ -48,3 +48,33 @@ test("Settings connects Gmail in a new tab and disconnects it after a confirm", 
   await expect(page.getByText("milad@afternoonumbrellafriends.com. Not connected.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Reconnect Gmail", exact: true })).toBeVisible();
 });
+
+test("a gmail.com mailbox connects beside the AUF one, counts down to its weekly reconnect, and gets its own Mail chip", async ({ desk }) => {
+  const page = desk.page;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.getByText("Alex Rivera", { exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Settings", exact: true }).first().click();
+  await expect(page.getByText("Read your gmail.com mailbox in Comma's Mail. Google asks you to reconnect it every week.")).toBeVisible();
+
+  for (const name of ["Connect Gmail", "Connect Personal Gmail"]) {
+    const tab = page.context().waitForEvent("page");
+    await page.getByRole("button", { name, exact: true }).click();
+    await (await tab).close();
+  }
+  await expect(page.getByText("miladmaaan@gmail.com. Comma reads your inbox. Reconnect within 5 days, Google's weekly limit.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Disconnect Gmail", exact: true })).toBeVisible();
+  await page.screenshot({ path: "/tmp/comma-settings-personal-gmail.png", animations: "disabled" });
+
+  await page.getByRole("button", { name: "Close settings", exact: true }).click();
+  await page.getByRole("button", { name: "Mail", exact: true }).click();
+  const mailboxes = page.getByRole("tablist", { name: "Mailbox" });
+  await expect(mailboxes.getByRole("tab")).toHaveText(["All", "AUF", "Personal"]);
+  await expect(page.getByTestId("mail-list").getByText("Load-in for Saturday")).toBeVisible();
+  await mailboxes.getByRole("tab", { name: "Personal" }).click();
+  await expect(page.getByRole("tab", { name: "People, 0" })).toBeVisible();
+  await expect(page.getByTestId("mail-list").getByText("Load-in for Saturday")).toHaveCount(0);
+  await mailboxes.getByRole("tab", { name: "AUF" }).click();
+  await expect(page.getByTestId("mail-list").getByText("Load-in for Saturday")).toBeVisible();
+  await page.screenshot({ path: "/tmp/comma-mail-two-mailboxes.png", animations: "disabled" });
+});
