@@ -10,7 +10,7 @@ import { FlashList } from "@shopify/flash-list";
 import { disambiguators, type HandleTiebreak } from "@shared/address";
 import { TODAY_SETTLE_GROUP } from "@shared/today";
 import { ChatRow } from "./chat-row";
-import { FilterChipRow, LensTabs } from "./conversation-filters";
+import { FilterChipRow, ViewList, ViewNav, ViewTitle } from "./conversation-filters";
 import { ConversationFiltersPanel } from "./lazy-surfaces";
 import { EmptyLens } from "./empty-lens";
 import { Collapse } from "./motion/collapse";
@@ -30,11 +30,13 @@ import { type ConversationListHandle, useConversationListViewport } from "./conv
 import { useConversationSearch } from "./conversations/use-conversation-search";
 import { PHONE_TAB_BAR_CLEARANCE } from "./phone-tab-bar";
 import { TriageGeometry } from "@/constants/triage-theme";
+import { headerFace } from "@/lib/header-font";
 
 import { publishRenderedOrder } from "@/hooks/use-queue-position";
 import { onTriageResolved, onTriageUndo, settleAllChats } from "@/hooks/use-triage-actions";
 import { useTheme } from "@/hooks/use-theme";
 import { useToday } from "@/hooks/use-today";
+import { useNavStyle } from "@/lib/settings";
 import { useAppBadge } from "@/lib/app-badge";
 import { useType } from "@/hooks/use-type";
 import { accountsApi, commaApi } from "@/lib/convex-api";
@@ -47,17 +49,16 @@ import {
   deriveInboxModel,
   desktopInboxTitle,
   filterInbox,
-  LENSES,
-  lensOf,
   narrowToday,
   platformsInUse,
   tagsInUse,
   planChats,
-  tabCounts,
+  viewCounts,
   viewName,
+  viewOf,
+  viewOrder,
   type InboxFilters,
   type InboxRow,
-  type Lens,
   type Refinements,
 } from "@/lib/inbox-model";
 import {
@@ -144,6 +145,10 @@ export function ConversationListPane({
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const store = useSyncExternalStore(subscribeInboxFilters, inboxFilterSnapshot, inboxFilterSnapshot);
+  const navStyle = useNavStyle();
+  // The phone's Sidebar list is a screen of its own, Mail-style: the views, then a view's conversations.
+  const [viewsOpen, setViewsOpen] = useState(false);
+  const showViews = !wide && navStyle === "list" && viewsOpen;
 
   // Refinements belong to the lens; People is the workspace's type lens, remembered per lens too.
   const refinements: Refinements = store.byLens[filters.state]?.refinements ?? DEFAULT_REFINEMENTS;
@@ -157,6 +162,7 @@ export function ConversationListPane({
   const selectLens = useCallback((lens: InboxFilters["state"]) => {
     const remembered = lensFilters(lens, DEFAULT_INBOX_FILTERS.type);
     search.applyFilters({ state: lens, type: remembered.type });
+    setViewsOpen(false);
   }, [search]);
   // Once the remembered filters load, the lens on screen takes its own People filter, before anything can save over it.
   const selectLensRef = useRef(selectLens);
@@ -177,19 +183,19 @@ export function ConversationListPane({
       if (view) openView(view);
     }
   }, [store.pending, openView]);
-  // ⌘1..⌘7 switch lenses while Messages is in front. Editable-safe: a chord never types.
+  // ⌘1..⌘9 open the views in the order the navigation style shows them, while Messages is in front. Editable-safe: a chord never types.
   useEffect(() => {
     if (Platform.OS !== "web" || !wide || !active) return;
     const onKey = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
-      const lens = LENSES[Number(event.key) - 1];
-      if (!lens) return;
+      const view = viewOrder(navStyle)[Number(event.key) - 1];
+      if (!view) return;
       event.preventDefault();
-      selectLens(lens.value);
+      selectLens(view.id);
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [wide, active, selectLens]);
+  }, [wide, active, selectLens, navStyle]);
   // The "Has a scheduled message" refinement drops a cancelled or sent row on the tap, like the footer count.
   const scheduledRows = usePendingScheduled(useQuery(commaApi.listScheduled, {}));
   const scheduled = useMemo(() => new Set((scheduledRows ?? [])
@@ -261,8 +267,8 @@ export function ConversationListPane({
     if (section) void settleAllChats(settleAllTargets(view, section.rows.map((row) => row.chat)));
   }, []);
   const onToday = filters.state === "today";
-  // Each tab counts what it would show: its own remembered People filter, the one a click on it restores.
-  const lensCounts = useMemo(() => counts && tabCounts(allChats, counts, plan.toGo,
+  // Each view counts what it would show: its own remembered People filter, the one opening it restores.
+  const lensCounts = useMemo(() => counts && viewCounts(allChats, counts, plan.toGo,
     (lens) => lens === filters.state ? filters.type : store.byLens[lens]?.type ?? DEFAULT_INBOX_FILTERS.type),
   [counts, plan.toGo, allChats, filters.state, filters.type, store.byLens]);
   useAppBadge(today.view === undefined ? undefined : plan.toGo);
@@ -291,7 +297,7 @@ export function ConversationListPane({
   const personalMail = useMemo(() => new Set((accounts ?? []).flatMap((account) => account.gmailApp === "personal" ? [account._id as string] : [])), [accounts]);
   // Today ignores Sort and Also include, so their chips would claim a filter that isn't there.
   const chips = activeChips(filters, refinements).filter((chip) => !onToday || !(chip.key === "order" || chip.key.startsWith("include-")));
-  const lensLabel = LENSES.find((lens) => lens.value === filters.state)?.label ?? "Settled";
+  const lensLabel = viewOf(filters.state).label;
   const clearAll = useCallback(() => {
     setLensFilters(filters.state, { type: DEFAULT_INBOX_FILTERS.type, refinements: DEFAULT_REFINEMENTS });
     onFiltersChange({ ...filters, type: DEFAULT_INBOX_FILTERS.type });
@@ -386,9 +392,10 @@ export function ConversationListPane({
     ),
     [theme.textTertiary, leaving, dropLeaving, handles, personalMail, wide, glide, selectedId, openRow, filters.state, toggleFold, settleSection],
   );
-  // Needs you and Unread show what happened and the next step once they empty; other lenses
-  // and searches keep the plain line.
-  const emptyLens = !search.query && chips.length === 0 && (filters.state === "unresponded" || filters.state === "unread") ? filters.state : null;
+  // To review and Unread show what happened and the next step once they empty; other views say
+  // their own line, and a search or a filter the plain one.
+  const narrowed = search.query !== "" || chips.length > 0;
+  const emptyLens = !narrowed && (filters.state === "unresponded" || filters.state === "unread") ? filters.state : null;
 
   useConversationListKeyboard({
     enabled: wide,
@@ -426,8 +433,20 @@ export function ConversationListPane({
       ) : null}
     </View>
   );
-  const lensTabs = (
-    <LensTabs state={filters.state} counts={lensCounts} onSelect={(lens: Lens) => selectLens(lens)} phone={!wide} />
+  const viewNav = <ViewNav style={navStyle} state={filters.state} counts={lensCounts} onSelect={selectLens} phone={!wide} />;
+  const phoneNav = navStyle !== "list" ? viewNav : showViews ? (
+    <>
+      <Text accessibilityRole="header" style={[styles.phoneViewsTitle, { color: theme.text }]}>Views</Text>
+      <ViewList state={filters.state} counts={lensCounts} onSelect={selectLens} phone />
+    </>
+  ) : (
+    <>
+      <Pressable accessibilityRole="button" accessibilityLabel="Views" onPress={() => setViewsOpen(true)} hitSlop={8} style={styles.phoneBack}>
+        <Ionicons aria-hidden name="chevron-back" size={20} color={theme.accent} />
+        <Text style={[styles.phoneBackText, { color: theme.accent }]}>Views</Text>
+      </Pressable>
+      <View style={styles.phoneTitle}><ViewTitle view={viewOf(filters.state)} counts={lensCounts} phone /></View>
+    </>
   );
   const newButton = <ChromeIconButton hugeIcon={PencilEdit02Icon} accessibilityLabel="New message" onPress={onNewMessage} />;
   const chrome = wide ? (
@@ -442,9 +461,9 @@ export function ConversationListPane({
       }
       below={
         <>
-          {/* The tabs show the lens; this names it for screen readers and the page outline. */}
+          {/* The navigation shows the view; this names it for screen readers and the page outline. */}
           <Text accessibilityRole="header" style={styles.visuallyHidden}>{desktopInboxTitle(filters)}</Text>
-          {lensTabs}
+          {viewNav}
         </>
       }
     />
@@ -466,7 +485,7 @@ export function ConversationListPane({
           // scrollToOffset / scrollToIndex (ConversationListHandle).
           ref={listRef as never}
           // Until the first listConversations page lands, Today's plan would claim the queue is cleared.
-          data={loading ? [] : rows}
+          data={loading || showViews ? [] : rows}
           keyExtractor={rowKey}
           {...(Platform.OS === "web" ? {} : { getItemType: (row: InboxRow) => row.kind })}
           // Native-only: FlatList has no drawDistance, and FlashList's is what
@@ -511,8 +530,8 @@ export function ConversationListPane({
               </View>
               {!wide && (
                 <View testID="phone-list-header">
-                  <View style={styles.phoneLenses}>{lensTabs}</View>
-                  <View style={styles.phoneSearch}>{searchField}</View>
+                  <View style={styles.phoneLenses}>{phoneNav}</View>
+                  {showViews ? null : <View style={styles.phoneSearch}>{searchField}</View>}
                 </View>
               )}
                             {search.active && search.mailMatches > 0 ? (
@@ -526,13 +545,10 @@ export function ConversationListPane({
                   </Text>
                 </Pressable>
               ) : null}
-              {lensOf(filters.state) === null && !search.active ? (
-                <Text style={[styles.lensNote, { color: theme.textSecondary, fontSize: type.secondary }]}>Settled</Text>
-              ) : null}
-              {onToday && !search.active ? (
+              {onToday && !search.active && !showViews ? (
                 <TodayHeaderCard header={loading ? { kind: "loading" } : todayHeader(today.view, plan)} dayStart={today.view?.dayStart ?? today.dayStart} onRequest={(mode) => void today.request(mode)} />
               ) : null}
-              {!search.active && (!onToday || chips.length > 0) ? (
+              {!search.active && !showViews && (!onToday || chips.length > 0) ? (
                 <FilterChipRow
                   chips={chips}
                   views={onToday ? [] : store.views}
@@ -547,7 +563,7 @@ export function ConversationListPane({
             </View>
           }
           ListEmptyComponent={
-            loading ? (
+            showViews ? null : loading ? (
               <SkeletonList />
             ) : emptyLens ? (
               <EmptyLens
@@ -564,7 +580,7 @@ export function ConversationListPane({
               />
             ) : (
               <View style={styles.empty}>
-                <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No conversations</Text>
+                <Text style={[styles.emptyText, { color: theme.textSecondary }]}>{narrowed ? "No conversations" : viewOf(filters.state).empty}</Text>
               </View>
             )
           }
@@ -714,6 +730,10 @@ const styles = StyleSheet.create({
   offlineBar: { alignItems: "center", borderRadius: 8, flexDirection: "row", gap: 6, marginHorizontal: 4, marginVertical: 6, paddingHorizontal: 10, paddingVertical: 5 },
   offlineText: { flex: 1, fontSize: 12, minWidth: 0 },
   phoneLenses: { marginHorizontal: -TriageGeometry.listGutter, paddingTop: 8 },
+  phoneViewsTitle: { ...headerFace, fontSize: 30, letterSpacing: -0.6, lineHeight: 36, paddingBottom: 8, paddingHorizontal: 20 },
+  phoneBack: { alignItems: "center", alignSelf: "flex-start", flexDirection: "row", gap: 2, paddingHorizontal: 12, paddingVertical: 4 },
+  phoneBackText: { fontSize: 17 },
+  phoneTitle: { paddingHorizontal: 20 },
   phoneSearch: { flexDirection: "row", paddingBottom: 6, paddingHorizontal: 8, paddingTop: 14 },
   lensNote: { fontWeight: "600", paddingHorizontal: 18, paddingTop: 10 },
   group: { flexDirection: "row", justifyContent: "space-between", paddingBottom: 6, paddingHorizontal: 18, paddingTop: 14 },
@@ -729,5 +749,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 15,
+    textAlign: "center",
   },
 });

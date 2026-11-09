@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "../fixtures/desk";
 
 async function needsCount(page: Page): Promise<number> {
-  const label = await page.getByRole("tab", { name: /^Needs you, \d+/ }).getAttribute("aria-label");
+  const label = await page.getByRole("tab", { name: /^To review, \d+/ }).getAttribute("aria-label");
   return Number(/(\d+)/.exec(label ?? "")?.[1]);
 }
 
@@ -10,11 +10,11 @@ const row = (page: Page, name: string) => page.getByTestId("conversation-row").f
 const menu = (page: Page) => page.getByRole("dialog");
 const palette = (page: Page) => page.getByPlaceholder("Search people and messages, or type a command");
 
-test("Later from a row's menu leaves Needs you, lists under Snoozed, says so in Details, and undoes", async ({ desk }) => {
+test("Later from a row's menu leaves To review, lists under Snoozed, says so in Details, and undoes", async ({ desk }) => {
   const page = desk.page;
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await page.getByRole("tab", { name: /^Needs you, \d+/ }).click();
+  await page.getByRole("tab", { name: /^To review, \d+/ }).click();
   const before = await needsCount(page);
 
   await row(page, "Alex Rivera").click({ button: "right" });
@@ -24,13 +24,12 @@ test("Later from a row's menu leaves Needs you, lists under Snoozed, says so in 
   await expect.poll(() => needsCount(page)).toBe(before - 1);
   await expect(row(page, "Alex Rivera")).toHaveCount(0);
 
-  // ⌘K → Snoozed lists it; opening it shows the snooze in Details.
-  await page.keyboard.press("Meta+k");
-  await palette(page).fill("Snoozed");
-  await page.getByRole("listbox", { name: "Results" }).getByText("Snoozed", { exact: true }).click();
-  const results = page.getByRole("listbox", { name: "Results" });
-  await expect(results.getByText("Alex Rivera")).toBeVisible();
-  await results.getByText("Alex Rivera").click();
+  // The Snoozed view lists it and counts it; opening it shows the snooze in Details.
+  await expect(page.getByRole("tab", { name: "Snoozed, 1" })).toBeVisible();
+  await page.getByRole("tab", { name: /^Snoozed/ }).click();
+  await expect(page.getByRole("heading", { name: "Snoozed" })).toBeAttached();
+  await expect(page.getByTestId("conversation-row")).toHaveCount(1);
+  await row(page, "Alex Rivera").click();
   await page.keyboard.press("Meta+i");
   await expect(page.getByTestId("details-later")).toContainText(/Snoozed until Tomorrow, 9:00/);
 

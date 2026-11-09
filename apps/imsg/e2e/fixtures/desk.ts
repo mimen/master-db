@@ -85,6 +85,15 @@ export const test = base.extend<DeskFixture>({
 
 export { expect };
 
+/** Opens a Messages view by its tab. The phone's Sidebar list keeps the views on a screen of their own, behind "Views". */
+export async function openView(page: Page, name: string): Promise<void> {
+  const tab = page.getByRole("tab", { name, exact: true });
+  const views = page.getByRole("button", { name: "Views", exact: true });
+  await expect(tab.or(views).first()).toBeVisible();
+  if (!(await tab.isVisible())) await views.click();
+  await tab.click();
+}
+
 /** The list renders rows in batches; a count taken mid-batch is not the list's size. */
 export async function settledCount(locator: Locator): Promise<number> {
   let count = -1;

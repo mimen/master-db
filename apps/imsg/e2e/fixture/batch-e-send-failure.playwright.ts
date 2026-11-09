@@ -17,8 +17,8 @@ test("a burst of failed sends raises one toast and keeps every Not delivered bub
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?send-failure", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: /^Needs you/ }).click();
-  await expect(page.getByRole("heading", { name: "Needs you" })).toBeVisible();
+  await page.getByRole("tab", { name: /^To review/ }).click();
+  await expect(page.getByRole("heading", { name: "To review" })).toBeVisible();
   await page.getByTestId("conversation-row").first().click();
   await desk.request.post("/__fixture/fault", { data: { method: "sendText", error: "offline" } });
 

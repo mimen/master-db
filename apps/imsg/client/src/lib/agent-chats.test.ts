@@ -25,7 +25,7 @@ test("open chats come first under the person's name with their state, then settl
   ], "Leah Kim", { kind: "chat", chatId: working._id }, NOW);
   expect(rows.map(({ label, trailing, section }) => [label, trailing, section])).toEqual([
     ["Venues", "18s", "Leah Kim"],
-    ["Guest list", "Needs you", "Leah Kim"],
+    ["Guest list", "Asking you", "Leah Kim"],
     ["Rideshare codes", "Draft ready", "Leah Kim"],
     ["Hotel block", "Open", "Leah Kim"],
     ["Deposit", "Failed", "Leah Kim"],

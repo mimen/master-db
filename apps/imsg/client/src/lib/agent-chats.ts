@@ -21,7 +21,7 @@ export interface SwitcherRow {
 
 function stateWord(chat: AgentChatSummary, attention: AgentAttention, now: number): string {
   switch (attention) {
-    case "needs_you": return "Needs you";
+    case "needs_you": return "Asking you";
     case "failed": return "Failed";
     case "ready": return chat.preview?.kind === "draft" ? "Draft ready" : "Ready";
     // The runner patches the chat as its turn starts, so the last update is about when the work began.

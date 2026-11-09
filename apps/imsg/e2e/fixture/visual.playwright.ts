@@ -33,8 +33,8 @@ async function resetAndOpen(
   await desk.page.setViewportSize({ width, height: 820 });
   await desk.page.emulateMedia({ colorScheme: scheme, reducedMotion });
   await desk.page.goto(`/?visual=${scheme}-${width}`, { waitUntil: "domcontentloaded" });
-  await desk.page.getByRole("tab", { name: /^Needs you/ }).click();
-  await expect(desk.page.getByRole("heading", { name: "Needs you" })).toBeVisible();
+  await desk.page.getByRole("tab", { name: /^To review/ }).click();
+  await expect(desk.page.getByRole("heading", { name: "To review" })).toBeVisible();
   await expect(desk.page.getByTestId("conversation-row").first()).toBeVisible();
 }
 
@@ -156,14 +156,14 @@ test("row actions follow conversation state across queue lenses and keep More mi
   await page.keyboard.press("Meta+e");
   const unsettle = row.getByRole("button", { name: "Un-settle Alex Rivera", exact: true });
   await expect(unsettle).toBeVisible();
-  await expect(page.getByText("Settled", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("state-strip").getByText("Settled", { exact: true })).toBeVisible();
   // The row shows the settle at once, but its write is out until every live query has refreshed, and a press
   // inside that window is turned away by design (triage-writes.ts). Press again, as the user would, until it takes.
   await expect(async () => {
     if (await unsettle.isVisible()) await page.keyboard.press("Meta+e");
     await expect(row.getByRole("button", { name: "Settle Alex Rivera", exact: true })).toBeVisible({ timeout: 300 });
   }).toPass();
-  await expect(page.getByText("Un-settled — back in Needs you", { exact: true })).toBeVisible();
+  await expect(page.getByText("Un-settled — back in To review", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "All messages" })).toBeVisible();
   await row.hover();
   await row.getByRole("button", { name: /More actions for/ }).click();
@@ -235,7 +235,7 @@ test("reply suggestions show vibe, fallback model, reaction confirmation, and mo
   await page.setViewportSize({ width: 390, height: 820 });
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
   await page.goto("/?visual=dark-390", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("tab", { name: "All", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Views", exact: true })).toBeVisible();
   await page.getByText("Alex Rivera", { exact: true }).first().click();
   await expect(page.getByText("what time do you need the final answer by?", { exact: true })).toBeVisible();
   await page.screenshot({ path: "/tmp/comma-suggestion-narrow.png", animations: "disabled" });
@@ -413,7 +413,7 @@ test("Scheduled and Settings remain open across every workspace", async ({ desk 
   await expect(page.getByLabel("Close scheduled")).toBeVisible();
 
   await page.getByRole("button", { name: "Messages", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Needs you" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "To review" })).toBeVisible();
   await expect(page.getByLabel("Close scheduled")).toBeVisible();
 
   await page.getByRole("tab", { name: /^Waiting/ }).click();
@@ -450,7 +450,7 @@ test("wide cold routes project into the persistent desktop shell", async ({ desk
   await expect(page.getByText("Settings", { exact: true }).last()).toBeVisible();
 
   await page.goto("/scheduled?workspace=messages", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: /Today|Needs you|Waiting|All messages/ }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Today|To review|Waiting|All messages/ }).first()).toBeVisible();
   await expect(page.getByText("Scheduled", { exact: true }).last()).toBeVisible();
 
   await page.goto("/person?address=%2B16195550102&name=Jordan%20Lee", { waitUntil: "domcontentloaded" });

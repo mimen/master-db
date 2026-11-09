@@ -1,13 +1,14 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { StateCounts, StateFilter } from "@shared/types";
-import { useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { LiquidTabs } from "./motion/liquid-tabs";
 import { RollingNumber } from "./motion/rolling-number";
+import { Dropdown, type DropdownOption } from "./ui/dropdown";
 import { headerFace } from "@/lib/header-font";
 import { useTheme } from "@/hooks/use-theme";
-import { LENSES, lensOf, type FilterChip, type Lens } from "@/lib/inbox-model";
+import { viewOf, viewOrder, viewShortcut, type FilterChip, type InboxView, type NavStyle } from "@/lib/inbox-model";
 import type { SavedView } from "@/lib/palette/saved-views";
 
 const WEB = Platform.OS === "web";
@@ -17,81 +18,180 @@ function formatCount(count: number): string {
   return count > 999 ? "999+" : String(count);
 }
 
-/**
- * The lens tab row, the app's only segmented control. Needs you carries a turn-colored count,
- * Unread and Agents gray ones. The row scrolls sideways when the sidebar is too narrow for all seven;
- * on the phone the tabs are the page title, without the bar.
- */
-export function LensTabs({
-  state,
-  counts,
-  onSelect,
-  phone = false,
-}: {
-  state: StateFilter;
-  counts: StateCounts | null;
-  onSelect: (lens: Lens) => void;
-  phone?: boolean;
-}) {
+/** A view's count, or undefined when the view has none or counts are still loading. */
+function countOf(view: InboxView, counts: StateCounts | null): number | undefined {
+  return view.count ? counts?.[view.id] : undefined;
+}
+
+function spoken(view: InboxView, counts: StateCounts | null): string {
+  const count = countOf(view, counts);
+  return count === undefined ? view.label : `${view.label}, ${count}`;
+}
+
+/** A view's count in its own color: a "turn" count above zero is the app badge's, and rolls as it changes. */
+function ViewCount({ view, counts, size }: { readonly view: InboxView; readonly counts: StateCounts | null; readonly size: "tab" | "row" | "title" }) {
   const theme = useTheme();
-  const scroller = useRef<ScrollView>(null);
-  // The tab picked, by click or ⌘1-7, is scrolled into view: Agents sits past the right edge when it overflows.
-  // The phone's row is far wider than the screen and keeps the user's own scroll.
-  useEffect(() => {
-    if (phone) return;
-    if (state === "agents") scroller.current?.scrollToEnd({ animated: true });
-    else scroller.current?.scrollTo({ x: 0, animated: true });
-  }, [phone, state]);
-  const tabs = LENSES.map((lens, index) => {
-    const count = lens.count ? counts?.[lens.value] : undefined;
-    return {
-      key: lens.value,
-      label: lens.label,
-      accessibilityLabel: count === undefined ? lens.label : `${lens.label}, ${count}`,
-      accessibilityHint: WEB && !phone ? `Command ${index + 1}` : undefined,
-    };
-  });
-  const row = (
-    <LiquidTabs
-      tabs={tabs}
-      // Settled has no tab; the bar rests under nothing.
-      value={lensOf(state) ?? ("settled" as Lens)}
-      onChange={onSelect}
-      underline={!phone}
-      style={phone ? styles.tabsPhone : styles.tabs}
-      tabStyle={phone ? styles.tabPhone : null}
-      renderLabel={(tab, color) => {
-        const lens = LENSES.find((l) => l.value === tab.key)!;
-        const count = lens.count ? counts?.[lens.value] : undefined;
-        const turnCount = lens.count === "turn" && (count ?? 0) > 0;
-        // The sparkle's count hugs it; word tabs right-align theirs in a two-digit slot.
-        const slot = lens.value === "agents" ? styles.sparkleCount : styles.countSlot;
-        return (
-          <>
-            {lens.value === "agents" ? (
-              // The mark agent drafts carry in rows.
-              <Ionicons aria-hidden name="sparkles" size={phone ? 24 : 14} color={color} style={phone ? styles.sparklePhone : styles.sparkle} />
-            ) : (
-              <Text numberOfLines={1} style={[phone ? styles.tabLabelPhone : styles.tabLabel, { color }]}>{tab.label}</Text>
-            )}
-            {lens.count && count === undefined ? (
-              // Counts are unknown until the first list arrives; two digits hold their place.
-              <Text aria-hidden style={[phone ? styles.tabCountPhone : styles.tabCount, slot, styles.countPlaceholder]}>00</Text>
-            ) : count === undefined ? null : lens.count === "turn" && count <= 999 ? (
-              // The Needs you count is the app badge; it rolls on snappy as it changes.
-              <View style={[phone ? styles.rollPhone : styles.roll, styles.countSlot]}>
-                <RollingNumber value={count} style={[phone ? styles.tabCountPhone : styles.tabCount, styles.rollText, { color: turnCount ? theme.turn : theme.textTertiary }, turnCount && styles.tabCountTurn]} />
-              </View>
-            ) : (
-              <Text style={[phone ? styles.tabCountPhone : styles.tabCount, slot, { color: theme.textTertiary }]}>{formatCount(count)}</Text>
-            )}
-          </>
-        );
-      }}
-    />
-  );
+  const count = countOf(view, counts);
+  if (!view.count) return null;
+  const textStyle = size === "tab" ? styles.tabCount : size === "title" ? styles.titleCount : styles.rowCount;
+  const turn = view.count === "turn" && (count ?? 0) > 0;
+  const color = turn ? theme.turn : theme.textTertiary;
   return (
-    <ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={phone ? null : styles.tabsScroll}>{row}</ScrollView>
+    // The rolling digits need a box of their own: a margin on their text would land on every digit.
+    <View style={size === "tab" ? styles.tabCountBox : size === "row" ? styles.rowCountBox : null}>
+      {count === undefined ? (
+        // Counts are unknown until the first list arrives; two digits hold the place so nothing shifts.
+        <Text aria-hidden style={[textStyle, styles.countPlaceholder]}>00</Text>
+      ) : turn && count <= 999 ? (
+        <RollingNumber value={count} style={[textStyle, { color }, styles.turnCount]} />
+      ) : (
+        <Text style={[textStyle, { color }]}>{formatCount(count)}</Text>
+      )}
+    </View>
+  );
+}
+
+interface ViewNavProps {
+  readonly style: NavStyle;
+  readonly state: StateFilter;
+  readonly counts: StateCounts | null;
+  readonly onSelect: (id: StateFilter) => void;
+  readonly phone?: boolean;
+}
+
+/** The Messages views in the style Settings picks. Every style reads VIEWS, so a new view shows up in all three. */
+export function ViewNav({ style, ...props }: ViewNavProps) {
+  if (style === "tabs") return <ViewTabs {...props} />;
+  if (style === "compact") return <ViewMenu {...props} />;
+  return <ViewList {...props} />;
+}
+
+/** The Tabs style: the primary views as tabs, then More with the rest. A view picked from More takes More's place. */
+function ViewTabs({ state, counts, onSelect, phone = false }: Omit<ViewNavProps, "style">) {
+  const theme = useTheme();
+  const order = viewOrder("tabs");
+  const primary = order.filter((view) => view.primary);
+  const more = order.filter((view) => !view.primary);
+  const inMore = more.some((view) => view.id === state);
+  const tabs = primary.map((view) => ({
+    key: view.id,
+    label: view.label,
+    accessibilityLabel: spoken(view, counts),
+    accessibilityHint: WEB && !phone ? viewShortcut("tabs", view.id) : undefined,
+  }));
+  const row = (
+    <View style={[styles.tabsRow, phone && styles.tabsRowPhone]}>
+      <LiquidTabs
+        tabs={tabs}
+        // A view under More has no tab; the bar rests under nothing.
+        value={state}
+        onChange={onSelect}
+        style={phone ? styles.tabsPhone : styles.tabs}
+        renderLabel={(tab, color) => (
+          <>
+            <Text numberOfLines={1} style={[phone ? styles.tabLabelPhone : styles.tabLabel, { color }]}>{tab.label}</Text>
+            <ViewCount view={viewOf(tab.key)} counts={counts} size="tab" />
+          </>
+        )}
+      />
+      <Dropdown
+        label="More views"
+        value={state}
+        options={menuOptions(more, counts)}
+        onChange={onSelect}
+        variant="chip"
+        menuWidth={220}
+        style={styles.more}
+        renderTrigger={(current) => (
+          <View style={[styles.moreBody, inMore && { borderBottomColor: theme.lensBar }]}>
+            <Text numberOfLines={1} style={[phone ? styles.tabLabelPhone : styles.tabLabel, { color: inMore ? theme.text : theme.textTertiary }]}>
+              {current?.label ?? "More"}
+            </Text>
+            <Ionicons aria-hidden name="chevron-down" size={11} color={inMore ? theme.text : theme.textTertiary} />
+          </View>
+        )}
+      />
+    </View>
+  );
+  // A sidebar dragged narrow scrolls the row rather than pushing the pane sideways.
+  return <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={phone ? null : styles.tabsScroll}>{row}</ScrollView>;
+}
+
+function menuOptions(views: readonly InboxView[], counts: StateCounts | null): DropdownOption<StateFilter>[] {
+  return views.map((view) => {
+    const count = countOf(view, counts);
+    return { value: view.id, label: view.label, icon: <ViewGlyph view={view} />, trailing: count === undefined ? undefined : formatCount(count) };
+  });
+}
+
+function ViewGlyph({ view, size = 14 }: { readonly view: InboxView; readonly size?: number }) {
+  const theme = useTheme();
+  return <Ionicons aria-hidden name={view.icon} size={size} color={theme.icon} style={{ width: size, textAlign: "center" }} />;
+}
+
+/** The Sidebar list style: every view on its own row, glyph, name and a right-aligned count, as in Mail or Linear. */
+export function ViewList({ state, counts, onSelect, phone = false }: Omit<ViewNavProps, "style">) {
+  const theme = useTheme();
+  return (
+    <View role="tablist" aria-orientation="vertical" style={phone ? styles.listPhone : styles.list}>
+      {viewOrder("list").map((view) => {
+        const selected = view.id === state;
+        return (
+          <Pressable
+            key={view.id}
+            role="tab"
+            aria-selected={selected}
+            accessibilityState={{ selected }}
+            accessibilityLabel={spoken(view, counts)}
+            accessibilityHint={WEB && !phone ? viewShortcut("list", view.id) : undefined}
+            onPress={() => onSelect(view.id)}
+            style={({ hovered, pressed }: { hovered?: boolean; pressed?: boolean }) => [
+              phone ? styles.rowPhone : styles.row,
+              NO_SELECT,
+              (hovered || pressed) && { backgroundColor: theme.rowHover },
+              selected && { backgroundColor: theme.rowSelected },
+            ]}
+          >
+            <ViewGlyph view={view} size={phone ? 20 : 15} />
+            <Text numberOfLines={1} style={[phone ? styles.rowLabelPhone : styles.rowLabel, { color: theme.text }, selected && styles.rowLabelOn]}>{view.label}</Text>
+            <ViewCount view={view} counts={counts} size="row" />
+            {phone ? <Ionicons aria-hidden name="chevron-forward" size={15} color={theme.textTertiary} /> : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** The Compact style: the view's name is the heading, and a menu of every view. */
+function ViewMenu({ state, counts, onSelect, phone = false }: Omit<ViewNavProps, "style">) {
+  const theme = useTheme();
+  const order = viewOrder("compact");
+  return (
+    <View style={phone ? styles.menuPhone : styles.menu}>
+      <Dropdown
+        label="View"
+        value={state}
+        options={menuOptions(order, counts)}
+        onChange={onSelect}
+        variant="title"
+        menuWidth={240}
+        renderTrigger={(current) => current && <ViewTitle view={viewOf(current.value)} counts={counts} phone={phone} trailing={<Ionicons aria-hidden name="chevron-down" size={phone ? 16 : 12} color={theme.icon} />} />}
+      />
+    </View>
+  );
+}
+
+/** A view's name as a heading with its count. The phone's Sidebar list puts it under a back link to the views. */
+export function ViewTitle({ view, counts, phone, trailing }: { readonly view: InboxView; readonly counts: StateCounts | null; readonly phone: boolean; readonly trailing?: ReactNode }) {
+  const theme = useTheme();
+  return (
+    <View style={styles.title}>
+      {/* Wide chrome names the view in its own hidden heading, with the People filter. */}
+      <Text accessibilityRole={phone ? "header" : undefined} numberOfLines={1} style={[phone ? styles.titleTextPhone : styles.titleText, { color: theme.text }]}>{view.title ?? view.label}</Text>
+      <ViewCount view={view} counts={counts} size="title" />
+      {trailing}
+    </View>
   );
 }
 
@@ -171,26 +271,35 @@ export function FilterChipRow({
 }
 
 const styles = StyleSheet.create({
-  // space-between spreads the tabs across a wide sidebar; a narrow one scrolls instead of squeezing them.
-  tabs: { flexGrow: 1, gap: 6, justifyContent: "space-between" },
+  tabsRow: { alignItems: "flex-end", flexDirection: "row", gap: 14 },
   tabsScroll: { flexGrow: 1 },
-  tabsPhone: { gap: 22, paddingHorizontal: 20 },
-  tabPhone: { paddingBottom: 6 },
-  tabLabel: { ...headerFace, fontSize: 14.5, letterSpacing: -0.15, lineHeight: 18 },
-  tabLabelPhone: { ...headerFace, fontSize: 26, letterSpacing: -0.5, lineHeight: 32 },
-  tabCount: { fontSize: 11.5, fontVariant: ["tabular-nums"], fontWeight: "500", lineHeight: 18, marginLeft: 5 },
-  tabCountPhone: { alignSelf: "flex-start", fontSize: 13, lineHeight: 16, fontVariant: ["tabular-nums"], fontWeight: "500", marginLeft: 3, marginTop: 2 },
-  tabCountTurn: { fontWeight: "600" },
-  // A fixed box: the icon font can land after first paint, and a fallback glyph's width would move the row.
-  sparkle: { lineHeight: 18, textAlign: "center", width: 14 },
-  sparkleCount: { marginLeft: 3, minWidth: "2ch", textAlign: "left" } as object,
-  sparklePhone: { lineHeight: 32, textAlign: "center", width: 24 },
+  tabs: { gap: 14 },
+  tabsRowPhone: { paddingHorizontal: 20 },
+  tabsPhone: { gap: 14 },
+  tabLabel: { ...headerFace, fontSize: 14, letterSpacing: -0.15, lineHeight: 18 },
+  tabLabelPhone: { ...headerFace, fontSize: 15, letterSpacing: -0.2, lineHeight: 20 },
+  // The count sits 4 px after its own label and 14 px before the next tab, so it never reads as the next one's.
+  tabCount: { fontSize: 11.5, fontVariant: ["tabular-nums"], fontWeight: "500", lineHeight: 18 },
+  tabCountBox: { alignSelf: "flex-start", marginLeft: 4 },
+  turnCount: { fontWeight: "600" },
   countPlaceholder: { opacity: 0 },
-  // Two tabular digits wide at any count under 100, so 8 to 16 to 44 while pages load never moves the tabs.
-  countSlot: { minWidth: "2ch", alignItems: "flex-end", textAlign: "right" } as object,
-  roll: { alignSelf: "flex-start", marginLeft: 5 },
-  rollPhone: { alignSelf: "flex-start", marginLeft: 3, marginTop: 2 },
-  rollText: { alignSelf: "auto", marginLeft: 0, marginTop: 0 },
+  more: { minHeight: 0, paddingHorizontal: 0 },
+  moreBody: { alignItems: "center", borderBottomColor: "transparent", borderBottomWidth: 2, flexDirection: "row", gap: 4, paddingBottom: 8 },
+  list: { paddingBottom: 6, paddingHorizontal: 6, paddingTop: 2 },
+  listPhone: { paddingHorizontal: 8, paddingTop: 4 },
+  row: { alignItems: "center", borderRadius: 7, flexDirection: "row", gap: 9, height: 28, paddingHorizontal: 8 },
+  rowPhone: { alignItems: "center", borderRadius: 12, flexDirection: "row", gap: 12, minHeight: 48, paddingHorizontal: 12 },
+  rowLabel: { flex: 1, fontSize: 13.5, fontWeight: "500" },
+  rowLabelPhone: { flex: 1, fontSize: 17 },
+  rowLabelOn: { fontWeight: "600" },
+  rowCount: { fontSize: 12, fontVariant: ["tabular-nums"], fontWeight: "500", lineHeight: 16 },
+  rowCountBox: { alignItems: "flex-end", minWidth: 24 },
+  menu: { alignItems: "flex-start", paddingBottom: 6, paddingHorizontal: 8 },
+  menuPhone: { alignItems: "flex-start", paddingHorizontal: 14 },
+  title: { alignItems: "baseline", flexDirection: "row", flexShrink: 1, gap: 6 },
+  titleText: { ...headerFace, flexShrink: 1, fontSize: 17, letterSpacing: -0.3 },
+  titleTextPhone: { ...headerFace, flexShrink: 1, fontSize: 30, letterSpacing: -0.6, lineHeight: 36 },
+  titleCount: { fontSize: 13, fontVariant: ["tabular-nums"], fontWeight: "500", lineHeight: 18 },
   chips: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 6, paddingBottom: 2, paddingLeft: 14, paddingRight: 12, paddingTop: 10 },
   chipsPhone: { gap: 8, paddingHorizontal: 20, paddingTop: 8 },
   chip: { alignItems: "center", borderRadius: 999, borderWidth: 1, flexDirection: "row", gap: 5, height: 24, paddingLeft: 9, paddingRight: 4 },
