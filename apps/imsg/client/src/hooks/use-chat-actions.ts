@@ -4,7 +4,10 @@ import type { ChatSummary } from "@shared/types";
 import { type PopoverAnchor, useActionSheet } from "@/lib/action-sheet";
 import { markChatRead, markChatUnread, pinChat } from "@/lib/chat-actions";
 import { openChatInfo } from "@/lib/chat-info";
+import { openDeferMenu } from "@/lib/later";
+import { canFollowUp } from "@/lib/later-times";
 import { copyHandleAction } from "@/lib/copy-handle";
+import { shortcutFor } from "@/lib/keyboard/registry";
 
 interface ChatActions {
   openMenu: (chat: ChatSummary, anchor?: PopoverAnchor) => void;
@@ -25,6 +28,9 @@ export function useChatActions(detailsInPane: boolean): ChatActions {
       chat.flags.pinned
         ? { label: "Unpin", onPress: () => pinChat(chat, false) }
         : { label: "Pin", onPress: () => pinChat(chat, true) },
+      { label: chat.later?.snoozedUntil !== undefined ? "Snoozed…" : "Later…", icon: "time-outline" as const, shortcut: shortcutFor("conversation.later"),
+        onPress: () => openDeferMenu(showSheet, chat, "later", { anchor }) },
+      ...(canFollowUp(chat) ? [{ label: "Follow up…", icon: "alarm-outline" as const, onPress: () => openDeferMenu(showSheet, chat, "followUp", { anchor }) }] : []),
       ...(!chat.isGroup && chat.participants[0] ? [copyHandleAction(chat.participants[0].address)] : []),
       {
         label: "Details",

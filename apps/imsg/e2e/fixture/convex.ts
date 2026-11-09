@@ -54,6 +54,7 @@ export function conversationRow(chat: ChatSummary): Conversation {
     lastMessageAt: chat.lastMessage?.dateCreated ?? 0, isSpam: chat.isSpam,
     hasGroupPhoto: chat.hasGroupPhoto ?? false, groupPhotoUrl: chat.groupPhotoUrl ?? null, updatedAt: FIXTURE_NOW,
     flags: chat.flags, unreadCount: chat.unreadCount,
+    ...(chat.later ? { later: chat.later } : {}),
     ...(chat.crm ? { crm: chat.crm } : {}),
   };
 }
@@ -658,6 +659,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     "comma/queries:listMessages": async (args) => paginate(slackWorld.owns(String(args.conversationId)) ? slackWorld.messages(String(args.conversationId))
       : mailWorld.owns(String(args.conversationId)) ? mailWorld.messages(String(args.conversationId))
         : await messages(String(args.conversationId)), args.paginationOpts as Pagination),
+    "comma/later:listSnoozed": async () => (await conversations()).filter((row) => row.later?.snoozedUntil !== undefined),
     "comma/queries:listEmailThreads": async (args) => paginate(mailWorld.threads(), args.paginationOpts as Pagination),
     "comma/queries:searchMessages": async (args) => {
       const text = String(args.query).trim();

@@ -18,6 +18,8 @@ import { router } from "expo-router";
 import { api, attachmentThumbnailUrl } from "@/lib/api";
 import { ContextMenuArea } from "@/components/context-menu-area";
 import { type PopoverAnchor, useActionSheet } from "@/lib/action-sheet";
+import { openDeferMenu } from "@/lib/later";
+import { canFollowUp, laterLines } from "@/lib/later-times";
 import { copyHandleAction } from "@/lib/copy-handle";
 import { pinChat, renameChat } from "@/lib/chat-actions";
 import { contactService } from "@/lib/contact-service";
@@ -444,6 +446,30 @@ export function ChatInfoContent({
         )}
 
         {summary && (
+          <Section
+            title="Later"
+            divider={theme.divider}
+            labelColor={theme.textSecondary}
+            action={{ label: summary.later?.snoozedUntil !== undefined ? "Change…" : "Snooze…", onPress: () => openDeferMenu(showSheet, summary, "later") }}
+          >
+            <View testID="details-later" style={styles.laterLines}>
+              {laterLines(summary.later).map((line) => (
+                <Text key={line} style={{ color: theme.text, fontSize: type.body }}>{line}</Text>
+              ))}
+              {canFollowUp(summary) && (
+                <Pressable accessibilityRole="button" accessibilityLabel="Follow up…" hitSlop={6} onPress={() => openDeferMenu(showSheet, summary, "followUp")}>
+                  {({ hovered, pressed }) => (
+                    <Text style={[{ color: theme.textSecondary, fontSize: type.body }, (hovered || pressed) && { textDecorationLine: "underline" }]}>
+                      {summary.later?.followUp ? "Change follow-up…" : "Follow up if no reply…"}
+                    </Text>
+                  )}
+                </Pressable>
+              )}
+            </View>
+          </Section>
+        )}
+
+        {summary && (
           <View style={[styles.section, { borderTopColor: theme.divider }]}>
             <ToggleRow
               icon="pin-outline"
@@ -666,6 +692,7 @@ const styles = StyleSheet.create({
   tagInput: { minWidth: 60, paddingVertical: 0 },
   section: { borderTopWidth: 1, marginTop: 18, paddingBottom: 6, paddingTop: 14 },
   sectionNote: { marginBottom: 8, marginTop: -4 },
+  laterLines: { gap: 6 },
   sectionHead: { alignItems: "baseline", flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
   sectionTitle: { fontWeight: "600" },
   sectionAction: { fontWeight: "500" },

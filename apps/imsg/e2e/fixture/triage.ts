@@ -1,5 +1,5 @@
 import { imessage } from "../../../../convex/comma/conversationIdentity";
-import { conversationFlags, type ChatState } from "../../shared/chat-state";
+import { conversationFlags, laterOf, type ChatState } from "../../shared/chat-state";
 import type { ChatSummary } from "../../shared/types";
 import type { MappedChat } from "../../server/map";
 import { CHAT_GUIDS, FIXTURE_NOW } from "./world";
@@ -46,7 +46,9 @@ export function createTriageFixture(deps: {
   async function settle(chatGuid: string, anchor?: string): Promise<void> {
     const last = await lastOf(chatGuid);
     if (anchor !== undefined && anchor !== last.guid && !deps.sameSend(anchor, last.guid)) throw new Error("latest message changed");
-    write(chatGuid, last.isFromMe ? { dismissedWaitingGuid: last.guid } : { dismissedUnrespondedGuid: last.guid });
+    const followUp = states.get(chatGuid)?.followUp;
+    write(chatGuid, { ...(last.isFromMe ? { dismissedWaitingGuid: last.guid } : { dismissedUnrespondedGuid: last.guid }),
+      snooze: undefined, snoozeReturn: undefined, followUp: followUp?.due ? undefined : followUp });
     log({ chatGuid, messageGuid: last.guid, reason: "dismiss", clearedAt: FIXTURE_NOW });
     deps.settled(chatGuid);
   }
@@ -63,6 +65,20 @@ export function createTriageFixture(deps: {
   async function flag(chatGuid: string, fields: Pick<Partial<ChatState>, "pinned" | "mutedUnresponded" | "markedUnread">): Promise<void> {
     if (await deps.lastMessage(chatGuid) === undefined) throw new Error("Conversation not found");
     write(chatGuid, fields);
+  }
+
+  /** convex/comma/later.ts, without the scheduler: the fixture clock never reaches a wake. */
+  async function snooze(chatGuid: string, until: number): Promise<void> {
+    await lastOf(chatGuid);
+    if (!(until > FIXTURE_NOW)) throw new Error("Pick a time in the future");
+    write(chatGuid, { snooze: { until, setAt: FIXTURE_NOW }, snoozeReturn: undefined });
+  }
+
+  async function followUp(chatGuid: string, at: number): Promise<void> {
+    const last = await lastOf(chatGuid);
+    if (!(at > FIXTURE_NOW)) throw new Error("Pick a time in the future");
+    if (!last.isFromMe) throw new Error("Follow up needs your message to be the last one");
+    write(chatGuid, { followUp: { at, since: last.dateCreated, due: false } });
   }
 
   function read(chatGuid: string, at: number): void {
@@ -86,7 +102,8 @@ export function createTriageFixture(deps: {
     const kind = imessage.kind(chat);
     const { flags, unreadCount } = conversationFlags({ platform: imessage.platform, kind }, states.get(chat.guid), chat.lastMessage,
       chat.lastMessage?.dateCreated ?? 0, chat.unreadCount);
-    return { ...chat, route: { platform: imessage.platform, accountId: null, imessage: { chatGuid: chat.guid } }, kind, flags, unreadCount };
+    const later = laterOf(states.get(chat.guid));
+    return { ...chat, route: { platform: imessage.platform, accountId: null, imessage: { chatGuid: chat.guid } }, kind, flags, unreadCount, ...(later ? { later } : {}) };
   }
 
   const id = (args: Record<string, unknown>) => String(args.conversationId);
@@ -96,6 +113,10 @@ export function createTriageFixture(deps: {
     "comma/triage:setPinned": async (args) => { await flag(id(args), { pinned: args.pinned === true }); return null; },
     "comma/triage:setMuted": async (args) => { await flag(id(args), { mutedUnresponded: args.muted === true }); return null; },
     "comma/triage:markUnread": async (args) => { await flag(id(args), { markedUnread: true }); return null; },
+    "comma/later:snooze": async (args) => { await snooze(id(args), Number(args.until)); return null; },
+    "comma/later:unsnooze": async (args) => { write(id(args), { snooze: undefined }); return null; },
+    "comma/later:setFollowUp": async (args) => { await followUp(id(args), Number(args.at)); return null; },
+    "comma/later:clearFollowUp": async (args) => { write(id(args), { followUp: undefined }); return null; },
   };
 
   return { handlers, reset, settle, unsettle, flag, read, replied, carry, flagged, clears: () => clears };

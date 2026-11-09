@@ -1,6 +1,6 @@
 import { WANTS_YOU } from "./agent-attention";
 import { attentionOf, screeningOf } from "./platform-profile";
-import type { ChatFlags, ChatSummary, ConversationKind, Platform, StateCounts, StateFilter, TypeFilter } from "./types";
+import type { ChatFlags, ChatLater, ChatSummary, ConversationKind, Platform, SnoozeReturnReason, StateCounts, StateFilter, TypeFilter } from "./types";
 
 /**
  * Chat State — the pure rules for a chat's flags: how Unresponded / Waiting /
@@ -23,6 +23,12 @@ export interface ChatState {
   readAt: number;
   /** Manually marked unread; cleared on next mark-read. */
   markedUnread: boolean;
+  /** Later: out of every queue until `until`. An inbound message after `setAt` ends it early. */
+  snooze?: { until: number; setAt: number };
+  /** The snooze that ended, until the conversation is settled, answered or snoozed again. */
+  snoozeReturn?: { reason: SnoozeReturnReason; until: number; at: number };
+  /** Remind if nobody else writes after `since` by `at`; `due` once that time passed unanswered. */
+  followUp?: { at: number; since: number; due: boolean };
 }
 
 interface LastMessageLike {
@@ -39,16 +45,22 @@ export interface RuledConversation {
   following?: boolean;
 }
 
-/** Unresponded and Waiting are the platform's attention for the last message, until that message is dismissed. */
+/**
+ * Unresponded and Waiting are the platform's attention for the last message, until that message is dismissed. A
+ * snoozed conversation is in no queue. One back from a snooze, or with a follow-up due, needs the user whatever its
+ * last message is.
+ */
 export function computeFlags(
   conversation: RuledConversation,
   state: ChatState | undefined,
   last: LastMessageLike | null,
   unreadCount: number,
 ): ChatFlags {
+  if (state?.snooze) return { unresponded: false, waiting: false, unread: false, mutedUnresponded: false, pinned: state.pinned };
   const attention = attentionOf(conversation, last);
-  const unresponded = last !== null && attention === "needsYou" && state?.dismissedUnrespondedGuid !== last.guid;
-  const waiting = last !== null && attention === "waiting" && state?.dismissedWaitingGuid !== last.guid;
+  const resurfaced = state?.snoozeReturn !== undefined || state?.followUp?.due === true;
+  const unresponded = resurfaced || (last !== null && attention === "needsYou" && state?.dismissedUnrespondedGuid !== last.guid);
+  const waiting = !resurfaced && last !== null && attention === "waiting" && state?.dismissedWaitingGuid !== last.guid;
   return {
     unresponded,
     waiting,
@@ -66,9 +78,23 @@ export function conversationFlags(
   lastMessageAt: number,
   unread: number,
 ): { flags: ChatFlags; unreadCount: number } {
-  const unreadCount = (state?.readAt ?? 0) >= lastMessageAt ? 0 : unread;
+  const unreadCount = state?.snooze || (state?.readAt ?? 0) >= lastMessageAt ? 0 : unread;
   return { flags: computeFlags(conversation, state, last, unreadCount), unreadCount };
 }
+
+/** The deferrals a client sees, without the scheduler's job ids. */
+export function laterOf(state: ChatState | undefined): ChatLater | undefined {
+  if (!state) return undefined;
+  const { snooze, snoozeReturn, followUp } = state;
+  if (!snooze && !snoozeReturn && !followUp) return undefined;
+  return {
+    ...(snooze ? { snoozedUntil: snooze.until } : {}),
+    ...(snoozeReturn ? { returned: { reason: snoozeReturn.reason, until: snoozeReturn.until, at: snoozeReturn.at } } : {}),
+    ...(followUp ? { followUp: { at: followUp.at, since: followUp.since, due: followUp.due } } : {}),
+  };
+}
+
+export const isSnoozed = (chat: Pick<ChatSummary, "later">): boolean => chat.later?.snoozedUntil !== undefined;
 
 /**
  * A screened conversation is junk, or from a stranger. Contact failures fail open for strangers instead of making
@@ -144,7 +170,7 @@ export function matchesFilters(chat: ChatSummary, state: StateFilter, type: Type
  * dismissed.
  */
 export function isSettled(chat: ChatSummary): boolean {
-  return chat.lastMessage !== null && !chat.flags.unresponded && !chat.flags.waiting && chat.agent === undefined;
+  return chat.lastMessage !== null && !chat.flags.unresponded && !chat.flags.waiting && chat.agent === undefined && !isSnoozed(chat);
 }
 
 /** What the one triage gesture does to a conversation in its current state. */
@@ -157,7 +183,8 @@ export type SettleAction = "settle" | "unsettle" | "none";
  * no messages, where there is no triage state to move in either direction.
  */
 export function settleActionFor(chat: ChatSummary): SettleAction {
-  if (chat.flags.unresponded || chat.flags.waiting || chat.agent !== undefined) return "settle";
+  // Settling a snoozed conversation is Done: it ends the snooze too.
+  if (chat.flags.unresponded || chat.flags.waiting || chat.agent !== undefined || (isSnoozed(chat) && chat.lastMessage !== null)) return "settle";
   return isSettled(chat) ? "unsettle" : "none";
 }
 
