@@ -132,13 +132,17 @@ const NEIGHBOR_SCAN = 10;
 
 /** The real message just before or after `message`. A shared timestamp still counts: strict inequality dropped a reply sent in the same millisecond. */
 async function neighbor(ctx: MutationCtx, message: Ingested, side: "before" | "after"): Promise<Doc<"comma_messages"> | null> {
-  const rows = await ctx.db.query("comma_messages")
+  const scan = (limit: number) => ctx.db.query("comma_messages")
     .withIndex("by_conversation_date", (q) => side === "before"
       ? q.eq("conversationId", message.conversationId).lte("dateCreated", message.dateCreated)
       : q.eq("conversationId", message.conversationId).gte("dateCreated", message.dateCreated))
     .order(side === "before" ? "desc" : "asc")
-    .take(NEIGHBOR_SCAN + 1);
-  return rows.find((row) => row.guid !== message.guid && !isAssociated(row) && !row.retracted && !isPendingGuid(row.guid)) ?? null;
+    .take(limit);
+  const real = (rows: Doc<"comma_messages">[]) =>
+    rows.find((row) => row.guid !== message.guid && !isAssociated(row) && !row.retracted && !isPendingGuid(row.guid)) ?? null;
+  // Two rows (the message itself and its neighbour) almost always settle it. An email row runs to ~90KB, so reading
+  // the full scan for every message of a long thread passed Convex's 16MB read limit on the first Gmail backfill.
+  return real(await scan(2)) ?? real(await scan(NEIGHBOR_SCAN + 1));
 }
 
 /**

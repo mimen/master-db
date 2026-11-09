@@ -33,11 +33,11 @@ async function setup() {
   return { t, as: t.withIdentity({ subject: `${userId}|session` }), c };
 }
 
-function ingest(t: T, c: ConversationId, ...messages: { guid: string; at: number; fromMe: boolean; clientKey?: string }[]) {
+function ingest(t: T, c: ConversationId, ...messages: { guid: string; at: number; fromMe: boolean; clientKey?: string; retracted?: boolean }[]) {
   return t.mutation(internal.comma.internal.upsertMessages, {
-    messages: messages.map(({ guid, at, fromMe, clientKey }) => ({
+    messages: messages.map(({ guid, at, fromMe, clientKey, retracted = false }) => ({
       guid, conversationId: c, chatGuid: CHAT, dateCreated: at, isFromMe: fromMe, text: guid, service: "iMessage" as const,
-      error: 0, edited: false, retracted: false, isTapback: false, reactions: [], isGroupEvent: false, mentions: [],
+      error: 0, edited: false, retracted, isTapback: false, reactions: [], isGroupEvent: false, mentions: [],
       attachmentGuids: [], ...(clientKey ? { clientKey } : {}), sourceVersion: 1,
     })),
   });
@@ -211,6 +211,15 @@ describe("reply clears", () => {
     await ingest(t, c, { guid: "out-b", at: 20, fromMe: true });
     await ingest(t, c, { guid: "in-a", at: 10, fromMe: false });
     expect(await events(t)).toEqual([{ messageGuid: "in-a", reason: "reply", clearedAt: 20 }]);
+  });
+
+  test("a reply past several unsent messages still finds the inbound message it answered", async () => {
+    const { t, c } = await setup();
+    await ingest(t, c, { guid: "in-1", at: 10, fromMe: false },
+      { guid: "gone-1", at: 11, fromMe: true, retracted: true }, { guid: "gone-2", at: 12, fromMe: true, retracted: true },
+      { guid: "gone-3", at: 13, fromMe: true, retracted: true });
+    await ingest(t, c, { guid: "out-1", at: 20, fromMe: true });
+    expect(await events(t)).toEqual([{ messageGuid: "in-1", reason: "reply", clearedAt: 20 }]);
   });
 
   test("a reply with the same timestamp as the inbound message still logs the clear", async () => {
