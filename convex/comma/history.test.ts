@@ -6,6 +6,9 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { ALLOWED_EMAIL } from "../_lib/authed";
 import schema from "../schema";
 
+import { messageKey } from "./reactions";
+import { IMESSAGE_ACCOUNT } from "./conversationIdentity";
+import { ensureAccount } from "./accounts";
 import type { messageWindow } from "./history";
 import { commaModules } from "./testModules.vitest";
 
@@ -90,7 +93,7 @@ describe("message history windows", () => {
     const seeded = await t.run(async (ctx) => {
       const id = await ctx.db.insert("comma_conversations", conversation());
       await ctx.db.insert("comma_messages", message(id, 1, "photo-message"));
-      await ctx.db.insert("comma_reactions", { platform: "imessage", conversationId: id, targetKey: "imessage:photo-message", key: "love", emoji: "❤️",
+      await ctx.db.insert("comma_reactions", { platform: "imessage", conversationId: id, targetKey: messageKey("imessage", (await ensureAccount(ctx, IMESSAGE_ACCOUNT))._id, "photo-message"), key: "love", emoji: "❤️",
         isFromMe: false, senderAddress: "them", at: 1, removed: false });
       const thumb = await ctx.storage.store(new Blob(["thumbnail"]));
       const original = await ctx.storage.store(new Blob(["original"]));

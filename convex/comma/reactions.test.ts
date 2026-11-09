@@ -6,19 +6,22 @@ import type { CommaReactionState } from "../schema/comma/validators";
 import { currentKey, fromTapback, messageKey, reactionWrites, sameReaction, shownReactions, supersedes } from "./reactions";
 
 const conversationId = "c1" as Id<"comma_conversations">;
+const accountId = "a1" as Id<"comma_accounts">;
 const state = (overrides: Partial<CommaReactionState> = {}): CommaReactionState => ({
-  platform: "imessage", conversationId, targetKey: "imessage:m1", key: "love", emoji: "❤️",
+  platform: "imessage", conversationId, targetKey: "imessage:a1:m1", key: "love", emoji: "❤️",
   isFromMe: false, senderAddress: "+15550001111", at: 10, removed: false, ...overrides,
 });
 
 describe("messageKey", () => {
-  test("namespaces a message id by its platform", () => {
-    expect(messageKey("imessage", "ABC-1")).toBe("imessage:ABC-1");
+  test("namespaces a message id by its platform and account, so two mailboxes' equal Gmail ids stay apart", () => {
+    expect(messageKey("imessage", accountId, "ABC-1")).toBe("imessage:a1:ABC-1");
+    expect(messageKey("gmail", "work" as Id<"comma_accounts">, "18c"))
+      .not.toBe(messageKey("gmail", "personal" as Id<"comma_accounts">, "18c"));
   });
 });
 
 describe("fromTapback", () => {
-  const row = { conversationId, isFromMe: false, sender: { address: "+15550001111" }, dateCreated: 10 };
+  const row = { conversationId, accountId, isFromMe: false, sender: { address: "+15550001111" }, dateCreated: 10 };
 
   test("a classic tapback is keyed by its name and looks like its emoji", () => {
     expect(fromTapback({ ...row, tapback: { targetGuid: "m1", reaction: "like", remove: false } }))

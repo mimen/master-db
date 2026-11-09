@@ -2,7 +2,12 @@ import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 
 import { internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
+
+import { ensureAccount } from "./accounts";
+import { IMESSAGE_ACCOUNT } from "./conversationIdentity";
+import { messageKey } from "./reactions";
 
 import { commaModules } from "./testModules.vitest";
 
@@ -91,5 +96,45 @@ describe("the Slack threads backfill", () => {
     expect(dmThread!.lastMessage?.guid).toBe("D1:3.0");
 
     expect(await t.action(internal.comma.migrations.runSlackThreadsBackfill, { dryRun: false })).toEqual({ scanned: 3, changed: 0 });
+  });
+});
+
+describe("the reaction keys backfill", () => {
+  test("reports first, then keys each old reaction by its conversation's account once, keeping the newer of two states", async () => {
+    const t = convexTest(schema, commaModules);
+    const { slackAccount, imessageAccount, rows } = await t.run(async (ctx) => {
+      const imessageAccount = (await ensureAccount(ctx, IMESSAGE_ACCOUNT))._id;
+      const slackAccount = await ctx.db.insert("comma_accounts", {
+        platform: "slack", externalId: "T1", label: "AUF", selfHandles: [], health: "ok", createdAt: 1,
+      });
+      const oldChat = await ctx.db.insert("comma_conversations", conversation("+15550001111", false));
+      const slackDm = await ctx.db.insert("comma_conversations", {
+        platform: "slack", accountId: slackAccount, conversationKey: "dm:U1", kind: "dm", isGroup: false, slack: { channel: "D1" },
+        displayName: "x", participants: [], lastMessageAt: 1, isSpam: false, updatedAt: 1,
+      });
+      const reaction = (conversationId: Id<"comma_conversations">, platform: "imessage" | "slack", targetKey: string, at: number) =>
+        ctx.db.insert("comma_reactions", { platform, conversationId, targetKey, key: "love", emoji: "❤️", isFromMe: true, at, removed: false });
+      return { slackAccount, imessageAccount, rows: {
+        legacy: await reaction(oldChat, "imessage", "imessage:p:0/GUID-1", 1),
+        slack: await reaction(slackDm, "slack", "slack:D1:1.0001", 5),
+        // An event that landed after the deploy, newer than the old row for the same sender and key.
+        twinOld: await reaction(oldChat, "imessage", "imessage:GUID-2", 1),
+        twinNew: await reaction(oldChat, "imessage", messageKey("imessage", imessageAccount, "GUID-2"), 9),
+      } };
+    });
+
+    expect(await t.action(internal.comma.migrations.runReactionKeysBackfill, { dryRun: true })).toEqual({ scanned: 4, changed: 3 });
+    expect((await t.run((ctx) => ctx.db.get(rows.legacy)))?.targetKey).toBe("imessage:p:0/GUID-1");
+
+    expect(await t.action(internal.comma.migrations.runReactionKeysBackfill, { dryRun: false, limit: 2 })).toEqual({ scanned: 4, changed: 3 });
+    const after = await t.run(async (ctx) => Promise.all([rows.legacy, rows.slack, rows.twinOld, rows.twinNew].map((id) => ctx.db.get(id))));
+    expect(after.map((row) => row && { targetKey: row.targetKey, at: row.at })).toEqual([
+      { targetKey: messageKey("imessage", imessageAccount, "p:0/GUID-1"), at: 1 },
+      { targetKey: messageKey("slack", slackAccount, "D1:1.0001"), at: 5 },
+      null,
+      { targetKey: messageKey("imessage", imessageAccount, "GUID-2"), at: 9 },
+    ]);
+
+    expect(await t.action(internal.comma.migrations.runReactionKeysBackfill, { dryRun: false })).toEqual({ scanned: 3, changed: 0 });
   });
 });

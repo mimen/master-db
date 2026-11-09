@@ -5,11 +5,12 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalMutation, type MutationCtx } from "../_generated/server";
 import type { CommaPlatform } from "../schema/comma/validators";
 
-import { ensureAccount } from "./accounts";
+import { ensureAccount, soleAccountScope } from "./accounts";
 import { conversationKind, IMESSAGE_ACCOUNT, slack } from "./conversationIdentity";
 import { findByKey } from "./conversationLookup";
 import { attachmentBackfill, messageBackfill } from "./messageShape";
 import { refreshLastMessage } from "./pendingSends";
+import { currentKey, messageKey, sameReaction } from "./reactions";
 import { countReplies } from "./slackSync";
 
 /**
@@ -208,6 +209,65 @@ export const runSlackThreadsBackfill = internalAction({
     for (;;) {
       const page: { scanned: number; changed: number; cursor: string; isDone: boolean } =
         await ctx.runMutation(slackThreadsPageRef, { cursor, limit, dryRun });
+      totals.scanned += page.scanned;
+      totals.changed += page.changed;
+      if (page.isDone) return totals;
+      cursor = page.cursor;
+    }
+  },
+});
+
+/**
+ * The reaction keys backfill, for rows from before G4: rewrites each reaction's `targetKey` from `platform:guid` to
+ * messageKey's `platform:account:guid`, with its conversation's account. Until it runs, reactions on older messages
+ * do not show. Where the new key already holds the same sender's state, because an event landed between the deploy
+ * and this run, the newer state stays. Idempotent and paged. Run the dry run first:
+ *
+ *   bunx convex run comma/migrations:runReactionKeysBackfill '{"dryRun":true}'
+ *   bunx convex run comma/migrations:runReactionKeysBackfill '{"dryRun":false}'
+ */
+export const backfillReactionKeysPage = internalMutation({
+  args: { cursor: v.union(v.string(), v.null()), limit: v.optional(v.number()), dryRun: v.boolean() },
+  returns: pageResult,
+  handler: async (ctx, { cursor, limit, dryRun }) => {
+    const page = await ctx.db.query("comma_reactions").paginate({ cursor, numItems: Math.min(limit ?? 200, 500) });
+    let changed = 0;
+    for (const row of page.page) {
+      const prefix = `${row.platform}:`;
+      const rest = row.targetKey.startsWith(prefix) ? row.targetKey.slice(prefix.length) : null;
+      if (rest === null || ctx.db.normalizeId("comma_accounts", rest.split(":")[0]!) !== null) continue;
+      const accountId = (await ctx.db.get(row.conversationId))?.accountId ?? (await soleAccountScope(ctx, row.platform)).accountId;
+      if (!accountId) continue;
+      changed++;
+      if (dryRun) continue;
+      const targetKey = messageKey(row.platform, accountId, rest);
+      const twin = (await ctx.db.query("comma_reactions").withIndex("by_targetKey", (q) => q.eq("targetKey", targetKey)).collect())
+        .find((other) => sameReaction({ ...other, key: currentKey(other.key) }, { ...row, key: currentKey(row.key) }));
+      if (twin && twin.at >= row.at) {
+        await ctx.db.delete(row._id);
+        continue;
+      }
+      if (twin) await ctx.db.delete(twin._id);
+      await ctx.db.patch(row._id, { targetKey });
+    }
+    return { scanned: page.page.length, changed, cursor: page.continueCursor, isDone: page.isDone };
+  },
+});
+
+const reactionKeysPageRef = makeFunctionReference<"mutation", { cursor: string | null; limit?: number; dryRun: boolean }, {
+  scanned: number; changed: number; cursor: string; isDone: boolean;
+}>("comma/migrations:backfillReactionKeysPage");
+
+/** Runs every page and reports what changed, or with dryRun what would. */
+export const runReactionKeysBackfill = internalAction({
+  args: { dryRun: v.boolean(), limit: v.optional(v.number()) },
+  returns: v.object({ scanned: v.number(), changed: v.number() }),
+  handler: async (ctx, { dryRun, limit }) => {
+    const totals = { scanned: 0, changed: 0 };
+    let cursor: string | null = null;
+    for (;;) {
+      const page: { scanned: number; changed: number; cursor: string; isDone: boolean } =
+        await ctx.runMutation(reactionKeysPageRef, { cursor, limit, dryRun });
       totals.scanned += page.scanned;
       totals.changed += page.changed;
       if (page.isDone) return totals;

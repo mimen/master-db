@@ -2,6 +2,7 @@ import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { CommaReaction, CommaReactionState } from "../schema/comma/validators";
 
+import { soleAccountScope } from "./accounts";
 import { currentKey, messageKey, reactionWrites, shownReactions } from "./reactions";
 
 /** Rows written before emoji keys were namespaced read with their current key, and a write converges them. */
@@ -21,7 +22,9 @@ export async function applyReaction(ctx: MutationCtx, event: CommaReactionState,
   return writes.length > 0;
 }
 
-/** A message's reactions, sender names unset. */
-export async function reactionsOf(ctx: QueryCtx, message: Pick<Doc<"comma_messages">, "platform" | "guid">): Promise<CommaReaction[]> {
-  return shownReactions(await reactionRows(ctx, messageKey(message.platform ?? "imessage", message.guid)));
+/** A message's reactions, sender names unset. A row from before accounts belongs to its platform's only account. */
+export async function reactionsOf(ctx: QueryCtx, message: Pick<Doc<"comma_messages">, "platform" | "accountId" | "guid">): Promise<CommaReaction[]> {
+  const platform = message.platform ?? "imessage";
+  const accountId = message.accountId ?? (await soleAccountScope(ctx, platform)).accountId;
+  return accountId ? shownReactions(await reactionRows(ctx, messageKey(platform, accountId, message.guid))) : [];
 }

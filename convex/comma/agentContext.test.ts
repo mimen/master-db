@@ -5,6 +5,9 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import schema from "../schema";
 
+import { messageKey } from "./reactions";
+import { IMESSAGE_ACCOUNT } from "./conversationIdentity";
+import { ensureAccount } from "./accounts";
 import { commaModules } from "./testModules.vitest";
 
 const modules = { ...commaModules, "../../comma/agentContext.ts": () => import("./agentContext") };
@@ -50,10 +53,10 @@ async function setup() {
     await ctx.db.insert("comma_messages", message(conversationId, "m3", 30, { isFromMe: true, sender: undefined }));
     await ctx.db.insert("comma_messages", message(conversationId, "m4", 40));
     await ctx.db.insert("comma_reactions", {
-      platform: "imessage", conversationId, targetKey: "imessage:m2", key: "like", emoji: "👍", isFromMe: false, senderAddress: ALEX, at: 21, removed: false,
+      platform: "imessage", conversationId, targetKey: messageKey("imessage", (await ensureAccount(ctx, IMESSAGE_ACCOUNT))._id, "m2"), key: "like", emoji: "👍", isFromMe: false, senderAddress: ALEX, at: 21, removed: false,
     });
     await ctx.db.insert("comma_reactions", {
-      platform: "imessage", conversationId, targetKey: "imessage:m2", key: "laugh", emoji: "😂", isFromMe: true, at: 22, removed: true,
+      platform: "imessage", conversationId, targetKey: messageKey("imessage", (await ensureAccount(ctx, IMESSAGE_ACCOUNT))._id, "m2"), key: "laugh", emoji: "😂", isFromMe: true, at: 22, removed: true,
     });
     return { conversationId, personId };
   });
@@ -139,7 +142,7 @@ test("agentAttachment returns null for another conversation's attachment", async
 describe("aiThread", () => {
   test("reads the thread as wire messages, newest last, with contact names, reactions and attachment kinds", async () => {
     const { t, conversationId } = await setup();
-    await t.run((ctx) => ctx.db.insert("comma_reactions", { platform: "imessage", conversationId, targetKey: "imessage:m4", key: "love", emoji: "❤️",
+    await t.run(async (ctx) => ctx.db.insert("comma_reactions", { platform: "imessage", conversationId, targetKey: messageKey("imessage", (await ensureAccount(ctx, IMESSAGE_ACCOUNT))._id, "m4"), key: "love", emoji: "❤️",
       isFromMe: true, at: 1, removed: false }));
     const thread = await t.mutation(internal.comma.agentContext.aiThread, { conversationId });
     expect(thread).toMatchObject({ title: "Door crew", isGroup: true,
@@ -194,7 +197,8 @@ test("aiSentText reads the account's own sent texts newest first, counting rows 
     const account = (externalId: string) => ctx.db.insert("comma_accounts", {
       platform: "imessage", externalId, label: externalId, selfHandles: [], health: "ok", createdAt: 0,
     });
-    const mine = await account("mac");
+    // setup's reactions already made the iMessage account.
+    const mine = (await ensureAccount(ctx, IMESSAGE_ACCOUNT))._id;
     const other = await account("other-mac");
     const sent = (guid: string, at: number, fields: Partial<Doc<"comma_messages">>) =>
       ctx.db.insert("comma_messages", message(conversationId, guid, at, { isFromMe: true, sender: undefined, ...fields }));

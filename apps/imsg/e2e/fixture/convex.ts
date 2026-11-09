@@ -60,18 +60,20 @@ export function conversationRow(chat: ChatSummary): Conversation {
  * Reactions as production Convex serves them: every tapback goes through the bridge mapper and ingest's
  * reaction rules, in arrival order since the fixture clock is pinned.
  */
+const IMESSAGE_ACCOUNT_ID = id<"comma_accounts">("account-imessage");
+
 function reactionsByGuid(raw: BBMessage[], chatGuid: string, names: FixtureIdentity): (guid: string) => CommaReaction[] {
   const tapbacks = raw.filter((m) => m.associatedMessageGuid && m.associatedMessageType);
   let states: CommaReactionState[] = [];
   for (const m of [...tapbacks].sort((a, b) => (a.dateCreated ?? 0) - (b.dateCreated ?? 0))) {
     const row = toMessageRow(m, id(chatGuid), 0);
-    const event = fromTapback({ ...row, platform: "imessage", tapback: row.imessage.tapback });
+    const event = fromTapback({ ...row, platform: "imessage", accountId: IMESSAGE_ACCOUNT_ID, tapback: row.imessage.tapback });
     if (!event) continue;
     for (const { row, state } of reactionWrites(states.filter((s) => s.targetKey === event.targetKey), event)) {
       states = row ? states.map((s) => (s === row ? state : s)) : [...states, state];
     }
   }
-  return (guid) => shownReactions(states.filter((state) => state.targetKey === messageKey("imessage", guid)))
+  return (guid) => shownReactions(states.filter((state) => state.targetKey === messageKey("imessage", IMESSAGE_ACCOUNT_ID, guid)))
     .map((r) => ({ ...r, senderName: r.senderAddress ? names.lookup(r.senderAddress) : null }));
 }
 
