@@ -35,7 +35,9 @@ export function conversationRoute(chat: Pick<ChatSummary, "route" | "isGroup">):
 /** The other person's handle in a one-to-one conversation, or null for a group. */
 export function dmAddress(chat: Pick<ChatSummary, "isGroup" | "participants" | "route">): string | null {
   if (chat.isGroup) return null;
-  return chat.participants[0]?.address ?? (chat.route.platform === "imessage" ? imessageChat.identifier(chat.route.imessage.chatGuid) : null);
+  const chatGuid = chat.route.platform === "imessage" ? chat.route.imessage?.chatGuid : undefined;
+  // A row cached by an older build can carry an iMessage route without a chat GUID; that crashed the list on iOS.
+  return chat.participants[0]?.address ?? (chatGuid ? imessageChat.identifier(chatGuid) : null);
 }
 
 /** The service a message drew in: green when SMS. A message on another platform is never SMS. */

@@ -29,3 +29,10 @@ export function useNativeUpdate(): NativeUpdate {
   }, []);
   return { ready: isUpdatePending, apply: () => void Updates.reloadAsync() };
 }
+
+/** The crash screen's Reload: fetch any newer update, then restart on the newest one, so a bundle that crashes can be replaced. */
+export function reloadApp(): boolean {
+  if (!Updates.isEnabled) return false;
+  void downloadAvailableUpdate().finally(() => void Updates.reloadAsync());
+  return true;
+}

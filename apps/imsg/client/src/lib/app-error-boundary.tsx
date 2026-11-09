@@ -3,6 +3,7 @@ import * as Clipboard from "expo-clipboard";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
+import { reloadApp } from "@/lib/native-update";
 
 type Props = { children: ReactNode };
 
@@ -49,10 +50,11 @@ export class AppErrorBoundary extends Component<Props, State> {
     this.setState({ componentStack: info.componentStack ?? null });
   }
 
+  // On iOS, re-rendering would run the same crashing bundle; restarting on the newest OTA update can replace it.
   private reload = (): void => {
     if (Platform.OS === "web" && typeof globalThis.window !== "undefined") {
       globalThis.window.location.reload();
-    } else this.setState({ error: null, componentStack: null, copied: false });
+    } else if (!reloadApp()) this.setState({ error: null, componentStack: null, copied: false });
   };
 
   private copyError = async (): Promise<void> => {

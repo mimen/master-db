@@ -6,7 +6,7 @@ import type { ChatSummary } from "@shared/types";
  */
 const KEY = "imsg.chatSnapshot.v1";
 /** Bump on any ChatSummary shape change: a cold start renders these rows with the new code before Convex answers. */
-const VERSION = 2;
+const VERSION = 3;
 export const SNAPSHOT_MAX = 300;
 
 type Store = Pick<Storage, "getItem" | "setItem">;

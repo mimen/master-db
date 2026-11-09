@@ -43,6 +43,12 @@ describe("chat snapshot", () => {
     store.setItem("imsg.chatSnapshot.v1", JSON.stringify({ version: 1, chats: [{ ...legacy, guid: "iMessage;-;+15550000001" }] }));
     expect(readChatSnapshot(store)).toBeNull();
   });
+
+  test("a version 2 snapshot is discarded: older builds cached Slack rows with a GUID-less iMessage route", () => {
+    const store = memory();
+    store.setItem("imsg.chatSnapshot.v1", JSON.stringify({ version: 2, chats: [chat(1)] }));
+    expect(readChatSnapshot(store)).toBeNull();
+  });
 });
 
 describe("bridgeSnapshot", () => {
