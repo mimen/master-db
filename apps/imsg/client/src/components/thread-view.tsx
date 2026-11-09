@@ -22,7 +22,7 @@ import { createInboundReadObserver } from "@/lib/message-observers";
 import { useActionSheet } from "@/lib/action-sheet";
 import { copyHandleAction } from "@/lib/copy-handle";
 import { setForwardText } from "@/lib/forward";
-import { pendingSends, SendCancelledError } from "@/lib/pending-sends";
+import { pendingSends } from "@/lib/pending-sends";
 import { onOpenThreadSearch } from "@/lib/thread-search";
 import { readChat } from "@/lib/chat-actions";
 import { useAgentEnabled } from "@/hooks/use-agent";
@@ -431,9 +431,7 @@ export function ThreadView({
 
   const retry = useCallback(
     (stranded: Message) => {
-      pendingSends.retry(conversationId, stranded).catch((error: unknown) => {
-        if (!(error instanceof SendCancelledError)) showToast(messagingCommandError(error, "Send failed"));
-      });
+      pendingSends.retry(conversationId, stranded).catch(() => undefined);
     },
     [conversationId],
   );
@@ -522,18 +520,20 @@ export function ThreadView({
                   const chat = conversationRef.current;
                   if (!chat) return;
                   const replyTo = message.replyToGuid ? { guid: message.replyToGuid, text: message.replyToPreview ?? "", isFromMe: message.replyToFromMe ?? false } : null;
-                  pendingSends.send(chat, { text: message.text, replyTo, mentions: message.mentions }).catch((error: unknown) => {
-                    if (!(error instanceof SendCancelledError)) showToast(messagingCommandError(error, "Send failed"));
-                  });
+                  pendingSends.send(chat, { text: message.text, replyTo, mentions: message.mentions }).catch(() => undefined);
                   scrollToLatest();
                 },
               },
             ]
           : []),
         // While a send is confirming, show Edit and Undo send inert rather than hiding them.
-        ...(mine && message.text && message.sendState
+        ...(mine && message.text && (message.sendState === "queued" || message.sendState === "sending")
           ? [...gated(edit, { label: "Edit", disabled: true, separatorBefore: true, onPress: () => undefined }),
             ...gated(unsend, { label: unsendLabel, disabled: true, note: "Available once it's sent", onPress: () => undefined })]
+          : []),
+        // A send that did not go out never will on its own: take it off the thread.
+        ...(message.sendState === "failed" || message.sendState === "notSent"
+          ? [{ label: "Discard", separatorBefore: true, destructive: true, onPress: () => cancelSend(message) }]
           : []),
         ...(mine && message.text && age < editWindowMs && !message.sendState
           ? gated(edit, { label: "Edit", note: formatWindowRemaining(editWindowMs, age), separatorBefore: true, onPress: () => setEditing(message) })
@@ -573,7 +573,7 @@ export function ThreadView({
       ];
       if (actions.length > 0 || tapbacks) showSheet({ actions, tapbacks, emoji, tapbacksUnavailable: reasonOf(react), anchor });
     },
-    [can, conversationId, isGroup, pend, scrollToLatest, showSheet],
+    [can, cancelSend, conversationId, isGroup, pend, scrollToLatest, showSheet],
   );
 
   const desk = headerChat !== null;

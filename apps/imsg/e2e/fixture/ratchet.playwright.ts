@@ -313,7 +313,9 @@ test("a forward shows at once and turns Not delivered with a toast when the brid
   const shown = page.waitForFunction(FORWARDED, undefined, { polling: "raf", timeout: 5_000 });
   await jordan.click();
   await shown;
-  await expect(page.getByText("Forward failed")).toBeVisible();
+  // Every send that did not go out raises the one failure toast, with Retry and Open.
+  const toast = page.getByRole("status").filter({ hasText: "Couldn't send. Check the Mac mini connection." });
+  await expect(toast.getByRole("button", { name: "Retry" })).toBeVisible();
   await expect(page.getByTestId("thread-view").getByText("Not delivered", { exact: true })).toBeVisible();
 });
 
@@ -389,7 +391,9 @@ test("Send again shows the copy at once and turns it Not delivered with a toast 
   const shown = page.waitForFunction(`(${ownBubble("Following up on Avery's plan.")})() >= 2`, undefined, { polling: "raf", timeout: 5_000 });
   await again.click();
   await shown;
-  await expect(page.getByText("Send failed")).toBeVisible();
+  // Every send that did not go out raises the one failure toast, with Retry and Open.
+  const toast = page.getByRole("status").filter({ hasText: "Couldn't send. Check the Mac mini connection." });
+  await expect(toast.getByRole("button", { name: "Retry" })).toBeVisible();
   await expect(page.getByTestId("thread-view").getByText("Not delivered", { exact: true })).toBeVisible();
 });
 

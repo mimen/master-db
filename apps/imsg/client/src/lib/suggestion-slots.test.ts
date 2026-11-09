@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ReplySuggestion } from "@shared/types";
-import { alternateIndexForKey, suggestionSlots } from "./suggestion-slots";
+import { alternateIndexForKey, shelfTakesKeys, suggestionSlots } from "./suggestion-slots";
 
 const suggestion = (id: string, kind: "text" | "reaction" = "text"): ReplySuggestion => ({
   id, kind, strategy: "clarify", vibe: "curious", text: id, reaction: kind === "reaction" ? "like" : null,
@@ -66,5 +66,17 @@ describe("alternateIndexForKey", () => {
     expect(key("Digit1", { altKey: false })).toBeNull();
     expect(key("Digit1", { metaKey: true })).toBeNull();
     expect(key("KeyA")).toBeNull();
+  });
+});
+
+describe("which shelf takes ⌥N", () => {
+  test("with a thread beside its channel, only the pane holding focus", () => {
+    expect(shelfTakesKeys({ inThisPane: true, inAnyPane: true, panes: 2 })).toBe(true);
+    expect(shelfTakesKeys({ inThisPane: false, inAnyPane: true, panes: 2 })).toBe(false);
+    expect(shelfTakesKeys({ inThisPane: false, inAnyPane: false, panes: 2 })).toBe(false);
+  });
+
+  test("a lone pane takes it wherever focus is", () => {
+    expect(shelfTakesKeys({ inThisPane: false, inAnyPane: false, panes: 1 })).toBe(true);
   });
 });

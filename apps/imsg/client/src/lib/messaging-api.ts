@@ -3,10 +3,21 @@ import { fromBridgeMessage } from "@shared/imessage";
 import { UnknownCommandError } from "./command-results";
 import type { RunCommandOptions, runCommand } from "./convex-commands";
 
+/**
+ * Convex says why it refused in a ConvexError's data. Read without importing ConvexError: that import alone moves
+ * convex/values into the first-visit common chunk.
+ */
+export function convexReason(error: unknown): string | null {
+  if (!(error instanceof Error) || !("data" in error)) return null;
+  const { data } = error;
+  if (typeof data === "string") return data;
+  return data && typeof data === "object" && "message" in data && typeof data.message === "string" ? data.message : null;
+}
+
 export function messagingCommandError(error: unknown, fallback: string): string {
   return error instanceof UnknownCommandError
     ? "Not sure this went through. Check the conversation before trying again."
-    : fallback;
+    : convexReason(error) ?? fallback;
 }
 
 export function createMessagingApi(run: typeof runCommand) {

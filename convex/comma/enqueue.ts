@@ -21,6 +21,9 @@ type SendPayload = Extract<CommaOutboxPayload, { kind: "send" }>;
 const GLOBAL_KINDS = new Set<CommaOutboxPayload["kind"]>(["createChat", "clearSuggestionLearning", "sendEmail"]);
 const expireRef = makeFunctionReference<"mutation", { clientKey: string }, null>("comma/pendingSends:expire");
 
+/** What the user sends: nothing goes out after NOT_SENT_AFTER_MS, so an executor that comes back hours later never sends it. */
+export const EXPIRING_KINDS = new Set<CommaOutboxPayload["kind"]>(["send", "sendAttachment", "sendContact", "createChat"]);
+
 /** Idempotent on clientKey. A send shows its pending bubble at once. */
 export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversationId, payload }: {
   clientKey: string; conversationId?: Id<"comma_conversations">; payload: CommaOutboxPayload;
@@ -37,12 +40,25 @@ export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversation
   const unsupported = conversation && route && unsupportedReason(route, conversation.isGroup, payload);
   if (unsupported) throw new ConvexError(unsupported);
   if (payload.kind === "sendEmail") await checkNewEmail(ctx, payload);
+  if (payload.kind === "sendEmail" || payload.kind === "send") await checkEmailFiles(ctx, payload.email);
   const now = Date.now();
   // A new email names its mailbox. ponytail: createChat names no platform, so it is iMessage's until another platform creates chats.
   const platform = route?.platform ?? (payload.kind === "sendEmail" ? "gmail" : "imessage");
   const id = await insertCommand(ctx, { clientKey, conversationId, route, payload, platform, now });
   if (payload.kind === "send" && conversation && route) await createPendingSend(ctx, { conversation, route, clientKey, payload, now });
+  if (EXPIRING_KINDS.has(payload.kind)) await ctx.scheduler.runAfter(NOT_SENT_AFTER_MS, expireRef, { clientKey });
   return { id, created: true };
+}
+
+/** Gmail's cap on a message's files together. */
+export const MAX_EMAIL_FILES_BYTES = 25 * 1024 * 1024;
+export const EMAIL_FILES_LIMIT = "The files are over Gmail's 25 MB limit";
+
+/** An email's files over Gmail's cap are refused while the composer still holds them, not after it has closed. */
+async function checkEmailFiles(ctx: MutationCtx, email: { attachments?: { storageId: Id<"_storage"> }[] } | undefined): Promise<void> {
+  let total = 0;
+  for (const { storageId } of email?.attachments ?? []) total += (await ctx.db.system.get(storageId))?.size ?? 0;
+  if (total > MAX_EMAIL_FILES_BYTES) throw new ConvexError(EMAIL_FILES_LIMIT);
 }
 
 /** A new email goes from a mailbox to someone; Convex refuses it here rather than in the lane. */
@@ -97,6 +113,5 @@ async function createPendingSend(ctx: MutationCtx, { conversation, route, client
     sourceVersion: 0,
     sendState: "queued",
   });
-  await ctx.scheduler.runAfter(NOT_SENT_AFTER_MS, expireRef, { clientKey });
 }
 

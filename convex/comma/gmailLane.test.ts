@@ -250,6 +250,20 @@ describe("files, reply all and forward", () => {
   });
 });
 
+describe("files over Gmail's 25 MB", () => {
+  test("Convex refuses a reply or a new email whose files total over the limit, so the composer still holds them", async () => {
+    const { t, as, accountId, conversationId } = await connected();
+    const half = await t.run((ctx) => ctx.storage.store(new Blob([new Uint8Array(13 * 1024 * 1024)], { type: "application/pdf" })));
+    const attachments = [{ storageId: half, filename: "a.pdf", mimeType: "application/pdf" }, { storageId: half, filename: "b.pdf", mimeType: "application/pdf" }];
+    const email = { to: ["sam@venue.test"], cc: [], subject: "Files", attachments };
+    await expect(as.mutation(api.comma.outbox.enqueue, { clientKey: "big1", conversationId, payload: { kind: "send", text: "hi", replyToGuid: "m1", email } }))
+      .rejects.toThrow("The files are over Gmail's 25 MB limit");
+    await expect(as.mutation(api.comma.outbox.enqueue, { clientKey: "big2", payload: { kind: "sendEmail", accountId, text: "hi", email } }))
+      .rejects.toThrow("The files are over Gmail's 25 MB limit");
+    expect(await t.run((ctx) => ctx.db.query("comma_outbox").collect())).toEqual([]);
+  });
+});
+
 describe("rate-limited sends", () => {
   test("a send Gmail turns away for its rate limit goes out once the limit passes", async () => {
     const { run } = await connected();

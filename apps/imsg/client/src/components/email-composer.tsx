@@ -1,14 +1,15 @@
 import { forwardSubject, forwardText, mailboxText, parseTyped, replyRecipients, replySubject, type MailAddress, type ReplyMode, type ReplySource } from "@shared/email-reply";
 import type { ConversationId } from "@shared/types";
 import type { GenericId } from "convex/values";
-import { ConvexError } from "convex/values";
 import { useState, type JSX } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View, type GestureResponderEvent, type NativeSyntheticEvent, type TextInputKeyPressEventData } from "react-native";
 
 import { formatFileSize } from "@/components/message-meta";
 import { ScheduleEditor } from "@/components/schedule-editor";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { pressAnchor, useActionSheet } from "@/lib/action-sheet";
+import { CommandExecutionError, UnknownCommandError } from "@/lib/command-results";
 import { commaDraftsApi, scheduledSendsApi } from "@/lib/convex-api";
 import { runCommand } from "@/lib/convex-commands";
 import { formatReceiptTime } from "@/lib/format";
@@ -57,6 +58,8 @@ export function EmailComposer({ conversationId, accountId, mailboxes, start, sub
   onClose: () => void;
 }): JSX.Element {
   const theme = useTheme();
+  // A key hint is for a keyboard: the narrow layout is a phone's.
+  const { wide } = useLayoutMode();
   const [mode, setMode] = useState(start.mode);
   const source = start.mode === "new" ? null : start.replyTo;
   const initial = start.mode === "reply" || start.mode === "replyAll" ? replyRecipients(start.replyTo, start.mode, self) : { to: [], cc: [] };
@@ -83,12 +86,17 @@ export function EmailComposer({ conversationId, accountId, mailboxes, start, sub
     ? import("@/lib/identity").then(({ convexClient }) => convexClient.mutation(commaDraftsApi.clearDraft, { conversationId }))
     : Promise.resolve(null);
 
+  /** Reply and Reply all swap the recipients each fills in, and keep the ones the user added. */
   const switchMode = (next: ReplyMode) => {
-    if (!source) return;
-    setMode(next);
+    if (!source || (mode !== "reply" && mode !== "replyAll")) return;
+    const before = replyRecipients(source, mode, self);
+    const filled = new Set([...before.to, ...before.cc].map((chip) => chip.address));
+    const added = (chips: MailAddress[]) => chips.filter((chip) => !filled.has(chip.address));
     const recipients = replyRecipients(source, next, self);
-    setTo(recipients.to);
-    setCc(recipients.cc);
+    const keep = (base: MailAddress[], extra: MailAddress[]) => [...base, ...extra.filter((chip) => !base.some((b) => b.address === chip.address))];
+    setMode(next);
+    setTo(keep(recipients.to, added(to)));
+    setCc(keep(recipients.cc, added(cc)));
   };
 
   const discard = () => {
@@ -98,7 +106,9 @@ export function EmailComposer({ conversationId, accountId, mailboxes, start, sub
 
   const refused = (failure: unknown) => {
     setSending(false);
-    setError(failure instanceof ConvexError ? String(failure.data) : messagingCommandError(failure, "Couldn't send the email."));
+    // The lane's refusal reads as the reply card's does.
+    setError(failure instanceof CommandExecutionError && !(failure instanceof UnknownCommandError)
+      ? `Couldn't send: ${failure.message}` : messagingCommandError(failure, "Couldn't send the email."));
   };
 
   const send = () => {
@@ -110,18 +120,12 @@ export function EmailComposer({ conversationId, accountId, mailboxes, start, sub
       runCommand(conversationId, reply(text), { onQueued: onClose }).catch(refused);
       return;
     }
+    // A new email or forward has no card to show its outcome, so the composer holds what was written until Gmail has it.
     const body = mode === "forward" && source ? forwardText(text, { ...source, subject }) : text;
-    let queued = false;
-    runCommand(null, { kind: "sendEmail", accountId: from as GenericId<"comma_accounts">, text: body, email }, {
-      onQueued: () => {
-        queued = true;
-        showToast("Sending…");
-        onClose();
-      },
-    }).then(() => showToast("Email sent")).catch((failure: unknown) => {
-      if (!queued) refused(failure);
-      else showToast(messagingCommandError(failure, "Couldn't send the email."));
-    });
+    runCommand(null, { kind: "sendEmail", accountId: from as GenericId<"comma_accounts">, text: body, email }).then(() => {
+      showToast("Email sent");
+      onClose();
+    }).catch(refused);
   };
 
   const schedule = async (body: string, sendAt: number): Promise<void> => {
@@ -140,7 +144,7 @@ export function EmailComposer({ conversationId, accountId, mailboxes, start, sub
       setError(null);
       schedule(text, sendAt).catch((failure: unknown) => {
         setSending(false);
-        setError(failure instanceof ConvexError ? String(failure.data) : "Couldn't schedule the email.");
+        setError(messagingCommandError(failure, "Couldn't schedule the email."));
       });
     };
     showSheet({
@@ -286,7 +290,7 @@ export function EmailComposer({ conversationId, accountId, mailboxes, start, sub
           <Text style={[styles.attach, { color: theme.accent }]}>{uploading ? "Attaching…" : "Attach"}</Text>
         </Pressable>
         <Text style={[styles.hint, { color: error ? theme.destructive : theme.textTertiary }]} numberOfLines={2}>
-          {error ?? (Platform.OS === "web" ? "⌘↩ to send" : "")}
+          {error ?? (wide ? "⌘↩ to send" : "")}
         </Text>
         {replying ? (
           <Pressable
