@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { EMAIL_SANDBOX, emailDocument, formatAddress, hasRecipient, replyFields } from "./mail";
+import { EMAIL_SANDBOX, emailDocument, formatAddress, hasRecipient, openByDefault, regularSenders, replyFields } from "./mail";
 import { inLens } from "./mail-lens";
 
 describe("inLens", () => {
@@ -12,6 +12,32 @@ describe("inLens", () => {
     expect(inLens(row(false, false, true), "people")).toBe(false);
     expect(inLens(row(true, false, false), "people")).toBe(false);
     for (const candidate of [row(true, true, true), row(false, false, false)]) expect(inLens(candidate, "all")).toBe(true);
+  });
+});
+
+describe("regularSenders", () => {
+  test("a sender on three threads is regular, whatever the case of the address; one on two is not", () => {
+    const thread = (...addresses: string[]) => ({ participants: addresses.map((address) => ({ address })) });
+    expect(regularSenders([thread("news@club.test"), thread("News@Club.test", "news@club.test"), thread("news@club.test"), thread("pat@a.test"), thread("pat@a.test")]))
+      .toEqual(new Set(["news@club.test"]));
+  });
+});
+
+describe("openByDefault", () => {
+  const thread = [
+    { _id: "a", isFromMe: false }, { _id: "b", isFromMe: true }, { _id: "c", isFromMe: false }, { _id: "d", isFromMe: false }, { _id: "e", isFromMe: true },
+  ];
+
+  test("with nothing unread, only the newest opens, and the reader lands on it", () => {
+    expect(openByDefault(thread, 0)).toEqual({ open: new Set(["e"]), target: "e" });
+  });
+
+  test("the newest unread received messages open beside the newest, and the reader lands on the first of them", () => {
+    expect(openByDefault(thread, 2)).toEqual({ open: new Set(["c", "d", "e"]), target: "c" });
+  });
+
+  test("an empty thread opens nothing", () => {
+    expect(openByDefault([], 3)).toEqual({ open: new Set(), target: undefined });
   });
 });
 

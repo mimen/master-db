@@ -1,4 +1,4 @@
-import { defaultTreeAdapter, parse, serialize, type DefaultTreeAdapterMap } from "parse5";
+import { defaultTreeAdapter, html as HTML, parse, serialize, type DefaultTreeAdapterMap } from "parse5";
 
 /**
  * Email HTML is hostile input. `cleanEmailHtml` rebuilds it from an allowlist on the server, before any client sees
@@ -75,7 +75,26 @@ function cleanElement(element: Element, counts: Counts): boolean {
   return true;
 }
 
+/** Outlook's reply marker. The quoted mail is every sibling after it, and the cleaner drops the id that finds it. */
+const isOutlookReply = (node: Node): node is Element => defaultTreeAdapter.isElementNode(node) && /^(appendonsend|divRplyFwdMsg)$/.test(attr(node, "id") ?? "");
+const isElement = (node: Node | undefined, tag: string) => node !== undefined && defaultTreeAdapter.isElementNode(node) && node.tagName === tag;
+
+/** Wraps Outlook's quoted tail, with the rule Outlook draws above it, in `<div class="comma-quote">` for the reader to fold. */
+function markOutlookQuote(parent: ParentNode): void {
+  if (defaultTreeAdapter.isElementNode(parent) && attr(parent, "class") === "comma-quote") return;
+  let start = parent.childNodes.findIndex(isOutlookReply);
+  if (start < 0) return;
+  if (isElement(parent.childNodes[start - 1], "hr")) start--;
+  const quote = defaultTreeAdapter.createElement("div", HTML.NS.HTML, [{ name: "class", value: "comma-quote" }]);
+  for (const node of parent.childNodes.slice(start)) {
+    defaultTreeAdapter.detachNode(node);
+    defaultTreeAdapter.appendChild(quote, node);
+  }
+  defaultTreeAdapter.appendChild(parent, quote);
+}
+
 function cleanChildren(parent: ParentNode, counts: Counts): void {
+  markOutlookQuote(parent);
   for (const node of [...parent.childNodes]) {
     if (node.nodeName === "#comment" || node.nodeName === "#documentType") {
       defaultTreeAdapter.detachNode(node);

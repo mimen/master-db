@@ -254,7 +254,7 @@ function ChatRowInner({
             <Text numberOfLines={1} style={[styles.name, { color: theme.text, fontSize: compact ? 13 : 17 }]}>
               {chat.displayName}
             </Text>
-            <SourceIcon badge={source} personal={personal} size={compact ? 13 : 15} decorative />
+            <SourceIcon badge={source} personal={personal} size={compact ? 14 : 16} decorative />
             {handle ? <HandleIcon tiebreak={handle} size={compact ? 12 : 14} decorative /> : null}
             {/* Private CRM layer (favorite/priority). Mirrors the star on favorited contacts. */}
             {chat.crm?.is_favorite && (

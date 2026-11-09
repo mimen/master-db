@@ -76,7 +76,7 @@ Run these in order. Comma's production is the Convex deployment `dev:shiny-gerbi
    - Reply to that message from Comma's Mail reader. The reply shows in Gmail's own thread, not as a new conversation, and its headers (Gmail's **Show original**) carry an `In-Reply-To` naming the message it answered.
    - Archive a thread from Comma. It leaves Gmail's Inbox, and Comma's cleared count rises by one, not two.
    - Open Mail. A newsletter shows only under All inbox, never under People.
-   - Send the mailbox an HTML message with a `<script>` and a 1×1 remote image. The reader shows neither, and holds other remote images until **Load images**.
+   - Send the mailbox an HTML message with a `<script>` and a 1×1 remote image. The reader shows neither. Other remote images load at once from a known sender, or from a mailing list on three or more inbox threads; from a stranger or spam they wait for **Load images** (`loadsRemoteImages` in `shared/platform-profile.ts`).
 
 ## The personal app (gmail.com)
 
