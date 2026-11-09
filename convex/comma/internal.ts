@@ -24,6 +24,7 @@ import { schedulePersonSummaries } from "./personSummaries";
 import { fromTapback } from "./reactions";
 import { applyReaction } from "./reactionStore";
 import { schedulePrecompute } from "./suggestions";
+import { resurfaceOnMessages } from "./later";
 import { logReplies } from "./triage";
 
 /**
@@ -148,7 +149,7 @@ export const upsertMessages = internalMutation({
     let written = 0;
     let skipped = 0;
     const touchedConversations = new Set<Id<"comma_conversations">>();
-    const real: Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe" | "sender">[] = [];
+    const real: Pick<Doc<"comma_messages">, "conversationId" | "guid" | "dateCreated" | "isFromMe" | "sender" | "mentionsMe">[] = [];
     for (const posted of messages) {
       const { imessage: { tapback, ...imessage }, ...core } = postedMessage(posted);
       const message = {
@@ -176,6 +177,7 @@ export const upsertMessages = internalMutation({
     }
     for (const conversationId of touchedConversations) await refreshLastMessage(ctx, conversationId);
     await logReplies(ctx, real);
+    await resurfaceOnMessages(ctx, real);
     await schedulePersonSummaries(ctx, real);
     await schedulePrecompute(ctx, real);
     return { written, skipped };
