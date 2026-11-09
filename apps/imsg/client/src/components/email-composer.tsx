@@ -6,6 +6,7 @@ import { Platform, Pressable, StyleSheet, Text, TextInput, View, type GestureRes
 
 import { formatFileSize } from "@/components/message-meta";
 import { ScheduleEditor } from "@/components/schedule-editor";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { pressAnchor, useActionSheet } from "@/lib/action-sheet";
 import { CommandExecutionError, UnknownCommandError } from "@/lib/command-results";
@@ -57,6 +58,8 @@ export function EmailComposer({ conversationId, accountId, mailboxes, start, sub
   onClose: () => void;
 }): JSX.Element {
   const theme = useTheme();
+  // A key hint is for a keyboard: the narrow layout is a phone's.
+  const { wide } = useLayoutMode();
   const [mode, setMode] = useState(start.mode);
   const source = start.mode === "new" ? null : start.replyTo;
   const initial = start.mode === "reply" || start.mode === "replyAll" ? replyRecipients(start.replyTo, start.mode, self) : { to: [], cc: [] };
@@ -287,7 +290,7 @@ export function EmailComposer({ conversationId, accountId, mailboxes, start, sub
           <Text style={[styles.attach, { color: theme.accent }]}>{uploading ? "Attaching…" : "Attach"}</Text>
         </Pressable>
         <Text style={[styles.hint, { color: error ? theme.destructive : theme.textTertiary }]} numberOfLines={2}>
-          {error ?? (Platform.OS === "web" ? "⌘↩ to send" : "")}
+          {error ?? (wide ? "⌘↩ to send" : "")}
         </Text>
         {replying ? (
           <Pressable
