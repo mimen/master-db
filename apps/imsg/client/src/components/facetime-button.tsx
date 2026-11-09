@@ -8,7 +8,7 @@ import * as Linking from "expo-linking";
 import { fromBridgeMessage } from "@shared/imessage";
 import type { ConversationId, Message } from "@shared/types";
 import { faceTimeTargetUrl, type FaceTimeKind } from "@/lib/message-actions";
-import { useActionSheet } from "@/lib/action-sheet";
+import { useActionSheet, type SheetAction } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
 import { useTheme } from "@/hooks/use-theme";
 import { useConversation } from "@/hooks/use-chat-directory";
@@ -24,16 +24,8 @@ interface FaceTimeButtonProps {
   compact?: boolean;
 }
 
-export function FaceTimeButton({
-  conversationId,
-  isGroup,
-  address,
-  color,
-  onSent,
-  compact = false,
-}: FaceTimeButtonProps): ReactElement {
-  const showSheet = useActionSheet();
-  const theme = useTheme();
+/** The FaceTime actions the conversation's route offers; empty when none is live. */
+export function useFaceTimeActions({ conversationId, isGroup, address, onSent }: Omit<FaceTimeButtonProps, "color" | "compact">): SheetAction[] {
   const can = useRouteSupport(useConversation(conversationId));
 
   const openDirect = async (kind: FaceTimeKind): Promise<void> => {
@@ -58,16 +50,24 @@ export function FaceTimeButton({
     }
   };
 
+  const actions = isGroup
+    ? gated(can("faceTimeLink"), { label: "Create & Send FaceTime Link", onPress: () => void createGroupLink() })
+    : [
+        ...gated(can("call"), { label: "FaceTime Audio", onPress: () => void openDirect("audio") }),
+        ...gated(can("call"), { label: "FaceTime Video", onPress: () => void openDirect("video") }),
+      ];
+  // A route that cannot call at all (Slack) shows no FaceTime, not a greyed one.
+  return actions.some((action) => !action.disabled) ? actions : [];
+}
+
+export function FaceTimeButton({ color, compact = false, ...props }: FaceTimeButtonProps): ReactElement | null {
+  const showSheet = useActionSheet();
+  const theme = useTheme();
+  const actions = useFaceTimeActions(props);
+  if (actions.length === 0) return null;
+
   const openActions = (): void => {
-    showSheet({
-      title: "FaceTime",
-      actions: isGroup
-        ? gated(can("faceTimeLink"), { label: "Create & Send FaceTime Link", onPress: () => void createGroupLink() })
-        : [
-            ...gated(can("call"), { label: "FaceTime Audio", onPress: () => void openDirect("audio") }),
-            ...gated(can("call"), { label: "FaceTime Video", onPress: () => void openDirect("video") }),
-          ],
-    });
+    showSheet({ title: "FaceTime", actions });
   };
 
   return (

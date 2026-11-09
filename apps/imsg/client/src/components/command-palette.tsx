@@ -39,7 +39,7 @@ import { useToday } from "@/hooks/use-today";
 import { addressesMatch, formatAddress } from "@shared/address";
 import { conversationRoute, fromBridgeMessage } from "@shared/imessage";
 import { composeSections, type ComposeRow } from "@/lib/palette/compose-rows";
-import { useChatDirectory } from "@/hooks/use-chat-directory";
+import { useChatDirectory, useConversation } from "@/hooks/use-chat-directory";
 import { openAgentChat } from "@/hooks/use-agent-toasts";
 import { agentApi, type AgentChatSummary } from "@/lib/agent-api";
 import { AGENT_ATTENTION } from "@/lib/inbox-model";
@@ -439,6 +439,25 @@ function Age({ age }: { age: RowAge | null | undefined }) {
   );
 }
 
+/** A message hit: its sender, or the conversation's name when the sender is unresolved, then the snippet. */
+function MessageHitContent({ hit: m, needle }: { hit: SearchHit; needle: string }) {
+  const theme = useTheme();
+  const chat = useConversation(m.conversationId);
+  const sender = m.isFromMe ? "You" : m.sender?.name ?? null;
+  const title = sender ?? chat?.displayName ?? (m.sender?.address ? formatAddress(m.sender.address) : "Message");
+  return (
+    <>
+      {sender === null && chat ? <ChatAvatar chat={chat} size={26} />
+        : <PersonAvatar address={m.isFromMe ? null : (m.sender?.address ?? null)} name={title} size={26} />}
+      <View style={[paletteStyles.textCol, styles.inline]}>
+        <Text numberOfLines={1} style={[paletteStyles.title, styles.noShrink, { color: theme.text }]}>{title}</Text>
+        <Highlighted text={m.text} needle={needle} color={theme.popTertiary} style={[paletteStyles.subtitle, styles.shrink]} />
+      </View>
+      <Text style={[styles.age, { color: theme.popTertiary }]}>{formatReceiptTime(m.dateCreated)}</Text>
+    </>
+  );
+}
+
 function PaletteRowContent({ item, needle, age, now }: { item: PaletteItem; needle: string; age?: RowAge; now: number }) {
   const theme = useTheme();
   switch (item.kind) {
@@ -478,20 +497,8 @@ function PaletteRowContent({ item, needle, age, now }: { item: PaletteItem; need
         </>
       );
     }
-    case "message": {
-      const m = item.message;
-      const sender = m.isFromMe ? "You" : (m.sender?.name ?? m.sender?.address ?? "?");
-      return (
-        <>
-          <PersonAvatar address={m.isFromMe ? null : (m.sender?.address ?? null)} name={sender} size={26} />
-          <View style={[paletteStyles.textCol, styles.inline]}>
-            <Text numberOfLines={1} style={[paletteStyles.title, styles.noShrink, { color: theme.text }]}>{sender}</Text>
-            <Highlighted text={m.text} needle={needle} color={theme.popTertiary} style={[paletteStyles.subtitle, styles.shrink]} />
-          </View>
-          <Text style={[styles.age, { color: theme.popTertiary }]}>{formatReceiptTime(m.dateCreated)}</Text>
-        </>
-      );
-    }
+    case "message":
+      return <MessageHitContent hit={item.message} needle={needle} />;
     case "agent":
       return (
         <>

@@ -54,7 +54,7 @@ import { ThreadSkeleton } from "./thread-skeleton";
 import { FaceTimeButton } from "./facetime-button";
 import { IconButton } from "./ui/icon-button";
 import { SourceIcon } from "./service-label";
-import AiChat02Icon from "@hugeicons/core-free-icons/AiChat02Icon";
+import SparklesIcon from "@hugeicons/core-free-icons/SparklesIcon";
 import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
 import SidebarRightIcon from "@hugeicons/core-free-icons/SidebarRightIcon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
@@ -638,7 +638,7 @@ export function ThreadView({
             </IconButton>
             {agentEnabled ? (
               <IconButton label="Ask the agent (⌘J)" onPress={() => openAgentPane(conversationId)} style={styles.headerIconButton}>
-                {({ active }) => <HugeiconsIcon icon={AiChat02Icon} size={18} color={active ? theme.text : theme.icon} strokeWidth={1.6} />}
+                {({ active }) => <HugeiconsIcon icon={SparklesIcon} size={18} color={active ? theme.text : theme.icon} strokeWidth={1.6} />}
               </IconButton>
             ) : null}
             <IconButton label="Conversation info" onPress={() => openChatInfo(conversationId)} style={styles.headerIconButton}>

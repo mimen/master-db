@@ -24,14 +24,14 @@ export function QueuePosition() {
         pressed && { backgroundColor: theme.backgroundSelected },
       ]}
     >
-      <Ionicons name={icon} size={17} color={theme.textSecondary} />
+      <Ionicons name={icon} size={15} color={theme.textTertiary} />
     </Pressable>
   );
   return (
     <View style={styles.wrap}>
       <Text
         accessibilityLabel={`Conversation ${position.index} of ${position.total}`}
-        style={[styles.count, { color: theme.textSecondary }]}
+        style={[styles.count, { color: theme.textTertiary }]}
       >
         {position.index} of {position.total}
       </Text>
@@ -43,7 +43,7 @@ export function QueuePosition() {
 
 const styles = StyleSheet.create({
   wrap: { alignItems: "center", flexDirection: "row", gap: 2, marginRight: 6 },
-  count: { fontSize: 12.5, fontVariant: ["tabular-nums"], marginRight: 6 },
+  count: { fontSize: 12, fontVariant: ["tabular-nums"], marginRight: 4 },
   step: { alignItems: "center", borderRadius: 8, height: 28, justifyContent: "center", width: 28 },
   disabled: { opacity: 0.35 },
 });

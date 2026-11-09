@@ -40,13 +40,13 @@ if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
       return handle ? { found: true, person: { _id: "person", photoUrl } } : undefined;
     },
   }));
-  mock.module("@/hooks/use-theme", () => ({ useTheme: () => ({ avatar: ["#ECECEE", "#E6E6E9"], avatarText: "#3C3C42" }) }));
+  mock.module("@/hooks/use-theme", () => ({ useTheme: () => ({ avatar: ["#ECECEE", "#E6E6E9"], avatarText: "#3C3C42", background: "#FFFFFF" }) }));
   let groupPhotoUrl: string | null = null;
   const conversations: string[] = [];
   mock.module("@/hooks/use-chat-directory", () => ({
     useConversation: (conversationId: string) => { conversations.push(conversationId); return { groupPhotoUrl }; },
   }));
-  const { PersonAvatar, GroupPhotoAvatar, avatarSlot } = await import("./avatar");
+  const { ChatAvatar, PersonAvatar, GroupPhotoAvatar, avatarSlot } = await import("./avatar");
 
   test("a contact keeps one ramp slot, and the slot stays inside the ramp", () => {
     expect(avatarSlot("+16195550101", 6)).toBe(avatarSlot("+16195550101", 6));
@@ -99,6 +99,21 @@ if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
       await render();
       expect(container.querySelector("img")?.src).toBe(groupPhotoUrl);
       expect(new Set(conversations)).toEqual(new Set(["group"]));
+    } finally { await act(async () => root.unmount()); }
+  });
+  test("a group of one draws one face, and a channel draws one # tile", async () => {
+    const container = document.getElementById("root");
+    if (!container) throw new Error("Missing test root");
+    const root = createRoot(container);
+    photoUrl = null;
+    const sam = { address: "sam@example.com", name: "Sam Lee", photoUrl: null };
+    const chat = (kind: "thread" | "channel", participants: typeof sam[]) =>
+      ({ conversationId: "c", kind, isGroup: true, displayName: "#bookings", participants, groupPhotoUrl: null }) as never;
+    try {
+      await act(async () => { root.render(createElement(ChatAvatar, { chat: chat("thread", [sam, sam]), size: 40 })); });
+      expect(container.textContent).toBe("SL");
+      await act(async () => { root.render(createElement(ChatAvatar, { chat: chat("channel", [sam, { ...sam, address: "rd@example.com" }]), size: 40 })); });
+      expect(container.textContent).toBe("#");
     } finally { await act(async () => root.unmount()); }
   });
 }
