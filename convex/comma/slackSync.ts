@@ -249,16 +249,32 @@ async function ingest(ctx: ActionCtx, token: string, accountId: Id<"comma_accoun
   return await ctx.runMutation(internal.comma.slackSync.ingestBatch, { accountId, users, conversations });
 }
 
+/** How long each retry of a failed event read waits. After the last, the event's own message is written without the read. */
+const EVENT_RETRY_MS = [5_000, 30_000, 120_000];
+
 /** One qualified event. A conversation Comma has not seen gets its name and members, and a new thread arrives whole. */
 export const ingestEvent = internalAction({
-  args: { accountId: v.id("comma_accounts"), ref: slackRef, isNew: v.boolean(), message: slackMessage },
+  args: { accountId: v.id("comma_accounts"), ref: slackRef, isNew: v.boolean(), message: slackMessage, attempt: v.optional(v.number()) },
   returns: v.null(),
-  handler: async (ctx, { accountId, ref, isNew, message }) => {
+  handler: async (ctx, { accountId, ref, isNew, message, attempt = 0 }) => {
     const token = await slackToken(ctx, accountId);
     if (!token) return null;
-    const info = isNew ? await channelInfo(token, ref.channel) : {};
-    const messages = isNew && ref.type === "thread" ? await threadMessages(token, ref.channel, ref.threadTs) : [message];
-    await ingest(ctx, token, accountId, [{ ref, ...info, messages }]);
+    // The webhook already recorded the event id, so nothing else brings this message again: a failed read is retried,
+    // and after the last retry the message is written as the event carried it.
+    let batch: ConversationBatch = { ref, messages: [message] };
+    try {
+      const info = isNew ? await channelInfo(token, ref.channel) : {};
+      const messages = isNew && ref.type === "thread" ? await threadMessages(token, ref.channel, ref.threadTs) : [message];
+      batch = { ref, ...info, messages };
+    } catch (error) {
+      const wait = EVENT_RETRY_MS[attempt];
+      if (wait !== undefined) {
+        const asked = error instanceof SlackApiError ? (error.retryAfterSeconds ?? 0) * 1000 : 0;
+        await ctx.scheduler.runAfter(Math.max(wait, asked), internal.comma.slackSync.ingestEvent, { accountId, ref, isNew, message, attempt: attempt + 1 });
+        return null;
+      }
+    }
+    await ingest(ctx, token, accountId, [batch]);
     return null;
   },
 });

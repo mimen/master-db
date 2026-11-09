@@ -174,6 +174,32 @@ describe("the Events webhook", () => {
     await settle(t);
     expect(await messages(t)).toEqual([]);
   });
+
+  test("a new DM whose first read is rate limited is read again, and its message lands", async () => {
+    const { t } = await connected();
+    slack.channel({ id: "D1", type: "im", user: SAM });
+    slack.rateLimitOnce.set("conversations.info", 1);
+    const event = eventCallback("Ev1", messageEvent("D1", "im", { user: SAM, text: "lunch?", ts: ago(1) }));
+    expect((await post(t, event)).status).toBe(200);
+    await settle(t);
+    expect(await conversations(t)).toEqual([expect.objectContaining({ conversationKey: "im:D1", participants: [{ address: `slack:${SAM}`, name: null }] })]);
+    expect((await messages(t)).map((message) => message.text)).toEqual(["lunch?"]);
+    expect(fetched().filter((method) => method === "conversations.info")).toHaveLength(2);
+  });
+
+  test("when a new thread can never be read, the reply the event carried is still kept", async () => {
+    const { t } = await connected();
+    const root = ago(10);
+    slack.channel({ id: "C1", type: "channel", name: "bookings", messages: [{ ts: root, user: SAM, text: "load-in time?", reply_count: 1 }] });
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/conversations.replies")) return new Response("upstream", { status: 503 });
+      return await slack.fetch(input, init);
+    });
+    await post(t, eventCallback("Ev1", messageEvent("C1", "channel", { user: SAM, text: "<@U066UCP4FS6> can you confirm?", ts: ago(1), thread_ts: root })));
+    await settle(t);
+    expect((await messages(t)).map((message) => [message.text, message.mentionsMe])).toEqual([["@Milad can you confirm?", true]]);
+    expect(await conversations(t)).toEqual([expect.objectContaining({ conversationKey: `th:C1:${root}`, slack: { channel: "C1", threadTs: root, following: true } })]);
+  });
 });
 
 describe("threads", () => {
