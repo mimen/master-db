@@ -5,7 +5,7 @@ import { createAiHandlers } from "../bridge/commands/ai";
 import { ConvexIngest } from "../bridge/convex-ingest";
 import { aiLane, OutboxBridge } from "../bridge/outbox";
 import { StatusPublisher } from "../bridge/state";
-import { PrecomputeBudget } from "../bridge/suggestions";
+import { PERSON_SUMMARY_BUDGET, PrecomputeBudget } from "../bridge/suggestions";
 import { loadAiSettings, loadGatewayKey, type AiConfig, type WhisperConfig } from "../config";
 import { OverlayDb } from "../db";
 import { buildToday, todayPort } from "../today/build";
@@ -13,12 +13,13 @@ import { startTodayWorker, type PendingBuild } from "../today/worker";
 import { WhisperService, type AudioSource } from "../whisper";
 import { loadProfile } from "./context";
 import { Gateway } from "./gateway";
+import { summarizePerson } from "./person-summary";
 import { AiService } from "./service";
 import { makeVaultSearch } from "./vault";
 
 /**
- * comma:ai, the Mini's model process: the ai outbox lane (suggestions, identify, feedback, transcription), the Today
- * build, and its own `ai` status row. It reads and writes only Convex, through the bridge ingest routes, and never
+ * comma:ai, the Mini's model process: the ai outbox lane (suggestions, identify, feedback, transcription), the
+ * aiBackground lane (suggestion precompute, person summaries), the Today build, and its own `ai` status row. It reads and writes only Convex, through the bridge ingest routes, and never
  * BlueBubbles, so it needs no BB_PASSWORD.
  */
 
@@ -97,6 +98,7 @@ export function startAi(deps: {
   });
   const whisper = deps.whisper ?? new WhisperService(config.whisper, db, storedAudio(ingest));
   const budget = new PrecomputeBudget(db, now);
+  const summaryBudget = new PrecomputeBudget(db, now, PERSON_SUMMARY_BUDGET);
   const status = new StatusPublisher({ key: AI_STATUS_KEY, ingest, now, report: () => {
     const transcription = whisper.availability();
     return {
@@ -106,7 +108,8 @@ export function startAi(deps: {
         ...(transcription.available ? {} : { whisperDetail: transcription.detail }) },
     };
   } });
-  const handlers = createAiHandlers({ ai, whisper, budget, now });
+  const handlers = createAiHandlers({ ai, whisper, budget, now, summaryBudget,
+    summarize: (port, personId, signal) => summarizePerson({ port, gateway, now }, personId, signal) });
   // A precompute drains in its own lane, so a user's suggestion or transcription never waits behind one.
   const outbox = new OutboxBridge({ config, ingest, client, now,
     lanes: [aiLane({ ingest, handlers }), aiLane({ ingest, handlers, lane: "aiBackground" })] });
@@ -118,7 +121,7 @@ export function startAi(deps: {
     build: (claim, signal) => buildToday({ gateway, profile: () => loadProfile(config.ai.vaultPath), store: db, port, now, log: console.log }, claim, signal),
   });
   return {
-    health: () => ({ suggestions: budget.health(), outbox: { inFlight: outbox.inFlight, lastExecutedAt: outbox.lastExecutedAt } }),
+    health: () => ({ suggestions: budget.health(), personSummaries: summaryBudget.health(), outbox: { inFlight: outbox.inFlight, lastExecutedAt: outbox.lastExecutedAt } }),
     flush: async () => { await status.flush(); await outbox.flush(); },
     stop: () => { today.stop(); outbox.stop(); status.stop(); },
   };

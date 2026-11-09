@@ -1,4 +1,4 @@
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { Redirect, router, Stack, useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -65,6 +65,8 @@ export default function ChatScreen(): React.JSX.Element | null {
       ? { guid: params.targetGuid, dateCreated: Number(params.targetDate) }
       : null;
   if (wide) return null;
+  // An email Today ranks reads in the Mail reader.
+  if (chat?.route.platform === "gmail") return <Redirect href={{ pathname: "/mail", params: { thread: chat.conversationId } }} />;
   // Room left of the action pill: ~70pt for the back button, ~44pt per action, ~32pt of pill padding.
   const titleMaxWidth = width - 70 - (agentEnabled ? 4 : 3) * 44 - 32;
 

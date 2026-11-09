@@ -56,7 +56,8 @@ typecheck, lint, and tests; builds web in a sibling directory; builds immutable 
 atomically activates web; restarts and health-checks the services; then publishes release
 pointers. The checked-in LaunchAgent installer gives the Mini processes `comma:server`,
 `comma:expo`, `comma:ai` and `comma:agent` argv identities. `comma:ai` (`server/ai/main.ts`) runs the
-`ai` outbox lane (suggestions, identify, feedback, Whisper transcription) and the Today build; it reads
+`ai` outbox lane (suggestions, identify, feedback, Whisper transcription), the `aiBackground` lane (suggestion
+precompute, person summaries) and the Today build; it reads
 and writes only Convex, needs no `BB_PASSWORD`, shares the Overlay file with `comma:server`, and logs to
 `~/Library/Logs/comma-ai.log`. `comma:agent` (`server/agent/`) runs the agent
 pane's Claude Agent SDK sessions; it idles without a heartbeat unless `COMMA_AGENT_ENABLED=true`

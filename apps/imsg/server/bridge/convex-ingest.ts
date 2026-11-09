@@ -49,6 +49,8 @@ export interface Bodies {
   aiThread: FunctionArgs<typeof internal.comma.agentContext.aiThread>;
   aiSentText: FunctionArgs<typeof internal.comma.agentContext.aiSentText>;
   agentAttachment: FunctionArgs<typeof internal.comma.agentContext.agentAttachment>;
+  personSummaryContext: FunctionArgs<typeof internal.comma.personSummaries.personSummaryContext>;
+  personSummaryPublish: FunctionArgs<typeof internal.comma.personSummaries.personSummaryPublish>;
 }
 export interface Results {
   account: BridgeAccount["accountId"];
@@ -71,6 +73,8 @@ export interface Results {
   aiThread: FunctionReturnType<typeof internal.comma.agentContext.aiThread>;
   aiSentText: FunctionReturnType<typeof internal.comma.agentContext.aiSentText>;
   agentAttachment: FunctionReturnType<typeof internal.comma.agentContext.agentAttachment>;
+  personSummaryContext: FunctionReturnType<typeof internal.comma.personSummaries.personSummaryContext>;
+  personSummaryPublish: FunctionReturnType<typeof internal.comma.personSummaries.personSummaryPublish>;
 }
 
 /** The kinds whose batches write for one account. */

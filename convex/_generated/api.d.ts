@@ -877,6 +877,7 @@ export declare const api: {
             | { kind: "clearSuggestionLearning" }
             | { kind: "identify" }
             | { attachmentGuid: string; kind: "transcribe" }
+            | { kind: "personSummary"; personId: Id<"people"> }
             | { kind: "markUnread"; messageGuid?: string }
             | { kind: "settle"; messageGuid?: string }
             | { kind: "unsettle"; messageGuid?: string }
@@ -1338,7 +1339,8 @@ export declare const api: {
             | { kind: "suggestionFeedback"; ok: true }
             | { kind: "clearSuggestionLearning"; ok: true }
             | { kind: "archive"; ok: true }
-            | { kind: "unarchive"; ok: true };
+            | { kind: "unarchive"; ok: true }
+            | { kind: "personSummary"; ok: true };
           status: "pending" | "claimed" | "sent" | "failed" | "unknown";
           updatedAt: number;
         } | null
@@ -1479,6 +1481,7 @@ export declare const api: {
             | { kind: "clearSuggestionLearning" }
             | { kind: "identify" }
             | { attachmentGuid: string; kind: "transcribe" }
+            | { kind: "personSummary"; personId: Id<"people"> }
             | { kind: "markUnread"; messageGuid?: string }
             | { kind: "settle"; messageGuid?: string }
             | { kind: "unsettle"; messageGuid?: string }
@@ -1929,7 +1932,8 @@ export declare const api: {
             | { kind: "suggestionFeedback"; ok: true }
             | { kind: "clearSuggestionLearning"; ok: true }
             | { kind: "archive"; ok: true }
-            | { kind: "unarchive"; ok: true };
+            | { kind: "unarchive"; ok: true }
+            | { kind: "personSummary"; ok: true };
           resultGuid?: string;
           route?:
             | {
@@ -1965,6 +1969,33 @@ export declare const api: {
         "public",
         { clientKey: string; retryKey: string },
         Id<"comma_outbox">
+      >;
+    };
+    personSummaries: {
+      get: FunctionReference<
+        "query",
+        "public",
+        { conversationId: Id<"comma_conversations"> },
+        {
+          name: string;
+          personId: Id<"people">;
+          platforms: Array<"imessage" | "slack" | "gmail">;
+          summary: {
+            basedOnAt: number;
+            generatedAt: number;
+            model: string;
+            points: Array<string>;
+            text: string;
+          } | null;
+          threads: Array<{
+            conversationId: Id<"comma_conversations">;
+            kind: "dm" | "group" | "channel" | "thread" | "emailThread";
+            lastMessageAt: number;
+            platform: "imessage" | "slack" | "gmail";
+            state: "needsYou" | "waiting";
+            title: string;
+          }>;
+        } | null
       >;
     };
     presence: {
@@ -2006,6 +2037,7 @@ export declare const api: {
             inInbox: boolean;
             subject: string;
             threadId: string;
+            unread?: number;
           };
           groupPhotoGuid?: string;
           groupPhotoStorageId?: Id<"_storage">;
@@ -2143,6 +2175,7 @@ export declare const api: {
               inInbox: boolean;
               subject: string;
               threadId: string;
+              unread?: number;
             };
             groupPhotoGuid?: string;
             groupPhotoStorageId?: Id<"_storage">;
@@ -2239,6 +2272,7 @@ export declare const api: {
               inInbox: boolean;
               subject: string;
               threadId: string;
+              unread?: number;
             };
             groupPhotoGuid?: string;
             groupPhotoStorageId?: Id<"_storage">;
@@ -2495,6 +2529,7 @@ export declare const api: {
             inInbox: boolean;
             subject: string;
             threadId: string;
+            unread?: number;
           };
           groupPhotoGuid?: string;
           groupPhotoStorageId?: Id<"_storage">;
@@ -4683,6 +4718,7 @@ export declare const internal: {
           organization?: string;
           personId?: Id<"people">;
           priority?: number | "high" | "normal" | "low";
+          summary?: string;
           tags: Array<string>;
         }>
       >;
@@ -4711,6 +4747,7 @@ export declare const internal: {
           }>;
           more: boolean;
           name: string;
+          summary?: string;
         } | null
       >;
       agentSearch: FunctionReference<
@@ -5704,6 +5741,7 @@ export declare const internal: {
             | { kind: "clearSuggestionLearning" }
             | { kind: "identify" }
             | { attachmentGuid: string; kind: "transcribe" }
+            | { kind: "personSummary"; personId: Id<"people"> }
             | { kind: "markUnread"; messageGuid?: string }
             | { kind: "settle"; messageGuid?: string }
             | { kind: "unsettle"; messageGuid?: string }
@@ -6154,7 +6192,8 @@ export declare const internal: {
             | { kind: "suggestionFeedback"; ok: true }
             | { kind: "clearSuggestionLearning"; ok: true }
             | { kind: "archive"; ok: true }
-            | { kind: "unarchive"; ok: true };
+            | { kind: "unarchive"; ok: true }
+            | { kind: "personSummary"; ok: true };
           resultGuid?: string;
           route?:
             | {
@@ -6629,7 +6668,8 @@ export declare const internal: {
             | { kind: "suggestionFeedback"; ok: true }
             | { kind: "clearSuggestionLearning"; ok: true }
             | { kind: "archive"; ok: true }
-            | { kind: "unarchive"; ok: true };
+            | { kind: "unarchive"; ok: true }
+            | { kind: "personSummary"; ok: true };
           resultGuid?: string;
           status: "sent" | "failed" | "unknown";
         },
@@ -6764,6 +6804,7 @@ export declare const internal: {
             | { kind: "clearSuggestionLearning" }
             | { kind: "identify" }
             | { attachmentGuid: string; kind: "transcribe" }
+            | { kind: "personSummary"; personId: Id<"people"> }
             | { kind: "markUnread"; messageGuid?: string }
             | { kind: "settle"; messageGuid?: string }
             | { kind: "unsettle"; messageGuid?: string }
@@ -7214,7 +7255,8 @@ export declare const internal: {
             | { kind: "suggestionFeedback"; ok: true }
             | { kind: "clearSuggestionLearning"; ok: true }
             | { kind: "archive"; ok: true }
-            | { kind: "unarchive"; ok: true };
+            | { kind: "unarchive"; ok: true }
+            | { kind: "personSummary"; ok: true };
           resultGuid?: string;
           route?:
             | {
@@ -7244,6 +7286,49 @@ export declare const internal: {
         "internal",
         { clientKey: string },
         null
+      >;
+    };
+    personSummaries: {
+      due: FunctionReference<
+        "mutation",
+        "internal",
+        { personId: Id<"people"> },
+        null
+      >;
+      personSummaryContext: FunctionReference<
+        "mutation",
+        "internal",
+        { personId: Id<"people"> },
+        {
+          lines: Array<{
+            at: number;
+            conversation: string;
+            conversationId: Id<"comma_conversations">;
+            fromMe: boolean;
+            kind: "dm" | "group";
+            platform: "imessage" | "slack" | "gmail";
+            sender: string;
+            text: string;
+          }>;
+          name: string;
+          notes?: string;
+          organization?: string;
+        } | null
+      >;
+      personSummaryPublish: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          personId: Id<"people">;
+          summary: {
+            basedOnAt: number;
+            generatedAt: number;
+            model: string;
+            points: Array<string>;
+            text: string;
+          };
+        },
+        boolean
       >;
     };
     photos: {

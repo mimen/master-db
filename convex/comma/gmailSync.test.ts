@@ -154,14 +154,33 @@ describe("the backfill", () => {
     expect(await clears(t)).toEqual([]);
   });
 
-  test("email threads stay out of the Messages list and Today's candidates", async () => {
+  test("email stays out of the Messages list; Today takes only the People lens, a known sender owed a reply", async () => {
     seedMailbox();
     const { t, as } = await setup();
     await connect(t, as);
     const listed = await as.query(api.comma.queries.listConversations, { paginationOpts: { numItems: 50, cursor: null } });
     expect(listed.page).toEqual([]);
-    const candidates = await t.mutation(internal.comma.today.todayCandidates, { cursor: null, numItems: 50 });
-    expect(candidates.page).toEqual([]);
+    const sam = (await thread(t, "t-sam"))!;
+    const candidates = async () => (await t.mutation(internal.comma.today.todayCandidates, { cursor: null, numItems: 50 })).page;
+    expect((await candidates()).map((row) => [row.conversationId, row.platform, row.state, row.unreadCount])).toEqual([[sam._id, "gmail", "needsYou", 1]]);
+
+    google.relabel("t-sam", { remove: ["INBOX"] });
+    await push(t, await google.oidcToken());
+    await settle(t);
+    expect(await candidates()).toEqual([]);
+  });
+
+  test("a thread is unread while Gmail labels a message UNREAD; reading it in Gmail clears it", async () => {
+    seedMailbox();
+    const { t, as } = await setup();
+    await connect(t, as);
+    const sam = (await thread(t, "t-sam"))!;
+    const view = () => as.query(api.comma.queries.getConversation, { conversationId: sam._id });
+    expect(await view()).toMatchObject({ unreadCount: 1, flags: { unread: true } });
+    google.relabel("t-sam", { remove: ["UNREAD"] });
+    await push(t, await google.oidcToken());
+    await settle(t);
+    expect(await view()).toMatchObject({ unreadCount: 0, flags: { unread: false } });
   });
 });
 

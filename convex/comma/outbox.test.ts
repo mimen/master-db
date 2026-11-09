@@ -405,7 +405,7 @@ test("renewal is fenced, cannot resurrect an expired lease, and prevents expiry 
 
 test("every new kind has the specified expiry policy and legacy claims remain valid", async () => {
   const { t, c } = await setup();
-  const retryable = ["pin", "mute", "markRead", "markUnread", "settle", "unsettle", "rename", "typing", "clearSuggestionLearning", "suggestions", "identify", "transcribe", "archive", "unarchive"];
+  const retryable = ["pin", "mute", "markRead", "markUnread", "settle", "unsettle", "rename", "typing", "clearSuggestionLearning", "suggestions", "identify", "transcribe", "archive", "unarchive", "personSummary"];
   expect(Object.keys(AUTO_RETRY).filter((kind) => AUTO_RETRY[kind as keyof typeof AUTO_RETRY]).sort()).toEqual(retryable.sort());
   const storageId = await t.run((ctx) => ctx.storage.store(new Blob(["attachment"])));
   const payloads: CommaOutboxPayload[] = [

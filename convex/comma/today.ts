@@ -1,6 +1,7 @@
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 
+import { conversationFlags } from "../../apps/imsg/shared/chat-state";
 import { todayCandidateState, todayWindow } from "../../apps/imsg/shared/today";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
@@ -8,6 +9,7 @@ import { assertAllowed } from "../_lib/authed";
 import { todayCandidate, todayMode, todayQueue, todayRun, todayView, type TodayCandidate, type TodayMode, type TodayRun } from "../schema/comma/validators";
 
 import { sameSecret } from "./bridgeAuth";
+import { conversationKind } from "./conversationIdentity";
 import { listReader, withConversationState } from "./queries";
 
 /**
@@ -149,7 +151,11 @@ export const todayClaim = internalMutation({
   },
 });
 
-/** One page of build candidates, newest first, projected the way listConversations is. */
+/**
+ * One page of build candidates, newest first, projected the way listConversations is. A row that could not be a
+ * candidate even with a known sender (a Slack channel's chatter, a thread Milad doesn't follow, mail sent to a list,
+ * an old Waiting) is dropped on its flags alone, before the projection's people and CRM reads.
+ */
 export const todayCandidates = internalMutation({
   args: { cursor: v.union(v.string(), v.null()), numItems: v.number() },
   returns: v.object({ page: v.array(todayCandidate), continueCursor: v.string(), isDone: v.boolean() }),
@@ -158,15 +164,15 @@ export const todayCandidates = internalMutation({
     const result = await ctx.db.query("comma_conversations")
       .withIndex("by_lastMessageAt")
       .order("desc")
-      // Email joins Today with the prioritizer (P1); until then the Mail workspace holds it.
-      .filter((q) => q.and(q.neq(q.field("lastMessage"), undefined), q.neq(q.field("kind"), "emailThread")))
+      .filter((q) => q.and(q.neq(q.field("lastMessage"), undefined), q.neq(q.field("slack.following"), false)))
       .paginate({ cursor, numItems });
     const read = listReader(ctx);
     const page: TodayCandidate[] = [];
     for (const conversation of result.page) {
+      if (!await mayBeCandidate(ctx, conversation, now)) continue;
       const view = await withConversationState(ctx, conversation, read);
       const platform = view.platform ?? "imessage";
-      const state = todayCandidateState({ ...view, platform }, now);
+      const state = todayCandidateState({ ...view, platform, bulk: view.gmail?.bulk }, now);
       if (!state) continue;
       page.push({
         conversationId: view._id, title: view.displayName, isGroup: view.isGroup, kind: view.kind, platform, state,
@@ -176,6 +182,16 @@ export const todayCandidates = internalMutation({
     return { page, continueCursor: result.continueCursor, isDone: result.isDone };
   },
 });
+
+async function mayBeCandidate(ctx: QueryCtx, conversation: Doc<"comma_conversations">, now: number): Promise<boolean> {
+  const state = await ctx.db.query("comma_conversation_state")
+    .withIndex("by_conversationId", (q) => q.eq("conversationId", conversation._id)).unique();
+  const platform = conversation.platform ?? "imessage";
+  const { flags } = conversationFlags({ platform, kind: conversationKind(conversation), following: conversation.slack?.following },
+    state ?? undefined, conversation.lastMessage ?? null, conversation.lastMessageAt, 0);
+  return todayCandidateState({ platform, flags, known: true, isSpam: conversation.isSpam, bulk: conversation.gmail?.bulk,
+    lastMessageAt: conversation.lastMessageAt }, now) !== null;
+}
 
 /** building(attempt) → done or failed. A replay of the outcome that already landed answers true and writes nothing. */
 export const todayFinish = internalMutation({

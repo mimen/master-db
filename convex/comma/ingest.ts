@@ -50,6 +50,8 @@ const ROUTES = {
   todayClaim: internal.comma.today.todayClaim,
   todayCandidates: internal.comma.today.todayCandidates,
   todayFinish: internal.comma.today.todayFinish,
+  personSummaryContext: internal.comma.personSummaries.personSummaryContext,
+  personSummaryPublish: internal.comma.personSummaries.personSummaryPublish,
 } as const;
 
 export type IngestKind = keyof typeof ROUTES;

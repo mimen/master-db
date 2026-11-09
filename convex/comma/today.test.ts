@@ -311,4 +311,31 @@ describe("todayCandidates", () => {
       { title: "old-needs", state: "needsYou", platform: "imessage" },
     ]);
   });
+
+  test("Slack joins when it needs Milad: DMs and threads owed a reply, a channel mention; chatter, unfollowed threads and his own last word stay out", async () => {
+    const { t } = setup();
+    const now = Date.now();
+    const slack = (key: string, kind: "dm" | "channel" | "thread", over: Partial<Doc<"comma_conversations">> = {}) => conversation(key, {
+      platform: "slack", kind, isGroup: kind !== "dm", primaryChatGuid: undefined, chatGuids: undefined,
+      slack: { channel: `C-${key}`, ...(kind === "thread" ? { threadTs: "1.0" } : {}) }, participants: [{ address: `slack:U-${key}`, name: null }],
+      lastMessage: { guid: `last-${key}`, text: "hi", dateCreated: now - 1000, isFromMe: false, senderName: null, hasAttachments: false }, ...over,
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.insert("comma_conversations", slack("dm", "dm"));
+      await ctx.db.insert("comma_conversations", slack("chatter", "channel"));
+      await ctx.db.insert("comma_conversations", slack("mention", "channel", {
+        lastMessage: { guid: "last-mention", text: "@Milad?", dateCreated: now - 1000, isFromMe: false, senderName: null, hasAttachments: false, mentionsMe: true },
+      }));
+      await ctx.db.insert("comma_conversations", slack("mine", "thread", { slack: { channel: "C-mine", threadTs: "1.0", following: true } }));
+      await ctx.db.insert("comma_conversations", slack("theirs", "thread", { slack: { channel: "C-theirs", threadTs: "1.0", following: false } }));
+      await ctx.db.insert("comma_conversations", slack("replied", "thread", {
+        slack: { channel: "C-replied", threadTs: "1.0", following: true },
+        lastMessage: { guid: "last-replied", text: "done", dateCreated: now - 1000, isFromMe: true, senderName: null, hasAttachments: false },
+      }));
+    });
+    const { page } = await t.mutation(internal.comma.today.todayCandidates, { cursor: null, numItems: 50 });
+    expect(page.map(({ kind, state }) => [kind, state]).sort()).toEqual([
+      ["channel", "needsYou"], ["dm", "needsYou"], ["thread", "needsYou"],
+    ]);
+  });
 });

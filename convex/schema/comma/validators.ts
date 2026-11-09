@@ -119,6 +119,8 @@ export const gmailThreadFields = v.object({
   threadId: v.string(), subject: v.string(), inInbox: v.boolean(), bulk: v.boolean(),
   /** Why Gmail refused Comma's last archive or unarchive, which Comma then took back. The thread's next sync clears it. */
   archiveError: v.optional(v.string()),
+  /** Messages carrying Gmail's UNREAD label; absent when none do. Gmail is the source, so reading there clears it. */
+  unread: v.optional(v.number()),
 });
 
 export const conversationFields = {
@@ -528,6 +530,8 @@ export const aiPayload = v.union(
   v.object({ kind: v.literal("clearSuggestionLearning") }),
   v.object({ kind: v.literal("identify") }),
   v.object({ kind: v.literal("transcribe"), attachmentGuid: v.string() }),
+  /** Convex's own, queued once a person's messages go quiet; it counts against the AI process's daily cap. */
+  v.object({ kind: v.literal("personSummary"), personId: v.id("people") }),
 );
 
 /** Triage kinds from clients older than comma/triage. Convex applies them; no lane executes them. */
@@ -549,7 +553,7 @@ export const outboxPayload = v.union(
 
 /**
  * The executor a command waits for. One lane per messaging platform, one for model work someone asked for, and
- * `aiBackground` for model work nobody waits on (suggestion precompute), so it never holds back a user's command.
+ * `aiBackground` for model work nobody waits on (suggestion precompute, person summaries), so it never holds back a user's command.
  */
 export const outboxLane = v.union(v.literal("imessage"), v.literal("slack"), v.literal("gmail"), v.literal("ai"), v.literal("aiBackground"));
 
@@ -639,6 +643,7 @@ export const commandResult = v.union(
   okResult("pin"), okResult("mute"), okResult("rename"), okResult("cancelScheduled"),
   okResult("participant"), okResult("leaveGroup"), okResult("deleteChat"), okResult("sendScheduledNow"),
   okResult("typing"), okResult("suggestionFeedback"), okResult("clearSuggestionLearning"), okResult("archive"), okResult("unarchive"),
+  okResult("personSummary"),
 );
 export type CommandResult = Infer<typeof commandResult>;
 
@@ -1052,3 +1057,22 @@ export type TodayRun = Infer<typeof todayRun>;
 export type TodayMode = Infer<typeof todayMode>;
 export type TodayView = Infer<typeof todayView>;
 export type TodayCandidate = Infer<typeof todayCandidate>;
+
+/**
+ * A person's written summary across platforms, rebuilt by the AI process once their messages go quiet. `dueAt` is
+ * set exactly while a rebuild is scheduled; `conversationId` is where their newest real message arrived.
+ */
+export const personSummary = v.object({
+  text: v.string(),
+  points: v.array(v.string()),
+  model: v.string(),
+  generatedAt: v.number(),
+  /** The newest message the summary read. */
+  basedOnAt: v.number(),
+});
+export const personSummaryFields = {
+  personId: v.id("people"),
+  conversationId: v.optional(v.id("comma_conversations")),
+  dueAt: v.optional(v.number()),
+  summary: v.optional(personSummary),
+};

@@ -28,6 +28,7 @@ import { showToast } from "@/lib/toast";
 import { AgentInput, type SendIntent } from "./agent-input";
 import { TranscriptRowView, WorkingStatus, type TranscriptActions } from "./agent-transcript";
 import { ChatSwitcher } from "./chat-switcher";
+import { PersonSummary } from "./person-summary";
 import { useLiveFollow } from "./use-live-follow";
 import { useMarkSeen, usePaneSelection } from "./use-pane-chat";
 import { resolveComposerDispatchMode } from "./vendor/composer-dispatch";
@@ -168,6 +169,7 @@ export function AgentPane({ conversationId, requestedChatId, onClose }: {
         </View>
       ) : null}
       <ScrollView {...scrollProps} style={styles.scroll} contentContainerStyle={styles.transcript} keyboardShouldPersistTaps="handled">
+        <PersonSummary conversationId={conversationId} />
         {rows.length === 0 ? (
           <Text style={[styles.empty, { color: theme.textTertiary, fontSize: type.body }]}>
             Ask about {name}. The agent reads the recent messages and can draft a reply.

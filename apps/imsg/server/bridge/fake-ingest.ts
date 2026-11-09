@@ -24,6 +24,7 @@ export class FakeIngest extends ConvexIngest {
     bridge: { privateApi: false, emojiReactions: false } };
   sent: Results["aiSentText"] = [];
   attachment: Results["agentAttachment"] = null;
+  person: Results["personSummaryContext"] = null;
   readonly uploads: Array<{ bytes: number; contentType: string }> = [];
 
   override async upload(bytes: Uint8Array, contentType: string): Promise<string> {
@@ -58,6 +59,8 @@ export class FakeIngest extends ConvexIngest {
       aiThread: this.thread,
       aiSentText: this.sent,
       agentAttachment: this.attachment,
+      personSummaryContext: this.person,
+      personSummaryPublish: true,
     };
     return results[kind];
   }
