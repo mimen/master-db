@@ -8049,6 +8049,7 @@ export declare const internal: {
         "internal",
         {
           accountId: Id<"comma_accounts">;
+          attempt?: number;
           isNew: boolean;
           message: {
             clientKey?: string;
