@@ -21,6 +21,7 @@ import { useChatActions } from "@/hooks/use-chat-actions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useRowSettle } from "@/hooks/use-triage-actions";
 import { markOpenStart } from "@/lib/open-timing";
+import { usePendingSends } from "@/lib/pending-sends";
 import { useTheme } from "@/hooks/use-theme";
 import { Springs } from "@/constants/springs";
 import { TriageGeometry } from "@/constants/triage-theme";
@@ -145,6 +146,8 @@ function ChatRowInner({
   const [moreHovered, setMoreHovered] = useState(false);
   const actionsVisible = compact && (hovered || focusedWithin || keyboardFocused);
   const last = chat.lastMessage;
+  // A send of this session's that did not go out marks the row until it is retried or discarded.
+  const sendFailed = usePendingSends(chat.conversationId).some((m) => m.sendState === "failed" || m.sendState === "notSent");
   // One rule for the chip and the swipe alike: the row offers Settle exactly
   // when the toggle has something to do, whatever lens the list is showing.
   const settleAction = settleActionFor(chat);
@@ -228,7 +231,7 @@ function ChatRowInner({
       ref={contextRef as never}
       role="button"
       // The dot is drawn, so unread has to be spoken here too.
-      aria-label={[chat.displayName, chat.subject, chat.flags.unread || chat.unreadCount > 0 ? "unread" : null, chat.agent ? AGENT_ATTENTION[chat.agent.attention].spoken : null, ...spoken].filter(Boolean).join(", ")}
+      aria-label={[chat.displayName, chat.subject, sendFailed ? "not delivered" : null, chat.flags.unread || chat.unreadCount > 0 ? "unread" : null, chat.agent ? AGENT_ATTENTION[chat.agent.attention].spoken : null, ...spoken].filter(Boolean).join(", ")}
       aria-selected={selected}
       onPress={() => onOpen(chat)}
       onPressIn={() => markOpenStart(chat.conversationId)}
@@ -304,6 +307,9 @@ function ChatRowInner({
           </Text>
         ) : null}
         <View style={styles.messageRow}>
+          {sendFailed ? (
+            <Ionicons testID="row-send-failed" name="alert-circle" size={compact ? 14 : 17} color={theme.destructive} style={styles.sendFailed} />
+          ) : null}
           <Text
             numberOfLines={chat.subject ? 1 : 2}
             style={[styles.messagePreview, { color: theme.textSecondary, fontSize: compact ? 12.5 : 15, lineHeight: compact ? 17 : 20 }]}
@@ -487,6 +493,7 @@ const styles = StyleSheet.create({
   messageSignal: {
     alignSelf: "flex-start",
   },
+  sendFailed: { marginTop: 1.5 },
   messagePreview: {
     flex: 1,
     minWidth: 0,

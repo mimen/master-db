@@ -280,3 +280,8 @@ describe("native menu bridge", () => {
     expect(closed).toBe(true);
   });
 });
+
+test("the shell grants the remote page only the opener command it invokes, open_url, and only for web, mail and phone links", async () => {
+  const capability = await Bun.file(new URL("../../../desktop/src-tauri/capabilities/default.json", import.meta.url)).json() as { permissions: string[] };
+  expect(capability.permissions.filter((permission) => permission.startsWith("opener:")).sort()).toEqual(["opener:allow-default-urls", "opener:allow-open-url"]);
+});

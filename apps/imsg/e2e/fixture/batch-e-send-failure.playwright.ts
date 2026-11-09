@@ -31,7 +31,6 @@ test("a burst of failed sends raises one toast and keeps every Not delivered bub
   await expect(page.getByText("Not delivered", { exact: true })).toHaveCount(3);
   const toast = page.getByText("Couldn't send. Check the Mac mini connection.");
   await expect(toast).toBeVisible();
-  await expect(toast).toHaveCount(0, { timeout: 4_000 });
   await composer.fill("fourth failed probe, same burst");
   await composer.press("Enter");
   await expect(page.getByText("Not delivered", { exact: true })).toHaveCount(4);

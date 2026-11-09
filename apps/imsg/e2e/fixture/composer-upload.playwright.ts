@@ -28,6 +28,8 @@ test("staged files upload through Convex with the caption on the first attachmen
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(thread.getByText("first.txt", { exact: true })).toBeVisible();
   await expect(thread.getByText("second.txt", { exact: true })).toBeVisible();
+  // Each file's bubble draws on the tap, before its upload queues, so wait for both commands.
+  await expect.poll(() => commands.length).toBe(2);
   expect(commands).toEqual([
     expect.objectContaining({ filename: "first.txt", caption: "Here are the notes", isAudioMessage: false }),
     expect.objectContaining({ filename: "second.txt", isAudioMessage: false }),

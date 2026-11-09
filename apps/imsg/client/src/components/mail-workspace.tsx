@@ -52,7 +52,7 @@ import { api } from "@/lib/api";
 import { markChatUnread, readChat, undoLastAction } from "@/lib/chat-actions";
 import { hasEveryWord, normalizeSearchQuery } from "@/lib/conversation-search";
 import { conversationToChat } from "@/lib/convex-adapters";
-import { commaApi } from "@/lib/convex-api";
+import { commaApi, pendingSendsApi } from "@/lib/convex-api";
 import { formatReceiptTime } from "@/lib/format";
 import { headerFace, toolbarTitle } from "@/lib/header-font";
 import { openExternalUrl } from "@/lib/external-link";
@@ -64,6 +64,7 @@ import { openDeferMenu } from "@/lib/later";
 import { inLens, regularSenders, type MailLens } from "@/lib/mail-lens";
 import { setMailSelection } from "@/lib/mail-selection";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
+import { messagingCommandError } from "@/lib/messaging-api";
 import { showToast } from "@/lib/toast";
 
 /**
@@ -553,6 +554,7 @@ export function EmailReader({ conversationId, subject, regularSenders: listed, o
             onLayout={message._id === initial.target ? land : undefined}
             onCompose={message.gmail && !pendingClientKey(message.guid) ? (mode) => compose(mode, message) : undefined}
             withFiles={message._id === replyTarget?._id && files.length > 0}
+            onEditResend={pendingClientKey(message.guid) ? () => compose("reply", messages.find((m) => m.guid === message.replyToGuid) ?? replyTarget, { text: message.text }) : undefined}
           />
         ))}
       </ScrollView>
@@ -588,7 +590,7 @@ const names = (addresses: readonly { address: string; name: string | null }[]) =
  * One message: a one-line row when folded, the whole email when open. Its header folds it again. Reply, Reply all and
  * Forward sit in the header of the newest message; an older one shows them while hovered, or once tapped.
  */
-function EmailCard({ message, open, latest, imagesByDefault, onToggle, onLayout, onCompose, withFiles }: {
+function EmailCard({ message, open, latest, imagesByDefault, onToggle, onLayout, onCompose, onEditResend, withFiles }: {
   message: Email;
   open: boolean;
   latest: boolean;
@@ -599,6 +601,8 @@ function EmailCard({ message, open, latest, imagesByDefault, onToggle, onLayout,
   onCompose?: (mode: CardAction) => void;
   /** Offer Reply all with the thread's files. */
   withFiles: boolean;
+  /** A reply of the user's that did not go out: opens the composer with what was written. */
+  onEditResend?: () => void;
 }): JSX.Element {
   const theme = useTheme();
   const [asked, setAsked] = useState(false);
@@ -669,7 +673,7 @@ function EmailCard({ message, open, latest, imagesByDefault, onToggle, onLayout,
           </View>
         ) : null}
       </View>
-      {message.sendState ? <SendState clientKey={pendingClientKey(message.guid) ?? ""} state={message.sendState} /> : null}
+      {message.sendState ? <SendState clientKey={pendingClientKey(message.guid) ?? ""} state={message.sendState} onEdit={onEditResend} /> : null}
       {html !== undefined && Platform.OS === "web" ? (
         <>
           {blocked > 0 && !images ? (
@@ -773,15 +777,36 @@ function useInlineImages(attachments: readonly Attachment[]): Readonly<Record<st
   return urls;
 }
 
-/** Where an email that has not landed stands. An unknown outcome is never offered for a resend. */
-function SendState({ clientKey, state }: { clientKey: string; state: NonNullable<Email["sendState"]> }): JSX.Element {
+/**
+ * Where an email that has not landed stands, and what to do with one that did not go out: Retry, Edit and resend, or
+ * Discard. An unknown outcome is never offered for a Retry; it may have gone.
+ */
+function SendState({ clientKey, state, onEdit }: { clientKey: string; state: NonNullable<Email["sendState"]>; onEdit?: () => void }): JSX.Element {
   const theme = useTheme();
   const [row] = useQuery(commaApi.outboxStatusFor, state === "failed" ? { clientKeys: [clientKey] } : "skip") ?? [];
+  const stranded = state === "failed" || state === "notSent";
   const copy = state === "queued" || state === "sending" ? "Sending…"
     : state === "notSent" ? "Not sent. Nothing took it in time."
       : row?.status === "unknown" ? "Not sure this went through. Check Sent in Gmail before sending again."
         : `Couldn't send${row?.error ? `: ${row.error}` : "."}`;
-  return <Text style={[styles.sendState, { color: state === "failed" || state === "notSent" ? theme.destructive : theme.textTertiary }]}>{copy}</Text>;
+  const run = (change: (client: typeof import("@/lib/identity")["convexClient"]) => Promise<unknown>, fallback: string) =>
+    void import("@/lib/identity").then(({ convexClient }) => change(convexClient)).catch((error: unknown) => showToast(messagingCommandError(error, fallback)));
+  const discard = () => run((client) => client.mutation(pendingSendsApi.cancelSend, { clientKey }), "Couldn't discard it.");
+  const actions = !stranded ? [] : [
+    ...(row?.status === "unknown" ? [] : [{ label: "Retry", onPress: () => run((client) => client.mutation(pendingSendsApi.retrySend, { clientKey, retryKey: `send-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }), "Couldn't send it again.") }]),
+    ...(onEdit ? [{ label: "Edit and resend", onPress: () => { onEdit(); discard(); } }] : []),
+    { label: "Discard", onPress: discard },
+  ];
+  return (
+    <View style={styles.sendStateRow}>
+      <Text style={[styles.sendState, { color: stranded ? theme.destructive : theme.textTertiary }]}>{copy}</Text>
+      {actions.map((action) => (
+        <Pressable key={action.label} accessibilityRole="button" onPress={action.onPress} hitSlop={6}>
+          <Text style={[styles.sendState, styles.sendAction, { color: theme.accent }]}>{action.label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
 }
 
 /** The cleaned HTML in a sandboxed iframe that runs no scripts, its quotes folded, sized to its content as they open. */
@@ -837,6 +862,8 @@ const styles = StyleSheet.create({
   archiveError: { borderBottomWidth: StyleSheet.hairlineWidth, fontSize: 12.5, paddingHorizontal: 22, paddingVertical: 8 },
   column: { alignSelf: "center", maxWidth: READER_WIDTH, width: "100%" },
   sendState: { fontSize: 12.5 },
+  sendStateRow: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  sendAction: { fontWeight: "600" },
   cards: { gap: 12, padding: 20 },
   card: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, gap: 12, padding: 16 },
   cardHead: { alignItems: "flex-start", flexDirection: "row", gap: 8 },

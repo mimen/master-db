@@ -52,8 +52,19 @@ export async function writeSlackFiles(
   if (downloads.length) await ctx.scheduler.runAfter(0, internal.comma.slackFiles.downloadFiles, { accountId, downloads });
 }
 
-/** The file, or null when Slack won't give it: an error, a size over the cap, or its sign-in page in place of the file. */
+/** Whether Slack itself serves this URL. A file Slack only links to lives on its own host, which must never be sent the token. */
+export function isSlackFileUrl(url: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(url);
+    return protocol === "https:" && (hostname === "slack.com" || hostname.endsWith(".slack.com"));
+  } catch {
+    return false;
+  }
+}
+
+/** The file, or null when it isn't Slack's to give or Slack won't give it: another host, an error, a size over the cap, or its sign-in page in place of the file. */
 async function fetchFile(url: string, token: string, mimeType: string | undefined): Promise<Blob | null> {
+  if (!isSlackFileUrl(url)) return null;
   const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (response.status === 429) throw new SlackApiError("files", "ratelimited", Number(response.headers.get("Retry-After") ?? "30"));
   if (!response.ok || Number(response.headers.get("Content-Length") ?? 0) > MAX_FILE_BYTES) return null;

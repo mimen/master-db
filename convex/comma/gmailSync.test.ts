@@ -50,7 +50,18 @@ async function setup() {
 type T = Awaited<ReturnType<typeof setup>>["t"];
 type As = Awaited<ReturnType<typeof setup>>["as"];
 
-const settle = (t: T) => t.finishAllScheduledFunctions(vi.runAllTimers);
+/**
+ * Runs scheduled functions one at a time. convex-test 0.0.38 lets an action's storage.store write into whichever
+ * transaction another concurrently running function holds, so two at once (a backfill and a file download) can
+ * drop a download. Ends once no job is pending: a job whose timer fired stays pending until its callback starts.
+ */
+async function settle(t: T): Promise<void> {
+  for (let round = 0; round < 200; round++) {
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersToNextTimer());
+    const jobs = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+    if (!jobs.some((job) => job.state.kind === "pending" || job.state.kind === "inProgress")) return;
+  }
+}
 
 /** Settings' Connect through Google's consent; connecting starts the backfill and the watch, run to the end here. */
 async function connect(t: T, as: As) {

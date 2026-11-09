@@ -876,8 +876,16 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     },
     "comma/pendingSends:cancelSend": async (args) => {
       const clientKey = String(args.clientKey);
+      const discarded = mailWorld.discard(clientKey);
+      if (discarded !== null) return discarded;
       const receipt = receipts.get(clientKey);
       if (!receipt) return true;
+      // A send that did not go out is discarded, as production's cancelSend does.
+      if (receipt.status === "failed" || receipt.status === "unknown") {
+        receipts.delete(clientKey);
+        temps.delete(clientKey);
+        return true;
+      }
       const held = mini.held.get(clientKey);
       if (receipt.status !== "pending" || !held) return false;
       clearTimeout(held.timer);
@@ -891,6 +899,8 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
       const retryKey = String(args.retryKey);
       const retried = receipts.get(retryKey);
       if (retried) return retried.id;
+      const mailRetry = mailWorld.retry(clientKey, retryKey);
+      if (mailRetry !== null) return mailRetry;
       const sendOf = sendPayloads.get(clientKey);
       if (!sendOf || receipts.get(clientKey)?.status !== "failed") throw new FixtureError("Only a send that did not go out can be retried", 400);
       temps.delete(clientKey);
@@ -925,10 +935,11 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     if (body.loseNextAnswerMs !== undefined) slackWorld.loseNextAnswer(body.loseNextAnswerMs);
     return c.json({ ok: true, conversationId: fixtureConversationId(body.seedChannel ? SLACK_CHANNEL : SLACK_DM) });
   });
-  // Makes the next email send's answer get lost (unknown until the check finds it), or Gmail refuse the next archive; seeds the
+  // Makes the next email send's answer get lost (unknown until the check finds it), Gmail refuse the next send or archive; seeds the
   // invoice thread, or connects both mailboxes.
   app.post("/__fixture/mail", async (c) => {
-    const body = await c.req.json<{ loseNextAnswerMs?: number; refuseNextArchive?: string; longThread?: boolean; invoice?: boolean; mailboxes?: boolean }>();
+    const body = await c.req.json<{ loseNextAnswerMs?: number; refuseNextArchive?: string; refuseNextSend?: string; longThread?: boolean; invoice?: boolean; mailboxes?: boolean }>();
+    if (body.refuseNextSend !== undefined) mailWorld.refuseNextSend(body.refuseNextSend);
     if (body.loseNextAnswerMs !== undefined) mailWorld.loseNextAnswer(body.loseNextAnswerMs);
     if (body.invoice) mailWorld.seedInvoice();
     // Both mailboxes connected, as Settings shows them after Connect.

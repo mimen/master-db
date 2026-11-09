@@ -86,3 +86,10 @@ test("failed and unknown results never acknowledge a send, navigate, or report s
     expect(succeeded).toBe(false);
   }
 });
+
+test("a refusal Convex explains shows its reason; anything else shows the fallback", () => {
+  const { ConvexError } = require("convex/values") as typeof import("convex/values");
+  expect(messagingCommandError(new ConvexError("Not in Comma's Slack yet"), "Couldn't send.")).toBe("Not in Comma's Slack yet");
+  expect(messagingCommandError(new ConvexError({ message: "The files are over Gmail's 25 MB limit" }), "Couldn't send.")).toBe("The files are over Gmail's 25 MB limit");
+  expect(messagingCommandError(new Error("[CONVEX M(comma/outbox:enqueue)] Server Error"), "Couldn't send.")).toBe("Couldn't send.");
+});

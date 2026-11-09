@@ -6,6 +6,11 @@ on:
     paths:
       - "apps/imsg/**"
       - "bun.lock"
+      # The Mini's processes and the web bundle compile these Convex modules in, so a change to one must
+      # reach the Mini. apps/imsg/scripts/deploy-paths.test.ts fails when the code imports one not listed.
+      - "convex/comma/conversationIdentity.ts"
+      - "convex/comma/routeSupport.ts"
+      - "convex/schema/comma/validators.ts"
   workflow_dispatch: {}
 # deploy.sh mutates the live checkout in place, so overlapping runs would
 # corrupt each other (one job's `git checkout -- .` kills another's build).

@@ -167,3 +167,19 @@ test("siblings and the conversation row follow the Convex conversation each chat
     participants: [{ address: "+15550001111", name: "Alex" }] });
   expect(writer.conversation("iMessage;-;missing", names)).toBeUndefined();
 });
+
+test("a message BlueBubbles can never read is dropped after a few reads, and the messages behind it still land", async () => {
+  const { raw, bb, ingest, writer } = fixture();
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  spyOn(console, "warn").mockImplementation(() => {});
+  const live = new LiveBridge(writer);
+  stops.push(() => { live.stop(); log.mockRestore(); });
+  await live.flush();
+  bb.emit({ kind: "new-message", message: { guid: "ghost", chats: [{ guid: CHAT }] } });
+  bb.emit({ kind: "new-message", message: raw });
+  await live.flush();
+  expect(ingest.calls.filter((call) => call.kind === "messages").flatMap((call) => call.body.messages.map((row) => row.guid))).toEqual(["m1"]);
+  for (let read = 0; read < 10 && live.pending; read++) await live.flush();
+  expect(live.pending).toBe(0);
+  expect(log.mock.calls.some(([line]) => String(line).includes("dropping ghost"))).toBe(true);
+});
