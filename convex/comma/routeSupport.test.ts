@@ -36,7 +36,8 @@ describe("a Slack route", () => {
     expect(unsupportedReason(slack, false, { kind: "unsend", messageGuid: "D1:1.0" })).toBeNull();
     expect(unsupportedReason(slack, false, { kind: "react", messageGuid: "D1:1.0", reaction: "love", remove: false })).toBe("Slack can't send that reaction");
     expect(unsupportedReason(slack, false, { kind: "delete", messageGuid: "D1:1.0" })).toBe("Slack can't delete a message just for you");
-    expect(unsupportedReason(slack, false, { kind: "schedule", text: "hi", sendAt: 1 })).toBe("Not in Comma's Slack yet");
+    expect(unsupportedReason(slack, false, { kind: "schedule", text: "hi", sendAt: 1 })).toBe("Only iMessage schedules through BlueBubbles");
+    expect(unsupportedReason(slack, false, { kind: "cancelScheduled", bbId: 1 })).toBe("Only iMessage schedules through BlueBubbles");
     expect(unsupportedReason(slack, false, { kind: "markRead" })).toBeNull();
     expect(unsupportedReason(slack, false, { kind: "suggestions", model: "opus", refresh: false })).toBeNull();
     expect(unsupportedReason(imessage, false, { kind: "suggestions", model: "opus", refresh: false })).toBeNull();
@@ -57,5 +58,6 @@ describe("a Gmail route", () => {
     expect(unsupportedReason({ platform: "slack", accountId: "a" as never, channel: "D1" }, false, { kind: "unarchive" })).toBe("Only a mailbox archives");
     expect(unsupportedReason(gmail, true, { kind: "react", messageGuid: "m", reaction: "emoji:🔥", remove: false })).toBe("Gmail can't send emoji reactions");
     expect(unsupportedReason(gmail, true, { kind: "markRead" })).toBeNull();
+    expect(unsupportedReason(gmail, true, { kind: "editScheduled", bbId: 1, text: "hi", sendAt: 1 })).toBe("Only iMessage schedules through BlueBubbles");
   });
 });

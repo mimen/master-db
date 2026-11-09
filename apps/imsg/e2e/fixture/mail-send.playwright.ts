@@ -77,7 +77,7 @@ test("mail-send: a send whose answer is lost says so and lands once when the che
   await desk.request.post("/__fixture/mail", { data: { loseNextAnswerMs: 2_000 } });
   await reader.getByRole("button", { name: "Reply", exact: true }).click();
   await page.getByTestId("email-composer").getByLabel("Message").fill("Confirmed.");
-  await page.getByTestId("email-composer").getByRole("button", { name: "Send" }).click();
+  await page.getByTestId("email-composer").getByRole("button", { name: "Send", exact: true }).click();
   await expect(reader.getByText("Not sure this went through. Check Sent in Gmail before sending again.")).toBeVisible();
   await page.screenshot({ path: join(evidence, "3-unknown-send.png") });
   await expect(reader.getByText("Not sure this went through.", { exact: false })).toHaveCount(0, { timeout: 10_000 });
@@ -119,7 +119,7 @@ test("mail-send: an agent's draft opens the email composer with its text and not
   await expect(composer.getByText("Sam asked to confirm load-in.")).toBeVisible();
   await expect(composer.getByLabel("To")).toHaveValue("Sam Lee <sam@venue.test>");
   await page.screenshot({ path: join(evidence, "6-agent-draft.png") });
-  await composer.getByRole("button", { name: "Send" }).click();
+  await composer.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.getByTestId("email-card").filter({ hasText: "6 works. I'll bring the van." })).toHaveCount(1);
   await expect(composer).toHaveCount(0);
   const draft = await desk.request.post("/__fixture/convex", { data: { name: "comma/queries:getDraft", args: { conversationId: "mail:t-venue" } } });

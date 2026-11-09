@@ -149,9 +149,9 @@ export const IMESSAGE_PROFILE = {
 } satisfies PlatformProfile;
 
 /** What Comma runs on Slack. */
-const SLACK_LIVE: readonly Feature[] = ["send", "react", "emojiReact", "reply", "edit", "unsend"];
+const SLACK_LIVE: readonly Feature[] = ["send", "react", "emojiReact", "reply", "edit", "unsend", "schedule"];
 /** What Slack has that Comma does not run yet. The rest Slack lacks. */
-const SLACK_SOON: readonly Feature[] = ["mentions", "schedule", "attachments"];
+const SLACK_SOON: readonly Feature[] = ["mentions", "attachments"];
 
 /** Milad's Slack workspace, as Milad through a user token. */
 export const SLACK_PROFILE: PlatformProfile = {
@@ -188,9 +188,9 @@ export const SLACK_PROFILE: PlatformProfile = {
 };
 
 /** What Comma runs on Gmail. */
-const GMAIL_LIVE: readonly Feature[] = ["send", "reply"];
+const GMAIL_LIVE: readonly Feature[] = ["send", "reply", "schedule"];
 /** What Gmail has that Comma does not run yet. Reactions, edits, typing and the rest Gmail lacks. */
-const GMAIL_SOON: readonly Feature[] = ["attachments", "schedule"];
+const GMAIL_SOON: readonly Feature[] = ["attachments"];
 
 /** Milad's Google Workspace mailbox. The email composer replaces the chat composer. */
 export const GMAIL_PROFILE: PlatformProfile = {

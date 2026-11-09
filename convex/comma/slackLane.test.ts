@@ -126,6 +126,25 @@ describe("sending to Slack", () => {
   });
 });
 
+describe("a scheduled Slack message", () => {
+  test("posts at its time through the Slack lane with no client open, and a cancelled one never posts", async () => {
+    const { t, as, dm, messages } = await connected();
+    const sendAt = Date.now() + 3_600_000;
+    const id = await as.mutation(api.comma.scheduledSends.schedule, { conversationId: dm, sendAt, payload: { kind: "send", text: "lunch at 1" } });
+    const cancelled = await as.mutation(api.comma.scheduledSends.schedule, { conversationId: dm, sendAt, payload: { kind: "send", text: "never" } });
+    await as.mutation(api.comma.scheduledSends.cancel, { scheduledId: cancelled });
+    vi.advanceTimersByTime(3_540_000);
+    await t.finishInProgressScheduledFunctions();
+    expect(posts()).toEqual([]);
+
+    await settle(t);
+    expect(Date.now()).toBeGreaterThanOrEqual(sendAt);
+    expect(posts().map((call) => call.params.text)).toEqual(["lunch at 1"]);
+    expect((await messages()).map((row) => [row.text, row.clientKey, row.sendState])).toEqual([["lunch?", undefined, undefined], ["lunch at 1", `scheduled-${id}`, undefined]]);
+    expect(await as.query(api.comma.queries.listScheduled, {})).toEqual([]);
+  });
+});
+
 describe("Slack's refusals and unknown outcomes", () => {
   test.each([
     ["an error answer", { ok: false, error: "not_in_channel" }, "Slack chat.postMessage failed: not_in_channel"],

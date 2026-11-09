@@ -453,7 +453,7 @@ export const suggestionFeedback = v.object({
   finalText: v.string(),
 });
 
-const sendPayload = v.object({
+export const sendPayload = v.object({
   kind: v.literal("send"),
   text: v.string(),
   replyToGuid: v.optional(v.string()),
@@ -482,6 +482,7 @@ const flagPayload = <K extends "markRead" | "markUnread" | "settle" | "unsettle"
   v.object({ kind: v.literal(kind), messageGuid: v.optional(v.string()) });
 const togglePayload = <K extends "pin" | "mute">(kind: K) => v.object({ kind: v.literal(kind), value: v.boolean() });
 const renamePayload = v.object({ kind: v.literal("rename"), name: v.string() });
+/** BlueBubbles' scheduling, iMessage's only. Comma schedules Slack and Gmail itself (comma/scheduledSends). */
 const schedulePayload = v.object({ kind: v.literal("schedule"), text: v.string(), sendAt: v.number() });
 const editScheduledPayload = v.object({
   kind: v.literal("editScheduled"),
@@ -682,13 +683,19 @@ export const draftFields = {
   agentChatId: v.optional(v.id("comma_agent_chats")),
 };
 
+/**
+ * A scheduled message: BlueBubbles' own for iMessage (`bbId`, mirrored by replaceScheduled), or one Comma schedules
+ * for Slack and Gmail (`payload`, sent by comma/scheduledSends at `sendAt`).
+ */
 export const scheduledFields = {
   /** Absent on rows written before accounts, which are all iMessage. */
   platform: v.optional(platform),
   accountId: v.optional(v.id("comma_accounts")),
-  bbId: v.number(),
+  bbId: v.optional(v.number()),
   conversationId: v.optional(v.id("comma_conversations")),
-  chatGuid: v.string(),
+  chatGuid: v.optional(v.string()),
+  /** The send Comma queues at `sendAt`. Its text is always the row's. */
+  payload: v.optional(sendPayload),
   text: v.string(),
   sendAt: v.number(),
   status: scheduledStatus,

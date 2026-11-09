@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import type { ChatSummary, ScheduledMessage } from "@shared/types";
+import type { ChatSummary } from "@shared/types";
 import { CenteredSpinner, EmptyState } from "@/components/empty-state";
 import { ScheduleEditor } from "@/components/schedule-editor";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { formatScheduledWhen, useScheduled } from "@/hooks/use-scheduled";
 import { useTypeRamp } from "@/hooks/use-type";
 import { chatGuidRoute } from "@shared/imessage";
-import { platformBadge } from "@shared/platform-profile";
+import { PROFILES, platformBadge } from "@shared/platform-profile";
+import type { ScheduledItem } from "@/lib/scheduled";
 import { groupScheduled, isNotSent } from "@/lib/scheduled-groups";
 import { showToast } from "@/lib/toast";
 import { ChatAvatar, PersonAvatar } from "./avatar";
@@ -21,6 +22,13 @@ export interface ScheduledContentProps {
   showHeader?: boolean;
   onClose?: () => void;
 }
+
+/**
+ * Convex says why it refused in a ConvexError's data. Read without importing ConvexError: that import alone moves
+ * convex/values into the first-visit common chunk (2 KB brotli), since the mail surface imports it too.
+ */
+const failure = (error: unknown, fallback: string): string =>
+  error instanceof Error && "data" in error && typeof error.data === "string" ? error.data : fallback;
 
 const timeOf = (ms: number): string => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
@@ -35,7 +43,7 @@ export function ScheduledContent({ showHeader = false, onClose }: ScheduledConte
   const type = useTypeRamp();
   const chats = useChatDirectory();
   const { items, loading, cancel, sendNow, edit } = useScheduled();
-  const [editing, setEditing] = useState<ScheduledMessage | null>(null);
+  const [editing, setEditing] = useState<ScheduledItem | null>(null);
   const [listWidth, setListWidth] = useState(0);
   const groups = groupScheduled(items);
   const pendingCount = items.filter((item) => item.status !== "complete").length;
@@ -60,10 +68,10 @@ export function ScheduledContent({ showHeader = false, onClose }: ScheduledConte
   ) : null;
 
   const actions = {
-    edit: (item: ScheduledMessage) => setEditing(item),
-    cancel: (item: ScheduledMessage) => cancel(item.id),
-    sendNow: (item: ScheduledMessage) =>
-      void sendNow(item.id).then(() => showToast("Sent now")).catch(() => showToast("Couldn't send the scheduled message. Try again.")),
+    edit: (item: ScheduledItem) => setEditing(item),
+    cancel: (item: ScheduledItem) => void cancel(item).catch((error: unknown) => showToast(failure(error, "Couldn't cancel the scheduled message."))),
+    sendNow: (item: ScheduledItem) =>
+      void sendNow(item).then(() => showToast("Sent now")).catch((error: unknown) => showToast(failure(error, "Couldn't send the scheduled message. Try again."))),
   };
 
   return (
@@ -109,21 +117,21 @@ function ScheduledRow({
   actions,
   roomy,
 }: {
-  item: ScheduledMessage;
+  item: ScheduledItem;
   chat: ChatSummary | null;
   theme: ThemeColors;
   roomy: boolean;
-  actions: Record<"edit" | "cancel" | "sendNow", (item: ScheduledMessage) => void>;
+  actions: Record<"edit" | "cancel" | "sendNow", (item: ScheduledItem) => void>;
 }) {
   const type = useTypeRamp();
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const failed = isNotSent(item.status);
   const editable = item.status === "pending" || failed;
-  const service = platformBadge(chatGuidRoute(item.chatGuid)).label;
+  const service = item.platform === "imessage" ? platformBadge(chatGuidRoute(item.chatGuid ?? "")).label : PROFILES[item.platform].name;
   const meta = failed
     ? `${service}, was due ${formatScheduledWhen(item.sendAt).replace(/^(Today|Tomorrow),/, (_m, day: string) => day.toLowerCase())}`
-    : chat?.isGroup ? `${service}, ${chat.participants.length + 1} people` : service;
+    : item.subject ? `${service}, ${item.subject}` : chat?.isGroup ? `${service}, ${chat.participants.length + 1} people` : service;
   // Web reveals the row actions as a floating group on hover; touch has no
   // hover, so they sit inline under the text instead.
   const hoverActions = Platform.OS === "web";

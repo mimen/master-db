@@ -1,5 +1,5 @@
 import { messageToMessage } from "./convex-adapters";
-import { commaApi } from "./convex-api";
+import { scheduledSendsApi } from "./convex-api";
 import { runCommand } from "./convex-commands";
 import { createMessagingApi } from "./messaging-api";
 import { convexClient } from "./identity";
@@ -9,22 +9,24 @@ import { createAiApi } from "./ai-api";
 import { mediaApi, storedAttachmentUrl, storedAttachmentThumbnailUrl, type GalleryAttachment } from "./media-api";
 import type {
   AttachmentSummary,
+  ChatSummary,
   Contact,
   GalleryItem,
   ContactSuggestion,
   ConversationId,
   Message,
   Platform,
-  ScheduledMessage,
   TranscriptState,
 } from "@shared/types";
+import type { GenericId } from "convex/values";
+import type { ScheduledItem } from "./scheduled";
 
-async function scheduledConversation(id: number): Promise<ConversationId> {
-  const rows = await convexClient.query(commaApi.listScheduled, {});
-  const conversationId = rows.find((row) => row.bbId === id)?.conversationId;
-  if (!conversationId) throw new Error("Scheduled message is unavailable");
-  return conversationId;
+function scheduledConversation(item: ScheduledItem): ConversationId {
+  if (!item.conversationId) throw new Error("Scheduled message is unavailable");
+  return item.conversationId;
 }
+
+const commaScheduledId = (item: ScheduledItem) => item.id as GenericId<"comma_scheduled">;
 
 const messagingApi = createMessagingApi(runCommand);
 
@@ -70,17 +72,22 @@ export const api = {
   participant: messagingApi.participant,
   leaveGroup: messagingApi.leaveGroup,
   deleteChat: messagingApi.deleteChat,
-  async schedule(conversationId: ConversationId, text: string, sendAt: number): Promise<ScheduledMessage> {
-    return (await runCommand(conversationId, { kind: "schedule", text, sendAt })).scheduled;
+  /** iMessage schedules in BlueBubbles; Slack and Gmail in Convex, which sends at the time. */
+  async schedule(chat: Pick<ChatSummary, "conversationId" | "route">, text: string, sendAt: number): Promise<void> {
+    if (chat.route.platform === "imessage") await runCommand(chat.conversationId, { kind: "schedule", text, sendAt });
+    else await convexClient.mutation(scheduledSendsApi.schedule, { conversationId: chat.conversationId, payload: { kind: "send", text }, sendAt });
   },
-  async updateScheduled(id: number, conversationId: ConversationId, text: string, sendAt: number): Promise<ScheduledMessage> {
-    return (await runCommand(conversationId, { kind: "editScheduled", bbId: id, text, sendAt })).scheduled;
+  async updateScheduled(item: ScheduledItem, text: string, sendAt: number): Promise<void> {
+    if (item.bbId === undefined) await convexClient.mutation(scheduledSendsApi.edit, { scheduledId: commaScheduledId(item), text, sendAt });
+    else await runCommand(scheduledConversation(item), { kind: "editScheduled", bbId: item.bbId, text, sendAt });
   },
-  async cancelScheduled(id: number): Promise<{ ok: boolean }> {
-    return runCommand(await scheduledConversation(id), { kind: "cancelScheduled", bbId: id });
+  async cancelScheduled(item: ScheduledItem): Promise<void> {
+    if (item.bbId === undefined) await convexClient.mutation(scheduledSendsApi.cancel, { scheduledId: commaScheduledId(item) });
+    else await runCommand(scheduledConversation(item), { kind: "cancelScheduled", bbId: item.bbId });
   },
-  async sendScheduledNow(id: number): Promise<{ ok: true }> {
-    return runCommand(await scheduledConversation(id), { kind: "sendScheduledNow", bbId: id });
+  async sendScheduledNow(item: ScheduledItem): Promise<void> {
+    if (item.bbId === undefined) await convexClient.mutation(scheduledSendsApi.sendNow, { scheduledId: commaScheduledId(item) });
+    else await runCommand(scheduledConversation(item), { kind: "sendScheduledNow", bbId: item.bbId });
   },
   transcriptState(attachmentGuid: string): Promise<TranscriptState> {
     return convexClient.query(mediaApi.transcriptState, { attachmentGuid });

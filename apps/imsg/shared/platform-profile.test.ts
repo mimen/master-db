@@ -133,11 +133,9 @@ describe("Slack", () => {
     expect(screeningOf({ platform: "slack", isSpam: false, known: false })).toBe("known");
   });
 
-  test("send, reply, react, edit and delete run; what Comma does not run yet greys; what Slack lacks says so; group controls are absent", () => {
-    for (const feature of ["send", "reply", "react", "emojiReact", "edit", "unsend"] as const) expect(support(route(true), feature)).toEqual({ ok: true });
-    for (const feature of ["attachments", "schedule"] as const) {
-      expect(support(route(true), feature)).toEqual({ ok: false, reason: "Not in Comma's Slack yet" });
-    }
+  test("send, reply, react, edit, delete and scheduling run; what Comma does not run yet greys; what Slack lacks says so; group controls are absent", () => {
+    for (const feature of ["send", "reply", "react", "emojiReact", "edit", "unsend", "schedule"] as const) expect(support(route(true), feature)).toEqual({ ok: true });
+    expect(support(route(true), "attachments")).toEqual({ ok: false, reason: "Not in Comma's Slack yet" });
     expect(support(route(true), "deleteMessage")).toEqual({ ok: false, reason: "Slack can't delete a message just for you" });
     expect(support(route(false), "call")).toEqual({ ok: false, reason: "Slack can't call" });
     expect(support(route(false), "rename")).toBeNull();
@@ -179,12 +177,9 @@ describe("Gmail", () => {
     expect(screeningOf({ platform: "imessage", isSpam: false, known: true, bulk: true })).toBe("known");
   });
 
-  test("sends and replies; attachments and scheduling grey with their reason, and what Gmail lacks says so", () => {
-    expect(support(route, "send")).toEqual({ ok: true });
-    expect(support(route, "reply")).toEqual({ ok: true });
-    for (const feature of ["attachments", "schedule"] as const) {
-      expect(support(route, feature)).toEqual({ ok: false, reason: "Not in Comma's Gmail yet" });
-    }
+  test("sends, replies and schedules; attachments grey with their reason, and what Gmail lacks says so", () => {
+    for (const feature of ["send", "reply", "schedule"] as const) expect(support(route, feature)).toEqual({ ok: true });
+    expect(support(route, "attachments")).toEqual({ ok: false, reason: "Not in Comma's Gmail yet" });
     expect(support(route, "react")).toEqual({ ok: false, reason: "Gmail can't send reactions" });
     expect(support(route, "edit")).toEqual({ ok: false, reason: "Gmail can't edit messages" });
     expect(reactionSupport(route, "emoji:🔥")).toEqual({ ok: false, reason: "Gmail can't send emoji reactions" });
