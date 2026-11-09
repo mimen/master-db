@@ -9,3 +9,8 @@ const NO_UPDATE: NativeUpdate = { ready: false, apply: () => undefined };
 export function useNativeUpdate(): NativeUpdate {
   return NO_UPDATE;
 }
+
+/** False: the web page reloads itself, and the crash screen handles that. */
+export function reloadApp(): boolean {
+  return false;
+}
