@@ -15,9 +15,11 @@ import { PaneHeader } from "@/components/ui/pane-header";
 import { Pill } from "@/components/ui/pill";
 import { Row } from "@/components/ui/row";
 import { SectionLabel } from "@/components/ui/section-label";
+import { SourceIcon } from "@/components/service-label";
 import { Space } from "@/constants/tokens";
 import { useTheme } from "@/hooks/use-theme";
 import { clientReleaseBuild } from "@/lib/release-status";
+import { platformServiceBadges } from "@shared/platform-profile";
 
 const noop = (): void => undefined;
 
@@ -68,6 +70,21 @@ export function UiGallery(): React.JSX.Element | null {
         <Pill label="Small" size="sm" onPress={noop} />
         <Pill label="Small accent" size="sm" tone="accent" selected onPress={noop} />
       </View>
+      <SectionLabel>Source icons</SectionLabel>
+      {[14, 16].map((size) => (
+        <View key={size} testID={`source-icons-${size}`} style={styles.line}>
+          {[...platformServiceBadges("imessage"), ...platformServiceBadges("slack"), ...platformServiceBadges("gmail")].map((badge) => (
+            <View key={badge.label} style={styles.source}>
+              <Text style={{ color: theme.text, fontSize: size - 1, fontWeight: "600" }}>{badge.label}</Text>
+              <SourceIcon badge={badge} size={size} />
+            </View>
+          ))}
+          <View style={styles.source}>
+            <Text style={{ color: theme.text, fontSize: size - 1, fontWeight: "600" }}>Gmail personal</Text>
+            <SourceIcon badge={platformServiceBadges("gmail")[0]!} personal size={size} />
+          </View>
+        </View>
+      ))}
       <SectionLabel>Rows</SectionLabel>
       <Row title="Regular row" subtitle="Secondary line" onPress={noop} trailing={<Text style={{ color: theme.textTertiary }}>9:41</Text>} />
       <Row title="Selected row" subtitle="Secondary line" selected onPress={noop} />
@@ -180,5 +197,6 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 12, lineHeight: 18, fontWeight: "600" },
   page: { gap: Space.xs, paddingBottom: Space.x4 },
   line: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: Space.md, paddingHorizontal: Space.gutter },
+  source: { flexDirection: "row", alignItems: "center", gap: 5 },
   empty: { height: 160 },
 });
