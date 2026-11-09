@@ -138,6 +138,23 @@ describe("sending email", () => {
   });
 });
 
+describe("rate-limited sends", () => {
+  test("a send Gmail turns away for its rate limit goes out once the limit passes", async () => {
+    const { run } = await connected();
+    let refused = 0;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/messages/send") && refused++ === 0) {
+        // The retry waits inside the running action, which settle() never advances past; setImmediate is not faked.
+        globalThis.setImmediate(() => vi.advanceTimersByTime(2_000));
+        return Response.json({ error: { code: 403, status: "PERMISSION_DENIED", errors: [{ reason: "rateLimitExceeded" }] } }, { status: 403 });
+      }
+      return await google.fetch(input, init);
+    });
+    expect(await run("rl1", reply("hi"))).toMatchObject({ status: "sent" });
+    expect(google.sent).toHaveLength(1);
+  }, 15_000);
+});
+
 describe("unknown sends", () => {
   /** Gmail takes the send, then its answer never arrives. */
   function loseSendAnswer(error: () => Error | Response) {
