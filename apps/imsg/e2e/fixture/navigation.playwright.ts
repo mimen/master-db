@@ -15,8 +15,8 @@ test("navigation: the view's name is a menu of every view, ⌘N follows its orde
   const page = desk.page;
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await expect(page.getByRole("button", { name: "View, Today" })).toBeVisible();
 
-  await expect(page.getByRole("tab")).toHaveCount(0);
   await page.keyboard.press("Meta+5");
   await expect(heading(page, "Snoozed")).toBeAttached();
   await expect(page.getByText(/^Nothing snoozed/)).toBeVisible();

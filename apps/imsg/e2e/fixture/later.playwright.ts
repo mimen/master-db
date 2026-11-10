@@ -1,10 +1,7 @@
 import type { Page } from "@playwright/test";
-import { expect, test, openView } from "../fixtures/desk";
+import { expect, test, openView, viewCount } from "../fixtures/desk";
 
-async function needsCount(page: Page): Promise<number> {
-  const label = await page.getByRole("tab", { name: /^To review, \d+/ }).getAttribute("aria-label");
-  return Number(/(\d+)/.exec(label ?? "")?.[1]);
-}
+const needsCount = (page: Page) => viewCount(page, "To review");
 
 const row = (page: Page, name: string) => page.getByTestId("conversation-row").filter({ hasText: name });
 const menu = (page: Page) => page.getByRole("dialog");
@@ -25,8 +22,8 @@ test("Later from a row's menu leaves To review, lists under Snoozed, says so in 
   await expect(row(page, "Alex Rivera")).toHaveCount(0);
 
   // The Snoozed view lists it and counts it; opening it shows the snooze in Details.
-  await expect(page.getByRole("tab", { name: "Snoozed, 1" })).toBeVisible();
-  await page.getByRole("tab", { name: /^Snoozed/ }).click();
+  await page.getByRole("button", { name: /^View, / }).click();
+  await page.getByRole("option").filter({ hasText: /Snoozed1$/ }).click();
   await expect(page.getByRole("heading", { name: "Snoozed" })).toBeAttached();
   await expect(page.getByTestId("conversation-row")).toHaveCount(1);
   await row(page, "Alex Rivera").click();
@@ -35,8 +32,10 @@ test("Later from a row's menu leaves To review, lists under Snoozed, says so in 
 
   // ⌘⇧Z works from anywhere and takes the snooze back.
   await page.keyboard.press("Meta+Shift+z");
-  await expect.poll(() => needsCount(page)).toBe(before);
+  await expect.poll(() => viewCount(page, "Snoozed")).toBe(0);
   await expect(page.getByTestId("details-later")).not.toContainText("Snoozed");
+  await openView(page, "To review");
+  await expect.poll(() => needsCount(page)).toBe(before);
 });
 
 test("H opens Later outside a text field; Follow up waits on the user's own last message", async ({ desk }) => {

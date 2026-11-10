@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, test } from "../fixtures/desk";
+import { expect, openView, test } from "../fixtures/desk";
 
 const evidence = process.env.VERIFY_IMSG_EVIDENCE ?? mkdtempSync(join(tmpdir(), "imsg-send-recovery-"));
 const FAILED_TOAST = "Couldn't send. Check the Mac mini connection.";
@@ -25,7 +25,7 @@ async function openAlex(page: Page): Promise<Locator> {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: /^All/ }).click();
+  await openView(page, "All");
   await alexRow(page).click();
   const thread = page.getByTestId("thread-view");
   await expect(thread).toBeVisible();

@@ -190,6 +190,7 @@ async function rowMenuItem(page: Page, name: string, item: string) {
 test("ratchet: settling the open conversation moves the To review count within 50 ms of ⌘E", async ({ desk }) => {
   const page = desk.page;
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await openView(page, "To review");
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
   await page.getByPlaceholder("iMessage").blur();
   const label = await page.locator('[aria-label^="To review, "]').getAttribute("aria-label");

@@ -32,7 +32,8 @@ function ViewCount({ view, counts }: { readonly view: InboxView; readonly counts
   const color = turn ? theme.turn : theme.textTertiary;
   return (
     // The rolling digits need a box of their own: a margin on their text would land on every digit.
-    <View>
+    // Named for assistive tech and tests: the digits alone roll through every value.
+    <View aria-label={count === undefined ? undefined : `${view.label}, ${count}`}>
       {count === undefined ? (
         // Counts are unknown until the first list arrives; two digits hold the place so nothing shifts.
         <Text aria-hidden style={[textStyle, styles.countPlaceholder]}>00</Text>

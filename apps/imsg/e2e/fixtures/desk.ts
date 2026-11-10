@@ -89,14 +89,14 @@ export { expect };
 export async function openView(page: Page, name: string): Promise<void> {
   await page.getByRole("button", { name: /^View, / }).click();
   await page.getByRole("option").filter({ hasText: new RegExp(`${name}(\\d+|999\\+)?$`) }).click();
+  // The menu closes over the list; a pointer left there hovers a row.
+  await page.mouse.move(0, 0);
 }
 
-/** A view's count, read off its option in the view menu. */
+/** The open view's count, read off its heading. */
 export async function viewCount(page: Page, name: string): Promise<number> {
-  await page.getByRole("button", { name: /^View, / }).click();
-  const text = await page.getByRole("option").filter({ hasText: new RegExp(`${name}\\d+$`) }).innerText();
-  await page.keyboard.press("Escape");
-  return Number(/(\d+)$/.exec(text)?.[1]);
+  const label = await page.locator(`[aria-label^="${name}, "]`).first().getAttribute("aria-label");
+  return Number(label?.slice(name.length + 2));
 }
 
 /** The list renders rows in batches; a count taken mid-batch is not the list's size. */

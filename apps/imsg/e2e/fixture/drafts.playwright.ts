@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "../fixtures/desk";
+import { expect, openView, test } from "../fixtures/desk";
 
 const SCREENSHOT = fileURLToPath(new URL("../../artifacts/drafts-tab.png", import.meta.url));
 
@@ -29,7 +29,7 @@ test("an agent draft lists under Drafts, opens into the composer with its attach
   });
 
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: /^Drafts/ }).click();
+  await openView(page, "Drafts");
   const rows = page.getByTestId("conversation-row");
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText("Alex Rivera");
