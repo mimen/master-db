@@ -232,13 +232,7 @@ export function MessagesWorkspace({
     commitChatSelection(selectionOf(chat), "preview");
   };
 
-  const openNewMessage = (): void => {
-    if (wide) {
-      openPalette(true);
-    } else {
-      router.push("/new-chat");
-    }
-  };
+  const openNewMessage = (): void => router.push("/new-chat");
 
   // Keyboard system (docs/keyboard-design.md, Slice 2): compose-first with an
   // Esc-entered glide mode. This screen registers the runtime (over refs so
@@ -259,8 +253,8 @@ export function MessagesWorkspace({
   useEffect(() => {
     if (Platform.OS !== "web" || !wide || !active) return;
     setKeyboardRuntime({
-      openPalette: () => openPalette(false),
-      openNewMessage: () => openPalette(true),
+      openPalette,
+      openNewMessage,
       openHelp: openHelp,
       moveSelection: (delta) => {
         setListMode(true);

@@ -14,7 +14,11 @@ import { join } from "node:path";
 import { brotliCompressSync, constants } from "node:zlib";
 
 /**
- * 2026-11-09, flow-audit fixes on top of Later and Follow up (#114) and the thread polish (#118): 476,448 bytes brotli,
+ * 2026-11-09, the compose sheet (audit 3.5): 482,723 bytes brotli, plus about 1%. compose-sheet.tsx is shared by the
+ * new-message, forward and Mail chunks, so Metro puts it in __common, which loads on the first visit (+1.5 KB).
+ * Raising it here was pre-approved.
+ *
+ * Before that, 2026-11-09, flow-audit fixes on top of Later and Follow up (#114) and the thread polish (#118): 476,448 bytes brotli,
  * plus about 1%. The audit fixes added about 1.5 KB to the shell (Mail's keyboard runtime, the Esc closers, the one
  * badge count); with #114 and #118 the build passed the old ceiling. Raising it here was pre-approved.
  *
@@ -23,7 +27,7 @@ import { brotliCompressSync, constants } from "node:zlib";
  * new email landed: Mail's agent pane wiring and the new-email command sit in the shell. Milad judged the
  * ceiling arbitrary next to feature work and approved raising it; the composer's picker and uploader stay lazy.
  */
-const CEILING_BYTES = 481_200;
+const CEILING_BYTES = 487_500;
 
 const exportDirectory = process.env.IMSG_BUNDLE_DIR ?? join(import.meta.dir, "../e2e/fixture/dist");
 

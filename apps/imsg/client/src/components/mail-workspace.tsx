@@ -3,7 +3,6 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import Archive02Icon from "@hugeicons/core-free-icons/Archive02Icon";
 import ArchiveRestoreIcon from "@hugeicons/core-free-icons/ArchiveRestoreIcon";
 import ArrowTurnForwardIcon from "@hugeicons/core-free-icons/ArrowTurnForwardIcon";
-import Attachment01Icon from "@hugeicons/core-free-icons/Attachment01Icon";
 import MailReply01Icon from "@hugeicons/core-free-icons/MailReply01Icon";
 import MailReplyAll01Icon from "@hugeicons/core-free-icons/MailReplyAll01Icon";
 import PencilEdit02Icon from "@hugeicons/core-free-icons/PencilEdit02Icon";
@@ -57,7 +56,7 @@ import { formatReceiptTime } from "@/lib/format";
 import { headerFace, toolbarTitle } from "@/lib/header-font";
 import { openExternalUrl } from "@/lib/external-link";
 import { useLightbox } from "@/lib/lightbox";
-import { isShown, registerEscapeCloser, runEscapeClosers, setKeyboardRuntime } from "@/lib/keyboard/controller";
+import { runEscapeClosers, setKeyboardRuntime } from "@/lib/keyboard/controller";
 import { shortcutFor } from "@/lib/keyboard/registry";
 import { EMAIL_SANDBOX, emailDocument, foldQuotes, messageFiles, openByDefault, threadFiles, type MailFile } from "@/lib/mail";
 import { openDeferMenu } from "@/lib/later";
@@ -97,20 +96,14 @@ export function MailWorkspace({ wide, active = false, onReader }: {
   const [lens, setLensState] = useState<MailLens>("people");
   const [selectedId, setSelectedId] = useState<ConversationId | null>(null);
   const [composingNew, setComposingNew] = useState(false);
-  const open = (id: ConversationId | null) => {
-    setComposingNew(false);
-    setSelectedId(id);
-  };
-  const openChat = useCallback((chat: ChatSummary) => {
-    setComposingNew(false);
-    setSelectedId(chat.conversationId);
-  }, []);
+  const open = (id: ConversationId | null) => setSelectedId(id);
+  const openChat = useCallback((chat: ChatSummary) => setSelectedId(chat.conversationId), []);
   // The wide shell's agent pane follows the open thread.
   useEffect(() => {
-    setMailSelection(wide && !composingNew ? selectedId : null);
+    setMailSelection(wide ? selectedId : null);
     return () => setMailSelection(null);
-  }, [wide, selectedId, composingNew]);
-  const pushed = !wide && (selectedId !== null || composingNew);
+  }, [wide, selectedId]);
+  const pushed = !wide && selectedId !== null;
   useEffect(() => onReader?.(pushed), [onReader, pushed]);
   // Search opens a mail hit as /mail?thread=<id>.
   const { thread: routed } = useGlobalSearchParams<{ thread?: string }>();
@@ -214,8 +207,8 @@ export function MailWorkspace({ wide, active = false, onReader }: {
       return true;
     };
     setKeyboardRuntime({
-      openPalette: () => openPalette(false),
-      openNewMessage: () => (live.current.canCompose ? live.current.composeNew() : openPalette(true)),
+      openPalette,
+      openNewMessage: () => (live.current.canCompose ? live.current.composeNew() : router.push({ pathname: "/new-chat", params: { workspace: "mail" } })),
       openHelp,
       moveSelection: (delta) => {
         const { chats: list, selectedId: current, open: show } = live.current;
@@ -340,7 +333,7 @@ export function MailWorkspace({ wide, active = false, onReader }: {
               testID="mail-row"
               chat={item}
               personal={personal.has(item.route.accountId ?? "")}
-              selected={wide && !composingNew && selectedId === item.conversationId}
+              selected={wide && selectedId === item.conversationId}
               onOpen={openChat}
             />
           )}
@@ -373,13 +366,11 @@ export function MailWorkspace({ wide, active = false, onReader }: {
     </SidebarFrame>
   );
 
-  const reader = composingNew ? (
-    <NewEmail
-      mailboxes={mailbox ? mailboxes.filter((account) => account._id === mailbox) : mailboxes}
-      onClose={() => setComposingNew(false)}
-      onBack={wide ? undefined : () => setComposingNew(false)}
-    />
-  ) : selectedId ? (
+  // New email opens as the compose sheet, from the mailbox the list is narrowed to.
+  const newEmail = composingNew ? (
+    <EmailComposer conversationId={null} accountId={mailbox} mailboxes={mailboxes} start={{ mode: "new" }} subject="" self={new Set()} hasDraft={false} onClose={() => setComposingNew(false)} />
+  ) : null;
+  const reader = selectedId ? (
     <EmailReader
       key={selectedId}
       conversationId={selectedId}
@@ -389,30 +380,8 @@ export function MailWorkspace({ wide, active = false, onReader }: {
     />
   ) : <SelectionEmpty icon="mail-outline" message="Select a thread" />;
 
-  if (!wide) return <View style={[styles.fill, { backgroundColor: theme.background }]}>{pushed ? reader : list}</View>;
-  return <DesktopSplit list={list} detail={reader} />;
-}
-
-/** New email, in the reader's place, with the reader's column and its bottom inset on a phone. */
-function NewEmail({ mailboxes, onClose, onBack }: {
-  mailboxes: Parameters<typeof EmailComposer>[0]["mailboxes"];
-  onClose: () => void;
-  onBack?: () => void;
-}): JSX.Element {
-  const theme = useTheme();
-  const insets = useSafeAreaInsets();
-  return (
-    <View testID="new-email" style={[styles.fill, { backgroundColor: theme.thread }]}>
-      {onBack ? (
-        <View style={[styles.readerHeader, styles.readerHeaderPhone, { borderBottomColor: theme.divider }]}>
-          <BackButton onPress={onBack} label="Back to Mail" />
-        </View>
-      ) : null}
-      <ScrollView contentContainerStyle={[styles.column, { paddingBottom: insets.bottom }]}>
-        <EmailComposer conversationId={null} accountId={null} mailboxes={mailboxes} start={{ mode: "new" }} subject="" self={new Set()} hasDraft={false} onClose={onClose} />
-      </ScrollView>
-    </View>
-  );
+  if (!wide) return <View style={[styles.fill, { backgroundColor: theme.background }]}>{pushed ? reader : list}{newEmail}</View>;
+  return <><DesktopSplit list={list} detail={reader} />{newEmail}</>;
 }
 
 /**
@@ -439,6 +408,7 @@ export function EmailReader({ conversationId, subject, regularSenders: listed, o
   const [openedDraft, setOpenedDraft] = useState<number | null>(null);
   const threadSubject = subject ?? messages[0]?.subject ?? "";
   const mailbox = (accounts ?? []).find((account) => account._id === conversation?.accountId);
+  const mailboxes = useMemo(() => (accounts ?? []).filter((account) => account.platform === "gmail" && account.connected), [accounts]);
   // The mailbox's own addresses, and any the user sent this thread from, which a reply all leaves out.
   const self = useMemo(() => new Set([
     ...(mailbox ? [mailbox.label, ...mailbox.selfHandles ?? []] : []).map((address) => address.toLowerCase()),
@@ -454,10 +424,12 @@ export function EmailReader({ conversationId, subject, regularSenders: listed, o
   const compose = (mode: CardAction, message = replyTarget, extra: { text?: string; note?: string; files?: readonly MailFile[] } = {}) => {
     const source = message && sourceOf(message);
     if (!source) return;
-    setComposing(mode === "forward" ? { mode, replyTo: { ...source, text: message.text }, files: messageFiles(message) }
-      // Copying someone onto a thread they missed: reply all with every file in the thread, each with its checkbox.
-      : mode === "replyAllFiles" ? { mode: "replyAll", replyTo: source, files }
-        : { mode, replyTo: source, ...extra });
+    if (mode === "forward") return setComposing({ mode, replyTo: { ...source, text: message.text }, files: messageFiles(message) });
+    // A draft's own files go checked. The thread's files are offered unchecked, so copying someone onto the thread
+    // with the invoice is one tap; Reply all lists them and a plain Reply leaves them out.
+    const drafted = (extra.files ?? []).map((file) => ({ ...file, on: true }));
+    const offered = files.filter((file) => !drafted.some((d) => d.storageId === file.storageId)).map((file) => ({ ...file, on: false, offered: true }));
+    setComposing({ mode, replyTo: source, ...extra, files: [...drafted, ...offered] });
   };
   // An agent's draft for this thread opens the composer with its text and files, once per draft.
   useEffect(() => {
@@ -499,19 +471,6 @@ export function EmailReader({ conversationId, subject, regularSenders: listed, o
   const archive = () => {
     if (chat) void toggleSettleChat(chat);
   };
-  // Esc closes the composer while it holds nothing the user wrote.
-  const composerBox = useRef<View>(null);
-  useEffect(() => {
-    if (!composing) return;
-    return registerEscapeCloser(() => {
-      const box = composerBox.current as unknown as HTMLElement | null;
-      if (!isShown(box)) return false;
-      const body = box?.querySelector?.("textarea");
-      if (body && body.value.trim() !== "") return false;
-      setComposing(null);
-      return true;
-    });
-  }, [composing]);
   const glyph = (icon: IconSvgElement) => ({ active }: { active: boolean }) => (
     <HugeiconsIcon icon={icon} size={18} color={active ? theme.text : theme.icon} strokeWidth={1.6} />
   );
@@ -538,7 +497,7 @@ export function EmailReader({ conversationId, subject, regularSenders: listed, o
       {conversation?.gmail?.archiveError ? (
         <Text accessibilityRole="alert" style={[styles.archiveError, { color: theme.destructive, borderBottomColor: theme.divider }]}>{conversation.gmail.archiveError}</Text>
       ) : null}
-      <ScrollView ref={scroller} contentContainerStyle={[styles.column, styles.cards, { paddingBottom: 32 + (composing ? 0 : bottom) }]}>
+      <ScrollView ref={scroller} contentContainerStyle={[styles.column, styles.cards, { paddingBottom: 32 + (composing && composing.mode !== "forward" ? 0 : bottom) }]}>
         {status === "CanLoadMore" ? (
           <Pressable accessibilityRole="button" onPress={() => loadMore(25)} style={styles.more}>
             <Text style={[styles.moreText, { color: theme.textSecondary }]}>Earlier messages</Text>
@@ -554,18 +513,18 @@ export function EmailReader({ conversationId, subject, regularSenders: listed, o
             onToggle={() => setToggled((current) => new Map(current).set(message._id, !isOpen(message._id)))}
             onLayout={message._id === initial.target ? land : undefined}
             onCompose={message.gmail && !pendingClientKey(message.guid) ? (mode) => compose(mode, message) : undefined}
-            withFiles={message._id === replyTarget?._id && files.length > 0}
             onEditResend={pendingClientKey(message.guid) ? () => compose("reply", messages.find((m) => m.guid === message.replyToGuid) ?? replyTarget, { text: message.text }) : undefined}
           />
         ))}
       </ScrollView>
       {composing ? (
-        <View ref={composerBox} style={[styles.column, { paddingBottom: bottom }]}>
+        // A forward is a new thread, so it opens as the compose sheet; a reply docks here under the cards.
+        <View style={composing.mode === "forward" ? null : [styles.column, { paddingBottom: bottom }]}>
           <EmailComposer
             key={`${composing.mode === "new" ? "" : composing.replyTo.guid}:${composing.mode}:${openedDraft ?? 0}`}
             conversationId={conversationId}
             accountId={conversation?.accountId ?? null}
-            mailboxes={mailbox ? [mailbox] : []}
+            mailboxes={mailboxes}
             start={composing}
             subject={threadSubject}
             self={self}
@@ -578,7 +537,7 @@ export function EmailReader({ conversationId, subject, regularSenders: listed, o
   );
 }
 
-type CardAction = ReplyMode | "forward" | "replyAllFiles";
+type CardAction = ReplyMode | "forward";
 const CARD_ACTIONS: readonly { mode: CardAction; label: string; icon: IconSvgElement }[] = [
   { mode: "reply", label: "Reply", icon: MailReply01Icon },
   { mode: "replyAll", label: "Reply all", icon: MailReplyAll01Icon },
@@ -591,7 +550,7 @@ const names = (addresses: readonly { address: string; name: string | null }[]) =
  * One message: a one-line row when folded, the whole email when open. Its header folds it again. Reply, Reply all and
  * Forward sit in the header of the newest message; an older one shows them while hovered, or once tapped.
  */
-function EmailCard({ message, open, latest, imagesByDefault, onToggle, onLayout, onCompose, onEditResend, withFiles }: {
+function EmailCard({ message, open, latest, imagesByDefault, onToggle, onLayout, onCompose, onEditResend }: {
   message: Email;
   open: boolean;
   latest: boolean;
@@ -600,8 +559,6 @@ function EmailCard({ message, open, latest, imagesByDefault, onToggle, onLayout,
   onLayout?: (event: LayoutChangeEvent) => void;
   /** Reply, reply all or forward this message; absent while it is still sending. */
   onCompose?: (mode: CardAction) => void;
-  /** Offer Reply all with the thread's files. */
-  withFiles: boolean;
   /** A reply of the user's that did not go out: opens the composer with what was written. */
   onEditResend?: () => void;
 }): JSX.Element {
@@ -636,7 +593,7 @@ function EmailCard({ message, open, latest, imagesByDefault, onToggle, onLayout,
       </Pressable>
     );
   }
-  const actions = onCompose ? [...CARD_ACTIONS, ...(withFiles ? [{ mode: "replyAllFiles" as const, label: "Reply all with attachments", icon: Attachment01Icon }] : [])] : [];
+  const actions = onCompose ? CARD_ACTIONS : [];
   const shown = latest || hovered || tapped;
   return (
     <Pressable

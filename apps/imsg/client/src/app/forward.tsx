@@ -9,6 +9,7 @@ export default function ForwardScreen(): React.JSX.Element | null {
   if (wide) return null;
   return (
     <ForwardContent
+      presentation="screen"
       onClose={() => router.back()}
       onOpenChat={(chat) => {
         if (!selectChat({ conversationId: chat.conversationId, name: chat.displayName })) {

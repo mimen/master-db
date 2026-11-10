@@ -96,7 +96,6 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   const { wide } = useLayoutMode();
   const theme = useTheme();
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [paletteCompose, setPaletteCompose] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [store] = useState(() => {
     const initialProjection = desktopProjection(pathname, params);
@@ -232,10 +231,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   const reportMessagesRail = useCallback((next: MessagesRailState): void => {
     setMessagesRail(next);
   }, []);
-  const openPalette = useCallback((compose = false): void => {
-    setPaletteCompose(compose);
-    setPaletteOpen(true);
-  }, []);
+  const openPalette = useCallback((): void => setPaletteOpen(true), []);
   const openHelp = useCallback((): void => setHelpOpen(true), []);
   // The callbacks below read this, so they stay stable and the context never changes.
   const latest = useRef({ activeWorkspace, helpOpen, paletteOpen, projectionKind: projection?.kind });
@@ -276,7 +272,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
       return true;
     };
     setKeyboardRuntime({
-      openPalette: () => openPalette(false),
+      openPalette,
       openNewMessage: () => router.push({ pathname: "/new-chat", params: { workspace: "contacts" } }),
       openHelp,
       moveSelection: () => undefined,
@@ -365,14 +361,16 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   );
   const closeRouteSurface = closeProjectedRoute;
   const routeOverlay = shellOwnsRoute ? state.routeOverlay : null;
-  const routeOverlayContent = routeOverlay?.kind === "search" ? (
+  const searchOverlay = routeOverlay?.kind === "search" ? (
     <SearchContent
       initialQuery={routeOverlay.query}
       scopeConversation={routeOverlay.conversationId}
       scopeLabel={routeOverlay.chatName}
       onClose={closeRouteSurface}
     />
-  ) : routeOverlay?.kind === "new-chat" ? (
+  ) : null;
+  // New message and Forward are compose sheets, which draw their own overlay.
+  const composeOverlay = routeOverlay?.kind === "new-chat" ? (
     <NewChatContent
       initialContact={routeOverlay.initialContact
         ? {
@@ -441,13 +439,14 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
             </View>
             {utilityPane}
             <OverlayShell
-              visible={routeOverlay !== null}
+              visible={searchOverlay !== null}
               onClose={closeRouteSurface}
               backdropStyle={styles.routeOverlayBackdrop}
               cardStyle={styles.routeOverlayCard}
             >
-              {routeOverlayContent}
+              {searchOverlay}
             </OverlayShell>
+            {composeOverlay}
             <OverlayShell
               visible={paletteOpen}
               onClose={() => setPaletteOpen(false)}
@@ -458,9 +457,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
               cardStyle={styles.paletteCard}
             >
               <CommandPalette
-                key={paletteCompose ? "compose" : "root"}
                 chats={[...messagesRail.allChats]}
-                initialMode={paletteCompose ? "compose" : "root"}
                 onClose={() => setPaletteOpen(false)}
                 onOpenChat={(chat) => messagesActions.current?.openChat(chat)}
                 onApplyState={(next) => {

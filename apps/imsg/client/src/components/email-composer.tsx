@@ -2,8 +2,9 @@ import { forwardSubject, forwardText, mailboxText, parseTyped, replyRecipients, 
 import type { ConversationId } from "@shared/types";
 import type { GenericId } from "convex/values";
 import { useState, type JSX } from "react";
-import { Platform, Pressable, StyleSheet, Text, TextInput, View, type GestureResponderEvent, type NativeSyntheticEvent, type TextInputKeyPressEventData } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View, type GestureResponderEvent, type NativeSyntheticEvent, type TextInputKeyPressEventData } from "react-native";
 
+import { ChipField, ComposeSheet, FromChip, SheetField, SheetFooter, WEB_INPUT, type Mailbox } from "@/components/compose-sheet";
 import { formatFileSize } from "@/components/message-meta";
 import { ScheduleEditor } from "@/components/schedule-editor";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
@@ -19,37 +20,31 @@ import { scheduleOptions } from "@/lib/scheduled";
 import { showToast } from "@/lib/toast";
 
 /**
- * The email composer. A reply or reply all answers one message, named above the fields; a forward and a new email
- * start a new thread from a mailbox. To and Cc are chips. Files ride along with checkboxes: a reply all can carry the
- * thread's files again, a forward carries the original's, and Attach adds one from the device. Enter adds a line and
- * ⌘Enter sends. A reply goes through the pending-send lifecycle, so its card shows at once and becomes Gmail's
- * message; Send later schedules it in Convex.
+ * The email composer, on the compose sheet's parts. A new email and a forward open as the sheet; a reply or reply all
+ * docks in the reader under the message it answers. To and Cc are chips, and the From chip shows the mailbox whenever
+ * more than one is connected. Files ride along with checkboxes: a forward carries the original's checked, an agent's
+ * draft carries its own checked, and a reply all offers the thread's files unchecked, one tap each to include. Attach
+ * adds one from the device. Enter adds a line and ⌘Enter sends. A reply goes through the pending-send lifecycle, so its
+ * card shows at once and becomes Gmail's message; Send later schedules it in Convex.
  */
 
 /** The message a reply or forward is made from, with what the composer says about it. */
 export type ComposerSource = ReplySource & { guid: string; name: string; date: number; text: string };
 
+/** A file the email can carry. `offered` marks one of the thread's files a reply all lists unchecked; a plain reply leaves those out. */
+export type ComposerFile = MailFile & { on: boolean; offered?: boolean };
+
 export type ComposerStart =
-  | { mode: ReplyMode; replyTo: ComposerSource; files?: readonly MailFile[]; text?: string; note?: string }
+  | { mode: ReplyMode; replyTo: ComposerSource; files?: readonly ComposerFile[]; text?: string; note?: string }
   | { mode: "forward"; replyTo: ComposerSource; files: readonly MailFile[] }
   | { mode: "new" };
-
-export interface Mailbox {
-  _id: string;
-  label: string;
-  gmailApp?: "workspace" | "personal";
-}
-
-type File = MailFile & { on: boolean };
-
-const mailboxName = (mailbox: Mailbox) => (mailbox.gmailApp === "personal" ? "Personal" : "AUF");
 
 export function EmailComposer({ conversationId, accountId, mailboxes, start, subject, self, hasDraft, onClose }: {
   /** The thread a reply goes into; a forward and a new email have none. */
   conversationId: ConversationId | null;
-  /** The thread's mailbox, which a forward sends from. */
+  /** The mailbox it goes out from: the thread's for a reply or forward, the narrowed one for a new email. */
   accountId: string | null;
-  /** The connected mailboxes a new email can come from. */
+  /** The connected mailboxes. A new email or forward can switch between them; a reply shows its own. */
   mailboxes: readonly Mailbox[];
   start: ComposerStart;
   subject: string;
@@ -68,18 +63,21 @@ export function EmailComposer({ conversationId, accountId, mailboxes, start, sub
   const [typed, setTyped] = useState({ to: "", cc: "" });
   const [subjectText, setSubject] = useState(start.mode === "new" ? "" : start.mode === "forward" ? forwardSubject(subject) : replySubject(subject));
   const [text, setText] = useState(start.mode === "reply" || start.mode === "replyAll" ? start.text ?? "" : "");
-  const [files, setFiles] = useState<File[]>(start.mode === "new" ? [] : (start.files ?? []).map((file) => ({ ...file, on: true })));
-  const [from, setFrom] = useState(start.mode === "new" ? mailboxes[0]?._id ?? null : accountId);
+  const [files, setFiles] = useState<ComposerFile[]>(start.mode === "new" ? []
+    : start.mode === "forward" ? start.files.map((file) => ({ ...file, on: true })) : [...start.files ?? []]);
+  const [from, setFrom] = useState(accountId ?? mailboxes[0]?._id ?? null);
   const [uploading, setUploading] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [picking, setPicking] = useState(false);
   const showSheet = useActionSheet();
   const replying = mode === "reply" || mode === "replyAll";
+  const listed = files.filter((file) => mode !== "reply" || !file.offered);
   const allTo = [...to, ...parseTyped(typed.to)];
   const allCc = [...cc, ...parseTyped(typed.cc)];
   const ready = !sending && uploading === 0 && (text.trim().length > 0 || mode === "forward") && allTo.length + allCc.length > 0 && from !== null;
-  const attachments = files.filter((file) => file.on).map(({ storageId, filename, mimeType }) => ({ storageId, filename, mimeType }));
+  const dirty = text.trim() !== "" || (mode === "new" && (allTo.length + allCc.length > 0 || subjectText.trim() !== ""));
+  const attachments = listed.filter((file) => file.on).map(({ storageId, filename, mimeType }) => ({ storageId, filename, mimeType }));
   const email = { to: allTo.map(mailboxText), cc: allCc.map(mailboxText), subject: subjectText.trim(), ...(attachments.length ? { attachments } : {}) };
   const reply = (body: string) => ({ kind: "send" as const, text: body, replyToGuid: source!.guid, email });
   const clearDraft = () => conversationId
@@ -181,78 +179,74 @@ export function EmailComposer({ conversationId, accountId, mailboxes, start, sub
     send();
   };
 
-  const recipients = (label: "To" | "Cc", value: MailAddress[], set: (next: MailAddress[]) => void, field: "to" | "cc") => (
-    <RecipientField
-      label={label}
-      value={value}
-      typed={typed[field]}
-      onTyped={(next) => setTyped((current) => ({ ...current, [field]: next }))}
-      onChange={set}
-      onKeyPress={onKeyPress}
-    />
-  );
+  /** To or Cc: typed text becomes chips at a comma, Enter or blur. */
+  const recipients = (label: "To" | "Cc", value: MailAddress[], set: (next: MailAddress[]) => void, field: "to" | "cc") => {
+    const commit = (input: string) => {
+      const added = parseTyped(input).filter((address) => !value.some((chip) => chip.address === address.address));
+      if (added.length) set([...value, ...added]);
+      setTyped((current) => ({ ...current, [field]: parseTyped(input).length ? "" : input }));
+    };
+    return (
+      <ChipField
+        label={label}
+        chips={value.map((chip) => ({ key: chip.address, label: chip.name ?? chip.address }))}
+        onRemove={(address) => set(value.filter((chip) => chip.address !== address))}
+        input={{
+          value: typed[field],
+          onChangeText: (next) => (/[,;]\s*$/.test(next) ? commit(next) : setTyped((current) => ({ ...current, [field]: next }))),
+          onSubmitEditing: () => commit(typed[field]),
+          onBlur: () => commit(typed[field]),
+          onKeyPress,
+          inputMode: "email",
+          autoFocus: !replying && field === "to",
+        }}
+      />
+    );
+  };
 
-  const heading = mode === "forward" ? "Forward" : mode === "new" ? "New email" : null;
-  return (
-    <View testID="email-composer" style={[styles.composer, { backgroundColor: theme.surface, borderColor: theme.divider }]}>
-      <View style={styles.top}>
-        {heading ? <Text accessibilityRole="header" style={[styles.modeText, { color: theme.text }]}>{heading}</Text> : (
-          <View role="tablist" style={styles.modes}>
-            {(["reply", "replyAll"] as const).map((option) => (
-              <Pressable
-                key={option}
-                role="tab"
-                aria-selected={mode === option}
-                onPress={() => switchMode(option)}
-                style={[styles.mode, mode === option && { backgroundColor: theme.rowSelected }]}
-              >
-                <Text style={[styles.modeText, { color: mode === option ? theme.text : theme.textSecondary }]}>{option === "reply" ? "Reply" : "Reply all"}</Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
-        <Pressable accessibilityRole="button" onPress={discard} hitSlop={8}>
-          <Text style={[styles.discard, { color: theme.textSecondary }]}>Discard</Text>
+  const docked = replying;
+  const header = docked ? (
+    <View role="tablist" style={styles.modes}>
+      {(["reply", "replyAll"] as const).map((option) => (
+        <Pressable
+          key={option}
+          role="tab"
+          aria-selected={mode === option}
+          onPress={() => switchMode(option)}
+          style={[styles.mode, mode === option && { backgroundColor: theme.rowSelected }]}
+        >
+          <Text style={[styles.modeText, { color: mode === option ? theme.text : theme.textSecondary }]}>{option === "reply" ? "Reply" : "Reply all"}</Text>
         </Pressable>
-      </View>
+      ))}
+    </View>
+  ) : undefined;
+  return (
+    <ComposeSheet
+      testID="email-composer"
+      title={mode === "forward" ? "Forward email" : mode === "new" ? "New email" : mode === "reply" ? "Reply" : "Reply all"}
+      header={header}
+      presentation={docked ? "docked" : "overlay"}
+      dirty={dirty}
+      onClose={discard}
+    >
       {source ? (
         <Text testID="composer-source" numberOfLines={1} style={[styles.source, { color: theme.textSecondary }]}>
           {mode === "forward" ? "Forwarding" : "Replying to"} {source.name}, {formatReceiptTime(source.date)}
           <Text style={{ color: theme.textTertiary }}>{`  ${source.text.replace(/\s+/g, " ").trim()}`}</Text>
         </Text>
       ) : null}
-      {mode === "new" && mailboxes.length > 1 ? (
-        <View style={[styles.field, { borderBottomColor: theme.divider }]}>
-          <Text style={[styles.label, { color: theme.textTertiary }]}>From</Text>
-          <View role="radiogroup" accessibilityLabel="From" style={styles.chips}>
-            {mailboxes.map((mailbox) => (
-              <Pressable
-                key={mailbox._id}
-                role="radio"
-                aria-checked={from === mailbox._id}
-                accessibilityLabel={`${mailboxName(mailbox)}, ${mailbox.label}`}
-                onPress={() => setFrom(mailbox._id)}
-                style={[styles.chip, { backgroundColor: from === mailbox._id ? theme.rowSelected : "transparent", borderColor: theme.divider }]}
-              >
-                <Text style={[styles.chipText, { color: theme.text }]}>{mailboxName(mailbox)}</Text>
-                <Text style={[styles.chipNote, { color: theme.textTertiary }]}>{mailbox.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      ) : null}
+      {mailboxes.length > 1 ? <FromChip mailboxes={mailboxes} value={from} {...(docked ? {} : { onChange: setFrom })} /> : null}
       {recipients("To", to, setTo, "to")}
       {recipients("Cc", cc, setCc, "cc")}
-      <View style={[styles.field, { borderBottomColor: theme.divider }]}>
-        <Text style={[styles.label, { color: theme.textTertiary }]}>Subject</Text>
+      <SheetField label="Subject">
         <TextInput
           accessibilityLabel="Subject"
           value={subjectText}
           onChangeText={setSubject}
           onKeyPress={onKeyPress}
-          style={[styles.input, { color: theme.text }, Platform.OS === "web" && styles.webInput]}
+          style={[styles.input, { color: theme.text }, WEB_INPUT]}
         />
-      </View>
+      </SheetField>
       {start.mode !== "new" && start.mode !== "forward" && start.note ? <Text style={[styles.note, { color: theme.textSecondary }]}>{start.note}</Text> : null}
       <TextInput
         accessibilityLabel="Message"
@@ -262,19 +256,19 @@ export function EmailComposer({ conversationId, accountId, mailboxes, start, sub
         onChangeText={setText}
         onKeyPress={onKeyPress}
         multiline
-        autoFocus={mode !== "new"}
-        style={[styles.body, { color: theme.text }, Platform.OS === "web" && styles.webInput]}
+        autoFocus={replying}
+        style={[styles.body, docked ? styles.dockedBody : styles.sheetBody, { color: theme.text }, WEB_INPUT]}
       />
-      {files.length ? (
+      {listed.length ? (
         <View accessibilityLabel="Attachments" style={styles.files}>
-          {files.map((file, index) => (
+          {listed.map((file) => (
             <Pressable
               key={file.storageId}
               role="checkbox"
               aria-checked={file.on}
               accessibilityLabel={`Include ${file.filename}`}
-              onPress={() => setFiles((current) => current.map((candidate, at) => (at === index ? { ...candidate, on: !candidate.on } : candidate)))}
-              style={[styles.file, { borderColor: theme.divider, opacity: file.on ? 1 : 0.55 }]}
+              onPress={() => setFiles((current) => current.map((candidate) => (candidate.storageId === file.storageId ? { ...candidate, on: !candidate.on } : candidate)))}
+              style={[styles.file, { borderColor: theme.divider, opacity: file.on ? 1 : 0.6 }]}
             >
               <View style={[styles.box, { borderColor: file.on ? theme.accent : theme.dividerStrong, backgroundColor: file.on ? theme.accent : "transparent" }]}>
                 {file.on ? <Text style={styles.tick}>✓</Text> : null}
@@ -285,35 +279,16 @@ export function EmailComposer({ conversationId, accountId, mailboxes, start, sub
           ))}
         </View>
       ) : null}
-      <View style={styles.bottom}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Attach files" onPress={() => void attach().catch(() => showToast("Couldn't attach the file."))} hitSlop={6}>
-          <Text style={[styles.attach, { color: theme.accent }]}>{uploading ? "Attaching…" : "Attach"}</Text>
-        </Pressable>
-        <Text style={[styles.hint, { color: error ? theme.destructive : theme.textTertiary }]} numberOfLines={2}>
-          {error ?? (wide ? "⌘↩ to send" : "")}
-        </Text>
-        {replying ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Send later"
-            accessibilityState={{ disabled: !ready }}
-            disabled={!ready}
-            onPress={openLater}
-            style={[styles.later, { borderColor: theme.divider, opacity: ready ? 1 : 0.45 }]}
-          >
-            <Text style={[styles.laterText, { color: theme.text }]}>Send later</Text>
-          </Pressable>
-        ) : null}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Send"
-          disabled={!ready}
-          onPress={send}
-          style={[styles.send, { backgroundColor: theme.accent, opacity: ready ? 1 : 0.45 }]}
-        >
-          <Text style={styles.sendText}>{sending ? "Sending…" : "Send"}</Text>
-        </Pressable>
-      </View>
+      <SheetFooter
+        onAttach={() => void attach().catch(() => showToast("Couldn't attach the file."))}
+        attaching={uploading > 0}
+        note={uploading ? "Attaching…" : wide ? "⌘↩ to send" : undefined}
+        error={error}
+        {...(replying ? { onLater: openLater } : {})}
+        ready={ready}
+        sending={sending}
+        onSend={send}
+      />
       {replying ? (
         <ScheduleEditor
           visible={picking}
@@ -325,91 +300,24 @@ export function EmailComposer({ conversationId, accountId, mailboxes, start, sub
           onSubmit={(body, sendAt) => schedule(body, sendAt)}
         />
       ) : null}
-    </View>
-  );
-}
-
-/** To or Cc: a chip per address, each removable, and a field whose text becomes chips at a comma, Enter or blur. */
-function RecipientField({ label, value, typed, onTyped, onChange, onKeyPress }: {
-  label: string;
-  value: MailAddress[];
-  typed: string;
-  onTyped: (text: string) => void;
-  onChange: (next: MailAddress[]) => void;
-  onKeyPress: (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => void;
-}): JSX.Element {
-  const theme = useTheme();
-  const commit = (text: string) => {
-    const added = parseTyped(text).filter((address) => !value.some((chip) => chip.address === address.address));
-    if (added.length) onChange([...value, ...added]);
-    onTyped(parseTyped(text).length ? "" : text);
-  };
-  return (
-    <View style={[styles.field, { borderBottomColor: theme.divider }]}>
-      <Text style={[styles.label, { color: theme.textTertiary }]}>{label}</Text>
-      <View style={styles.chips}>
-        {value.map((chip) => (
-          <Pressable
-            key={chip.address}
-            accessibilityRole="button"
-            accessibilityLabel={`Remove ${chip.name ?? chip.address} from ${label}`}
-            onPress={() => onChange(value.filter((candidate) => candidate.address !== chip.address))}
-            style={[styles.chip, { backgroundColor: theme.rowHover, borderColor: theme.divider }]}
-          >
-            <Text testID="recipient-chip" numberOfLines={1} style={[styles.chipText, { color: theme.text }]}>{chip.name ?? chip.address}</Text>
-            <Text style={[styles.chipNote, { color: theme.textTertiary }]}>×</Text>
-          </Pressable>
-        ))}
-        <TextInput
-          accessibilityLabel={label}
-          value={typed}
-          onChangeText={(text) => (/[,;]\s*$/.test(text) ? commit(text) : onTyped(text))}
-          onSubmitEditing={() => commit(typed)}
-          onBlur={() => commit(typed)}
-          onKeyPress={(event) => {
-            if (event.nativeEvent.key === "Backspace" && !typed && value.length) onChange(value.slice(0, -1));
-            onKeyPress(event);
-          }}
-          autoCapitalize="none"
-          autoCorrect={false}
-          inputMode="email"
-          style={[styles.input, styles.chipInput, { color: theme.text }, Platform.OS === "web" && styles.webInput]}
-        />
-      </View>
-    </View>
+    </ComposeSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  composer: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, gap: 2, marginHorizontal: 20, marginVertical: 12, padding: 12 },
-  top: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", paddingBottom: 6 },
   modes: { flexDirection: "row", gap: 4 },
   mode: { borderRadius: 7, paddingHorizontal: 10, paddingVertical: 4 },
   modeText: { fontSize: 13, fontWeight: "600" },
-  discard: { fontSize: 13 },
-  source: { fontSize: 12.5, paddingBottom: 4 },
-  field: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 8, paddingVertical: 6 },
-  label: { fontSize: 13, width: 56 },
+  source: { fontSize: 12.5, paddingBottom: 6, paddingHorizontal: 16, paddingTop: 8 },
   input: { flex: 1, fontSize: 14, paddingVertical: 2 },
-  chipInput: { minWidth: 140 },
-  webInput: { outlineStyle: "none" } as object,
-  chips: { alignItems: "center", flex: 1, flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  chip: { alignItems: "center", borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 6, maxWidth: 280, paddingHorizontal: 10, paddingVertical: 3 },
-  chipText: { flexShrink: 1, fontSize: 13, fontWeight: "500" },
-  chipNote: { fontSize: 12 },
-  note: { fontSize: 12.5, fontStyle: "italic", paddingTop: 8 },
-  body: { fontSize: 14, lineHeight: 21, minHeight: 120, paddingTop: 10, textAlignVertical: "top" },
-  files: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingTop: 6 },
+  note: { fontSize: 12.5, fontStyle: "italic", paddingHorizontal: 16, paddingTop: 8 },
+  body: { fontSize: 14, lineHeight: 21, paddingHorizontal: 16, paddingTop: 10, textAlignVertical: "top" },
+  sheetBody: { flex: 1 },
+  dockedBody: { minHeight: 120 },
+  files: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingBottom: 8, paddingHorizontal: 16 },
   file: { alignItems: "center", borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 8, maxWidth: 320, paddingHorizontal: 10, paddingVertical: 6 },
   box: { alignItems: "center", borderRadius: 4, borderWidth: 1.5, height: 16, justifyContent: "center", width: 16 },
   tick: { color: "#fff", fontSize: 11, fontWeight: "700", lineHeight: 13 },
   fileName: { flexShrink: 1, fontSize: 13 },
   fileSize: { fontSize: 12 },
-  bottom: { alignItems: "center", flexDirection: "row", gap: 12, justifyContent: "space-between", paddingTop: 6 },
-  attach: { fontSize: 14, fontWeight: "600" },
-  hint: { flex: 1, fontSize: 12 },
-  later: { borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 7 },
-  laterText: { fontSize: 14, fontWeight: "600" },
-  send: { borderRadius: 8, paddingHorizontal: 16, paddingVertical: 7 },
-  sendText: { color: "#fff", fontSize: 14, fontWeight: "600" },
 });

@@ -1,364 +1,259 @@
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { addressesMatch, formatAddress } from "@shared/address";
+import { conversationRoute, fromBridgeMessage } from "@shared/imessage";
+import type { Contact, ConversationId, Message } from "@shared/types";
+import { router } from "expo-router";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+
+import { ChipField, ComposeSheet, SheetFooter, WEB_INPUT } from "@/components/compose-sheet";
+import { useAirtableSearch } from "@/hooks/use-airtable-search";
+import { useChatDirectory } from "@/hooks/use-chat-directory";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
+import { useTheme } from "@/hooks/use-theme";
+import { api } from "@/lib/api";
 import { runCommand } from "@/lib/convex-commands";
 import { messagingCommandError } from "@/lib/messaging-api";
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import Ionicons from "@expo/vector-icons/Ionicons";
-import { router } from "expo-router";
-import { api } from "@/lib/api";
-import { useChatDirectory } from "@/hooks/use-chat-directory";
-import { conversationRoute, selectChat } from "@/lib/selection";
+import { afterPaint } from "@/lib/open-timing";
+import { composeSections, type ComposeRow } from "@/lib/palette/compose-rows";
+import { draftBubble, pendingSends } from "@/lib/pending-sends";
+import { conversationRoute as threadHref, selectChat } from "@/lib/selection";
 import { showToast } from "@/lib/toast";
-import type { ChatSummary, Contact } from "@shared/types";
-import { formatAddress } from "@shared/address";
-import { useLayoutMode } from "@/hooks/use-layout-mode";
-import { contactService, splitPrefix } from "@/lib/contact-service";
-import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
-import { type AirtableHumanRow } from "@/lib/identity";
-import { useAirtableSearch } from "@/hooks/use-airtable-search";
+
 import { PersonAvatar } from "./avatar";
-import { ServiceDot, SourceIcon } from "./service-label";
-import { useTheme } from "@/hooks/use-theme";
-import type { ThemeColors } from "@/components/ui/interaction";
+import { PaletteListRow, PaletteSectionHeader, paletteStyles, usePaletteCursor } from "./palette/palette-list";
 
-type Row =
-  | { kind: "recent-header"; key: string }
-  | { kind: "contact"; key: string; contact: Contact }
-  | { kind: "airtable-header"; key: string }
-  | { kind: "airtable"; key: string; human: AirtableHumanRow };
-
-const RECENT_LIMIT = 8;
-
-/** People from the most recent one-to-one conversations, newest first. */
-function recentContacts(chats: readonly ChatSummary[] | null): Contact[] {
-  if (!chats) return [];
-  return [...chats]
-    .filter((chat) => !chat.isGroup && chat.participants[0])
-    .sort((a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0))
-    .slice(0, RECENT_LIMIT)
-    .map((chat) => ({ address: chat.participants[0]!.address, name: chat.displayName }));
+/** Opens a conversation in the shell, or as a route on a phone. */
+function show(conversationId: ConversationId, name?: string): void {
+  if (!selectChat({ conversationId, ...(name ? { name } : {}) })) router.push(threadHref(conversationId));
 }
 
-/** New-message UI shared by the mobile route and the desktop overlay panel. */
-export function NewChatContent({
-  onClose,
-  initialContact,
-}: {
+/**
+ * New message, on the compose sheet. The To field searches people as you type and its rows replace the body until
+ * someone is picked; then the body takes the first message. On the web, arrows rove the rows, Enter adds the selected
+ * one from To and sends from the body, and ⇧Enter is a new line.
+ */
+export function NewChatContent({ onClose, initialContact, presentation }: {
   onClose: () => void;
-  /** Pre-fills the recipient — used by the person-view's "Message" action for someone with no existing thread. */
+  /** Pre-fills the recipient: the person view's "Message" for someone with no thread yet. */
   initialContact?: Contact;
-}) {
+  /** A phone route draws the sheet as its page. */
+  presentation?: "overlay" | "screen";
+}): React.JSX.Element {
   const theme = useTheme();
   const { wide } = useLayoutMode();
-  const [activeIndex, setActiveIndex] = useState(0);
-  const toInput = useRef<TextInput>(null);
+  const [recipients, setRecipients] = useState<Contact[]>(initialContact ? [initialContact] : []);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Contact[]>([]);
-  const [selected, setSelected] = useState<Contact[]>(initialContact ? [initialContact] : []);
+  const [results, setResults] = useState<{ needle: string; contacts: Contact[] }>({ needle: "", contacts: [] });
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const toRef = useRef<TextInput>(null);
+  const bodyRef = useRef<TextInput>(null);
+  const directory = useChatDirectory();
 
   const needle = query.trim();
-  const chats = useChatDirectory();
-  const recents = useMemo(() => recentContacts(chats), [chats]);
-
+  // The last answer stays on screen while the next one loads, so rows never blank between keys;
+  // the directory's own matches fill in instantly in the meantime.
   useEffect(() => {
-    if (needle.length < 2) {
-      setResults([]);
-      return;
-    }
+    if (needle.length < 2) return;
+    let cancelled = false;
     const handle = setTimeout(() => {
-      api.contacts(needle).then(setResults).catch(() => setResults([]));
-    }, 200);
-    return () => clearTimeout(handle);
+      api.contacts(needle).then((found) => {
+        if (!cancelled) setResults({ needle, contacts: found });
+      }).catch(() => undefined);
+    }, 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
   }, [needle]);
+  const searching = needle.length >= 2 && results.needle !== needle;
 
-  const addContact = (c: Contact) => {
-    setSelected((current) => (current.some((x) => x.address === c.address) ? current : [...current, c]));
+  const addRecipient = (contact: Contact): void => {
+    setRecipients((current) => (current.some((x) => addressesMatch(x.address, contact.address)) ? current : [...current, contact]));
     setQuery("");
-    toInput.current?.focus();
+    toRef.current?.focus();
   };
-
-
-  // Same pattern as the Contacts screen: existing contacts first, unlinked
-  // Airtable matches below — sharing the search/dedupe/add logic via the hook.
+  // Unlinked Airtable humans can be added, then land as a recipient, as on the Contacts surfaces.
   const { results: airtableResults, add: addAirtableContact, addingId } = useAirtableSearch(needle, (_personId, human) => {
     const address = human.phone ?? human.email;
-    if (address) addContact({ address, name: human.display_name });
+    if (address) addRecipient({ address, name: human.display_name });
   });
 
-  const showRecents = needle.length === 0;
-  const unselectedRecents = recents.filter((c) => !selected.some((x) => x.address === c.address));
-  const rows: Row[] = showRecents ? [
-    ...(unselectedRecents.length > 0 ? [{ kind: "recent-header" as const, key: "recent-header" }] : []),
-    ...unselectedRecents.map((c) => ({ kind: "contact" as const, key: `recent-${c.address}`, contact: c })),
-  ] : [
-    ...results.map((c) => ({ kind: "contact" as const, key: `${c.address}-${c.name}`, contact: c })),
-    ...(airtableResults.length > 0
-      ? [
-          { kind: "airtable-header" as const, key: "airtable-header" },
-          ...airtableResults.map((h) => ({ kind: "airtable" as const, key: `at-${h.record_id}`, human: h })),
-        ]
-      : []),
-  ];
+  const sections = useMemo(() => composeSections({
+    query,
+    recipients,
+    directory: directory ?? [],
+    contacts: needle.length >= 2 ? results.contacts : [],
+    airtable: airtableResults,
+  }), [query, recipients, directory, needle, results.contacts, airtableResults]);
+  const rows = useMemo(() => sections.flatMap((section) => section.rows), [sections]);
+  const cursor = usePaletteCursor(useMemo(() => rows.map((row) => row.key), [rows]));
+  const { reset } = cursor;
+  useEffect(() => reset(), [needle, reset]);
+  const picking = needle !== "" || recipients.length === 0;
 
-  const create = async () => {
-    if (selected.length === 0 || !text.trim() || sending) return;
+  const [only] = recipients;
+  const existing = recipients.length === 1 && only ? directory?.find((chat) => !chat.isGroup && conversationRoute(chat).service === "iMessage" &&
+    chat.participants.length === 1 && addressesMatch(chat.participants[0]?.address ?? "", only.address)) : undefined;
+  const canSend = recipients.length > 0 && text.trim().length > 0 && !sending;
+
+  const send = (): void => {
+    const body = text.trim();
+    if (recipients.length === 0 || body === "" || sending) return;
     setSending(true);
-    try {
-      const { conversationId } = await runCommand(null, {
-        kind: "createChat",
-        addresses: selected.map((c) => c.address),
-        text: text.trim(),
+    // createChat lands one recipient in their iMessage conversation; when that already exists, the message shows there
+    // on the click, as a composer send does. A new chat's first message is not a queued send, so it cannot be cancelled.
+    const temp: Message | null = existing ? { ...draftBubble(existing, { text: body }), sendState: "sending" } : null;
+    if (existing && temp) {
+      pendingSends.upsert(existing.conversationId, temp);
+      // Mounting the thread costs a long frame; the Sending ring paints first, on the frame of the click.
+      afterPaint(() => {
+        onClose();
+        show(existing.conversationId, existing.displayName);
       });
-      onClose();
-      if (conversationId && !selectChat({ conversationId })) router.push(conversationRoute(conversationId));
-    } catch (e) {
-      // Surface the server's reason when it gives one — a bare toast made
-      // the group-creation failure (apple-script vs private-api) opaque.
-      const detail =
-        e instanceof Error ? /"error"\s*:\s*"([^"]+)"/.exec(e.message)?.[1] : undefined;
-      showToast(messagingCommandError(e, detail ? `Couldn't start: ${detail.slice(0, 120)}` : e instanceof Error ? `Couldn't start: ${e.message.slice(0, 120)}` : "Couldn't start the conversation"));
-    } finally {
-      setSending(false);
     }
+    runCommand(null, { kind: "createChat", addresses: recipients.map((c) => c.address), text: body })
+      .then(({ conversationId, message }) => {
+        if (existing && temp && conversationId === existing.conversationId) return pendingSends.settle(conversationId, temp.guid, fromBridgeMessage(message));
+        if (existing && temp) pendingSends.retain(existing.conversationId, (m) => m.guid !== temp.guid);
+        onClose();
+        if (conversationId) show(conversationId);
+      })
+      .catch((e: unknown) => {
+        if (existing && temp) pendingSends.strand(existing.conversationId, temp);
+        const detail = e instanceof Error ? /"error"\s*:\s*"([^"]+)"/.exec(e.message)?.[1] : undefined;
+        showToast(messagingCommandError(e, detail ? `Couldn't start: ${detail.slice(0, 120)}` : e instanceof Error ? `Couldn't start: ${e.message.slice(0, 120)}` : "Couldn't start the conversation"));
+      })
+      .finally(() => setSending(false));
   };
 
-  const canSend = selected.length > 0 && text.trim().length > 0;
-  const pickable = rows.filter((row) => row.kind === "contact" || row.kind === "airtable");
-  const active = pickable.length > 0 ? pickable[Math.min(activeIndex, pickable.length - 1)] : undefined;
-  const pick = (row: Row): void => {
-    if (row.kind === "contact") addContact(row.contact);
-    else if (row.kind === "airtable") void addAirtableContact(row.human);
+  const choose = (row: ComposeRow): void => {
+    if (row.kind === "airtable") void addAirtableContact(row.human);
+    else addRecipient(row.contact);
   };
-  const onKey = (key: string): boolean => {
-    if (pickable.length === 0) return false;
-    if (key === "ArrowDown") setActiveIndex((i) => (i + 1) % pickable.length);
-    else if (key === "ArrowUp") setActiveIndex((i) => (i - 1 + pickable.length) % pickable.length);
-    else return false;
-    return true;
+  /** Enter in To: add the selected row, or move on to the body once someone is picked. */
+  const submitTo = (): void => {
+    const row = rows[cursor.indexRef.current];
+    if (row && needle !== "") return choose(row);
+    if (needle === "" && recipients.length > 0) bodyRef.current?.focus();
+    else if (row) choose(row);
   };
 
-  const suggestions = rows.length > 0 ? (
-    <View
-      style={[
-        wide ? styles.popover : styles.inlineList,
-        wide && { backgroundColor: theme.popBg, boxShadow: theme.popShadow } as object,
-      ]}
-    >
-      <FlatList
-        data={rows}
-        keyExtractor={(row) => row.key}
-        keyboardShouldPersistTaps="handled"
-        renderItem={({ item }) => {
-          if (item.kind === "airtable-header" || item.kind === "recent-header") {
-            return (
-              <Text style={[styles.sectionHeader, { color: theme.textTertiary }]}>
-                {item.kind === "recent-header" ? "Recent" : "From Airtable"}
-              </Text>
-            );
-          }
-          const selectedRow = item === active;
-          if (item.kind === "airtable") {
-            const adding = addingId === item.human.record_id;
-            return (
-              <SuggestionRow
-                selected={selectedRow}
-                disabled={adding}
-                onPress={() => pick(item)}
-                theme={theme}
-                avatar={<PersonAvatar address={null} name={item.human.display_name} size={28} />}
-                name={item.human.display_name}
-                query={needle}
-                handle={item.human.phone ?? item.human.email ?? undefined}
-                trailing={adding ? <ActivityIndicator size="small" /> : <Ionicons name="add-circle-outline" size={18} color={theme.icon} />}
-              />
-            );
-          }
-          const badge = contactService(item.contact.address, chats);
-          const handle = formatAddress(item.contact.address);
-          return (
-            <SuggestionRow
-              selected={selectedRow}
-              onPress={() => pick(item)}
-              theme={theme}
-              avatar={<PersonAvatar address={item.contact.address} name={item.contact.name} size={28} />}
-              name={item.contact.name}
-              query={needle}
-              handle={item.contact.name === handle ? undefined : handle}
-              trailing={badge ? <SourceIcon badge={badge} /> : undefined}
-            />
-          );
+  const live = useRef({ send, submitTo, picking });
+  live.current = { send, submitTo, picking };
+  const cursorRef = useRef(cursor);
+  cursorRef.current = cursor;
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const onKey = (e: KeyboardEvent): void => {
+      const inBody = document.activeElement === (bodyRef.current as unknown as Element | null);
+      const inTo = document.activeElement === (toRef.current as unknown as Element | null);
+      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && inTo && live.current.picking) {
+        e.preventDefault();
+        e.stopPropagation();
+        cursorRef.current.move(e.key === "ArrowDown" ? 1 : -1);
+      } else if (e.key === "Enter" && (inTo || (inBody && !e.shiftKey))) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (inBody) live.current.send();
+        else live.current.submitTo();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, []);
+
+  let flatIndex = -1;
+  return (
+    <ComposeSheet title="New message" presentation={presentation} dirty={text.trim() !== ""} onClose={onClose}>
+      <ChipField
+        label="To"
+        chips={recipients.map((contact) => ({ key: contact.address, label: contact.name === contact.address ? formatAddress(contact.address) : contact.name }))}
+        onRemove={(address) => setRecipients((current) => current.filter((c) => c.address !== address))}
+        input={{
+          ref: toRef,
+          value: query,
+          onChangeText: setQuery,
+          placeholder: recipients.length === 0 ? "Name, number, or email" : "Add another",
+          autoFocus: true,
+          spellCheck: false,
+          // react-native-web reads blurOnSubmit, not submitBehavior; Enter picks and keeps typing.
+          blurOnSubmit: false,
+          onSubmitEditing: submitTo,
         }}
       />
-    </View>
-  ) : null;
-
-  return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: theme.thread }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      {wide && (
-        <View style={[styles.header, { borderBottomColor: theme.divider }]}>
-          <Text accessibilityRole="header" style={[styles.headerTitle, { color: theme.text }]}>New message</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close new message"
-            onPress={onClose}
-            hitSlop={8}
-            style={({ hovered, pressed }) => [styles.headerIcon, (hovered || pressed) && { backgroundColor: theme.rowHover }]}
-          >
-            <Ionicons name="close" size={18} color={theme.icon} />
-          </Pressable>
-        </View>
-      )}
-      <View style={[styles.toRow, { borderBottomColor: theme.divider }]}>
-        <Text style={[styles.toLabel, { color: theme.textTertiary }]}>To</Text>
-        {selected.map((contact) => {
-          const badge = contactService(contact.address, chats);
-          return (
-            <Pressable
-              key={contact.address}
-              accessibilityRole="button"
-              accessibilityLabel={`Remove ${contact.name}`}
-              onPress={() => setSelected((cur) => cur.filter((c) => c.address !== contact.address))}
-              style={({ hovered, pressed }) => [styles.token, { backgroundColor: hovered || pressed ? theme.rowHover : theme.surface, borderColor: theme.dividerStrong }]}
-            >
-              <PersonAvatar address={contact.address} name={contact.name} size={18} />
-              <Text numberOfLines={1} style={[styles.tokenText, { color: theme.text }]}>{contact.name}</Text>
-              {badge && <ServiceDot badge={badge} />}
-            </Pressable>
-          );
-        })}
+      {picking ? (
+        <ScrollView keyboardShouldPersistTaps="handled" style={styles.fill} contentContainerStyle={styles.rows}>
+          {sections.map((section) => (
+            <Fragment key={section.title}>
+              <PaletteSectionHeader title={section.title} />
+              {section.rows.map((row) => {
+                flatIndex += 1;
+                const index = flatIndex;
+                const name = row.kind === "airtable" ? row.human.display_name : row.contact.name;
+                const address = row.kind === "airtable" ? row.human.phone ?? row.human.email ?? null : row.contact.address;
+                const adding = row.kind === "airtable" && addingId === row.human.record_id;
+                return (
+                  <PaletteListRow
+                    key={row.key}
+                    paletteKey={row.key}
+                    selected={index === cursor.selectedIndex}
+                    disabled={adding}
+                    onPress={() => choose(row)}
+                    onHover={() => cursor.setSelectedIndex(index)}
+                  >
+                    {row.kind === "raw" ? (
+                      <View style={[paletteStyles.iconBadge, { backgroundColor: theme.field }]}>
+                        <Ionicons aria-hidden name={address?.includes("@") ? "mail-outline" : "call-outline"} size={14} color={theme.icon} />
+                      </View>
+                    ) : (
+                      <PersonAvatar address={address ?? name} name={name} size={28} />
+                    )}
+                    <View style={paletteStyles.textCol}>
+                      <Text numberOfLines={1} style={[paletteStyles.title, { color: theme.text }]}>
+                        {row.kind === "raw" ? formatAddress(row.contact.address) : name}
+                      </Text>
+                      {row.kind !== "raw" && address && formatAddress(address) !== name ? (
+                        <Text numberOfLines={1} style={[paletteStyles.subtitle, { color: theme.textSecondary }]}>{formatAddress(address)}</Text>
+                      ) : null}
+                    </View>
+                    {adding ? <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>Adding…</Text> : null}
+                  </PaletteListRow>
+                );
+              })}
+            </Fragment>
+          ))}
+          {rows.length === 0 && needle.length >= 2 ? (
+            <Text style={[paletteStyles.empty, { color: theme.textSecondary }]}>
+              {searching ? "Searching…" : `No one matches “${needle}”. Type a full number or email to start a new conversation.`}
+            </Text>
+          ) : null}
+        </ScrollView>
+      ) : (
         <TextInput
-          ref={toInput}
-          value={query}
-          onChangeText={(value) => {
-            setQuery(value);
-            setActiveIndex(0);
-          }}
-          placeholder={selected.length === 0 ? "Name, number, or email" : ""}
+          ref={bodyRef}
+          accessibilityLabel="Message"
+          placeholder="Message"
           placeholderTextColor={theme.textTertiary}
-          autoFocus
-          // react-native-web reads blurOnSubmit, not submitBehavior; Enter picks and keeps typing.
-          blurOnSubmit={false}
-          onKeyPress={(event) => {
-            if (onKey(event.nativeEvent.key)) event.preventDefault();
-          }}
-          onSubmitEditing={() => {
-            if (active) pick(active);
-            else {
-              const value = query.trim();
-              if (value) addContact({ address: value, name: value });
-            }
-          }}
-          style={[styles.toInput, { color: theme.text }]}
+          value={text}
+          onChangeText={setText}
+          multiline
+          style={[styles.body, { color: theme.text }, WEB_INPUT]}
         />
-      </View>
-
-      <View style={{ flex: 1 }}>{suggestions}</View>
-
-      <View style={styles.composerWrap}>
-        <View style={[styles.composer, { backgroundColor: theme.surface, borderColor: theme.dividerStrong }]}>
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            placeholder="Message"
-            placeholderTextColor={theme.textTertiary}
-            multiline
-            style={[styles.msgInput, { color: theme.text }]}
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Send"
-            onPress={() => void create()}
-            disabled={!canSend || sending}
-            style={({ hovered, pressed }) => [styles.sendButton, { backgroundColor: canSend ? theme.bubbleMine : theme.field }, canSend && !sending && hovered && !pressed && { opacity: HOVER_DIM }, canSend && !sending && pressed && { opacity: PRESS_DIM }]}
-          >
-            {sending ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Ionicons name="arrow-up" size={16} color={canSend ? "#FFFFFF" : theme.icon} />
-            )}
-          </Pressable>
-        </View>
-      </View>
-    </KeyboardAvoidingView>
-  );
-}
-
-function SuggestionRow({
-  avatar,
-  name,
-  query,
-  handle,
-  trailing,
-  selected,
-  disabled,
-  theme,
-  onPress,
-}: {
-  avatar: React.ReactNode;
-  name: string;
-  query: string;
-  handle?: string;
-  trailing?: React.ReactNode;
-  selected: boolean;
-  disabled?: boolean;
-  theme: ThemeColors;
-  onPress: () => void;
-}) {
-  const { match, rest } = splitPrefix(name, query);
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={name}
-      aria-selected={selected}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ hovered, pressed }) => [styles.suggestion, (selected || hovered || pressed) && { backgroundColor: selected ? theme.popSelected : theme.rowHover }]}
-    >
-      {avatar}
-      <View style={styles.suggestionBody}>
-        <Text numberOfLines={1} style={[styles.suggestionName, { color: theme.text }]}>
-          {match ? <Text style={{ fontWeight: "700" }}>{match}</Text> : null}
-          {rest}
-        </Text>
-        {handle ? <Text numberOfLines={1} style={[styles.suggestionHandle, { color: theme.textTertiary }]}>{handle}</Text> : null}
-      </View>
-      {trailing}
-    </Pressable>
+      )}
+      <SheetFooter
+        note={existing ? `This continues your conversation with ${existing.displayName}.` : wide ? "↩ to send, ⇧↩ for a new line" : undefined}
+        ready={canSend}
+        sending={sending}
+        onSend={send}
+      />
+    </ComposeSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", height: 52, justifyContent: "space-between", paddingLeft: 22, paddingRight: 12 },
-  headerTitle: { fontSize: 15.5, fontWeight: "600", letterSpacing: -0.15 },
-  headerIcon: { alignItems: "center", borderRadius: 6, height: 28, justifyContent: "center", width: 28 },
-  toRow: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", flexWrap: "wrap", gap: 6, minHeight: 52, paddingHorizontal: 22, paddingVertical: 10 },
-  toLabel: { fontSize: 13.5, marginRight: 4 },
-  token: { alignItems: "center", borderRadius: 999, borderWidth: 1, flexDirection: "row", gap: 6, height: 26, maxWidth: 240, paddingLeft: 3, paddingRight: 9 },
-  tokenText: { flexShrink: 1, fontSize: 13, fontWeight: "500" },
-  toInput: { flex: 1, fontSize: 13.5, minWidth: 120, paddingVertical: 2 },
-  popover: { borderRadius: 12, left: 62, maxHeight: 360, padding: 5, position: "absolute", top: 4, width: 420, zIndex: 2 },
-  inlineList: { flex: 1, paddingHorizontal: 8, paddingTop: 4 },
-  sectionHeader: { fontSize: 11.5, fontWeight: "600", paddingBottom: 4, paddingHorizontal: 10, paddingTop: 8 },
-  suggestion: { alignItems: "center", borderRadius: 10, flexDirection: "row", gap: 11, marginBottom: 2, minHeight: 48, paddingHorizontal: 10, paddingVertical: 6 },
-  suggestionBody: { flex: 1, minWidth: 0 },
-  suggestionName: { fontSize: 13.5, lineHeight: 17 },
-  suggestionHandle: { fontSize: 12, fontVariant: ["tabular-nums"], lineHeight: 15 },
-  composerWrap: { alignSelf: "center", maxWidth: 760, paddingBottom: 16, paddingHorizontal: 16, width: "100%" },
-  composer: { alignItems: "flex-end", borderRadius: 16, borderWidth: 1, flexDirection: "row", gap: 8, padding: 8, paddingLeft: 14 },
-  msgInput: { flex: 1, fontSize: 14, lineHeight: 20, maxHeight: 120, minHeight: 40, paddingVertical: 10 },
-  sendButton: { alignItems: "center", borderRadius: 15, height: 30, justifyContent: "center", marginBottom: 5, width: 30 },
+  fill: { flex: 1 },
+  rows: { paddingBottom: 8, paddingHorizontal: 6, paddingTop: 6 },
+  body: { flex: 1, fontSize: 14, lineHeight: 21, paddingHorizontal: 16, paddingTop: 12, textAlignVertical: "top" },
 });
