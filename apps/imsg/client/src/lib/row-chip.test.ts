@@ -9,7 +9,7 @@ const agent = (attention: NonNullable<ChatSummary["agent"]>["attention"]): ChatS
 
 describe("rowChip", () => {
   test("the agent's state wins, tinted by what it wants", () => {
-    expect(rowChip({ agent: agent("needs_you"), later: { snoozedUntil: at(10, 9) } }, { now })).toEqual({ label: "Agent: needs you", tone: "turn", icon: "sparkles" });
+    expect(rowChip({ agent: agent("needs_you"), later: { snoozedUntil: at(10, 9) } }, { now })).toEqual({ label: "Agent: asking you", tone: "turn", icon: "sparkles" });
     expect(rowChip({ agent: agent("failed") }, { now })?.tone).toBe("destructive");
     expect(rowChip({ agent: agent("ready") }, { now })?.tone).toBe("accent");
     expect(rowChip({ agent: agent("working") }, { now })?.tone).toBe("neutral");

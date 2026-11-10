@@ -56,7 +56,7 @@ function Tab({
 }
 
 /**
- * The phone's floating bubble bar: each workspace (home carries the Needs you
+ * The phone's floating bubble bar: each workspace (home carries the To review
  * count), then Scheduled and Settings. It floats above the home indicator over a
  * fade, and the lists scroll under it.
  */

@@ -139,12 +139,12 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
     resetTriageWritesForTests();
   });
 
-  test("a settle leaves Needs you and becomes a done gap in Today before Convex answers, and stays gone after", async () => {
+  test("a settle leaves To review and becomes a done gap in Today before Convex answers, and stays gone after", async () => {
     const person = owed(1);
     const release = hold();
     const settling = toggleSettleChat(person);
     await until(() => writes.length > 0);
-    expect(inNeedsYou(person), "out of Needs you while the write is in flight").toBe(false);
+    expect(inNeedsYou(person), "out of To review while the write is in flight").toBe(false);
     expect(view().cleared, "Today's clear log has it before Convex answers").toEqual(["conv-1"]);
     release();
     await settling;
@@ -180,7 +180,7 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
     expect(view().cleared).toEqual([]);
   });
 
-  test("a conversation in Needs you only for its agent chat settles those chats and leaves at once; Undo reopens only them", async () => {
+  test("a conversation in To review only for its agent chat settles those chats and leaves at once; Undo reopens only them", async () => {
     const marcus = chat({});
     const release = hold();
     const settling = toggleSettleChat(marcus);

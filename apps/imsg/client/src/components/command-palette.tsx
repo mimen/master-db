@@ -25,8 +25,7 @@ import {
 import { commandQuery, peopleFirstSections, recencyAge, turnAge, type RowAge } from "@/lib/palette-people";
 import { splitAroundMatch } from "@/lib/split-match";
 import { toggleSettleChat } from "@/hooks/use-triage-actions";
-import { conversationToChat } from "@/lib/convex-adapters";
-import { accountsApi, laterApi } from "@/lib/convex-api";
+import { accountsApi } from "@/lib/convex-api";
 import { runCommand as runKeyboardCommand } from "@/lib/keyboard/controller";
 import { openPersonPane } from "@/lib/person-pane";
 import { openScheduledPane } from "@/lib/scheduled-pane";
@@ -139,9 +138,6 @@ function PaletteRoot({
   const [searching, setSearching] = useState(false);
   // One clock per open: ages must not tick while the cursor moves.
   const [now] = useState(() => Date.now());
-  // The Snoozed view: the palette lists every snoozed conversation in place of its search.
-  const [snoozedView, setSnoozedView] = useState(false);
-  const snoozed = useQuery(laterApi.listSnoozed, snoozedView ? {} : "skip");
   const accounts = useQuery(accountsApi.listAccounts, {});
   const personalMail = useMemo(() => new Set((accounts ?? []).flatMap((account) => account.gmailApp === "personal" ? [account._id as string] : [])), [accounts]);
   const commandFilter = commandQuery(query);
@@ -179,15 +175,6 @@ function PaletteRoot({
   const { agentPane } = useAgentSettings();
   const agentChats = useQuery(agentApi.listAgentChats, agentPane ? {} : "skip") ?? NO_AGENT_CHATS;
   const sections = useMemo((): PaletteSection[] => {
-    if (snoozedView) {
-      const needle = query.trim().toLowerCase();
-      const items = (snoozed ?? []).map(conversationToChat)
-        .filter((chat) => !needle || chat.displayName.toLowerCase().includes(needle))
-        .map((chat): PaletteItem => chat.isGroup
-          ? { kind: "group", key: `snoozed-${chat.conversationId}`, chat, matchedMember: null }
-          : { kind: "conversation", key: `snoozed-${chat.conversationId}`, chat });
-      return items.length > 0 ? [{ title: "Snoozed", items }] : [];
-    }
     if (commandFilter !== null) {
       // ">" asks for commands only: the engine with no conversations yields just its command list.
       return buildPaletteSections({ query: commandFilter, chats: [], messages: [], contacts: [] });
@@ -197,7 +184,7 @@ function PaletteRoot({
       return agents ? [...people.sections, agents] : people.sections;
     }
     return buildPaletteSections({ query, chats, messages, contacts, agentChats });
-  }, [snoozedView, snoozed, commandFilter, query, chats, messages, contacts, people, agentChats]);
+  }, [commandFilter, query, chats, messages, contacts, people, agentChats]);
   const flat = useMemo(() => flattenSections(sections), [sections]);
   const flatRef = useRef(flat);
   flatRef.current = flat;
@@ -249,10 +236,6 @@ function PaletteRoot({
       item.command.id.value === "new-message"
     ) {
       return onCompose();
-    }
-    if (item.kind === "command" && item.command.id.kind === "action" && item.command.id.value === "snoozed") {
-      setQuery("");
-      return setSnoozedView(true);
     }
     onClose();
     switch (item.kind) {
@@ -346,10 +329,7 @@ function PaletteRoot({
         contentContainerStyle={styles.listContent}
         {...({ id: "command-palette-results", role: "listbox", "aria-label": "Results" } as object)}
       >
-        {snoozedView && sections.length === 0 && (
-          <Text style={[paletteStyles.empty, { color: theme.textSecondary }]}>{snoozed === undefined ? "Loading…" : "Nothing snoozed"}</Text>
-        )}
-        {!snoozedView && sections.length === 0 && searchText.length >= 2 && (
+        {sections.length === 0 && searchText.length >= 2 && (
           <Text style={[paletteStyles.empty, { color: theme.textSecondary }]}>
             {searching ? "Searching…" : `No results for “${searchText}”`}
           </Text>

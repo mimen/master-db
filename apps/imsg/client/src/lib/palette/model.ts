@@ -2,7 +2,7 @@ import { agentAttention } from "@shared/agent-attention";
 import type { ChatSummary, Contact, StateFilter, TypeFilter } from "@shared/types";
 import type { SearchHit } from "@/lib/api";
 import type { AgentChatSummary } from "@/lib/agent-api";
-import { ATTENTION_ORDER } from "@/lib/inbox-model";
+import { ATTENTION_ORDER, viewOf } from "@/lib/inbox-model";
 import { shortcutFor } from "@/lib/keyboard/registry";
 import { WORKSPACES, type WorkspaceId } from "@/lib/workspaces";
 
@@ -19,7 +19,7 @@ export type PaletteCommandId =
   | { kind: "state"; value: StateFilter }
   | { kind: "type"; value: TypeFilter }
   | { kind: "tab"; value: WorkspaceId }
-  | { kind: "action"; value: "new-message" | "shortcuts" | "scheduled" | "settings" | "update-today" | "regenerate-today" | "later" | "follow-up" | "snoozed" }
+  | { kind: "action"; value: "new-message" | "shortcuts" | "scheduled" | "settings" | "update-today" | "regenerate-today" | "later" | "follow-up" }
   | { kind: "view"; value: string };
 
 export interface PaletteCommand {
@@ -36,6 +36,9 @@ interface LensCommand {
   keywords: readonly string[];
 }
 
+/** A view's palette entry takes its name from VIEWS; only the words that find it live here. */
+const view = (id: StateFilter, keywords: readonly string[]): LensCommand => ({ title: viewOf(id).title ?? viewOf(id).label, keywords });
+
 /**
  * Keyed by the filter unions, not listed by hand, so a new lens cannot ship
  * without a palette entry: a missing key is a type error here.
@@ -47,14 +50,15 @@ interface LensCommand {
  * each miss meant a lens with no way to ask for it.
  */
 const STATE_COMMANDS: Record<StateFilter, LensCommand> = {
-  today: { title: "Today", keywords: ["view", "filter", "queue", "plan", "ranked"] },
-  all: { title: "All conversations", keywords: ["view", "filter", "inbox"] },
-  unread: { title: "Unread", keywords: ["view", "filter"] },
-  unresponded: { title: "Needs you", keywords: ["view", "filter", "your turn", "unresponded"] },
-  waiting: { title: "Waiting", keywords: ["view", "filter", "awaiting reply"] },
-  drafts: { title: "Drafts", keywords: ["view", "filter", "unsent", "prepared", "agent"] },
-  agents: { title: "Agents", keywords: ["view", "filter", "agent chats", "assistant"] },
-  settled: { title: "Settled", keywords: ["view", "filter", "done", "handled", "archive"] },
+  today: view("today", ["view", "filter", "queue", "plan", "ranked"]),
+  all: view("all", ["view", "filter", "inbox", "conversations"]),
+  unread: view("unread", ["view", "filter"]),
+  unresponded: view("unresponded", ["view", "filter", "your turn", "needs you", "unresponded"]),
+  waiting: view("waiting", ["view", "filter", "awaiting reply"]),
+  drafts: view("drafts", ["view", "filter", "unsent", "prepared", "agent"]),
+  agents: view("agents", ["view", "filter", "agent chats", "assistant"]),
+  snoozed: view("snoozed", ["view", "later", "snooze", "deferred"]),
+  settled: view("settled", ["view", "filter", "done", "handled", "archive"]),
 };
 
 const TYPE_COMMANDS: Record<TypeFilter, LensCommand> = {
@@ -87,7 +91,6 @@ export const PALETTE_COMMANDS: readonly PaletteCommand[] = [
   { id: { kind: "action", value: "new-message" }, title: "New message", keywords: ["compose", "start", "chat"], shortcut: shortcutFor("conversation.new") },
   { id: { kind: "action", value: "later" }, title: "Later…", keywords: ["snooze", "defer", "remind me", "later"], shortcut: shortcutFor("conversation.later") },
   { id: { kind: "action", value: "follow-up" }, title: "Follow up if no reply…", keywords: ["follow up", "remind", "reminder", "no reply", "nudge"] },
-  { id: { kind: "action", value: "snoozed" }, title: "Snoozed", keywords: ["view", "later", "snooze", "deferred"] },
   { id: { kind: "action", value: "scheduled" }, title: "Scheduled messages", keywords: ["schedule", "later", "send later", "queue", "pending"] },
   { id: { kind: "action", value: "shortcuts" }, title: "Keyboard shortcuts", keywords: ["help", "keys"], shortcut: shortcutFor("help.open") },
   { id: { kind: "action", value: "settings" }, title: "Settings", keywords: ["preferences", "options", "config"] },

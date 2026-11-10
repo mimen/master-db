@@ -28,7 +28,7 @@ async function open(page: Page, width: number, height: number, scheme: "light" |
 }
 
 async function needsCount(page: Page): Promise<number> {
-  const label = await page.getByRole("tab", { name: /^Needs you, \d+/ }).getAttribute("aria-label");
+  const label = await page.getByRole("tab", { name: /^To review, \d+/ }).getAttribute("aria-label");
   return Number(/(\d+)/.exec(label ?? "")?.[1]);
 }
 
@@ -38,8 +38,8 @@ test("settle-loop: strip, ⌘E settle with toast and undo, auto-advance, positio
   const page = desk.page;
   const kinds = captureCommands(page);
   await open(page, 1440, 900, "light");
-  // The app opens on Today; this loop is Needs you's.
-  await page.getByRole("tab", { name: /^Needs you, \d+/ }).click();
+  // The app opens on Today; this loop is To review's.
+  await page.getByRole("tab", { name: /^To review, \d+/ }).click();
   const rows = page.getByTestId("conversation-row");
   const before = await needsCount(page);
   await rows.first().click();
@@ -64,7 +64,7 @@ test("settle-loop: strip, ⌘E settle with toast and undo, auto-advance, positio
   await page.screenshot({ path: join(evidence, "desk-settled-toast.png") });
   writeFileSync(join(evidence, "aria.txt"), await page.getByTestId("thread-view").ariaSnapshot());
 
-  // ⌘Z outside a text field undoes; the conversation returns to Needs you.
+  // ⌘Z outside a text field undoes; the conversation returns to To review.
   await page.mouse.click(900, 300);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.keyboard.press("Meta+z");
@@ -77,7 +77,7 @@ test("settle-loop: strip, ⌘E settle with toast and undo, auto-advance, positio
   await page.getByRole("button", { name: "Next conversation (J)" }).click();
   await expect(page.getByText(`${at + 1} of ${before}`, { exact: true })).toBeVisible();
 
-  // Send from Needs you stays on the conversation; only a settle moves on.
+  // Send from To review stays on the conversation; only a settle moves on.
   const sender = (await heading(page).textContent())!;
   await page.getByPlaceholder("iMessage").fill("On it");
   await page.getByRole("button", { name: "Send", exact: true }).click();
@@ -98,7 +98,7 @@ test("settle-loop: ⌘E right after a send anchors on that send, and the convers
   });
   await desk.request.post("/__fixture/send-timing", { data: { delayMs: 1500, echo: false } });
   await open(page, 1440, 900, "light");
-  await page.getByRole("tab", { name: /^Needs you, \d+/ }).click();
+  await page.getByRole("tab", { name: /^To review, \d+/ }).click();
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
   const composer = page.getByPlaceholder("iMessage");
   await composer.fill("Settling right after this");
@@ -128,7 +128,7 @@ test("settle-loop: settled strip offers un-settle (dark)", async ({ desk }) => {
   if (await strip.getByRole("button", { name: "Settle (⌘E)" }).isVisible()) await page.keyboard.press("Meta+e");
   await expect(strip).toContainText("Settled");
   // What brings it back is the lead's tooltip, not more words on the line.
-  await expect(strip.getByTestId("strip-lead")).toHaveAttribute("title", /Back in Needs you if .+ texts again/);
+  await expect(strip.getByTestId("strip-lead")).toHaveAttribute("title", /Back in To review if .+ texts again/);
   await expect(strip.getByRole("button", { name: "Un-settle (⌘E)" })).toBeVisible();
   await page.waitForTimeout(5600);
   await page.mouse.move(900, 300);

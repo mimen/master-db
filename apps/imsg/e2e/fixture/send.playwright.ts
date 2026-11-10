@@ -144,11 +144,11 @@ test("a burst of send taps queued behind a busy frame sends the message once", a
   await expect(page.getByTestId("thread-view").getByText("once only", { exact: true })).toHaveCount(1);
 });
 
-test("sending in Needs you stays on the conversation; only ⌘E moves on", async ({ desk }) => {
+test("sending in To review stays on the conversation; only ⌘E moves on", async ({ desk }) => {
   const page = desk.page;
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: /^Needs you/ }).click();
+  await page.getByRole("tab", { name: /^To review/ }).click();
   await page.getByTestId("conversation-row").first().click();
   const heading = page.getByTestId("thread-view").getByRole("heading", { level: 2 });
   const name = (await heading.textContent())?.trim();
@@ -162,7 +162,7 @@ test("sending in Needs you stays on the conversation; only ⌘E moves on", async
   await page.waitForTimeout(2000);
   await expect(heading).toHaveText(name);
   const openRow = page.getByTestId("conversation-row").filter({ hasText: name });
-  await expect(openRow, "a replied conversation stays in Needs you while it is open").toHaveCount(1);
+  await expect(openRow, "a replied conversation stays in To review while it is open").toHaveCount(1);
   await composer.blur();
   await page.keyboard.press("Meta+e");
   await expect(heading).not.toHaveText(name);
@@ -186,11 +186,11 @@ test("a conversation read in Unread stays listed until it is left", async ({ des
   await expect(rows).toHaveCount(before);
 });
 
-test("leaving a replied conversation drops it from Needs you", async ({ desk }) => {
+test("leaving a replied conversation drops it from To review", async ({ desk }) => {
   const page = desk.page;
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: /^Needs you/ }).click();
+  await page.getByRole("tab", { name: /^To review/ }).click();
   const rows = page.getByTestId("conversation-row");
   await rows.first().click();
   const heading = page.getByTestId("thread-view").getByRole("heading", { level: 2 });

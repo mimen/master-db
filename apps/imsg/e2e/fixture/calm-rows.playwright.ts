@@ -35,7 +35,7 @@ test("the source sits on the avatar and the agent reads as one chip on the previ
   await expect(row(page, "Alex Rivera").getByLabel("Favorite")).toHaveCSS("color", "rgb(100, 100, 107)");
 
   await page.getByRole("tab", { name: /^All/ }).first().click();
-  await expect(row(page, "Diego Santos").getByTestId("row-chip")).toContainText("Agent: needs you");
+  await expect(row(page, "Diego Santos").getByTestId("row-chip")).toContainText("Agent: asking you");
   await expect(row(page, "Riley Chen").getByTestId("row-chip")).toContainText("Agent: ready");
   await expect(row(page, "Avery Brooks").getByTestId("row-chip")).toHaveCount(0);
   await expect(page.getByTestId("agent-badge")).toHaveCount(0);
@@ -43,7 +43,7 @@ test("the source sits on the avatar and the agent reads as one chip on the previ
 
 test("a lens that already means attention shows unread as a semibold name, never a dot", async ({ desk }) => {
   const page = desk.page;
-  await open(page, /^Needs you/);
+  await open(page, /^To review/);
   await expect(page.getByTestId("unread-dot")).toHaveCount(0);
   const unread = row(page, "Avery Brooks").getByText("Avery Brooks", { exact: true });
   await expect(unread).toHaveCSS("font-weight", "600");

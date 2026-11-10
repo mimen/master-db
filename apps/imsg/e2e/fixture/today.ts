@@ -36,7 +36,7 @@ const REGENERATED_GROUPS = [
 
 /**
  * The fixture's comma_today_queue: one row the client reads through comma/today:get, built from
- * TODAY_SEED. A build ranks the known Needs you conversations newest first into two groups. An Update
+ * TODAY_SEED. A build ranks the known To review conversations newest first into two groups. An Update
  * continues the queue's session; a Regenerate starts a new one.
  */
 export function createTodayFixture(deps: {

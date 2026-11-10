@@ -24,7 +24,7 @@ export interface TodayView {
     brief: string;
     groups: readonly TodayGroup[];
     readCount: number;
-    /** Every candidate at the snapshot; a queue stored before the count falls back to its Needs you. */
+    /** Every candidate at the snapshot; a queue stored before the count falls back to its To review. */
     candidateCount: number;
     items: ReadonlyMap<string, TodayItem>;
     openAtSnapshot: ReadonlySet<string>;
@@ -67,10 +67,10 @@ export type TodayPlace =
  * needsYou = known && flags.unresponded (message-based; an agent chat alone never counts).
  * handled  = cleared since the build's snapshot.
  *
- *   queued, Needs you at build:  needsYou && !handled → ranked | needsYou → new | else → done
+ *   queued, To review at build:  needsYou && !handled → ranked | needsYou → new | else → done
  *   queued, Waiting at build:    waiting && !handled → ranked  | needsYou → new | else → done
  *   queued to settle, changed:   where ranked would be → new, so Settle all never dismisses a message the build never read
- *   not queued, needsYou:        Needs you at build && !handled → below | else → new
+ *   not queued, needsYou:        To review at build && !handled → below | else → new
  *   otherwise:                   cleared today → settled | else → out
  */
 export function classifyToday(view: TodayView | null | undefined, chat: ChatSummary): TodayPlace {
@@ -131,7 +131,7 @@ export interface TodaySection {
 }
 
 export interface TodayPlan {
-  /** fallback: no queue today, so one Needs you section in its usual order. */
+  /** fallback: no queue today, so one To review section in its usual order. */
   mode: "queue" | "fallback";
   sections: TodaySection[];
   /** Ranked plus New since. */
@@ -150,7 +150,7 @@ export function todayDate(at: number): string {
 }
 
 const NEW_DETAIL = "Arrived after the queue was built. Newest first, not ranked.";
-const BELOW_DETAIL = "Needs you threads left out today: closed loops, low stakes.";
+const BELOW_DETAIL = "To review threads left out today: closed loops, low stakes.";
 
 const entry = (chat: ChatSummary): TodayRowEntry => ({ chat, rank: null, reason: null });
 const newestFirst = (a: ChatSummary, b: ChatSummary) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0);
@@ -170,7 +170,7 @@ export function planToday(
   if (!queue) {
     const open = new Set(chats.filter((chat) => matchesFilters(chat, "unresponded", "known")));
     const rows = queueOrder(chats.filter((chat) => chat.conversationId === opts.held || open.has(chat))).map(entry);
-    const sections: TodaySection[] = rows.length ? [{ key: "fallback", label: "Needs you", detail: null, tone: null, foldable: false, rows }] : [];
+    const sections: TodaySection[] = rows.length ? [{ key: "fallback", label: "To review", detail: null, tone: null, foldable: false, rows }] : [];
     return { mode: "fallback", sections, toGo: open.size, newSince: 0, settled };
   }
 
