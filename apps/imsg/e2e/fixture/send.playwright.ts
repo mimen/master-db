@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { FIXTURE_NOW } from "./world";
-import { expect, settledCount, test } from "../fixtures/desk";
+import { expect, settledCount, test, openView } from "../fixtures/desk";
 
 interface BubbleTrace {
   /** Distinct DOM nodes that rendered the text: 1 means the row never remounted. */
@@ -69,7 +69,7 @@ async function openThread(desk: Parameters<Parameters<typeof test>[1]>[0]["desk"
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "no-preference" });
   await page.goto("/?send", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   await page.getByTestId("conversation-row").first().click();
   await expect(page.getByPlaceholder("iMessage")).toBeVisible();
   return page;
@@ -148,7 +148,7 @@ test("sending in To review stays on the conversation; only ⌘E moves on", async
   const page = desk.page;
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: /^To review/ }).click();
+  await openView(page, "To review");
   await page.getByTestId("conversation-row").first().click();
   const heading = page.getByTestId("thread-view").getByRole("heading", { level: 2 });
   const name = (await heading.textContent())?.trim();
@@ -173,7 +173,7 @@ test("a conversation read in Unread stays listed until it is left", async ({ des
   const page = desk.page;
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: /^Unread/ }).click();
+  await openView(page, "Unread");
   const rows = page.getByTestId("conversation-row");
   await expect(rows.first()).toBeVisible();
   const before = await settledCount(rows);
@@ -190,7 +190,7 @@ test("leaving a replied conversation drops it from To review", async ({ desk }) 
   const page = desk.page;
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: /^To review/ }).click();
+  await openView(page, "To review");
   const rows = page.getByTestId("conversation-row");
   await rows.first().click();
   const heading = page.getByTestId("thread-view").getByRole("heading", { level: 2 });

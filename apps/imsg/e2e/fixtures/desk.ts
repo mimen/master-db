@@ -85,13 +85,18 @@ export const test = base.extend<DeskFixture>({
 
 export { expect };
 
-/** Opens a Messages view by its tab. The phone's Sidebar list keeps the views on a screen of their own, behind "Views". */
+/** Opens a Messages view from the view menu. An option's text is its glyph, label, then count. */
 export async function openView(page: Page, name: string): Promise<void> {
-  const tab = page.getByRole("tab", { name, exact: true });
-  const views = page.getByRole("button", { name: "Views", exact: true });
-  await expect(tab.or(views).first()).toBeVisible();
-  if (!(await tab.isVisible())) await views.click();
-  await tab.click();
+  await page.getByRole("button", { name: /^View, / }).click();
+  await page.getByRole("option").filter({ hasText: new RegExp(`${name}(\\d+|999\\+)?$`) }).click();
+  // The menu closes over the list; a pointer left there hovers a row.
+  await page.mouse.move(0, 0);
+}
+
+/** The open view's count, read off its heading. */
+export async function viewCount(page: Page, name: string): Promise<number> {
+  const label = await page.locator(`[aria-label^="${name}, "]`).first().getAttribute("aria-label");
+  return Number(label?.slice(name.length + 2));
 }
 
 /** The list renders rows in batches; a count taken mid-batch is not the list's size. */

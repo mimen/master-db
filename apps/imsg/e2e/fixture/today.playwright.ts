@@ -1,12 +1,9 @@
 import type { Page } from "@playwright/test";
-import { expect, test } from "../fixtures/desk";
+import { expect, test, viewCount } from "../fixtures/desk";
 import { fixtureConversationId } from "../../shared/fixture-ids";
 import { FIXTURE_NOW } from "./world";
 
-async function todayCount(page: Page): Promise<number> {
-  const label = await page.getByRole("tab", { name: /^Today, \d+/ }).getAttribute("aria-label");
-  return Number(/(\d+)/.exec(label ?? "")?.[1]);
-}
+const todayCount = (page: Page) => viewCount(page, "Today");
 
 async function openToday(page: Page): Promise<void> {
   await page.addInitScript((fixtureNow) => {
@@ -23,7 +20,7 @@ const composerFocused = (page: Page) => page.evaluate(() => document.activeEleme
 test("the app opens on Today; a settle leaves a rank gap and moves progress; Update folds New since into the groups", async ({ desk }) => {
   const { page } = desk;
   await openToday(page);
-  await expect(page.getByRole("tab", { name: /^Today, \d+/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("button", { name: "View, Today" })).toBeVisible();
   await expect(page.getByTestId("today-meta")).toHaveText("Updated 10:30 AM");
   await expect(page.getByTestId("today-meta")).toHaveAttribute("title", "Session from Aug 19 · Opus 5.5 · read 15 of 21 threads");
   await expect(page.getByText("New since 10:30 AM", { exact: true })).toBeVisible();

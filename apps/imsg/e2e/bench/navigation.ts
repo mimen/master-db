@@ -71,7 +71,8 @@ try {
   await page.addInitScript(renderCounter);
   if (names) await page.addInitScript(() => { Object.assign(window, { __renderNames: {}, __renderRoots: {} }); });
   await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await page.getByRole("button", { name: /^View, / }).click();
+  await page.getByRole("option").filter({ hasText: /All$/ }).click();
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).first().waitFor();
   await page.waitForTimeout(SETTLE_MS);
   const open = await openRow(page, "Alex Rivera");

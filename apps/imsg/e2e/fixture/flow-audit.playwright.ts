@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, test } from "../fixtures/desk";
+import { expect, test, openView } from "../fixtures/desk";
 import { fixtureConversationId } from "../../shared/fixture-ids";
 
 /** Every Convex call the client makes, by function name, with its args. */
@@ -137,7 +137,7 @@ test("B13: a quiet Slack channel is neither settled nor settleable", async ({ de
   const page = desk.page;
   await desk.request.post("/__fixture/slack", { data: { seedChannel: true } });
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   await page.getByTestId("conversation-row").filter({ hasText: "Doors at 8" }).click();
   await expect(page.getByTestId("thread-view").first().getByText("Doors at 8, set times to follow")).toBeVisible();
   await expect(page.getByTestId("thread-settle")).toHaveCount(0);

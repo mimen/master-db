@@ -8,7 +8,7 @@ import type { SuggestionModel } from "@shared/types";
  * mirrored to AsyncStorage — but reactive, so a change in the settings picker
  * updates every reader (the suggestion shelf) immediately.
  */
-export type { Settings, SuggestionMode, NameOrder, ThemePreference, OpenOnLens, GroupConversationsBy, AgentModel, NavStyle } from "./settings-values";
+export type { Settings, SuggestionMode, NameOrder, ThemePreference, OpenOnLens, GroupConversationsBy, AgentModel } from "./settings-values";
 import type { AgentEffort } from "./agent-api";
 import {
   DEFAULT,
@@ -16,7 +16,6 @@ import {
   type AgentModel,
   type GroupConversationsBy,
   type NameOrder,
-  type NavStyle,
   type OpenOnLens,
   type Settings,
   type SuggestionMode,
@@ -101,13 +100,6 @@ export function setGroupBy(groupBy: GroupConversationsBy): void {
   persist();
 }
 
-export function setNavStyle(navigation: NavStyle): void {
-  if (state.navigation === navigation) return;
-  state = { ...state, navigation };
-  emit();
-  persist();
-}
-
 export function setAgentSettings(next: Partial<Pick<Settings, "agentPane" | "agentModel" | "agentEffort">>): void {
   state = { ...state, ...next };
   emit();
@@ -153,10 +145,6 @@ export function useOpenOn(): OpenOnLens {
 
 export function useGroupBy(): GroupConversationsBy {
   return useSyncExternalStore(subscribe, () => state.groupBy, () => state.groupBy);
-}
-
-export function useNavStyle(): NavStyle {
-  return useSyncExternalStore(subscribe, () => state.navigation, () => state.navigation);
 }
 
 export interface AgentSettings {

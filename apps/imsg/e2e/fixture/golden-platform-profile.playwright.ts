@@ -2,7 +2,7 @@ import { tmpdir } from "node:os";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { expect, test } from "../fixtures/desk";
+import { expect, test, openView } from "../fixtures/desk";
 import { fixtureConversationId } from "../../shared/fixture-ids";
 import { FIXTURE_NOW } from "./world";
 
@@ -30,7 +30,7 @@ async function sendIn(desk: Desk, name: string, placeholder: string, text: strin
   }, FIXTURE_NOW);
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   await page.getByLabel("Search conversations and messages").fill(name);
   await page.getByTestId("conversation-row").filter({ hasText: name }).first().click();
   const composer = page.getByPlaceholder(placeholder);

@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 
-import { expect, settledCount, test } from "../fixtures/desk";
+import { expect, settledCount, test, openView } from "../fixtures/desk";
 
 const OUT = process.env.COMMA_GALLERY_DIR ?? "/tmp/comma-ui-batch-d";
 
@@ -57,7 +57,7 @@ test("settling shows a bottom toast whose Undo restores the conversation", async
   const page = desk.page;
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: /^To review/ }).click();
+  await openView(page, "To review");
   await expect(page.getByRole("heading", { name: "To review" })).toBeVisible();
   await expect(page.getByTestId("conversation-row").first()).toBeVisible();
   const before = await settledCount(page.getByTestId("conversation-row"));

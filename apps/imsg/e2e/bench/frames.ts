@@ -79,7 +79,8 @@ async function receive(page: Page, text: string): Promise<void> {
 
 async function openThread(page: Page): Promise<void> {
   await page.goto(base + "/");
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await page.getByRole("button", { name: /^View, / }).click();
+  await page.getByRole("option").filter({ hasText: /All$/ }).click();
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).first().click();
   await page.getByTestId("thread-view").getByText(`Seeded message ${SEEDED}`).waitFor({ timeout: 30_000 });
   await page.waitForTimeout(1000);

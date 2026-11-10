@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { expect, test } from "../fixtures/desk";
+import { expect, test, openView } from "../fixtures/desk";
 
 test.use({
   launchOptions: async ({ launchOptions }, provide) => {
@@ -28,7 +28,7 @@ test("web mic: click toggles, short take and Esc send nothing, explicit send upl
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?voice", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: /^To review/ }).click();
+  await openView(page, "To review");
   await expect(page.getByRole("heading", { name: "To review" })).toBeVisible();
   await page.getByTestId("conversation-row").first().click();
   const mic = page.getByRole("button", { name: "Record voice message" });

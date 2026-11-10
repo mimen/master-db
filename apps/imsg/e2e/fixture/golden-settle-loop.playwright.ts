@@ -2,7 +2,7 @@ import { tmpdir } from "node:os";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { expect, test } from "../fixtures/desk";
+import { expect, test, openView, viewCount } from "../fixtures/desk";
 import { fixtureConversationId } from "../../shared/fixture-ids";
 import { pendingGuid } from "../../shared/pending-send";
 
@@ -27,10 +27,7 @@ async function open(page: Page, width: number, height: number, scheme: "light" |
   await expect(page.getByTestId("conversation-row").first()).toBeVisible();
 }
 
-async function needsCount(page: Page): Promise<number> {
-  const label = await page.getByRole("tab", { name: /^To review, \d+/ }).getAttribute("aria-label");
-  return Number(/(\d+)/.exec(label ?? "")?.[1]);
-}
+const needsCount = (page: Page) => viewCount(page, "To review");
 
 const heading = (page: Page) => page.getByTestId("thread-view").getByRole("heading", { level: 2 });
 
@@ -39,7 +36,7 @@ test("settle-loop: strip, ⌘E settle with toast and undo, auto-advance, positio
   const kinds = captureCommands(page);
   await open(page, 1440, 900, "light");
   // The app opens on Today; this loop is To review's.
-  await page.getByRole("tab", { name: /^To review, \d+/ }).click();
+  await openView(page, "To review");
   const rows = page.getByTestId("conversation-row");
   const before = await needsCount(page);
   await rows.first().click();
@@ -98,7 +95,7 @@ test("settle-loop: ⌘E right after a send anchors on that send, and the convers
   });
   await desk.request.post("/__fixture/send-timing", { data: { delayMs: 1500, echo: false } });
   await open(page, 1440, 900, "light");
-  await page.getByRole("tab", { name: /^To review, \d+/ }).click();
+  await openView(page, "To review");
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
   const composer = page.getByPlaceholder("iMessage");
   await composer.fill("Settling right after this");
@@ -120,7 +117,7 @@ test("settle-loop: ⌘E right after a send anchors on that send, and the convers
 test("settle-loop: settled strip offers un-settle (dark)", async ({ desk }) => {
   const page = desk.page;
   await open(page, 1440, 900, "dark");
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   const rows = page.getByTestId("conversation-row");
   await rows.first().click();
   const strip = page.getByTestId("state-strip");

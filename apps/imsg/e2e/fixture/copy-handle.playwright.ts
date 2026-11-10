@@ -1,4 +1,4 @@
-import { expect, test } from "../fixtures/desk";
+import { expect, test, openView } from "../fixtures/desk";
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
@@ -16,7 +16,7 @@ test("right-clicking a conversation copies the person's phone number", async ({ 
 test("right-clicking a group member in Details copies their number", async ({ desk }) => {
   const page = desk.page;
   await page.goto("/");
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   await page.getByTestId("conversation-row").filter({ hasText: "Launch Crew" }).click();
   await page.keyboard.press("Meta+i");
   await page.getByText("(619) 555-0104", { exact: true }).click({ button: "right" });
@@ -27,7 +27,7 @@ test("right-clicking a group member in Details copies their number", async ({ de
 test("a group message's menu copies the sender's number", async ({ desk }) => {
   const page = desk.page;
   await page.goto("/");
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   await page.getByTestId("conversation-row").filter({ hasText: "Launch Crew" }).click();
   await page.getByText("I added the revised run of show.", { exact: true }).click({ button: "right" });
   await page.getByRole("dialog").getByText("Copy Maya's number", { exact: true }).click();
