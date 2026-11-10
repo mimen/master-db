@@ -5366,6 +5366,7 @@ export declare const internal: {
         "internal",
         {
           accountId: Id<"comma_accounts">;
+          historyId?: string;
           messages: Array<{
             attachments?: Array<{
               contentId?: string;
@@ -5943,6 +5944,12 @@ export declare const internal: {
         { cursor: string | null; dryRun: boolean; limit?: number },
         { changed: number; cursor: string; isDone: boolean; scanned: number }
       >;
+      backfillUnlistedPage: FunctionReference<
+        "mutation",
+        "internal",
+        { cursor: string | null; dryRun: boolean; limit?: number },
+        { changed: number; cursor: string; isDone: boolean; scanned: number }
+      >;
       runAccountsBackfill: FunctionReference<
         "action",
         "internal",
@@ -5971,6 +5978,12 @@ export declare const internal: {
         { changed: number; scanned: number }
       >;
       runSlackThreadsBackfill: FunctionReference<
+        "action",
+        "internal",
+        { dryRun: boolean; limit?: number },
+        { changed: number; scanned: number }
+      >;
+      runUnlistedBackfill: FunctionReference<
         "action",
         "internal",
         { dryRun: boolean; limit?: number },

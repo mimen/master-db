@@ -191,9 +191,9 @@ export const listConversations = query({
     await assertAllowed(ctx);
     const result = await ctx.db
       .query("comma_conversations")
-      .withIndex("by_lastMessageAt")
+      .withIndex("by_unlisted_lastMessageAt", (q) => q.eq("unlisted", undefined))
       .order("desc")
-      // Email threads list in the Mail workspace, not in Messages.
+      // Email threads list in the Mail workspace, not in Messages. The index skips them once the unlisted backfill has run.
       .filter((q) => q.and(q.neq(q.field("lastMessage"), undefined), q.neq(q.field("kind"), "emailThread")))
       .paginate(args.paginationOpts);
     const read = listReader(ctx);
@@ -214,9 +214,9 @@ export const listEmailThreads = query({
     await assertAllowed(ctx);
     const result = await ctx.db
       .query("comma_conversations")
-      .withIndex("by_kind_lastMessageAt", (q) => q.eq("kind", "emailThread"))
+      .withIndex("by_gmailInbox_lastMessageAt", (q) => q.eq("gmail.inInbox", true))
       .order("desc")
-      .filter((q) => q.and(q.neq(q.field("lastMessage"), undefined), q.eq(q.field("gmail.inInbox"), true)))
+      .filter((q) => q.neq(q.field("lastMessage"), undefined))
       .paginate(args.paginationOpts);
     const read = listReader(ctx);
     return { ...result, page: await Promise.all(result.page.map((conversation) => withConversationState(ctx, conversation, read))) };

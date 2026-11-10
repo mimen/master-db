@@ -197,7 +197,9 @@ async function seedBusyChannel(ctx: MutationCtx & { storage: StorageActionWriter
     };
   };
   await ctx.db.insert("comma_conversations", row("ch:C1", "channel", { channel: "C1" }, false));
-  for (let i = 0; i < 300; i++) await ctx.db.insert("comma_conversations", row(`th:C1:${i}`, "thread", { channel: "C1", threadTs: `${i}`, following: false }, false));
+  for (let i = 0; i < 300; i++) {
+    await ctx.db.insert("comma_conversations", { ...row(`th:C1:${i}`, "thread", { channel: "C1", threadTs: `${i}`, following: false }, false), unlisted: true });
+  }
   for (let i = 300; i < 320; i++) await ctx.db.insert("comma_conversations", row(`th:C1:${i}`, "thread", { channel: "C1", threadTs: `${i}`, following: true }, true));
   await ctx.db.insert("comma_conversations", row("th:C1:320", "thread", { channel: "C1", threadTs: "320", following: true }, false, true));
 }
@@ -231,12 +233,12 @@ test("an opted-in busy Slack channel's threads Milad doesn't follow cost the lis
   const first = await directory();
   expect(first.rows).toHaveLength(102);
   expect(first.rows.filter((row) => row.kind === "thread").map((row) => row.conversationKey)).toEqual(["th:C1:320"]);
-  // A thread Milad doesn't follow costs no read. Each he follows reads its state to decide (21), and the one shown reads
-  // it again with its row. The rest is the inbox's own reads over five pages instead of two, and the shown thread's
-  // parent and root.
+  // A thread Milad doesn't follow is off the list's index, so it fills no page: the list takes the inbox's two pages, where
+  // it took five while it read those threads and dropped them. Each thread he follows reads its state to decide (21), and
+  // the one shown reads it again with its row, and its parent and root.
   expect(first.lookups).toEqual({
-    chat_crm: 22, comma_conversation_state: 100 + 1 + 21 + 1, comma_conversations: 10, comma_messages: 26,
-    identities: 120, "people.get": 75, "storage.getUrl": 48, tags: 82,
+    chat_crm: 22, comma_conversation_state: 100 + 1 + 21 + 1, comma_conversations: 2 + 5, comma_messages: 26,
+    identities: 119, "people.get": 75, "storage.getUrl": 48, tags: 82,
   });
 
   if (process.env.COMMA_READS_REPORT) {

@@ -1,8 +1,8 @@
 # imsg
 
-Self-hosted iMessage client. The Expo/React-Native-Web app reads and sends through
-Convex. A Bun/Hono server on the Mini bridges BlueBubbles into Convex, runs the iMessage
-side of queued commands, and serves session, release and deployment-health routes plus the web app.
+Comma, a messaging client for iMessage, Slack and Gmail. The Expo/React-Native-Web app reads and sends through
+Convex, and Convex reads and sends Slack and Gmail itself. A Bun/Hono server on the Mini bridges BlueBubbles into
+Convex, runs the iMessage side of queued commands, and serves session, release and deployment-health routes plus the web app.
 The client has no feature REST calls or Mini event-stream connection.
 
 ## Language
@@ -301,7 +301,7 @@ the chat it shows. Showing a chat while the window has focus marks its finished 
 (`seenAt`). A reply the agent drafts goes into the
 composer as an agent Draft; when the user has typed there, it waits in the pane as a **pane draft**
 with "Use in composer". The pane exists only while `aiStatus.agent` is true and the Settings toggle
-is on. Plan: `docs/plans/comma-agent-pane.html`.
+is on.
 _Avoid_: assistant (that is one item kind), suggestion
 
 **Agent attention**:
@@ -312,5 +312,5 @@ ended unseen), working, open, or settled. A conversation carries its most urgent
 with an unsettled agent chat, and the Agents tab lists them grouped by attention. Settling a
 conversation settles its agent chats and un-settling reopens them; sending the draft a chat wrote
 settles that chat. On wide screens the pane opens itself on a conversation whose chat needs you, is
-ready or failed. Plan: `docs/plans/comma-agent-threads.html`.
+ready or failed.
 _Avoid_: status, unread (for agent chats)

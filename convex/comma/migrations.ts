@@ -129,6 +129,54 @@ export const runKindsBackfill = internalAction({
 });
 
 /**
+ * The unlisted backfill: stamps `unlisted` on every email thread and every Slack thread Milad doesn't follow from
+ * before the Messages list's index skipped them. Until it runs the list still drops them, only after reading them.
+ * Idempotent and paged. Run the dry run first:
+ *
+ *   bunx convex run comma/migrations:runUnlistedBackfill '{"dryRun":true}'
+ *   bunx convex run comma/migrations:runUnlistedBackfill '{"dryRun":false}'
+ *
+ * Once a real run reports zero changes, the list's own email-thread filter can go.
+ */
+export const backfillUnlistedPage = internalMutation({
+  args: { cursor: v.union(v.string(), v.null()), limit: v.optional(v.number()), dryRun: v.boolean() },
+  returns: pageResult,
+  handler: async (ctx, { cursor, limit, dryRun }) => {
+    const page = await ctx.db.query("comma_conversations").paginate({ cursor, numItems: Math.min(limit ?? 200, 500) });
+    let changed = 0;
+    for (const row of page.page) {
+      const unlisted = conversationKind(row) === "emailThread" || (row.slack?.threadTs !== undefined && row.slack.following === false);
+      if (!unlisted || row.unlisted) continue;
+      changed++;
+      if (!dryRun) await ctx.db.patch(row._id, { unlisted: true });
+    }
+    return { scanned: page.page.length, changed, cursor: page.continueCursor, isDone: page.isDone };
+  },
+});
+
+const unlistedPageRef = makeFunctionReference<"mutation", { cursor: string | null; limit?: number; dryRun: boolean }, {
+  scanned: number; changed: number; cursor: string; isDone: boolean;
+}>("comma/migrations:backfillUnlistedPage");
+
+/** Runs every page and reports what changed, or with dryRun what would. */
+export const runUnlistedBackfill = internalAction({
+  args: { dryRun: v.boolean(), limit: v.optional(v.number()) },
+  returns: v.object({ scanned: v.number(), changed: v.number() }),
+  handler: async (ctx, { dryRun, limit }) => {
+    const totals = { scanned: 0, changed: 0 };
+    let cursor: string | null = null;
+    for (;;) {
+      const page: { scanned: number; changed: number; cursor: string; isDone: boolean } =
+        await ctx.runMutation(unlistedPageRef, { cursor, limit, dryRun });
+      totals.scanned += page.scanned;
+      totals.changed += page.changed;
+      if (page.isDone) return totals;
+      cursor = page.cursor;
+    }
+  },
+});
+
+/**
  * The Slack threads backfill, for rows from before S3. It stamps each `th:` conversation stored as a group with
  * `kind: "thread"` and `following: true` (S1 kept only threads Milad was in), and moves each reply kept inline in a
  * DM or group DM into its thread's own conversation, then counts every thread's replies onto its root. Readers serve

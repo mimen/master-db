@@ -92,10 +92,12 @@ export const enqueue = mutation({
     if (!created || !conversationId) return id;
     if (payload.kind === "markRead") await readConversation(ctx, conversationId, Date.now());
     if (payload.kind === "send" || payload.kind === "sendAttachment") {
-      // The composer's own send takes its draft with it, and sending a drafted attachment sends the
-      // whole draft. An agent send goes through enqueueCommand and leaves the user's draft alone.
+      // The composer's own send takes its draft with it, and sending a drafted attachment sends the whole draft.
+      // A send that waited out an offline spell finds whatever was typed since, which is not what it sent, so that stays.
+      // An agent send goes through enqueueCommand and leaves the user's draft alone.
       const draft = await ctx.db.query("comma_drafts").withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId)).unique();
-      if (draft && (payload.kind === "send" || draft.attachments?.some((a) => a.storageId === payload.storageId))) {
+      const sentIt = payload.kind === "send" ? draft?.text.trim() === payload.text.trim() : draft?.attachments?.some((a) => a.storageId === payload.storageId);
+      if (draft && sentIt) {
         await settleDraftChat(ctx, draft);
         await ctx.db.delete(draft._id);
       }
@@ -176,8 +178,8 @@ export const claimOutbox = internalMutation({
         claimToken: undefined,
         updatedAt: now,
       });
-      if (!retry && row.payload.kind === "send") {
-        await strandPendingSend(ctx, row.clientKey, "failed");
+      if (!retry) {
+        if (row.payload.kind === "send") await strandPendingSend(ctx, row.clientKey, "failed");
         await laneSpec(lane).onUnknown?.(ctx, row);
       }
     }

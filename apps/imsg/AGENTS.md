@@ -80,7 +80,8 @@ and Restart banners.
   iMessage's read receipt. See "Triage state" in `CONTEXT.md`.
 - The [`comma_*` tables](../../convex/schema/comma/) store conversations, messages,
   attachments, conversation state, drafts, scheduled messages, triage, sync state, and outbox commands.
-  The local ingest contract reference is `apps/imsg/docs/convex-ingest-contract.md`.
+  The bridge's ingest contract is pinned by `convex/comma/bridgeContract.test.ts`, which runs the Mini's
+  bridge against the Convex functions under convex-test.
 - Clients read and send every feature through Convex. The client never calls the Mini except
   for session and release routes, `GET /api/convex-token` and `GET /api/deploy/status`.
   They never sign in: the [auth provider](client/src/lib/convex-auth.tsx)
@@ -117,15 +118,10 @@ and Restart banners.
 - Contact avatars: run `bun scripts/export-avatars.ts` **on the Mini**
   after contact-photo changes; BlueBubbles itself returns no avatars.
 - master-db `bun.lock` churns across sessions — `git checkout -- **/bun.lock` before pull.
-- Test shared UI/business behavior in the browser fixture. Use Expo Go for iOS seams and
+- Test shared UI/business behavior in the browser fixture (`bun run e2e:fixture`; README "Tests"). It
+  refuses a port another server holds, so run on your own with `IMSG_FIXTURE_PORT=<port>`, and set
+  `IMSG_FIXTURE_REUSE=1` only for a fixture server this checkout started. Use Expo Go for iOS seams and
   `bun run dev:desktop` for native shell seams. Production clients expose explicit update
   banners instead of relying on cache-clearing rituals.
-- **A fresh worktree typechecks dirty until Expo's generated types exist.** `client/tsconfig.json`
-  includes `expo-env.d.ts` and `.expo/types/**`, both gitignored, so a new checkout has neither.
-  Without them `bun run typecheck:imsg` reports ~109 phantom
-  `TS2339: Property 'hovered' does not exist on type 'PressableStateCallbackType'` errors in
-  components you never touched. The fix is the two-line stub, a `/// <reference types="expo/types" />`
-  line in `client/expo-env.d.ts`, or any Expo CLI command that regenerates it. Do not chase those
-  errors in component code, and do not conclude react-native-web is missing types.
 - Run `bun install` at the **repo root as well as** `apps/imsg` and `apps/imsg/client`. The root
   install supplies hoisted dependencies the other two do not.

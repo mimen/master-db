@@ -9,6 +9,7 @@ import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
 import { ALIAS, FakeGmail, MAILBOX, PUSH_TOPIC, pushBody, stubGmailEnv, type FakeMail } from "./fakeGmail.vitest";
+import { parseGmailMessage, type RawGmailMessage } from "./gmailMessage";
 import { GMAIL_SCOPES } from "./googleAuth";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
@@ -285,6 +286,24 @@ describe("archive in both directions, from Gmail", () => {
     expect(await clears(t)).toEqual([]);
   });
 
+  test("a thread read from before an archive, written after it, leaves the thread archived", async () => {
+    seedMailbox();
+    const { t, as } = await setup();
+    const account = await connect(t, as);
+    const before = await (await google.fetch("https://gmail.googleapis.com/gmail/v1/users/me/threads/t-sam?format=full",
+      { headers: { Authorization: `Bearer ${google.accessToken}` } })).json() as { historyId: string; messages: RawGmailMessage[] };
+    google.relabel("t-sam", { remove: ["INBOX"] });
+    await push(t, await google.oidcToken());
+    await settle(t);
+    const sam = (await thread(t, "t-sam"))!;
+    expect(sam.gmail!.inInbox).toBe(false);
+
+    await t.mutation(internal.comma.gmailSync.ingestThread, { accountId: account._id, threadId: "t-sam", historyId: before.historyId, quiet: false,
+      messages: before.messages.map(parseGmailMessage) });
+    expect((await thread(t, "t-sam"))!.gmail!.inInbox).toBe(false);
+    expect((await stateOf(t, sam._id))?.dismissedUnrespondedGuid).toBe("m1");
+  });
+
   test("a new message reopens an archived thread on its own", async () => {
     seedMailbox();
     const { t, as } = await setup();
@@ -356,7 +375,7 @@ describe("the Mail list", () => {
     expect(page.map((row) => [row.gmail?.threadId, row.known, row.gmail?.bulk, row.flags.unresponded])).toEqual([
       ["t-news", false, true, true], ["t-stranger", false, false, true], ["t-sam", true, false, true],
     ]);
-    expect(page.find((row) => row.gmail?.threadId === "t-sam")).toMatchObject({ displayName: "Sam Lee", gmail: { subject: "Doors" } });
+    expect(page.find((row) => row.gmail?.threadId === "t-sam")).toMatchObject({ displayName: "Sam Lee", gmail: { subject: "Doors" }, unlisted: true });
   });
 });
 

@@ -225,7 +225,7 @@ describe("threads", () => {
     await say(t, "C2", "channel", { ts: ago(9), user: DANA, text: "unloading", thread_ts: root });
     const channel = (await byKey(t, "ch:C2"))!;
     const reply = (await byKey(t, `th:C2:${root}`))!;
-    expect(reply).toMatchObject({ kind: "thread", rawDisplayName: "#ops", slack: { channel: "C2", threadTs: root, following: false } });
+    expect(reply).toMatchObject({ kind: "thread", rawDisplayName: "#ops", slack: { channel: "C2", threadTs: root, following: false }, unlisted: true });
     expect((await messages(t)).map((message) => [message.text, message.conversationId === channel._id, message.replyCount])).toEqual([
       ["van's here", true, 1], ["unloading", false, undefined],
     ]);
@@ -240,6 +240,7 @@ describe("threads", () => {
       expect.objectContaining({ conversationKey: `th:C2:${root}`, kind: "thread", flags: expect.objectContaining({ unresponded: true }), thread: { parentId: channel._id, replyCount: 2 } }),
       expect.objectContaining({ conversationKey: "ch:C2" }),
     ]);
+    expect((await byKey(t, `th:C2:${root}`))!.unlisted).toBeUndefined();
     await say(t, "C2", "channel", { ts: ago(7), user: MILAD, text: "signed", thread_ts: root });
     expect((await list(as)).map((row) => row.conversationKey)).toEqual(["ch:C2"]);
     expect((await messages(t)).find((message) => message.text === "van's here")!.replyCount).toBe(3);

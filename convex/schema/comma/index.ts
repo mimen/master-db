@@ -39,8 +39,11 @@ export const comma_conversations = defineTable(conversationFields)
   /** Finds rows written before accounts; drop after the accounts backfill. */
   .index("by_platform_conversationKey", ["platform", "conversationKey"])
   .index("by_lastMessageAt", ["lastMessageAt"])
-  /** The Mail workspace's list: email threads, newest first. */
+  /** The Messages list: every conversation it can show, newest first. */
+  .index("by_unlisted_lastMessageAt", ["unlisted", "lastMessageAt"])
   .index("by_kind_lastMessageAt", ["kind", "lastMessageAt"])
+  /** The Mail workspace's list: email threads in the inbox, newest first. */
+  .index("by_gmailInbox_lastMessageAt", ["gmail.inInbox", "lastMessageAt"])
   .index("by_primaryChatGuid", ["primaryChatGuid"])
   .index("by_unreadCount", ["unread.count"]);
 

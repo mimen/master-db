@@ -131,6 +131,8 @@ export const gmailThreadFields = v.object({
   archiveError: v.optional(v.string()),
   /** Messages carrying Gmail's UNREAD label; absent when none do. Gmail is the source, so reading there clears it. */
   unread: v.optional(v.number()),
+  /** Gmail's historyId for the newest read written, so a slower, older read of the thread never undoes it. */
+  historyId: v.optional(v.string()),
 });
 
 export const conversationFields = {
@@ -166,6 +168,11 @@ export const conversationFields = {
   hasGroupPhoto: v.optional(v.boolean()),
   /** Mirrored from chat.db: inbound messages newer than the last read or sent one. */
   unread: v.optional(v.object({ count: v.number(), firstAt: v.number() })),
+  /**
+   * Set on what the Messages list never shows, so its index skips them: an email thread (Mail lists it) and a Slack
+   * thread Milad doesn't follow (its channel holds it). Rows from before it get it from the unlisted backfill.
+   */
+  unlisted: v.optional(v.literal(true)),
   updatedAt: v.number(),
 };
 

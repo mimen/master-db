@@ -12,7 +12,7 @@ Records in this directory:
 
 All benchmarks live in `apps/imsg/e2e/bench/` and run from `apps/imsg`. `trace-open.ts` prints the socket and query timeline of one cold load and open. `e2e/bench/queries.ts` prints Convex payload bytes per query during a cold load. Ratchets live in `e2e/fixture/ratchet.playwright.ts` and run in `validate-imsg.yml`.
 
-To A/B a change on real data without touching production: `bun run deploy:branch` deploys the branch as a UI-only preview on its own port that reads production Convex, then run the prod benchmarks with `--url <preview URL>`, interleaved with runs against production. Fixture runs need `bun run fixture:start` (port 8399). Production runs are read-only: they open a conversation with the glide key `j`, which previews without marking read, and they send nothing.
+To A/B a change on real data without touching production: `bun run deploy:branch` deploys the branch as a UI-only preview on its own port that reads production Convex, then run the prod benchmarks with `--url <preview URL>`, interleaved with runs against production. Fixture runs need `bun run fixture:start` (port 8399, or `IMSG_FIXTURE_PORT`). The Playwright fixture config refuses a port another server holds unless `IMSG_FIXTURE_REUSE=1`, so set it only for a server this checkout started. Production runs are read-only: they open a conversation with the glide key `j`, which previews without marking read, and they send nothing.
 
 | # | Metric | Command | Baseline (2026-10-10) | Current | Target | Ratchet |
 |---|---|---|---|---|---|---|

@@ -79,6 +79,13 @@ test("only a new send clears its conversation draft, retries preserve the next d
   expect(await as.query(api.comma.queries.getDraft, { conversationId })).toMatchObject({ text: "next" });
 });
 
+test("a send queued while offline leaves the draft typed after it", async () => {
+  const { as, conversationId } = await setup();
+  await as.mutation(api.comma.drafts.setDraft, { conversationId, text: "typed after the send" });
+  await as.mutation(api.comma.outbox.enqueue, { clientKey: "offline", conversationId, payload: { kind: "send", text: "sent while offline" } });
+  expect(await as.query(api.comma.queries.getDraft, { conversationId })).toMatchObject({ text: "typed after the send" });
+});
+
 async function stored(t: Awaited<ReturnType<typeof setup>>["t"], filename = "photo.png", mimeType = "image/png") {
   return await t.action(internal.comma.drafts.storeAttachment, { filename, mimeType, base64: btoa("png-bytes") });
 }
