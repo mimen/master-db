@@ -99,11 +99,11 @@ export default function RootLayout() {
                   />
                   <Stack.Screen name="chat/[guid]" options={{ headerShown: false }} />
                   <Stack.Screen name="search" options={{ presentation: "modal", title: "Search", headerLeft: backButton }} />
-                  <Stack.Screen name="new-chat" options={{ presentation: "modal", title: "New message", headerLeft: backButton }} />
+                  <Stack.Screen name="new-chat" options={{ presentation: "modal", headerShown: false }} />
                   <Stack.Screen name="chat-info" options={{ presentation: "modal", title: "Details", headerLeft: backButton }} />
                   <Stack.Screen name="scheduled" options={{ presentation: "modal", title: "Scheduled", headerLeft: backButton }} />
                   <Stack.Screen name="agent" options={{ presentation: "modal", headerShown: false }} />
-                  <Stack.Screen name="forward" options={{ presentation: "modal", title: "Forward", headerLeft: backButton }} />
+                  <Stack.Screen name="forward" options={{ presentation: "modal", headerShown: false }} />
                   <Stack.Screen name="person" options={{ presentation: "modal", title: "Contact", headerLeft: backButton }} />
                     <Stack.Screen name="settings" options={{ presentation: "modal", title: "Settings" }} />
                   </Stack>

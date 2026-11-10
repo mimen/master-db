@@ -1,8 +1,6 @@
-import { runCommand } from "@/lib/convex-commands";
 import { requestSavedView } from "@/lib/palette/saved-views";
-import { messagingCommandError } from "@/lib/messaging-api";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import type { ChatSummary, Contact, Message, StateFilter, TypeFilter } from "@shared/types";
+import type { ChatSummary, Contact, StateFilter, TypeFilter } from "@shared/types";
 import { useQuery } from "convex/react";
 import { router } from "expo-router";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
@@ -10,8 +8,6 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StylePro
 import Reanimated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
 import { Springs } from "@/constants/springs";
 
-import { useAirtableSearch } from "@/hooks/use-airtable-search";
-import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
 import { api, type SearchHit } from "@/lib/api";
 import { formatReceiptTime } from "@/lib/format";
 import {
@@ -31,23 +27,18 @@ import { openPersonPane } from "@/lib/person-pane";
 import { openScheduledPane } from "@/lib/scheduled-pane";
 import { openSettingsPane } from "@/lib/settings-pane";
 import { selectChat } from "@/lib/selection";
-import { showToast } from "@/lib/toast";
 import { useTheme } from "@/hooks/use-theme";
 import { useToday } from "@/hooks/use-today";
 
-import { addressesMatch, formatAddress } from "@shared/address";
-import { conversationRoute, fromBridgeMessage } from "@shared/imessage";
+import { formatAddress } from "@shared/address";
+import { conversationRoute } from "@shared/imessage";
 import { platformBadge } from "@shared/platform-profile";
-import { composeSections, type ComposeRow } from "@/lib/palette/compose-rows";
-import { useChatDirectory, useConversation } from "@/hooks/use-chat-directory";
+import { useConversation } from "@/hooks/use-chat-directory";
 import { openAgentChat } from "@/hooks/use-agent-toasts";
 import { agentApi, type AgentChatSummary } from "@/lib/agent-api";
 import { AGENT_ATTENTION } from "@/lib/inbox-model";
 import { useAgentSettings } from "@/lib/settings";
-import { draftBubble, pendingSends } from "@/lib/pending-sends";
-import { afterPaint } from "@/lib/open-timing";
 import { ChatAvatar, PersonAvatar, type AvatarSource } from "./avatar";
-import { MorphSendButton } from "./motion/morph-send-button";
 import {
   PaletteListRow,
   PaletteSectionHeader,
@@ -69,8 +60,6 @@ const COMMAND_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 export interface CommandPaletteProps {
   /** Recency-ordered universe. */
   chats: ChatSummary[];
-  /** "compose" opens straight into the new-message flow (⌘N / compose button). */
-  initialMode?: "root" | "compose";
   onClose: () => void;
   /** Full open: mark read + focus composer — palette jump is reply intent. */
   onOpenChat: (chat: ChatSummary) => void;
@@ -83,24 +72,18 @@ export interface CommandPaletteProps {
 /**
  * Desktop ⌘K palette (docs/keyboard-design.md Slice 3). The web skin over the
  * headless engine in lib/palette/model.ts — a future mobile sheet reuses the
- * engine, not this component. Both views (search + compose) are built on the
- * shared cursor/row primitives in palette/palette-list.tsx so they behave
- * identically. Esc closes via the global escape ladder; neither view handles
- * it locally.
+ * engine, not this component. Its rows are the shared cursor/row primitives
+ * in palette/palette-list.tsx, which the new-message sheet also uses. Esc
+ * closes via the global escape ladder. New message opens the compose sheet.
  */
 export function CommandPalette({
   chats,
-  initialMode = "root",
   onClose,
   onOpenChat,
   onApplyState,
   onApplyType,
   onShowHelp,
 }: CommandPaletteProps) {
-  const [mode, setMode] = useState<"root" | "compose">(initialMode);
-  if (mode === "compose") {
-    return <PaletteCompose onClose={onClose} />;
-  }
   return (
     <PaletteRoot
       chats={chats}
@@ -108,7 +91,10 @@ export function CommandPalette({
       onOpenChat={onOpenChat}
       onApplyState={onApplyState}
       onApplyType={onApplyType}
-      onCompose={() => setMode("compose")}
+      onCompose={() => {
+        onClose();
+        router.push("/new-chat");
+      }}
       onShowHelp={onShowHelp}
     />
   );
@@ -509,265 +495,6 @@ function PaletteRowContent({ item, needle, age, now, personalMail }: { item: Pal
   }
 }
 
-/** Palette-styled new-message flow: recipient search with chips, then the
- * first message. Built on the same cursor/row primitives as the root view. */
-function PaletteCompose({ onClose }: { onClose: () => void }) {
-  const theme = useTheme();
-  const [recipients, setRecipients] = useState<Contact[]>([]);
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<{ needle: string; contacts: Contact[] }>({ needle: "", contacts: [] });
-  const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
-  const recipientInputRef = useRef<TextInput>(null);
-  const messageInputRef = useRef<TextInput>(null);
-  const directory = useChatDirectory();
-
-  const needle = query.trim();
-  // The last answer stays on screen while the next one loads, so rows never blank between keys;
-  // the directory's own matches fill in instantly in the meantime.
-  useEffect(() => {
-    if (needle.length < 2) return;
-    let cancelled = false;
-    const handle = setTimeout(() => {
-      api
-        .contacts(needle)
-        .then((found) => {
-          if (!cancelled) setResults({ needle, contacts: found });
-        })
-        .catch(() => undefined);
-    }, 150);
-    return () => {
-      cancelled = true;
-      clearTimeout(handle);
-    };
-  }, [needle]);
-  const searching = needle.length >= 2 && results.needle !== needle;
-
-  const addRecipient = (c: Contact): void => {
-    setRecipients((cur) => (cur.some((x) => addressesMatch(x.address, c.address)) ? cur : [...cur, c]));
-    setQuery("");
-    recipientInputRef.current?.focus();
-  };
-
-  // Same Airtable augmentation as the Contacts surfaces: unlinked humans can
-  // be added, then land as a recipient.
-  const { results: airtableResults, add: addAirtableContact, addingId } = useAirtableSearch(
-    needle,
-    (_personId, human) => {
-      const address = human.phone ?? human.email;
-      if (address) addRecipient({ address, name: human.display_name });
-    },
-  );
-
-  const sections = useMemo(() => composeSections({
-    query,
-    recipients,
-    directory: directory ?? [],
-    contacts: needle.length >= 2 ? results.contacts : [],
-    airtable: airtableResults,
-  }), [query, recipients, directory, needle, results.contacts, airtableResults]);
-  const rows = useMemo(() => sections.flatMap((section) => section.rows), [sections]);
-  const rowsRef = useRef(rows);
-  rowsRef.current = rows;
-
-  const cursor = usePaletteCursor(useMemo(() => rows.map((r) => r.key), [rows]));
-  const { reset } = cursor;
-  useEffect(() => reset(), [needle, reset]);
-
-  const [only] = recipients;
-  const existing = recipients.length === 1 && only ? directory?.find((chat) => !chat.isGroup && conversationRoute(chat).service === "iMessage" &&
-    chat.participants.length === 1 && addressesMatch(chat.participants[0]?.address ?? "", only.address)) : undefined;
-  const send = (): void => {
-    const body = text.trim();
-    if (recipients.length === 0 || body === "" || sending) return;
-    setSending(true);
-    // createChat lands one recipient in their iMessage conversation; when that already exists,
-    // the message shows there on the click, as a composer send does.
-    // A new chat's first message is not a queued send, so it cannot be cancelled.
-    const temp: Message | null = existing ? { ...draftBubble(existing, { text: body }), sendState: "sending" } : null;
-    if (existing && temp) {
-      pendingSends.upsert(existing.conversationId, temp);
-      // Mounting the thread costs a long frame; the Sending ring paints first, on the frame of the click.
-      afterPaint(() => {
-        onClose();
-        selectChat({ conversationId: existing.conversationId, name: existing.displayName });
-      });
-    }
-    runCommand(null, { kind: "createChat", addresses: recipients.map((c) => c.address), text: body })
-      .then(({ conversationId, message }) => {
-        if (existing && temp && conversationId === existing.conversationId) return pendingSends.settle(conversationId, temp.guid, fromBridgeMessage(message));
-        if (existing && temp) pendingSends.retain(existing.conversationId, (m) => m.guid !== temp.guid);
-        onClose();
-        if (conversationId) selectChat({ conversationId });
-      })
-      .catch((e: unknown) => {
-        if (existing && temp) pendingSends.strand(existing.conversationId, temp);
-        const detail =
-          e instanceof Error ? /"error"\s*:\s*"([^"]+)"/.exec(e.message)?.[1] : undefined;
-        showToast(messagingCommandError(e, detail ? `Couldn't start: ${detail.slice(0, 120)}` : e instanceof Error ? `Couldn't start: ${e.message.slice(0, 120)}` : "Couldn't start the conversation"));
-      })
-      .finally(() => setSending(false));
-  };
-
-  const choose = (row: ComposeRow): void => {
-    if (row.kind === "airtable") void addAirtableContact(row.human);
-    else addRecipient(row.contact);
-  };
-
-  // Keyboard: arrows rove results; Enter adds the selected row from the To field and sends from
-  // the message field (⇧Enter is a new line); Backspace on an empty To field pops the last chip.
-  // Esc stays with the global ladder.
-  const stateRef = useRef({ query, recipients, send, choose });
-  stateRef.current = { query, recipients, send, choose };
-  const cursorRef = useRef(cursor);
-  cursorRef.current = cursor;
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      const st = stateRef.current;
-      const inMessage =
-        typeof document !== "undefined" &&
-        document.activeElement === (messageInputRef.current as unknown as Element | null);
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        if (inMessage || rowsRef.current.length === 0) return;
-        e.preventDefault();
-        e.stopPropagation();
-        cursorRef.current.move(e.key === "ArrowDown" ? 1 : -1);
-        return;
-      }
-      if (e.key === "Enter") {
-        if (inMessage && e.shiftKey) return;
-        e.preventDefault();
-        e.stopPropagation();
-        if (inMessage) return st.send();
-        const row = rowsRef.current[cursorRef.current.indexRef.current];
-        if (row && st.query.trim() !== "") return st.choose(row);
-        if (st.query.trim() === "" && st.recipients.length > 0) messageInputRef.current?.focus();
-        else if (row) st.choose(row);
-        return;
-      }
-      if (e.key === "Backspace" && !inMessage && st.query === "" && st.recipients.length > 0) {
-        setRecipients((cur) => cur.slice(0, -1));
-      }
-    };
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
-  }, []);
-
-  const canSend = recipients.length > 0 && text.trim().length > 0 && !sending;
-  const inTo = query.trim() !== "" || recipients.length === 0;
-  let flatIndex = -1;
-
-  return (
-    <PaletteFrame style={styles.composeFrame}>
-      <View style={[styles.composeHeader, { borderBottomColor: theme.divider }]}>
-        <Text style={[styles.composeTitle, { color: theme.text }]}>New message</Text>
-        <Text aria-hidden style={[paletteStyles.kbd, { borderColor: theme.dividerStrong, color: theme.popTertiary }]}>esc</Text>
-      </View>
-      <View style={[styles.composeToRow, { borderBottomColor: theme.divider }]}>
-        <Text style={[styles.composeToLabel, { color: theme.textSecondary }]}>To</Text>
-        <View style={styles.chipWrap}>
-          {recipients.map((contact) => (
-            <Pressable
-              key={contact.address}
-              accessibilityRole="button"
-              accessibilityLabel={`Remove ${contact.name}`}
-              onPress={() => setRecipients((cur) => cur.filter((c) => c.address !== contact.address))}
-              style={({ hovered, pressed }) => [styles.chip, { backgroundColor: theme.accent }, hovered && !pressed && { opacity: HOVER_DIM }, pressed && { opacity: PRESS_DIM }]}
-            >
-              <Text numberOfLines={1} style={[styles.chipText, { color: theme.onAccent }]}>{contact.name === contact.address ? formatAddress(contact.address) : contact.name}</Text>
-              <Ionicons name="close" size={13} color={theme.onAccent} />
-            </Pressable>
-          ))}
-          <TextInput
-            ref={recipientInputRef}
-            value={query}
-            onChangeText={setQuery}
-            placeholder={recipients.length === 0 ? "Name, number, or email" : "Add another"}
-            placeholderTextColor={theme.popTertiary}
-            accessibilityLabel="To"
-            autoFocus
-            autoCorrect={false}
-            autoCapitalize="none"
-            spellCheck={false}
-            style={[styles.input, styles.composeToInput, { color: theme.text }]}
-          />
-        </View>
-      </View>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.listContent} style={styles.composeResults}>
-        {sections.map((section) => (
-          <Fragment key={section.title}>
-            <PaletteSectionHeader title={section.title} />
-            {section.rows.map((row) => {
-              flatIndex += 1;
-              const index = flatIndex;
-              const selected = index === cursor.selectedIndex;
-              const name = row.kind === "airtable" ? row.human.display_name : row.contact.name;
-              const address = row.kind === "airtable" ? row.human.phone ?? row.human.email ?? null : row.contact.address;
-              const adding = row.kind === "airtable" && addingId === row.human.record_id;
-              return (
-                <PaletteListRow
-                  key={row.key}
-                  paletteKey={row.key}
-                  selected={selected}
-                  disabled={adding}
-                  onPress={() => choose(row)}
-                  onHover={() => cursor.setSelectedIndex(index)}
-                >
-                  {row.kind === "raw" ? (
-                    <View style={[paletteStyles.iconBadge, { backgroundColor: theme.field }]}>
-                      <Ionicons aria-hidden name={address?.includes("@") ? "mail-outline" : "call-outline"} size={14} color={theme.icon} />
-                    </View>
-                  ) : (
-                    <PersonAvatar address={address ?? name} name={name} size={28} />
-                  )}
-                  <View style={paletteStyles.textCol}>
-                    <Text numberOfLines={1} style={[paletteStyles.title, { color: theme.text }]}>
-                      {row.kind === "raw" ? formatAddress(row.contact.address) : name}
-                    </Text>
-                    {row.kind !== "raw" && address && formatAddress(address) !== name ? (
-                      <Text numberOfLines={1} style={[paletteStyles.subtitle, { color: theme.textSecondary }]}>{formatAddress(address)}</Text>
-                    ) : null}
-                  </View>
-                  {adding ? <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>Adding…</Text> : null}
-                </PaletteListRow>
-              );
-            })}
-          </Fragment>
-        ))}
-        {rows.length === 0 && needle.length >= 2 && (
-          <Text style={[paletteStyles.empty, { color: theme.textSecondary }]}>
-            {searching ? "Searching…" : `No one matches “${needle}”. Type a full number or email to start a new conversation.`}
-          </Text>
-        )}
-        {rows.length === 0 && needle.length < 2 && recipients.length > 0 && (
-          <Text style={[paletteStyles.empty, { color: theme.textSecondary }]}>
-            {existing ? `This continues your conversation with ${existing.displayName}.` : "Add another person, or write the first message below."}
-          </Text>
-        )}
-      </ScrollView>
-      <View style={[styles.composeBar, { borderTopColor: theme.divider }]}>
-        <TextInput
-          ref={messageInputRef}
-          value={text}
-          onChangeText={setText}
-          placeholder={recipients.length === 0 ? "Add someone first" : "Message"}
-          placeholderTextColor={theme.popTertiary}
-          accessibilityLabel="Message"
-          multiline
-          numberOfLines={1}
-          style={[styles.composeMessageInput, { borderColor: theme.dividerStrong, color: theme.text }]}
-        />
-        <MorphSendButton status={sending ? "sending" : "idle"} disabled={!canSend && !sending} onPress={send} />
-      </View>
-      <View style={[styles.footer, { borderTopColor: theme.divider }]}>
-        <FooterHint keys="↑↓" label="move" />
-        <FooterHint keys="↵" label={inTo ? "add" : "send"} />
-        <FooterHint keys="⇧↵" label="new line" />
-      </View>
-    </PaletteFrame>
-  );
-}
-
 const styles = StyleSheet.create({
   frame: {
     borderRadius: 16,
@@ -822,78 +549,5 @@ const styles = StyleSheet.create({
   },
   footerKeys: {
     fontWeight: "600",
-  },
-  composeFrame: {
-    height: 480,
-  },
-  composeHeader: {
-    alignItems: "center",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    height: 44,
-    justifyContent: "space-between",
-    paddingHorizontal: 18,
-  },
-  composeTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  composeToRow: {
-    alignItems: "center",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    minHeight: 52,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-  },
-  composeToLabel: {
-    fontSize: 15,
-  },
-  composeResults: {
-    flex: 1,
-  },
-  chipWrap: {
-    alignItems: "center",
-    flex: 1,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  chip: {
-    alignItems: "center",
-    borderRadius: 13,
-    flexDirection: "row",
-    gap: 4,
-    height: 26,
-    maxWidth: 220,
-    paddingHorizontal: 10,
-  },
-  chipText: {
-    flexShrink: 1,
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  composeToInput: {
-    minWidth: 160,
-    paddingVertical: 4,
-  },
-  composeBar: {
-    alignItems: "flex-end",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  composeMessageInput: {
-    borderRadius: 17,
-    borderWidth: 1,
-    flex: 1,
-    fontSize: 15,
-    maxHeight: 120,
-    minHeight: 34,
-    paddingHorizontal: 13,
-    paddingVertical: 7,
   },
 });

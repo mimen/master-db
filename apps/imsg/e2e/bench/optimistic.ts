@@ -174,10 +174,11 @@ const CASES: Case[] = [
       await openAlex(page);
       await inbound(page).click({ button: "right" });
       await page.getByRole("menuitem", { name: "Forward" }).click();
-      await page.getByPlaceholder("Forward to…").fill("Jordan");
-      await page.getByRole("button", { name: "Jordan Lee", exact: true }).waitFor();
+      await page.getByRole("textbox", { name: "To", exact: true }).fill("Jordan");
+      await page.getByRole("button", { name: "Jordan Lee", exact: true }).click();
+      await page.getByRole("button", { name: "Remove Jordan Lee from To" }).waitFor();
     },
-    act: (page) => page.getByRole("button", { name: "Jordan Lee", exact: true }).click(),
+    act: (page) => page.getByRole("dialog", { name: "Forward message" }).getByRole("button", { name: "Send", exact: true }).click(),
     done: () => [...document.querySelectorAll('[data-testid="thread-view"] [role="button"]')]
       .some((element) => element.getAttribute("aria-label") === "You: Can you send the final arrival time?"),
   },
@@ -191,7 +192,7 @@ const CASES: Case[] = [
       await page.getByText("+16195550101").first().waitFor();
       await page.keyboard.press("Enter");
       await page.getByRole("button", { name: "Remove Alex Rivera" }).waitFor();
-      await page.getByPlaceholder("iMessage").last().fill("bench palette probe");
+      await page.getByRole("dialog", { name: "New message" }).getByPlaceholder("Message").fill("bench palette probe");
     },
     act: (page) => page.getByRole("button", { name: "Send", exact: true }).last().click(),
     done: () => document.querySelector('[aria-label="Sending"]') !== null ||

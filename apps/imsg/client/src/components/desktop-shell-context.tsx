@@ -51,7 +51,7 @@ export interface DesktopShellContextValue {
   readonly closeUtility: () => void;
   readonly dispatch: (action: DesktopShellAction) => void;
   readonly openHelp: () => void;
-  readonly openPalette: (compose?: boolean) => void;
+  readonly openPalette: () => void;
   readonly registerMessagesActions: (actions: MessagesWorkspaceActions | null) => void;
   readonly reportMessagesRail: (state: MessagesRailState) => void;
 }

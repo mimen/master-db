@@ -267,14 +267,17 @@ test("a voice message shows at once, then leaves with a toast and stays staged w
   await expect(page.getByRole("button", { name: "Remove attachment" })).toBeVisible();
 });
 
-/** Opens the forward picker on Alex's question and returns Jordan's row in it. */
+/** Opens the forward sheet on Alex's question, picks Jordan into To, and returns its Send button. */
 async function forwardToJordan(page: Page) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
   await page.getByTestId("thread-view").getByRole("button", { name: `Alex Rivera: ${INBOUND}` }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Forward" }).click();
-  await page.getByPlaceholder("Forward to…").fill("Jordan");
-  return page.getByRole("button", { name: "Jordan Lee", exact: true });
+  const sheet = page.getByRole("dialog", { name: "Forward message" });
+  await sheet.getByRole("textbox", { name: "To", exact: true }).fill("Jordan");
+  await sheet.getByRole("button", { name: "Jordan Lee", exact: true }).click();
+  await expect(sheet.getByRole("button", { name: "Remove Jordan Lee from To" })).toBeVisible();
+  return sheet.getByRole("button", { name: "Send", exact: true });
 }
 
 const FORWARDED = `() => [...document.querySelectorAll('[data-testid="thread-view"] [role="button"]')]
@@ -294,13 +297,13 @@ async function settleDelayedSend(page: Page) {
  */
 const FORWARD_LIMIT_MS = process.env.CI ? 100 : 50;
 
-test("ratchet: a forwarded message is in the destination thread within 50 ms of the click", async ({ desk }) => {
+test("ratchet: a forwarded message is in the destination thread within 50 ms of Send", async ({ desk }) => {
   // A real bridge takes longer than a frame; the bare fixture can answer inside 50 ms.
   expect((await desk.request.post("/__fixture/send-timing", { data: { delayMs: 300 } })).ok()).toBe(true);
   const page = desk.page;
-  const jordan = await forwardToJordan(page);
+  const send = await forwardToJordan(page);
   await timeToFrame(page, "pointerdown", FORWARDED);
-  await jordan.click();
+  await send.click();
   expect(await elapsedToFrame(page)).toBeLessThanOrEqual(FORWARD_LIMIT_MS);
   await settleDelayedSend(page);
 });
@@ -309,9 +312,9 @@ test("a forward shows at once and turns Not delivered with a toast when the brid
   const fault = await desk.request.post("/__fixture/fault", { data: { method: "sendText" } });
   expect(fault.ok()).toBe(true);
   const page = desk.page;
-  const jordan = await forwardToJordan(page);
+  const send = await forwardToJordan(page);
   const shown = page.waitForFunction(FORWARDED, undefined, { polling: "raf", timeout: 5_000 });
-  await jordan.click();
+  await send.click();
   await shown;
   // Every send that did not go out raises the one failure toast, with Retry and Open.
   const toast = page.getByRole("status").filter({ hasText: "Couldn't send. Check the Mac mini connection." });

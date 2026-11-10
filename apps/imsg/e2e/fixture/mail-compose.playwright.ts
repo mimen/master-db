@@ -72,6 +72,7 @@ test("mail-reply-message: Reply on an earlier message answers that message, name
   await expect(composer.getByTestId("composer-source")).toContainText("Replying to Rosa Diaz");
   await expect(composer.getByTestId("composer-source")).toContainText("invoice #42 for Saturday is attached");
   expect(await chips(composer, "To")).toEqual(["Rosa Diaz"]);
+  expect(await checked(composer), "a plain Reply offers no files").toEqual([]);
   await composer.getByLabel("Message").fill("Paid today. Thanks, Rosa.");
   await page.screenshot({ path: join(evidence, "2-reply-to-message.png") });
   await composer.getByRole("button", { name: "Send", exact: true }).click();
@@ -83,20 +84,27 @@ test("mail-reply-message: Reply on an earlier message answers that message, name
   }]);
 });
 
-test("mail-reply-all-files: Reply all with attachments carries the thread's files, each with a checkbox, to everyone but Milad", async ({ desk }) => {
+test("mail-reply-all-files: plain Reply all lists the thread's files unchecked, and one tap carries the invoice to Carlos", async ({ desk }) => {
   const page = desk.page;
   const calls = enqueued(page);
   const reader = await openInvoice(page);
-  await reader.getByRole("button", { name: "Reply all with attachments" }).click();
+  await expect(reader.getByRole("button", { name: /Reply all with attachments/ })).toHaveCount(0);
+  await reader.getByRole("button", { name: "Reply all to the message from Sam Lee" }).click();
   const composer = page.getByTestId("email-composer");
   await expect(composer.getByTestId("composer-source")).toContainText("Replying to Sam Lee");
   expect(await chips(composer, "To")).toEqual(["Sam Lee", "Rosa Diaz"]);
   expect(await chips(composer, "Cc")).toEqual(["Dana Ortiz"]);
-  expect(await checked(composer)).toEqual([["Include invoice-42.pdf", "true"], ["Include stage.png", "true"]]);
+  expect(await checked(composer)).toEqual([["Include invoice-42.pdf", "false"], ["Include stage.png", "false"]]);
+
+  // A plain Reply leaves the thread's files out; back to Reply all, they are offered again, still unchecked.
+  await composer.getByRole("tab", { name: "Reply", exact: true }).click();
+  expect(await checked(composer)).toEqual([]);
+  await composer.getByRole("tab", { name: "Reply all" }).click();
+  expect(await checked(composer)).toEqual([["Include invoice-42.pdf", "false"], ["Include stage.png", "false"]]);
 
   await composer.getByRole("textbox", { name: "Cc", exact: true }).fill("Carlos Ruiz <carlos@books.test>,");
   await expect.poll(() => chips(composer, "Cc")).toEqual(["Dana Ortiz", "Carlos Ruiz"]);
-  await composer.getByRole("checkbox", { name: "Include stage.png" }).click();
+  await composer.getByRole("checkbox", { name: "Include invoice-42.pdf" }).click();
   await composer.getByLabel("Message").fill("Looping in Carlos for the books.");
   await page.screenshot({ path: join(evidence, "3-reply-all-with-attachments.png") });
   await composer.getByRole("button", { name: "Send", exact: true }).click();
@@ -112,6 +120,36 @@ test("mail-reply-all-files: Reply all with attachments carries the thread's file
   }]);
 });
 
+test("mail-reply-all-unchecked: a Reply all that checks nothing sends no files", async ({ desk }) => {
+  const page = desk.page;
+  const calls = enqueued(page);
+  const reader = await openInvoice(page);
+  await reader.getByRole("button", { name: "Reply all to the message from Sam Lee" }).click();
+  const composer = page.getByTestId("email-composer");
+  await composer.getByLabel("Message").fill("Thanks all.");
+  await composer.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(composer).toHaveCount(0);
+  expect(calls).toHaveLength(1);
+  expect(calls[0]!.payload.email?.attachments).toBeUndefined();
+});
+
+test("mail-from-chip: a reply shows the mailbox it goes out from, fixed; with one mailbox there is no chip", async ({ desk }) => {
+  const page = desk.page;
+  const reader = await openInvoice(page);
+  await reader.getByRole("button", { name: "Reply to the message from Sam Lee" }).click();
+  const composer = page.getByTestId("email-composer");
+  const from = composer.getByTestId("from-chip");
+  await expect(from).toHaveAccessibleName("From AUF, milad@afternoonumbrellafriends.com");
+  await expect(composer.getByRole("button", { name: /^From / }), "a reply cannot change its mailbox").toHaveCount(0);
+
+  await desk.request.post("/__fixture/reset");
+  await desk.request.post("/__fixture/mail", { data: { invoice: true } });
+  const single = await openInvoice(page);
+  await single.getByRole("button", { name: "Reply to the message from Sam Lee" }).click();
+  await expect(page.getByTestId("email-composer").getByLabel("Message")).toBeFocused();
+  await expect(page.getByTestId("email-composer").getByTestId("from-chip")).toHaveCount(0);
+});
+
 test("mail-forward: Forward quotes the original under a note, carries its files, and sends as a new thread from the same mailbox", async ({ desk }) => {
   const page = desk.page;
   const calls = enqueued(page);
@@ -119,7 +157,8 @@ test("mail-forward: Forward quotes the original under a note, carries its files,
   await reader.getByRole("button", { name: /^Rosa Diaz, / }).click();
   await reader.getByRole("button", { name: "Forward to the message from Rosa Diaz" }).click();
   const composer = page.getByTestId("email-composer");
-  await expect(composer.getByRole("heading", { name: "Forward" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Forward email" })).toBeVisible();
+  await expect(composer.getByText("Forward email", { exact: true })).toBeVisible();
   await expect(composer.getByTestId("composer-source")).toContainText("Forwarding Rosa Diaz");
   await expect(composer.getByLabel("Subject")).toHaveValue("Fwd: Invoice #42 for Saturday");
   expect(await chips(composer, "To")).toEqual([]);
@@ -148,11 +187,12 @@ test("mail-compose: New email picks its mailbox, takes chips, and sends a new th
   await page.goto("/mail", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "New email" }).click();
   const composer = page.getByTestId("email-composer");
-  await expect(composer.getByRole("heading", { name: "New email" })).toBeVisible();
-  const from = composer.getByRole("radiogroup", { name: "From" });
-  await expect(from.getByRole("radio", { name: "AUF, milad@afternoonumbrellafriends.com" })).toHaveAttribute("aria-checked", "true");
-  await from.getByRole("radio", { name: "Personal, miladmaaan@gmail.com" }).click();
-  await expect(from.getByRole("radio", { name: "Personal, miladmaaan@gmail.com" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("dialog", { name: "New email" })).toBeVisible();
+  await expect(composer.getByRole("textbox", { name: "To", exact: true })).toBeFocused();
+  const from = composer.getByTestId("from-chip");
+  await expect(from).toHaveAccessibleName("From AUF, milad@afternoonumbrellafriends.com");
+  await from.click();
+  await expect(from).toHaveAccessibleName("From Personal, miladmaaan@gmail.com");
   await composer.getByRole("textbox", { name: "To", exact: true }).fill("Jordan Kim <jordan@agency.test>;");
   await expect.poll(() => chips(composer, "To")).toEqual(["Jordan Kim"]);
   await composer.getByLabel("Subject").fill("Dinner Friday?");
@@ -175,4 +215,25 @@ test("mail-agent: Ask agent opens the agent pane on the open email thread", asyn
   await expect(page.getByTestId("desktop-shell")).toHaveAttribute("data-utility-workspace", "mail");
   await expect(page.getByRole("textbox", { name: "Ask the agent" })).toBeVisible();
   await page.screenshot({ path: join(evidence, "6-agent-on-email.png") });
+});
+
+test("mail-reply-esc: the docked reply closes on Esc while empty and asks before discarding what was written", async ({ desk }) => {
+  const page = desk.page;
+  const reader = await openInvoice(page);
+  await reader.getByRole("button", { name: "Reply to the message from Sam Lee" }).click();
+  const composer = page.getByTestId("email-composer");
+  await expect(composer.getByLabel("Message", { exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(composer).toHaveCount(0);
+
+  await reader.getByRole("button", { name: "Reply to the message from Sam Lee" }).click();
+  await composer.getByLabel("Message", { exact: true }).fill("Half a thought");
+  await page.keyboard.press("Escape");
+  await expect(composer.getByRole("alert")).toHaveText("Discard what you wrote?");
+  await composer.getByRole("button", { name: "Keep editing" }).click();
+  await expect(composer.getByLabel("Message", { exact: true })).toHaveValue("Half a thought");
+  await composer.getByRole("button", { name: "Close Reply" }).click();
+  await composer.getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(composer).toHaveCount(0);
+  await expect(reader.getByTestId("email-card")).toHaveCount(2);
 });
