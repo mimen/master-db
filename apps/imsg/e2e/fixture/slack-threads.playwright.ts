@@ -55,8 +55,7 @@ test("slack-threads phone: a channel's thread chip pushes the thread as its own 
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await openView(page, "All");
-  // Visible: the phone keeps Mail's tab mounted, and Sam's email row there also says "doors at 8".
-  await page.getByTestId("conversation-row").filter({ hasText: "Doors at 8", visible: true }).click();
+  await page.getByTestId("conversation-row").filter({ hasText: "Doors at 8" }).click();
   await expect(page.getByText(ROOT)).toBeVisible();
   await page.getByRole("button", { name: "Open thread, 2 replies" }).click();
   await expect(page).toHaveURL(/\/c\/fx/);

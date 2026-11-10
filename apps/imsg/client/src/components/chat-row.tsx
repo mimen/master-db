@@ -119,6 +119,7 @@ function ChatRowInner({
   agentLens = false,
   today,
   leaving = false,
+  testID = "conversation-row",
 }: {
   chat: ChatSummary;
   /** The handle that separates this row from another of the same name on the same service. */
@@ -135,6 +136,8 @@ function ChatRowInner({
   today?: { rank: number | null; reason: string | null };
   /** Folding out of the list. */
   leaving?: boolean;
+  /** Mail's rows answer to their own id: the phone keeps Mail's tab mounted beside the Messages list. */
+  testID?: string;
 }) {
   const theme = useTheme();
   const { wide: compact } = useLayoutMode();
@@ -227,7 +230,7 @@ function ChatRowInner({
 
   const row = (
     <Pressable
-      testID="conversation-row"
+      testID={testID}
       ref={contextRef as never}
       role="button"
       // The dot is drawn, so unread has to be spoken here too.

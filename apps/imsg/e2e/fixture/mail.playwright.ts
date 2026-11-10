@@ -165,7 +165,7 @@ test("All shows each thread's mailbox on its Gmail mark, and older messages offe
   await desk.request.post("/__fixture/mail", { data: { mailboxes: true } });
   await page.goto("/mail", { waitUntil: "domcontentloaded" });
   await page.getByRole("tab", { name: /^All inbox/ }).click();
-  const row = (name: string) => page.getByTestId("mail-list").getByTestId("conversation-row").filter({ hasText: name });
+  const row = (name: string) => page.getByTestId("mail-list").getByTestId("mail-row").filter({ hasText: name });
   await expect(row("Club Weekly")).toHaveAttribute("aria-label", /, Gmail, personal$/);
   await expect(row("Sam Lee")).toHaveAttribute("aria-label", /^Sam Lee, Load-in for Saturday, .*, Gmail$/);
 
@@ -189,12 +189,12 @@ test("Mail search finds threads by sender, subject or any message's body, and sa
   const list = page.getByTestId("mail-list");
   const search = page.getByRole("textbox", { name: "Search mail" });
   await search.fill("pat booking");
-  await expect(list.getByTestId("conversation-row")).toHaveCount(1);
+  await expect(list.getByTestId("mail-row")).toHaveCount(1);
   await expect(list.getByText("Booking inquiry")).toBeVisible();
   // Only the first message, Milad's own, says this.
   await search.fill("what time is load-in");
   await expect(list.getByText("Load-in for Saturday")).toBeVisible();
-  await expect(list.getByTestId("conversation-row")).toHaveCount(1);
+  await expect(list.getByTestId("mail-row")).toHaveCount(1);
   await search.fill("zebra crossing");
   await expect(list.getByText("No matches.")).toBeVisible();
   await page.getByRole("button", { name: "Clear search" }).click();
@@ -207,7 +207,7 @@ test("H snoozes the open thread out of Mail and moves on; Follow up routes throu
   await page.goto("/mail", { waitUntil: "domcontentloaded" });
   await page.getByRole("tab", { name: /^All inbox/ }).click();
   const list = page.getByTestId("mail-list");
-  await list.getByTestId("conversation-row").filter({ hasText: "Sam Lee" }).click();
+  await list.getByTestId("mail-row").filter({ hasText: "Sam Lee" }).click();
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 
   await page.keyboard.press("Meta+k");

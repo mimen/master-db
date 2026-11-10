@@ -337,6 +337,7 @@ export function MailWorkspace({ wide, active = false, onReader }: {
           keyExtractor={(chat) => chat.conversationId}
           renderItem={({ item }) => (
             <ChatRow
+              testID="mail-row"
               chat={item}
               personal={personal.has(item.route.accountId ?? "")}
               selected={wide && !composingNew && selectedId === item.conversationId}
