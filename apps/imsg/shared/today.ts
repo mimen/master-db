@@ -9,9 +9,9 @@ export const TODAY_TIME_ZONE = "America/Los_Angeles";
 const DAY_MS = 86_400_000;
 
 /**
- * A fresh build reads up to `needsYou` Needs you threads: the newest `recent` under `recentMaxAgeMs`, then the rest of
+ * A fresh build reads up to `needsYou` To review threads: the newest `recent` under `recentMaxAgeMs`, then the rest of
  * the backlog least recently read first, so the deep inbox rotates through. Plus the newest `waiting` Waiting threads.
- * An Update reads up to `update.fresh` threads with news, and `update.perOpenSlot` unread Needs you per open slot,
+ * An Update reads up to `update.fresh` threads with news, and `update.perOpenSlot` unread To review per open slot,
  * at least `update.newDay` on a new day and at most `update.deeper`.
  */
 export const TODAY_LIMITS = {
@@ -48,7 +48,7 @@ export function todayWindow(now: number): { day: DayKey; start: number } {
 }
 
 /**
- * Build-input rule: screened known, message-based. Needs you at any age; Waiting under 30 days, for iMessage only.
+ * Build-input rule: screened known, message-based. To review at any age; Waiting under 30 days, for iMessage only.
  * Slack and email join when they need Milad: a Slack thread he replied in last would otherwise take most of the
  * Waiting reads, and email joins only as the Mail workspace's People lens, a known sender owed a reply.
  */

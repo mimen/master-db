@@ -71,7 +71,7 @@ export function MessagesWorkspace({
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
   // The conversation auto-advance opened. Only it slides in; a click cuts as before.
   const [advanced, setAdvanced] = useState<{ conversationId: ConversationId; from: string } | null>(null);
-  // The open conversation stays in Today, Needs you or Unread after a reply or a read, until it is
+  // The open conversation stays in Today, To review or Unread after a reply or a read, until it is
   // left or settled; otherwise the row vanished under the cursor mid-reply.
   const [held, setHeld] = useState<ConversationId | null>(null);
   const { chats, allChats, counts, loading, error, refresh } = useChats(state, type, !wide, wide ? held : null);
@@ -168,7 +168,7 @@ export function MessagesWorkspace({
     router.push(conversationRoute(chat.conversationId));
   };
 
-  // Auto-advance (round4 ux.md daily loop): in Today, Needs you and Unread, a reply or a settle
+  // Auto-advance (round4 ux.md daily loop): in Today, To review and Unread, a reply or a settle
   // moves straight on to the next conversation in lens order with the composer focused.
   // Today's membership is the plan the list renders, fallback included, so it comes from the list.
   const rendered = useRenderedOrder();
@@ -179,7 +179,7 @@ export function MessagesWorkspace({
     return () => publishQueuePosition(null);
   }, [active, order, selected?.conversationId, wide]);
   // The neighbor is remembered while the open conversation is still in the lens: by the time
-  // a send's echo or a settle lands, the conversation has already left Needs you.
+  // a send's echo or a settle lands, the conversation has already left To review.
   const nextRef = useRef<ChatSummary | null>(null);
   // Rerun on the rendered order too: folding a section changes what the next conversation is.
   useEffect(() => {
@@ -281,7 +281,7 @@ export function MessagesWorkspace({
         const action = settleActionFor(sel);
         traceTriage({ kind: "settle-key", conversationId: sel.conversationId, lens: stateRef.current, action, next: nextRef.current?.conversationId ?? null });
         void toggleSettleChat(sel);
-        // Today, Needs you and Unread auto-advance on the settle itself (onTriageSettling).
+        // Today, To review and Unread auto-advance on the settle itself (onTriageSettling).
         // Elsewhere, glide off the row only when the action drops it out of the lens.
         const advances = action === "settle" && ADVANCING.has(stateRef.current);
         if (!advances && settleLeavesLens(action, stateRef.current)) getListAdapter()?.selectNeighborOf(sel.conversationId);

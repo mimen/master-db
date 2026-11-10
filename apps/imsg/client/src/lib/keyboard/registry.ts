@@ -1,3 +1,4 @@
+import { viewOrder, viewShortcut, type NavStyle } from "../inbox-model";
 import type { CommandDefinition, CommandId, KeyBinding } from "./types";
 
 /** Single source of truth: every command, once. Help/palette render from this. */
@@ -118,16 +119,16 @@ export function shortcutFor(id: CommandId): string | undefined {
 
 /** Keys a surface binds itself, outside the command registry, so help lists every key there is. */
 const SURFACE_KEYS: readonly HelpEntry[] = [
-  { title: "Switch lens", keys: ["⌘1–⌘7"] },
   { title: "Use a suggestion", keys: ["⌥1–⌥3"] },
   { title: "Accept the suggested text", keys: ["Tab"] },
   { title: "Send an email", keys: ["⌘↵"] },
 ];
 
-/** Help entries derived from the registry — cannot drift from behavior.
+/** Help entries derived from the registry and the views — cannot drift from behavior.
  * Commands sharing a title (Enter opens in the list, replies elsewhere) read
- * as one entry, since to the user they are one key doing one job. */
-export function helpEntries(): HelpEntry[] {
+ * as one entry, since to the user they are one key doing one job. Each view's
+ * chord follows the navigation style's order. */
+export function helpEntries(style: NavStyle): HelpEntry[] {
   const entries = new Map<string, string[]>();
   for (const command of COMMANDS) {
     const keys = BINDINGS
@@ -137,5 +138,9 @@ export function helpEntries(): HelpEntry[] {
     const merged = entries.get(command.title) ?? [];
     entries.set(command.title, [...merged, ...keys.filter((key) => !merged.includes(key))]);
   }
-  return [...[...entries].map(([title, keys]) => ({ title, keys })), ...SURFACE_KEYS];
+  const views = viewOrder(style).flatMap((view) => {
+    const key = viewShortcut(style, view.id);
+    return key ? [{ title: `Go to ${view.label}`, keys: [key] }] : [];
+  });
+  return [...[...entries].map(([title, keys]) => ({ title, keys })), ...views, ...SURFACE_KEYS];
 }

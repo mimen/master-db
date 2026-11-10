@@ -1,4 +1,4 @@
-import { expect, test } from "../fixtures/desk";
+import { expect, openView, test } from "../fixtures/desk";
 
 test("Mail lists the inbox under People and All inbox, and newsletters never reach People", async ({ desk }) => {
   const page = desk.page;
@@ -6,7 +6,7 @@ test("Mail lists the inbox under People and All inbox, and newsletters never rea
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.getByText("Alex Rivera", { exact: true }).first()).toBeVisible();
   // Email threads list in Mail, not in the Messages lenses; only Today ranks them beside chats.
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   await expect(page.getByText("Load-in for Saturday")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Mail", exact: true }).click();

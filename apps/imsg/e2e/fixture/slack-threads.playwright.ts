@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { expect, test } from "../fixtures/desk";
+import { expect, openView, test } from "../fixtures/desk";
 
 const evidence = process.env.VERIFY_IMSG_EVIDENCE ?? mkdtempSync(join(tmpdir(), "imsg-slack-threads-"));
 const MENTION = "@Milad can you sign the rider before then?";
@@ -13,7 +13,7 @@ test("slack-threads desk: the inbox lists only the thread that wants Milad, and 
   await desk.request.post("/__fixture/slack", { data: { seedChannel: true } });
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
 
   const rows = page.getByTestId("conversation-row");
   const threadRow = rows.filter({ hasText: MENTION });
@@ -54,7 +54,7 @@ test("slack-threads phone: a channel's thread chip pushes the thread as its own 
   await desk.request.post("/__fixture/slack", { data: { seedChannel: true } });
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   // Visible: the phone keeps Mail's tab mounted, and Sam's email row there also says "doors at 8".
   await page.getByTestId("conversation-row").filter({ hasText: "Doors at 8", visible: true }).click();
   await expect(page.getByText(ROOT)).toBeVisible();

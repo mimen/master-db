@@ -4,7 +4,8 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
-import { LENSES as TABS } from "@/lib/inbox-model";
+import { viewOf, viewShortcut, type NavStyle } from "@/lib/inbox-model";
+import { useNavStyle } from "@/lib/settings";
 import { compactAge, LATE_AFTER_MS, waitingLongest, yourTurnLongest, type AgedChat } from "@/lib/turn-age";
 
 import { ChatAvatar } from "./avatar";
@@ -52,20 +53,20 @@ const LENSES = {
     pick: waitingLongest,
     total: (chats: readonly ChatSummary[]) => chats.filter((chat) => chat.flags.waiting).length,
     rowTrailing: "nudge",
-    footer: "See all in Waiting",
-    footerHint: undefined,
+    footer: (label: string) => `See all in ${label}`,
+    footerView: "waiting",
     footerAction: "onSeeAllWaiting",
   },
   unread: {
     title: "Nothing unread",
     line2: ({ unresponded }: EmptyLensCounts) =>
-      `You've opened every message.${unresponded === 0 ? "" : unresponded === 1 ? " 1 conversation still needs a reply." : ` ${unresponded} conversations still need a reply.`}`,
+      `You've opened every message.${unresponded === 0 ? "" : unresponded === 1 ? " 1 conversation still to review." : ` ${unresponded} conversations still to review.`}`,
     sectionTitle: "Your turn the longest",
     pick: yourTurnLongest,
     total: (_chats: readonly ChatSummary[], counts: EmptyLensCounts) => counts.unresponded,
     rowTrailing: "age",
-    footer: "Go to Needs you",
-    footerHint: `⌘${TABS.findIndex((tab) => tab.value === "unresponded") + 1}`,
+    footer: (label: string) => `Go to ${label}`,
+    footerView: "unresponded",
     footerAction: "onGoToNeedsReply",
   },
 } as const satisfies Record<EmptyLensKind, {
@@ -75,14 +76,21 @@ const LENSES = {
   pick: (chats: readonly ChatSummary[], limit: number, now: number) => AgedChat[];
   total: (chats: readonly ChatSummary[], counts: EmptyLensCounts) => number;
   rowTrailing: "nudge" | "age";
-  footer: string;
-  footerHint: string | undefined;
+  footer: (label: string) => string;
+  footerView: "waiting" | "unresponded";
   footerAction: "onSeeAllWaiting" | "onGoToNeedsReply";
 }>;
 
-export function emptyLensCopy(lens: EmptyLensKind, counts: EmptyLensCounts): EmptyLensCopy {
+/** The footer names the view it goes to and its chord in the navigation style on screen, both read off VIEWS. */
+export function emptyLensCopy(lens: EmptyLensKind, counts: EmptyLensCounts, style: NavStyle): EmptyLensCopy {
   const entry = LENSES[lens];
-  return { title: entry.title, line2: entry.line2(counts), sectionTitle: entry.sectionTitle, footer: entry.footer, footerHint: entry.footerHint };
+  return {
+    title: entry.title,
+    line2: entry.line2(counts),
+    sectionTitle: entry.sectionTitle,
+    footer: entry.footer(viewOf(entry.footerView).label),
+    footerHint: viewShortcut(style, entry.footerView),
+  };
 }
 
 // Desktop values from round4/html/desk-empty.html, phone from phone-empty.html.
@@ -97,14 +105,14 @@ function snippetOf(chat: ChatSummary): string {
   return `${last.isFromMe ? "You: " : ""}${last.text || (last.hasAttachments ? "Attachment" : "")}`;
 }
 
-/** The calm state a Needs you or Unread lens shows once it is empty: what happened, then the next useful step. */
+/** The calm state a To review or Unread view shows once it is empty: what happened, then the next useful step. */
 export function EmptyLens(props: EmptyLensProps) {
   const { lens, chats, counts, now, onOpenChat } = props;
   const { wide } = useLayoutMode();
   const c = useTheme();
   const s = wide ? SIZE.desk : SIZE.phone;
   const entry = LENSES[lens];
-  const copy = emptyLensCopy(lens, counts);
+  const copy = emptyLensCopy(lens, counts, useNavStyle());
   const rows = entry.pick(chats, ROWS, now);
 
   return (

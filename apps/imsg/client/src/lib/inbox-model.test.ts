@@ -1,4 +1,4 @@
-import type { ChatSummary, ConversationId } from "@shared/types";
+import type { ChatSummary, ConversationId, StateFilter } from "@shared/types";
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -21,7 +21,10 @@ import {
   narrowToday,
   parseServiceFilter,
   serviceOptions,
-  tabCounts,
+  viewCounts,
+  viewOrder,
+  viewShortcut,
+  VIEWS,
 } from "./inbox-model";
 import { computeCounts } from "@shared/chat-state";
 import type { TodayPlan } from "./today";
@@ -75,7 +78,7 @@ describe("inbox filter defaults", () => {
 describe("desktopInboxTitle", () => {
   test("names the lens alone while People is at its default, and adds People otherwise", () => {
     expect(desktopInboxTitle({ state: "all", type: "known" })).toBe("All messages");
-    expect(desktopInboxTitle({ state: "unresponded", type: "known" })).toBe("Needs you");
+    expect(desktopInboxTitle({ state: "unresponded", type: "known" })).toBe("To review");
     expect(desktopInboxTitle({ state: "all", type: "unknown" })).toBe("All messages · Unknown");
     expect(desktopInboxTitle({ state: "settled", type: "dm" })).toBe("Settled · One-to-one");
   });
@@ -363,7 +366,7 @@ describe("Agents lens", () => {
     ({ attention, chatId: `chat-${attention}-${activityAt}`, title: "Title", openCount: 1, activityAt, ...(preview ? { preview } : {}) });
   const refine: RefineContext = { refinements: DEFAULT_REFINEMENTS, scheduled: new Set(), now: NOW };
 
-  test("groups people by their most urgent chat under Needs you, Failed, Ready, Working, Open, newest activity first", () => {
+  test("groups people by their most urgent chat under Asking you, Failed, Ready, Working, Open, newest activity first", () => {
     const chats = [
       makeChat({ conversationId: cid("open"), agent: agent("open", 50) }),
       makeChat({ conversationId: cid("ready-old"), agent: agent("ready", 10), lastMessage: { ...makeChat().lastMessage!, dateCreated: NOW } }),
@@ -375,7 +378,7 @@ describe("Agents lens", () => {
     ];
     const model = deriveInboxModel(chats, { state: "agents", type: "all" }, "", undefined, undefined, refine);
     expect(model.rows.map((row) => row.kind === "chat" ? row.chat.conversationId : `${row.label} ${row.count}`)).toEqual([
-      "Needs you 1", "asking", "Failed 1", "failed", "Ready 2", "ready-new", "ready-old", "Working 1", "working", "Open 1", "open",
+      "Asking you 1", "asking", "Failed 1", "failed", "Ready 2", "ready-new", "ready-old", "Working 1", "working", "Open 1", "open",
     ]);
     expect(model.listChats.map((chat) => chat.conversationId as string)).toEqual(["asking", "failed", "ready-new", "ready-old", "working", "open"]);
   });
@@ -387,7 +390,7 @@ describe("Agents lens", () => {
   });
 
   test("the status line names the state, says Draft ready for a draft, and keeps a working chat to its first thought", () => {
-    expect(agentStatusLine(agent("needs_you", 1, { kind: "question", text: "Which load-in time?" }))).toEqual({ word: "Needs you", text: "Which load-in time?" });
+    expect(agentStatusLine(agent("needs_you", 1, { kind: "question", text: "Which load-in time?" }))).toEqual({ word: "Asking you", text: "Which load-in time?" });
     expect(agentStatusLine(agent("ready", 1, { kind: "draft", text: "See you Friday" }))).toEqual({ word: "Draft ready", text: "See you Friday" });
     expect(agentStatusLine(agent("ready", 1, { kind: "reply", text: "Done.\n\n- Two spots" }))).toEqual({ word: "Ready", text: "Done. - Two spots" });
     expect(agentStatusLine(agent("failed", 1, { kind: "error", text: "Timed out." }))).toEqual({ word: "Failed", text: "Timed out." });
@@ -520,17 +523,32 @@ describe("service filter", () => {
   });
 });
 
-describe("tabCounts", () => {
-  test("each tab counts under its own People filter, whichever tab is on screen", () => {
+describe("viewCounts", () => {
+  test("each view counts under its own People filter, whichever view is on screen", () => {
     const owed = { ...makeChat().flags, unresponded: true };
     const chats = [
       makeChat({ conversationId: cid("known"), flags: owed }),
       makeChat({ conversationId: cid("stranger"), known: false, flags: owed }),
     ];
     const onScreen = computeCounts(chats, "known");
-    const tabs = tabCounts(chats, onScreen, 7, (lens) => (lens === "unresponded" ? "all" : "known"));
-    expect(tabs.unresponded, "Needs you remembers Everyone").toBe(2);
+    const tabs = viewCounts(chats, onScreen, 7, (lens) => (lens === "unresponded" ? "all" : "known"));
+    expect(tabs.unresponded, "To review remembers Everyone").toBe(2);
     expect(tabs.all, "All keeps Known").toBe(1);
     expect(tabs.today).toBe(7);
+  });
+});
+
+describe("VIEWS", () => {
+  test("every state is one view, so a new state cannot ship without a place in the navigation", () => {
+    const states: StateFilter[] = ["today", "unresponded", "waiting", "unread", "snoozed", "drafts", "agents", "all", "settled"];
+    expect([...VIEWS.map((view) => view.id)].sort()).toEqual([...states].sort());
+  });
+
+  test("the list keeps table order; Tabs puts its four tabs first and More after, and ⌘N follows each", () => {
+    expect(viewOrder("list").map((view) => view.label)).toEqual(["Today", "To review", "Waiting", "Unread", "Snoozed", "Drafts", "Agents", "All", "Settled"]);
+    expect(viewOrder("tabs").map((view) => view.label)).toEqual(["Today", "To review", "Waiting", "All", "Unread", "Snoozed", "Drafts", "Agents", "Settled"]);
+    expect(viewShortcut("list", "all")).toBe("⌘8");
+    expect(viewShortcut("tabs", "all")).toBe("⌘4");
+    expect(viewShortcut("compact", "snoozed")).toBe("⌘5");
   });
 });
