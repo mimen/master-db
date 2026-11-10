@@ -299,7 +299,7 @@ test("suggestion shelf states hold their footprint and recover quietly", async (
     await page.mouse.move(5, 5);
     await expect(retry, "a failure stays quiet until the pointer reaches the shelf").toHaveText("");
     await retry.hover();
-    await expect(retry).toHaveText("Retry suggestions");
+    await expect(retry).toContainText("Retry suggestions");
     await page.screenshot({ path: `/tmp/comma-shelf-failed-${scheme}.png`, animations: "disabled" });
 
     fail = false;

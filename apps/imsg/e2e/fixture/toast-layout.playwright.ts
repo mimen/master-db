@@ -53,8 +53,11 @@ for (const scheme of ["light", "dark"] as const) {
       expect(pill.x + pill.width / 2, "toast is centered within the thread").toBeCloseTo(chrome.x + chrome.width / 2, 1);
       expect(pill.y, "toast stays below the entire message list").toBeGreaterThanOrEqual(listWithToast.y + listWithToast.height);
       expect(pill.y).toBeGreaterThanOrEqual(chrome.y);
-      const chips = await page.getByText("what time do you need the final answer by?", { exact: true }).boundingBox();
-      if (chips) expect(pill.y, "toast clears the suggestion chips").toBeGreaterThanOrEqual(chips.y + chips.height);
+      const ghost = await page.getByTestId("composer-ghost").boundingBox();
+      if (ghost) {
+        const coversGhost = pill.y < ghost.y + ghost.height && pill.y + pill.height > ghost.y;
+        expect(coversGhost, "toast leaves the suggested reply in the field readable").toBe(false);
+      }
       expect(pill.y + pill.height).toBeLessThanOrEqual(chrome.y + chrome.height);
       await undo.click();
       await expect(undo).toHaveCount(0);

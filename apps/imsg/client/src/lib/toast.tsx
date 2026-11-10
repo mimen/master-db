@@ -47,6 +47,7 @@ export function ToastAnchor({ children, active }: { readonly children: ReactNode
   const context = useContext(ToastContext);
   const anchor = useRef(Symbol("toast-anchor")).current;
   const focused = useIsFocused();
+  const { wide } = useLayoutMode();
   const registerAnchor = context?.registerAnchor;
   useEffect(() => {
     if (active && focused) return registerAnchor?.(anchor);
@@ -55,9 +56,10 @@ export function ToastAnchor({ children, active }: { readonly children: ReactNode
   return (
     <View testID="thread-composer-chrome">
       {children}
-      {/* Bottom-anchored over the composer card, so it never covers the suggestion chips above it. */}
+      {/* Desktop: over the card's tool row. Phone: the field is the whole card, so the toast sits over the strip's
+          line above it, which says the same thing while the toast shows. */}
       {context?.activeAnchor === anchor && (
-        <View pointerEvents="box-none" style={[styles.overlay, { bottom: Space.md }]}>
+        <View pointerEvents="box-none" style={[styles.overlay, wide ? { bottom: Space.md } : { top: 0 }]}>
           {context.pill}
         </View>
       )}

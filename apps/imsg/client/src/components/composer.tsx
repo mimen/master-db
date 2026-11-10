@@ -1489,7 +1489,8 @@ const styles = StyleSheet.create({
   toolSep: { height: 16, marginHorizontal: 2, width: 1 },
   toolSpacer: { flex: 1 },
   serviceDot: { borderRadius: 4, height: 8, width: 8 },
-  ghostTab: { fontSize: 12, fontStyle: "normal", fontWeight: "600" },
+  // The ghost's own size: a smaller run would stretch the line box and grow the field by a pixel.
+  ghostTab: { fontStyle: "normal", fontWeight: "600" },
   cardGhost: { left: 16, position: "absolute", right: 16, top: CARD_PAD_TOP },
   phoneGhost: { left: MIRROR_INSET_H, position: "absolute", right: USE_KEY_INSET, top: (Platform.OS === "web" ? 7 : 8) + INPUT_BORDER_W },
   useKey: {
