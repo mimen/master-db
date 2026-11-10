@@ -102,7 +102,7 @@ const health = () => ({ ok: true, privateApi: bb.hasPrivateApi, emojiReactions: 
 app.get("/api/health", (c) => c.json(health()));
 
 // Immutable release identity consumed by the thin desktop shell.
-registerDeployStatusRoute(app, webReleaseManifestPath);
+registerDeployStatusRoute(app, webReleaseManifestPath, `${deployStateDir}/ios-release.json`);
 registerDesktopReleaseRoutes(app, desktopRoot, desktopReleaseRoot);
 registerConvexTokenRoute(app, config, { client: deps.convexAuthClient, now });
 

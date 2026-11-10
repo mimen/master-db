@@ -1,9 +1,11 @@
 export interface NativeUpdate {
   readonly ready: boolean;
   readonly apply: () => void;
+  /** A new native build to install from Expo, when this install's runtime is behind. */
+  readonly installUrl: string | null;
 }
 
-const NO_UPDATE: NativeUpdate = { ready: false, apply: () => undefined };
+const NO_UPDATE: NativeUpdate = { ready: false, apply: () => undefined, installUrl: null };
 
 /** Web and the desktop shell update through the release monitor; only the iOS build uses OTA. */
 export function useNativeUpdate(): NativeUpdate {

@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import {
   displayReleaseSha,
+  iosBuildToInstall,
+  parseIosBuildRelease,
   parseDeployedWebRelease,
   parseShellReleaseState,
   releaseSha,
@@ -69,5 +71,23 @@ describe("release activation decisions", () => {
   test("formats compact Settings identities without inventing a SHA", () => {
     expect(displayReleaseSha(RUNNING_WEB)).toBe("111111111111");
     expect(displayReleaseSha(null)).toBe("—");
+  });
+});
+
+describe("iOS build install link", () => {
+  const release = { runtime: "abc", buildUrl: "https://expo.dev/accounts/a/projects/b/builds/1" };
+
+  test("parses only an Expo build link with a runtime", () => {
+    expect(parseIosBuildRelease(release)).toEqual(release);
+    expect(parseIosBuildRelease({ runtime: "abc", buildUrl: "https://evil.example/x" })).toBeNull();
+    expect(parseIosBuildRelease({ buildUrl: release.buildUrl })).toBeNull();
+    expect(parseIosBuildRelease(null)).toBeNull();
+  });
+
+  test("offers the build only to an install on a different runtime", () => {
+    expect(iosBuildToInstall(release, "old")).toBe(release.buildUrl);
+    expect(iosBuildToInstall(release, "abc")).toBeNull();
+    expect(iosBuildToInstall(release, null)).toBeNull();
+    expect(iosBuildToInstall(null, "old")).toBeNull();
   });
 });
