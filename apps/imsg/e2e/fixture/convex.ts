@@ -548,9 +548,15 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     ...triage.handlers,
     "comma/triage:settle": async (args) => mailWorld.owns(String(args.conversationId)) ? mailWorld.settle(String(args.conversationId)) : triage.handlers["comma/triage:settle"]!(args),
     "comma/triage:unsettle": async (args) => mailWorld.owns(String(args.conversationId)) ? mailWorld.unsettle(String(args.conversationId)) : triage.handlers["comma/triage:unsettle"]!(args),
+    // Production's mutation commits the read and queues the receipt; a Mini that fails the receipt fails the command, not the read.
     "comma/triage:markRead": async (args) => {
       triage.read(String(args.conversationId), Number(args.at));
-      return handlers["comma/outbox:enqueue"]!({ clientKey: `markRead-${String(args.conversationId)}-${new Date().getTime()}`, conversationId: args.conversationId, payload: { kind: "markRead" } });
+      const clientKey = `markRead-${String(args.conversationId)}-${new Date().getTime()}`;
+      return await handlers["comma/outbox:enqueue"]!({ clientKey, conversationId: args.conversationId, payload: { kind: "markRead" } }).catch((error: unknown) => {
+        const id = `outbox-${clientKey}`;
+        receipts.set(clientKey, { id, clientKey, status: "failed", error: error instanceof Error ? error.message : String(error), updatedAt: Date.now() });
+        return id;
+      });
     },
     "comma/linkPreview:fetchLinkPreview": async (args) => {
       const url = typeof args.url === "string" ? parsePublicPreviewUrl(args.url) : null;

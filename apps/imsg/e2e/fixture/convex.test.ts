@@ -103,6 +103,12 @@ test("comma/triage settles against the shown last message, reads with a receipt,
   const receipt = await triage("markRead", { at: FIXTURE_NOW });
   expect((await conversation()).flags.unread).toBe(false);
   expect(await call("comma/outbox:getCommand", { commandId: receipt })).toMatchObject({ status: "sent", result: { kind: "markRead", ok: true } });
+  await triage("markUnread");
+  bb.setFault("markRead", "offline");
+  const failed = await triage("markRead", { at: FIXTURE_NOW });
+  bb.setFault(null);
+  expect((await conversation()).flags.unread).toBe(false);
+  expect(await call("comma/outbox:getCommand", { commandId: failed })).toMatchObject({ status: "failed" });
   await command({ kind: "send", text: "on it" });
   const today = await call<{ cleared: unknown[] }>("comma/today:get", { day: "2026-10-27" });
   expect(today.cleared).toEqual([{ conversationId: fixtureConversationId(CHAT_GUIDS.needs), at: expect.any(Number) }]);

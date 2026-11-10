@@ -22,7 +22,9 @@ export default defineConfig({
     command: process.env.IMSG_FIXTURE_PREBUILT === "1" ? "bun run fixture:serve" : "bun run fixture:start",
     cwd: join(configDirectory, ".."),
     url: `${BASE_URL}/api/health`,
-    reuseExistingServer: true,
+    // Another worktree's fixture server serves that worktree's build, so a busy port fails the run rather than testing it.
+    // verify-imsg's drive.sh opts in for the instance its launch.sh started.
+    reuseExistingServer: process.env.IMSG_FIXTURE_REUSE === "1",
     timeout: 120_000,
     env: { ...process.env, IMSG_FIXTURE_PORT: String(PORT) },
   },
