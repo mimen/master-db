@@ -83,13 +83,13 @@ and Restart banners.
   The bridge's ingest contract is pinned by `convex/comma/bridgeContract.test.ts`, which runs the Mini's
   bridge against the Convex functions under convex-test.
 - Clients read and send every feature through Convex. The client never calls the Mini except
-  for session and release routes, `GET /api/convex-token` and `GET /api/deploy/status`.
+  for session and release routes, `GET /api/convex-token`, `GET /api/deploy/status` and `GET /api/deploy/ios`.
   They never sign in: the [auth provider](client/src/lib/convex-auth.tsx)
   fetches a Convex session from the Mini's `GET /api/convex-token`, which the Mini mints with the
   `tailnet` credentials provider and the bridge secret. Port 8447 is tailnet-only, so tailnet
   membership is the login; Convex's `authed*` guards still reject callers from the open internet.
 - The Mini's HTTP routes are session and release routes plus `GET /api/health` for deployment
-  checks. Release routes include `/api/deploy/status`, `/api/desktop-release`,
+  checks. Release routes include `/api/deploy/status`, `/api/deploy/ios`, `/api/desktop-release`,
   `/api/desktop-release/artifact/:filename`, and `/api/desktop-version`. It also serves static
   files and the SPA, with a 404 boundary for unknown `/api/*` paths. Feature REST routes and
   `/events` are gone; the bridge still uses the local services directly.

@@ -11,7 +11,7 @@ const build = (id: string, status: string, hash: string | null) => ({
 describe("planIosRelease", () => {
   test("publishes OTA when a finished build carries the current runtime", () => {
     expect(planIosRelease("abc", [build("old", "FINISHED", "zzz"), build("b1", "FINISHED", "abc")]))
-      .toEqual({ kind: "publish" });
+      .toEqual({ kind: "publish", buildId: "b1" });
   });
 
   test("waits on an in-flight build for the current runtime instead of starting another", () => {

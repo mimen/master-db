@@ -65,6 +65,26 @@ export function parseShellReleaseState(
   return { runningSha, stagedSha };
 }
 
+/** The production iOS build for the deployed native runtime: OTA reaches only installs on that runtime. */
+export interface IosBuildRelease {
+  readonly runtime: string;
+  readonly buildUrl: string;
+}
+
+export function parseIosBuildRelease(value: unknown): IosBuildRelease | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { runtime, buildUrl } = value as Record<string, unknown>;
+  if (typeof runtime !== "string" || !runtime) return null;
+  if (typeof buildUrl !== "string" || !buildUrl.startsWith("https://expo.dev/")) return null;
+  return { runtime, buildUrl };
+}
+
+/** The install link, when this install's runtime is not the deployed one. */
+export function iosBuildToInstall(release: IosBuildRelease | null, runningRuntime: string | null): string | null {
+  if (!release || !runningRuntime || release.runtime === runningRuntime) return null;
+  return release.buildUrl;
+}
+
 export function webUpdateAvailable(snapshot: ReleaseIdentitySnapshot): boolean {
   const deployed = snapshot.deployedWeb;
   const runningSha = snapshot.running.webSha;

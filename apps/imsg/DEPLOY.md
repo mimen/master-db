@@ -65,6 +65,8 @@ The phone runs an installed internal build, not Expo Go. After the web release i
 - A build for the fingerprint is in flight: nothing is published; the next deploy publishes.
 - No build has it (a native dependency, plugin or `app.json` change): an EAS build starts and the log prints its link. Install it on the phone from that link. Until then the installed app keeps its last compatible update.
 
+Each run records that runtime's build (finished, in flight or just started) in `ios-release.json` in the deploy state directory, served at `/api/deploy/ios`. An installed app on a different runtime shows **New app build** with Install, which opens the build's Expo page.
+
 The Mini authenticates with `~/.config/comma/expo-token` (account `mimen1994`). A failed publish fails the run but leaves the web release live. Rollback is `cd client && bunx eas-cli update:republish --group <prior-group-id> --channel production`, or merging a revert.
 
 A new device or an expired profile needs an interactive credentials pass with the App Store Connect key (`op://AUF/AUF App Store Connect API Key`, team `458KZD965T`): register the device with `bunx eas-cli device:create`, then run `bunx eas-cli build -p ios --profile production` with `EXPO_ASC_API_KEY_PATH`, `EXPO_ASC_KEY_ID` and `EXPO_ASC_ISSUER_ID` set. The note's `.p8` sits below a prose header, so write only the `BEGIN`/`END` block to the key file.

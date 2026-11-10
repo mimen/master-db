@@ -1,6 +1,6 @@
 import { shellUpdateAvailable, webUpdateAvailable } from "@shared/release-identity";
 import { useEffect, useState, useSyncExternalStore, type JSX, type ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 
@@ -24,11 +24,12 @@ export function ReleaseUpdateBanners(): JSX.Element | null {
   const webReady = webUpdateAvailable(snapshot);
   const shellReady = shellUpdateAvailable(snapshot);
   const nativeUpdate = useNativeUpdate();
+  const { installUrl } = nativeUpdate;
   // Below the status bar and the iPhone's Dynamic Island, where the chip can be tapped.
   const { top } = useSafeAreaInsets();
   const restartFailed = shellReady && failedStagedSha === snapshot.shell.stagedSha;
 
-  if (!webReady && !shellReady && !nativeUpdate.ready) return null;
+  if (!webReady && !shellReady && !nativeUpdate.ready && !installUrl) return null;
 
   const surface = {
     backgroundColor: theme.backgroundElement,
@@ -67,6 +68,20 @@ export function ReleaseUpdateBanners(): JSX.Element | null {
             style={({ pressed }) => [styles.action, pressed && styles.pressed]}
           >
             <Text style={[styles.actionText, { color: theme.accent }]}>Reload</Text>
+          </Pressable>
+        </Banner>
+      )}
+      {installUrl && (
+        <Banner style={surface}>
+          <Text style={[styles.message, { color: theme.text }]}>New app build</Text>
+          <Text style={[styles.separator, { color: theme.textSecondary }]}>—</Text>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="Install the new app build"
+            onPress={() => void Linking.openURL(installUrl)}
+            style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+          >
+            <Text style={[styles.actionText, { color: theme.accent }]}>Install</Text>
           </Pressable>
         </Banner>
       )}

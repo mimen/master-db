@@ -44,7 +44,7 @@ describe("deployed web release status", () => {
   test("serves the current release and fails closed when unavailable", async () => {
     const path = manifestPath();
     const app = new Hono();
-    registerDeployStatusRoute(app, path);
+    registerDeployStatusRoute(app, path, manifestPath());
 
     expect((await app.request("/api/deploy/status")).status).toBe(404);
     writeFileSync(path, JSON.stringify({
@@ -59,5 +59,18 @@ describe("deployed web release status", () => {
       branch: "feat/release-ui",
       webSha: "b".repeat(40),
     });
+  });
+
+  test("serves the iOS build for the deployed runtime and fails closed when unavailable", async () => {
+    const iosPath = manifestPath();
+    const app = new Hono();
+    registerDeployStatusRoute(app, manifestPath(), iosPath);
+
+    expect((await app.request("/api/deploy/ios")).status).toBe(404);
+    const release = { runtime: "e8167f9ef38b", buildUrl: "https://expo.dev/accounts/a/projects/b/builds/1" };
+    writeFileSync(iosPath, JSON.stringify(release));
+    const response = await app.request("/api/deploy/ios");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(release);
   });
 });

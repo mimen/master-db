@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -9,7 +9,7 @@ export interface IosBuild {
 }
 
 export type IosReleasePlan =
-  | { readonly kind: "publish" }
+  | { readonly kind: "publish"; readonly buildId: string }
   | { readonly kind: "wait"; readonly buildId: string }
   | { readonly kind: "build" };
 
@@ -22,12 +22,22 @@ const IN_FLIGHT = new Set(["NEW", "IN_QUEUE", "IN_PROGRESS", "PENDING"]);
  */
 export function planIosRelease(fingerprint: string, builds: readonly IosBuild[]): IosReleasePlan {
   const matching = builds.filter((build) => build.fingerprint?.hash === fingerprint);
-  if (matching.some((build) => build.status === "FINISHED")) return { kind: "publish" };
+  const finished = matching.find((build) => build.status === "FINISHED");
+  if (finished) return { kind: "publish", buildId: finished.id };
   const inFlight = matching.find((build) => IN_FLIGHT.has(build.status));
   return inFlight ? { kind: "wait", buildId: inFlight.id } : { kind: "build" };
 }
 
 const PROFILE = "production";
+const BUILDS_URL = "https://expo.dev/accounts/mimen1994/projects/imsg/builds";
+
+/** The phone compares its runtime against this to offer the build's install page. */
+function recordIosBuild(runtime: string, buildId: string): void {
+  const dir = process.env.IMSG_DEPLOY_STATE_DIR ?? join(homedir(), "Library/Application Support/imsg-deploy");
+  const path = join(dir, "ios-release.json");
+  writeFileSync(`${path}.tmp`, JSON.stringify({ runtime, buildUrl: `${BUILDS_URL}/${buildId}` }));
+  renameSync(`${path}.tmp`, path);
+}
 
 function eas(args: readonly string[], env: Record<string, string>): string {
   const result = Bun.spawnSync(["bunx", "eas-cli", ...args, "--non-interactive"], {
@@ -58,6 +68,7 @@ function main(sourceSha: string): void {
     eas(["build:list", "--platform", "ios", "--build-profile", PROFILE, "--limit", "10", "--json"], env),
   ) as IosBuild[];
   const plan = planIosRelease(hash, builds);
+  if (plan.kind !== "build") recordIosBuild(hash, plan.buildId);
 
   if (plan.kind === "publish") {
     // eas update exports to client/dist by default, which is the live web release the Mini serves.
@@ -72,9 +83,10 @@ function main(sourceSha: string): void {
   const started = JSON.parse(
     eas(["build", "--platform", "ios", "--profile", PROFILE, "--no-wait", "--json"], env),
   ) as { id: string }[];
-  console.log(
-    `Native runtime changed. Install the new iOS build when it finishes: https://expo.dev/accounts/mimen1994/projects/imsg/builds/${started[0]?.id}`,
-  );
+  const buildId = started[0]?.id;
+  if (!buildId) throw new Error("eas build returned no build id");
+  recordIosBuild(hash, buildId);
+  console.log(`Native runtime changed. Install the new iOS build when it finishes: ${BUILDS_URL}/${buildId}`);
 }
 
 if (import.meta.main) {
