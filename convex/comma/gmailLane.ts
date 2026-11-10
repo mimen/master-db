@@ -3,7 +3,7 @@ import { v, type Infer } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalMutation, type ActionCtx, type MutationCtx } from "../_generated/server";
-import { gmailMessageValue, type CommandResult, type CommaRoute } from "../schema/comma/validators";
+import { gmailMessageValue, type CommandResult } from "../schema/comma/validators";
 
 import { gmail } from "./conversationIdentity";
 import { EMAIL_FILES_LIMIT, MAX_EMAIL_FILES_BYTES } from "./enqueue";
@@ -26,7 +26,6 @@ import { settleConversation, unsettleConversation } from "./triage";
  */
 
 type OutboxRow = Doc<"comma_outbox">;
-type GmailRoute = Extract<CommaRoute, { platform: "gmail" }>;
 type GmailMessageValue = Infer<typeof gmailMessageValue>;
 type SendKind = Extract<OutboxRow["payload"], { kind: "send" | "sendEmail" }>;
 type Header = { name: string; value: string };
@@ -318,26 +317,33 @@ const LAST_CHECK_MS = 2 * 60_000;
 /** How far before its enqueue a sent message may be dated, for clock skew between Convex and Gmail. */
 const SKEW_MS = 60_000;
 
-/** Schedules the check for a Gmail send that ended unknown. Every other row passes through. */
+/** The mailbox a send went out from: a reply's route names it, a new email's payload does. */
+function sendingAccount(row: OutboxRow): Id<"comma_accounts"> | null {
+  if (row.payload.kind === "sendEmail") return row.payload.accountId;
+  return row.payload.kind === "send" && row.route?.platform === "gmail" ? row.route.accountId : null;
+}
+
+/** Schedules the check for a Gmail send or new email that ended unknown. Every other row passes through. */
 export async function checkUnknownGmailSend(ctx: MutationCtx, row: OutboxRow): Promise<void> {
-  if (row.lane !== "gmail" || row.payload.kind !== "send") return;
+  if (row.lane !== "gmail" || !sendingAccount(row)) return;
   await ctx.scheduler.runAfter(FIRST_CHECK_MS, internal.comma.gmailLane.findSend, { clientKey: row.clientKey, last: false });
 }
 
 const readFull = async <T>(token: string, path: string) => await googleApi<T>(`${GMAIL_API}/${path}?format=full`, { token });
 
-/** Sent messages that could be the send: its own Message-ID first, then one in the thread with the same subject and text. */
-async function candidates(ctx: ActionCtx, row: OutboxRow, route: GmailRoute): Promise<GmailMessageValue[]> {
-  if (row.payload.kind !== "send") return [];
-  const token = await gmailToken(ctx, route.accountId);
-  const [address] = await ctx.runQuery(internal.comma.gmailSync.selfHandles, { accountId: route.accountId });
+/** Sent messages that could be the send: its own Message-ID first, then for a reply one in its thread with the same subject and text. */
+async function candidates(ctx: ActionCtx, row: OutboxRow, accountId: Id<"comma_accounts">): Promise<GmailMessageValue[]> {
+  const token = await gmailToken(ctx, accountId);
+  const [address] = await ctx.runQuery(internal.comma.gmailSync.selfHandles, { accountId });
   if (!token || !address) return [];
   const q = `rfc822msgid:${messageIdOf(row.clientKey, address).slice(1, -1)}`;
   const listed = await googleApi<{ messages?: { id: string }[] }>(`${GMAIL_API}/messages?${new URLSearchParams({ q })}`, { token });
   const byId = await Promise.all((listed.messages ?? []).map(async ({ id }) => parseGmailMessage(await readFull<RawGmailMessage>(token, `messages/${encodeURIComponent(id)}`))));
   if (byId.length) return byId.map((message) => ({ ...message, bulk: false }));
+  // A new email has no thread to look in, so only its Message-ID finds it.
+  if (row.payload.kind !== "send" || row.route?.platform !== "gmail") return [];
   const { text, email } = row.payload;
-  const thread = (await readFull<RawThread>(token, `threads/${encodeURIComponent(route.threadId)}`)).messages ?? [];
+  const thread = (await readFull<RawThread>(token, `threads/${encodeURIComponent(row.route.threadId)}`)).messages ?? [];
   return thread.map(parseGmailMessage).filter((message) => message.labelIds.includes("SENT") && message.internalDate >= row.createdAt - SKEW_MS &&
     message.subject === email?.subject.trim() && message.text.trim() === text.trim())
     .sort((a, b) => a.internalDate - b.internalDate).map((message) => ({ ...message, bulk: false }));
@@ -348,10 +354,11 @@ export const findSend = internalAction({
   returns: v.null(),
   handler: async (ctx, { clientKey, last }) => {
     const row = await ctx.runQuery(internal.comma.outbox.unknownSend, { clientKey });
-    if (row?.route?.platform !== "gmail" || row.payload.kind !== "send") return null;
+    const accountId = row && sendingAccount(row);
+    if (!row || !accountId) return null;
     let found: GmailMessageValue[] = [];
     try {
-      found = await candidates(ctx, row, row.route);
+      found = await candidates(ctx, row, accountId);
     } catch {
       // Gmail could not be read this time; the next check reads again, and after the last the send stays unknown.
     }
@@ -367,10 +374,17 @@ export const landFoundSend = internalMutation({
   returns: v.boolean(),
   handler: async (ctx, { clientKey, candidates: found }) => {
     const row = await ctx.db.query("comma_outbox").withIndex("by_clientKey", (q) => q.eq("clientKey", clientKey)).unique();
-    if (row?.status !== "unknown" || row.route?.platform !== "gmail" || !row.conversationId) return false;
+    if (row?.status !== "unknown" || !sendingAccount(row)) return false;
     for (const message of found) {
       const owner = await ctx.db.query("comma_outbox").withIndex("by_resultGuid", (q) => q.eq("resultGuid", message.id)).first();
       if (owner && owner.clientKey !== clientKey) continue;
+      if (row.payload.kind === "sendEmail") {
+        const sent = { status: "sent" as const, error: undefined, resultGuid: message.id, result: { kind: "sendEmail" as const, guid: message.id, gmail: message }, updatedAt: Date.now() };
+        await ctx.db.patch(row._id, sent);
+        await applyGmailResult(ctx, { ...row, ...sent });
+        return true;
+      }
+      if (row.route?.platform !== "gmail" || !row.conversationId) return false;
       await ctx.db.patch(row._id, { status: "sent", error: undefined, resultGuid: message.id, result: { kind: "send", guid: message.id, gmail: message }, updatedAt: Date.now() });
       await landGmailSend(ctx, row.route.accountId, row.conversationId, message, clientKey);
       await completePendingSend(ctx, clientKey, "sent", message.id);

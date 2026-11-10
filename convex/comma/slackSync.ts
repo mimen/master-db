@@ -66,14 +66,16 @@ async function upsertConversation(ctx: MutationCtx, account: Doc<"comma_accounts
   const channelName = home.name ? `#${home.name}` : parent?.kind === "channel" ? parent.rawDisplayName : undefined;
   const rawDisplayName = ref.type === "im" ? undefined : ref.type === "mpim" || (parent && parent.kind !== "channel") ? ""
     : channelName ?? existing?.rawDisplayName ?? "Slack thread";
+  const following = ref.type === "thread" ? follows(home, self, existing) : undefined;
   const fields = {
     platform: "slack" as const, accountId: account._id, conversationKey, kind, isGroup: isGroupKind(kind),
-    slack: { channel: ref.channel, ...(ref.type === "thread" ? { threadTs: ref.threadTs, following: follows(home, self, existing) } : {}) },
+    slack: { channel: ref.channel, ...(ref.type === "thread" ? { threadTs: ref.threadTs, following } : {}) },
+    unlisted: following === false ? true as const : undefined,
     displayName: rawDisplayName || "Slack", ...(rawDisplayName !== undefined ? { rawDisplayName } : {}), participants, isSpam: false,
   };
   if (!existing) return await ctx.db.insert("comma_conversations", { ...fields, lastMessageAt: 0, updatedAt: Date.now() });
   const same = existing.displayName === fields.displayName && existing.rawDisplayName === fields.rawDisplayName && existing.kind === kind &&
-    JSON.stringify(existing.participants) === JSON.stringify(participants) && existing.slack?.following === fields.slack.following;
+    JSON.stringify(existing.participants) === JSON.stringify(participants) && existing.slack?.following === fields.slack.following && existing.unlisted === fields.unlisted;
   if (!same) await ctx.db.patch(existing._id, { ...fields, updatedAt: Date.now() });
   return existing._id;
 }

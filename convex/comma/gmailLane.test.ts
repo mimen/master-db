@@ -295,6 +295,36 @@ describe("unknown sends", () => {
     });
   }
 
+  test("a new email whose answer is lost is found by its Message-ID, lands as its thread once and is never sent again", async () => {
+    const { t, as, accountId, outbox } = await connected();
+    loseSendAnswer(() => new DOMException("The operation timed out.", "TimeoutError"));
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "n1", payload: {
+      kind: "sendEmail", accountId, text: "Invoice attached.", email: { to: ["Carlos <carlos@books.test>"], cc: [], subject: "Invoice" },
+    } });
+    await settle(t);
+    const row = await outbox("n1");
+    expect(row).toMatchObject({ status: "sent", resultGuid: "sent-1", result: { kind: "sendEmail", guid: "sent-1" } });
+    expect(row.error).toBeUndefined();
+    expect(await t.run((ctx) => ctx.db.get(row.conversationId!))).toMatchObject({
+      platform: "gmail", accountId, gmail: { threadId: "thread-sent-1", subject: "Invoice" }, lastMessage: { guid: "sent-1" },
+    });
+    expect(google.sent).toHaveLength(1);
+    expect(google.gmailCalls("/messages").filter((call) => call.url.searchParams.get("q") === "rfc822msgid:comma.n1@afternoonumbrellafriends.com")).toHaveLength(1);
+  });
+
+  test("a new email whose action died after Gmail took it is found by its Message-ID at its lease's expiry, and never sent again", async () => {
+    const { t, accountId, outbox } = await connected();
+    const now = Date.now();
+    google.deliver({ id: "sent-9", threadId: "thread-sent-9", labelIds: ["SENT"], text: "Invoice attached.",
+      headers: { From: MAILBOX, To: "carlos@books.test", Subject: "Invoice", "Message-ID": "<comma.n2@afternoonumbrellafriends.com>" } });
+    await t.run((ctx) => ctx.db.insert("comma_outbox", { clientKey: "n2", lane: "gmail", status: "claimed", attempts: 1, leaseUntil: now - 1, claimToken: "dead",
+      payload: { kind: "sendEmail", accountId, text: "Invoice attached.", email: { to: ["carlos@books.test"], cc: [], subject: "Invoice" } }, createdAt: now, updatedAt: now }));
+    await t.mutation(internal.comma.outbox.claimOutbox, { now, leaseMs: 60_000, limit: 1, lane: "gmail" });
+    await settle(t);
+    expect(await outbox("n2")).toMatchObject({ status: "sent", resultGuid: "sent-9" });
+    expect(google.sent).toHaveLength(0);
+  });
+
   test("a send forced to time out after Gmail took it ends unknown, is found by its Message-ID, lands once and is never sent again", async () => {
     const { t, as, conversationId, outbox, messages } = await connected();
     loseSendAnswer(() => new DOMException("The operation timed out.", "TimeoutError"));

@@ -53,6 +53,31 @@ describe("conversation kinds", () => {
   });
 });
 
+describe("the unlisted backfill", () => {
+  test("reports first, then stamps email threads and unfollowed Slack threads once, and nothing the Messages list shows", async () => {
+    const t = convexTest(schema, commaModules);
+    const ids = await t.run(async (ctx) => {
+      const base = { isGroup: true, participants: [], lastMessageAt: 1, isSpam: false, updatedAt: 1, displayName: "x" };
+      const insert = (row: object) => ctx.db.insert("comma_conversations", { ...base, ...row } as typeof base & { conversationKey: string });
+      return {
+        dm: await ctx.db.insert("comma_conversations", conversation("+15550001111", false)),
+        email: await insert({ platform: "gmail", conversationKey: "gm:t1", kind: "emailThread", gmail: { threadId: "t1", subject: "s", inInbox: true, bulk: false } }),
+        stamped: await insert({ platform: "gmail", conversationKey: "gm:t2", kind: "emailThread", unlisted: true, gmail: { threadId: "t2", subject: "s", inInbox: false, bulk: false } }),
+        unfollowed: await insert({ platform: "slack", conversationKey: "th:C1:1", kind: "thread", slack: { channel: "C1", threadTs: "1", following: false } }),
+        followed: await insert({ platform: "slack", conversationKey: "th:C1:2", kind: "thread", slack: { channel: "C1", threadTs: "2", following: true } }),
+        channel: await insert({ platform: "slack", conversationKey: "ch:C1", kind: "channel", slack: { channel: "C1" } }),
+      };
+    });
+    const unlisted = () => t.run(async (ctx) => Object.fromEntries(await Promise.all(Object.entries(ids).map(async ([name, id]) => [name, (await ctx.db.get(id))?.unlisted]))));
+
+    expect(await t.action(internal.comma.migrations.runUnlistedBackfill, { dryRun: true })).toEqual({ scanned: 6, changed: 2 });
+    expect((await unlisted()).email).toBeUndefined();
+    expect(await t.action(internal.comma.migrations.runUnlistedBackfill, { dryRun: false, limit: 2 })).toEqual({ scanned: 6, changed: 2 });
+    expect(await unlisted()).toEqual({ dm: undefined, email: true, stamped: true, unfollowed: true, followed: undefined, channel: undefined });
+    expect(await t.action(internal.comma.migrations.runUnlistedBackfill, { dryRun: false })).toEqual({ scanned: 6, changed: 0 });
+  });
+});
+
 describe("the Slack threads backfill", () => {
   test("reports first, then restamps old thread rows and moves a DM's inline replies into their thread, once", async () => {
     const t = convexTest(schema, commaModules);

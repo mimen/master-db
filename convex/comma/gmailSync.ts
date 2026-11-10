@@ -74,9 +74,10 @@ const participantsOf = (account: Doc<"comma_accounts">, messages: readonly Gmail
 /**
  * Writes one thread: the conversation, new messages, senders as identities, and the settle its Inbox label implies.
  * Gmail never changes a message once sent, so a message already stored is skipped. `quiet`: a backfill or resync,
- * whose settles leave no clear in the log.
+ * whose settles leave no clear in the log. `historyId`: the read's, so one older than the thread's last write is dropped.
  */
-export async function writeGmailThread(ctx: MutationCtx, accountId: Id<"comma_accounts">, threadId: string, raw: readonly GmailMessageValue[], quiet: boolean) {
+export async function writeGmailThread(ctx: MutationCtx, accountId: Id<"comma_accounts">, threadId: string, raw: readonly GmailMessageValue[], quiet: boolean,
+  historyId?: string) {
   const account = await gmailAccount(ctx, accountId);
   const messages = raw.filter((message) => !message.labelIds.includes("DRAFT")).sort((a, b) => a.internalDate - b.internalDate);
   if (!messages.length) return { written: 0, skipped: 0 };
@@ -87,11 +88,16 @@ export async function writeGmailThread(ctx: MutationCtx, accountId: Id<"comma_ac
   const unread = messages.filter((message) => message.labelIds.includes("UNREAD")).length;
   const conversationKey = gmail.conversationKey(threadId);
   const existing = await findByKey(ctx, scope, conversationKey);
+  const held = existing?.gmail?.historyId;
+  // Two syncs can read one thread and commit out of order; the older read's labels are stale, and its messages are held.
+  if (held && historyId && BigInt(historyId) < BigInt(held)) return { written: 0, skipped: messages.length };
+  const newest = historyId ?? held;
   // A refused archive stays on screen while the thread is still in the inbox; a settle or an archive in Gmail ends it.
   const archiveError = inInbox ? existing?.gmail?.archiveError : undefined;
   const fields = {
-    platform: "gmail" as const, accountId, conversationKey, kind: gmail.kind(), isGroup: true,
-    gmail: { threadId, subject: messages[0]!.subject || "(no subject)", inInbox, bulk, ...(unread ? { unread } : {}), ...(archiveError ? { archiveError } : {}) },
+    platform: "gmail" as const, accountId, conversationKey, kind: gmail.kind(), isGroup: true, unlisted: true as const,
+    gmail: { threadId, subject: messages[0]!.subject || "(no subject)", inInbox, bulk, ...(unread ? { unread } : {}), ...(archiveError ? { archiveError } : {}),
+      ...(newest ? { historyId: newest } : {}) },
     // An email thread is named by its people at read time; the Mail list shows the subject beside them.
     displayName: messages[0]!.subject || "(no subject)", rawDisplayName: "",
     participants: participantsOf(account, messages), isSpam: messages.some((message) => message.labelIds.includes("SPAM")),
@@ -100,8 +106,8 @@ export async function writeGmailThread(ctx: MutationCtx, accountId: Id<"comma_ac
   if (!existing) conversationId = await ctx.db.insert("comma_conversations", { ...fields, lastMessageAt: 0, updatedAt: Date.now() });
   else {
     conversationId = existing._id;
-    const same = JSON.stringify([existing.gmail, existing.displayName, existing.participants, existing.isSpam]) ===
-      JSON.stringify([fields.gmail, fields.displayName, fields.participants, fields.isSpam]);
+    const same = JSON.stringify([existing.gmail, existing.displayName, existing.participants, existing.isSpam, existing.unlisted]) ===
+      JSON.stringify([fields.gmail, fields.displayName, fields.participants, fields.isSpam, fields.unlisted]);
     if (!same) await ctx.db.patch(existing._id, { ...fields, updatedAt: Date.now() });
   }
   const written = await insertGmailMessages(ctx, account, conversationId, messages);
@@ -152,9 +158,9 @@ export async function insertGmailMessages(ctx: MutationCtx, account: Doc<"comma_
 }
 
 export const ingestThread = internalMutation({
-  args: { accountId: v.id("comma_accounts"), threadId: v.string(), messages: v.array(gmailMessageValue), quiet: v.boolean() },
+  args: { accountId: v.id("comma_accounts"), threadId: v.string(), messages: v.array(gmailMessageValue), quiet: v.boolean(), historyId: v.optional(v.string()) },
   returns: v.object({ written: v.number(), skipped: v.number() }),
-  handler: async (ctx, { accountId, threadId, messages, quiet }) => await writeGmailThread(ctx, accountId, threadId, messages, quiet),
+  handler: async (ctx, { accountId, threadId, messages, quiet, historyId }) => await writeGmailThread(ctx, accountId, threadId, messages, quiet, historyId),
 });
 
 /**
@@ -206,9 +212,10 @@ async function readThread(ctx: ActionCtx, token: string, accountId: Id<"comma_ac
   });
   if (!keep) return null;
   if (fromMe || messages.some((message) => !message.bulk)) {
-    messages = ((await googleApi<RawThread>(threadUrl(threadId, "full"), { token })).messages ?? []).map(parseGmailMessage);
+    thread = await googleApi<RawThread>(threadUrl(threadId, "full"), { token });
+    messages = (thread.messages ?? []).map(parseGmailMessage);
   }
-  return await ctx.runMutation(internal.comma.gmailSync.ingestThread, { accountId, threadId, messages, quiet });
+  return await ctx.runMutation(internal.comma.gmailSync.ingestThread, { accountId, threadId, messages, quiet, historyId: thread.historyId });
 }
 
 // ---- History sync: what changed since the stored historyId. A push and the backstop both run it. ----
