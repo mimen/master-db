@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, test } from "../fixtures/desk";
+import { expect, test, openView } from "../fixtures/desk";
 
 async function needsCount(page: Page): Promise<number> {
   const label = await page.getByRole("tab", { name: /^To review, \d+/ }).getAttribute("aria-label");
@@ -14,7 +14,7 @@ test("Later from a row's menu leaves To review, lists under Snoozed, says so in 
   const page = desk.page;
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await page.getByRole("tab", { name: /^To review, \d+/ }).click();
+  await openView(page, "To review");
   const before = await needsCount(page);
 
   await row(page, "Alex Rivera").click({ button: "right" });
@@ -43,7 +43,7 @@ test("H opens Later outside a text field; Follow up waits on the user's own last
   const page = desk.page;
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
 
   // Alex wrote last, so Follow up has nothing to wait on.
   await row(page, "Alex Rivera").click({ button: "right" });

@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { expect, test } from "../fixtures/desk";
+import { expect, test, openView } from "../fixtures/desk";
 
 const evidence = process.env.VERIFY_IMSG_EVIDENCE ?? mkdtempSync(join(tmpdir(), "imsg-slack-files-"));
 
@@ -11,7 +11,7 @@ test("slack-files: a Slack image draws inline and opens in the lightbox, a file 
   await desk.request.post("/__fixture/slack", { data: { seedFiles: true } });
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   await page.getByTestId("conversation-row").filter({ hasText: "Sam Lee" }).click();
 
   const thread = page.getByTestId("thread-view");

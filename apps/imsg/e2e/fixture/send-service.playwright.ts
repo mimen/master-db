@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { FIXTURE_NOW } from "./world";
-import { expect, test } from "../fixtures/desk";
+import { expect, test, openView } from "../fixtures/desk";
 
 const SMS_GREEN = "rgb(52, 199, 89)";
 const IMESSAGE_BLUE = "rgb(0, 122, 255)";
@@ -43,7 +43,7 @@ for (const chat of [
     }, FIXTURE_NOW);
     await page.emulateMedia({ colorScheme: "light", reducedMotion: "no-preference" });
     await page.goto("/?send", { waitUntil: "domcontentloaded" });
-    await page.getByRole("tab", { name: "All", exact: true }).click();
+    await openView(page, "All");
     await page.getByLabel("Search conversations and messages").fill(chat.name);
     await page.getByTestId("conversation-row").filter({ hasText: chat.name }).first().click();
     const composer = page.getByPlaceholder(chat.placeholder);

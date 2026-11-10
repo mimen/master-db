@@ -165,7 +165,7 @@ describe("registry", () => {
   });
 
   test("help advertises the triage chords and hides the shell-only ones", () => {
-    const entries = helpEntries("list");
+    const entries = helpEntries();
     expect(entries.find((e) => e.title === "Next conversation")?.keys).toEqual(["J", "↓", "⌘↓"]);
     expect(entries.find((e) => e.title === "Settle / un-settle")?.keys).toEqual(["⌘E"]);
     expect(entries.find((e) => e.title === "Mark unread")?.keys).toEqual(["⌘U"]);
@@ -176,14 +176,13 @@ describe("registry", () => {
     expect(entries.map((e) => e.keys.join(" "))).toEqual(expect.arrayContaining(["⌥1–⌥3", "Tab", "⌘↵"]));
   });
 
-  test("help lists each view's chord in the order the navigation style shows the views", () => {
-    const chords = (style: "list" | "tabs") => helpEntries(style).filter((e) => e.title.startsWith("Go to ")).map((e) => `${e.title.slice(6)} ${e.keys[0]}`);
-    expect(chords("list")).toEqual(["Today ⌘1", "To review ⌘2", "Waiting ⌘3", "Unread ⌘4", "Snoozed ⌘5", "Drafts ⌘6", "Agents ⌘7", "All ⌘8", "Settled ⌘9"]);
-    expect(chords("tabs").slice(0, 5)).toEqual(["Today ⌘1", "To review ⌘2", "Waiting ⌘3", "All ⌘4", "Unread ⌘5"]);
+  test("help lists each view's chord in the views' order", () => {
+    const chords = helpEntries().filter((e) => e.title.startsWith("Go to ")).map((e) => `${e.title.slice(6)} ${e.keys[0]}`);
+    expect(chords).toEqual(["Today ⌘1", "To review ⌘2", "Waiting ⌘3", "Unread ⌘4", "Snoozed ⌘5", "Drafts ⌘6", "Agents ⌘7", "All ⌘8", "Settled ⌘9"]);
   });
 
   test("help lists Enter once and names Esc for where it goes", () => {
-    const entries = helpEntries("list");
+    const entries = helpEntries();
     const enter = entries.filter((e) => e.keys.includes("↵"));
     expect(enter).toEqual([{ title: "Open / reply", keys: ["↵"] }]);
     expect(entries.find((e) => e.keys.includes("Esc"))?.title).toBe("Back to list");

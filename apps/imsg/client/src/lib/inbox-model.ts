@@ -36,9 +36,6 @@ export function resetInboxFilters(): InboxFilters {
   return { ...DEFAULT_INBOX_FILTERS };
 }
 
-/** How Messages lays out its views. Settings switches it; every style reads VIEWS. */
-export type NavStyle = "list" | "tabs" | "compact";
-
 export interface InboxView {
   readonly id: StateFilter;
   readonly label: string;
@@ -47,37 +44,30 @@ export interface InboxView {
   readonly icon: ComponentProps<typeof Ionicons>["name"];
   /** "turn" colors a count above zero (the app badge's), "plain" grays it; null means no count, for unbounded archives. */
   readonly count: "turn" | "plain" | null;
-  /** A tab of its own in the Tabs style; the rest sit under More. */
-  readonly primary: boolean;
   /** What the view says when nothing is in it and no filter or search narrows it. */
   readonly empty: string;
 }
 
 /** Every view of the Messages list, in list order. A new view is one row here. */
 export const VIEWS: readonly InboxView[] = [
-  { id: "today", label: "Today", icon: "sunny-outline", count: "turn", primary: true, empty: "Nothing queued for today" },
-  { id: "unresponded", label: "To review", icon: "chatbubble-ellipses-outline", count: "turn", primary: true, empty: "Nothing to review" },
-  { id: "waiting", label: "Waiting", icon: "hourglass-outline", count: "plain", primary: true, empty: "Nobody owes you a reply" },
-  { id: "unread", label: "Unread", icon: "ellipse-outline", count: "plain", primary: false, empty: "Nothing unread" },
-  { id: "snoozed", label: "Snoozed", icon: "time-outline", count: "plain", primary: false, empty: "Nothing snoozed. Later on a conversation puts it here until it comes back." },
-  { id: "drafts", label: "Drafts", icon: "document-text-outline", count: "plain", primary: false, empty: "No drafts" },
-  { id: "agents", label: "Agents", icon: "sparkles-outline", count: "plain", primary: false, empty: "No agent chats" },
-  { id: "all", label: "All", title: "All messages", icon: "file-tray-full-outline", count: null, primary: true, empty: "No conversations" },
-  { id: "settled", label: "Settled", icon: "checkmark-done-outline", count: null, primary: false, empty: "Nothing settled" },
+  { id: "today", label: "Today", icon: "sunny-outline", count: "turn", empty: "Nothing queued for today" },
+  { id: "unresponded", label: "To review", icon: "chatbubble-ellipses-outline", count: "turn", empty: "Nothing to review" },
+  { id: "waiting", label: "Waiting", icon: "hourglass-outline", count: "plain", empty: "Nobody owes you a reply" },
+  { id: "unread", label: "Unread", icon: "ellipse-outline", count: "plain", empty: "Nothing unread" },
+  { id: "snoozed", label: "Snoozed", icon: "time-outline", count: "plain", empty: "Nothing snoozed. Later on a conversation puts it here until it comes back." },
+  { id: "drafts", label: "Drafts", icon: "document-text-outline", count: "plain", empty: "No drafts" },
+  { id: "agents", label: "Agents", icon: "sparkles-outline", count: "plain", empty: "No agent chats" },
+  { id: "all", label: "All", title: "All messages", icon: "file-tray-full-outline", count: null, empty: "No conversations" },
+  { id: "settled", label: "Settled", icon: "checkmark-done-outline", count: null, empty: "Nothing settled" },
 ];
 
 export function viewOf(id: StateFilter): InboxView {
   return VIEWS.find((view) => view.id === id)!;
 }
 
-/** The order a style shows its views in, which ⌘1-⌘9 follow: Tabs puts its primary tabs first, then More. */
-export function viewOrder(style: NavStyle): readonly InboxView[] {
-  return style === "tabs" ? [...VIEWS.filter((view) => view.primary), ...VIEWS.filter((view) => !view.primary)] : VIEWS;
-}
-
-/** The ⌘ chord that opens a view in a style. Only the first nine views have one. */
-export function viewShortcut(style: NavStyle, id: StateFilter): string | undefined {
-  const index = viewOrder(style).findIndex((view) => view.id === id);
+/** The ⌘ chord that opens a view, in VIEWS order. Only the first nine views have one. */
+export function viewShortcut(id: StateFilter): string | undefined {
+  const index = VIEWS.findIndex((view) => view.id === id);
   return index >= 0 && index < 9 ? `⌘${index + 1}` : undefined;
 }
 

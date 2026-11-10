@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 
-import { expect, settledCount, test } from "../fixtures/desk";
+import { expect, settledCount, test, openView } from "../fixtures/desk";
 
 const OUT = process.env.COMMA_GALLERY_DIR ?? "/tmp/comma-toast-fix2/after";
 const sizes = [
@@ -17,7 +17,7 @@ for (const scheme of ["light", "dark"] as const) {
       await page.setViewportSize({ width: 1300, height: 820 });
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto(`/chat/${encodeURIComponent(desk.chats.unreadGroup)}?name=Launch%20Crew&isGroup=1`, { waitUntil: "domcontentloaded" });
-      await page.getByRole("tab", { name: "All", exact: true }).click();
+      await openView(page, "All");
       const rows = page.getByTestId("conversation-row");
       await expect(rows.first()).toBeVisible();
       const before = await settledCount(rows);
@@ -71,7 +71,7 @@ test("toast does not reflow the message list or sidebar", async ({ desk }) => {
   const page = desk.page;
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.goto(`/chat/${encodeURIComponent(desk.chats.unreadGroup)}?name=Launch%20Crew&isGroup=1`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   await expect(page.getByText("what time do you need the final answer by?", { exact: true })).toBeVisible();
   const regions = [
     page.getByTestId("thread-message-list"),
@@ -117,7 +117,7 @@ test("toast stays visible when the selected thread's workspace is hidden", async
   const page = desk.page;
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.goto(`/chat/${encodeURIComponent(desk.chats.unreadGroup)}?name=Launch%20Crew&isGroup=1`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   await page.getByTestId("thread-settle").click();
   const undo = page.getByRole("button", { name: "Undo", exact: true });
   await expect(undo).toBeVisible();
@@ -138,7 +138,7 @@ test("action toast keeps Undo available for five seconds", async ({ desk }) => {
   await page.clock.install();
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.goto(`/chat/${encodeURIComponent(desk.chats.unreadGroup)}?name=Launch%20Crew&isGroup=1`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   await expect(page.getByText("I added the revised run of show.", { exact: true })).toBeVisible();
   await page.getByTestId("thread-settle").click();
   const undo = page.getByRole("button", { name: "Undo", exact: true });

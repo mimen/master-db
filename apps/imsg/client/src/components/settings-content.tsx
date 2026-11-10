@@ -28,7 +28,6 @@ import {
   setAgentSettings,
   setGroupBy,
   setNameOrder,
-  setNavStyle,
   setOpenOn,
   setSuggestionMode,
   setSuggestionModel,
@@ -36,7 +35,6 @@ import {
   useAgentSettings,
   useGroupBy,
   useNameOrder,
-  useNavStyle,
   useOpenOn,
   useSuggestionMode,
   useSuggestionModel,
@@ -44,7 +42,6 @@ import {
   type AgentModel,
   type GroupConversationsBy,
   type NameOrder,
-  type NavStyle,
   type OpenOnLens,
   type SuggestionMode,
   type ThemePreference,
@@ -71,12 +68,6 @@ const OPEN_ON_OPTIONS: readonly DropdownOption<OpenOnLens>[] = [
   { value: "unread", label: "Unread" },
   { value: "waiting", label: "Waiting" },
   { value: "all", label: "All" },
-];
-
-const NAVIGATION_OPTIONS: readonly DropdownOption<NavStyle>[] = [
-  { value: "list", label: "Sidebar list", description: "Every view in a list above the conversations, each with its count." },
-  { value: "tabs", label: "Tabs", description: "Today, To review, Waiting and All as tabs. The rest under More." },
-  { value: "compact", label: "Compact", description: "The view's name is a menu. The most room for conversations." },
 ];
 
 const GROUP_BY_OPTIONS: readonly DropdownOption<GroupConversationsBy>[] = [
@@ -360,7 +351,6 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
   const nameOrder = useNameOrder();
   const openOn = useOpenOn();
   const groupBy = useGroupBy();
-  const navigation = useNavStyle();
   const suggestionMode = useSuggestionMode();
   const suggestionModel = useSuggestionModel();
   const themePreference = useThemePreference();
@@ -433,10 +423,7 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
           <AccountsGroup />
 
           <Group title="Lists">
-            <SettingRow first title="Navigation" caption="How Messages lays out its views. ⌘1–⌘9 follow the order on screen.">
-              <Dropdown label="Navigation" value={navigation} options={NAVIGATION_OPTIONS} onChange={setNavStyle} menuWidth={300} />
-            </SettingRow>
-            <SettingRow title="Open on" caption="The view Comma shows when it starts.">
+            <SettingRow first title="Open on" caption="The view Comma shows when it starts.">
               <Dropdown label="Open on" value={openOn} options={OPEN_ON_OPTIONS} onChange={setOpenOn} />
             </SettingRow>
             <SettingRow title="Group conversations by" caption="Section headers in every lens.">

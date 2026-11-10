@@ -1,4 +1,4 @@
-import { expect, test } from "../fixtures/desk";
+import { expect, test, openView } from "../fixtures/desk";
 
 test("a burst of failed sends raises one toast and keeps every Not delivered bubble", async ({ desk }) => {
   const page = desk.page;
@@ -17,7 +17,7 @@ test("a burst of failed sends raises one toast and keeps every Not delivered bub
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?send-failure", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: /^To review/ }).click();
+  await openView(page, "To review");
   await expect(page.getByRole("heading", { name: "To review" })).toBeVisible();
   await page.getByTestId("conversation-row").first().click();
   await desk.request.post("/__fixture/fault", { data: { method: "sendText", error: "offline" } });

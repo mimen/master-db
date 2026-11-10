@@ -1,7 +1,7 @@
 import type { Page, Route } from "@playwright/test";
 import { census, REGIONS, type Shift } from "../bench/census";
 import { renderCounter, type Renders } from "../bench/renders";
-import { expect, test } from "../fixtures/desk";
+import { expect, test, openView } from "../fixtures/desk";
 
 /**
  * Hill-climb ratchets (docs/hillclimb/README.md). Each test pins a kept performance win,
@@ -180,7 +180,7 @@ async function elapsedToFrame(page: Page): Promise<number> {
 
 async function rowMenuItem(page: Page, name: string, item: string) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   const row = page.getByTestId("conversation-row").filter({ hasText: name });
   await row.hover();
   await row.getByRole("button", { name: /More actions for/ }).click();
@@ -368,7 +368,7 @@ test("a new message shows at once and turns Not delivered with a toast when the 
 /** Avery's older send carries a stale error code in the seed, so its menu offers Send again. */
 async function sendAgainMenuItem(page: Page) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   await page.getByTestId("conversation-row").filter({ hasText: "Avery Brooks" }).click();
   const own = page.getByTestId("thread-view").getByRole("button", { name: AVERY_SEND });
   await expect(own).toHaveCount(1);
@@ -431,7 +431,7 @@ async function openSeededThread(desk: Desk) {
   await page.addInitScript(renderCounter);
   for (let i = 1; i <= SEEDED; i++) await desk.receive(desk.chats.needs, `Seeded message ${i}`, desk.chats.needs.split(";").at(-1));
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).first().click();
   const thread = page.getByTestId("thread-view");
   await expect(thread.getByText(`Seeded message ${SEEDED}`, { exact: true })).toBeVisible();
@@ -562,7 +562,7 @@ test("ratchet: opening a conversation, then switching to another, renders the sh
   const page = desk.page;
   await page.addInitScript(renderCounter);
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   await expect(page.getByTestId("conversation-row").filter({ hasText: "Jordan Lee" })).toBeVisible();
   await page.waitForTimeout(600);
   const open = await openFromList(page, "Alex Rivera");
@@ -695,7 +695,7 @@ const renamedInDetails = `() => [...document.querySelectorAll('[data-testid="des
 /** Opens Launch Crew's Details and types a new name, ready to save. */
 async function renameLaunchCrew(page: Page) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   await page.getByTestId("conversation-row").filter({ hasText: "Launch Crew" }).click();
   await page.keyboard.press("Meta+i");
   await page.getByRole("button", { name: "Rename group" }).click();

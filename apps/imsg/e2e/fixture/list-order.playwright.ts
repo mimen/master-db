@@ -1,4 +1,4 @@
-import { expect, settledCount, test } from "../fixtures/desk";
+import { expect, settledCount, test, openView } from "../fixtures/desk";
 
 const rowNames = (page: import("@playwright/test").Page) =>
   page.getByTestId("conversation-row").evaluateAll((rows) => rows.map((row) => (row.getAttribute("aria-label") ?? "").split(",")[0]));
@@ -25,7 +25,7 @@ test("⌘↓ and ⌘↑ step conversations from the composer without settling", 
 test("Sort: Oldest first reverses the list and shows a chip that flips it back", async ({ desk }) => {
   const page = desk.page;
   await page.goto("/");
-  await page.getByRole("tab", { name: /^To review/ }).click();
+  await openView(page, "To review");
   await settledCount(page.getByTestId("conversation-row"));
   const newest = await rowNames(page);
   await page.getByRole("button", { name: /^Filter conversations/ }).click();

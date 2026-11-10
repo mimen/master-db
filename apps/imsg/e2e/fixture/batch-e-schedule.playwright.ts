@@ -1,10 +1,10 @@
-import { expect, test } from "../fixtures/desk";
+import { expect, test, openView } from "../fixtures/desk";
 
 test("Send later menu opens above its toolbar control and the date editor above the send button", async ({ desk }) => {
   const page = desk.page;
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?schedule", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: /^To review/ }).click();
+  await openView(page, "To review");
   await expect(page.getByRole("heading", { name: "To review" })).toBeVisible();
   await page.getByTestId("conversation-row").first().click();
   await page.getByPlaceholder("iMessage").fill("Doors at 8");

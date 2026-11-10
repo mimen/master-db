@@ -22,7 +22,6 @@ import {
   parseServiceFilter,
   serviceOptions,
   viewCounts,
-  viewOrder,
   viewShortcut,
   VIEWS,
 } from "./inbox-model";
@@ -544,11 +543,9 @@ describe("VIEWS", () => {
     expect([...VIEWS.map((view) => view.id)].sort()).toEqual([...states].sort());
   });
 
-  test("the list keeps table order; Tabs puts its four tabs first and More after, and ⌘N follows each", () => {
-    expect(viewOrder("list").map((view) => view.label)).toEqual(["Today", "To review", "Waiting", "Unread", "Snoozed", "Drafts", "Agents", "All", "Settled"]);
-    expect(viewOrder("tabs").map((view) => view.label)).toEqual(["Today", "To review", "Waiting", "All", "Unread", "Snoozed", "Drafts", "Agents", "Settled"]);
-    expect(viewShortcut("list", "all")).toBe("⌘8");
-    expect(viewShortcut("tabs", "all")).toBe("⌘4");
-    expect(viewShortcut("compact", "snoozed")).toBe("⌘5");
+  test("⌘N follows table order", () => {
+    expect(VIEWS.map((view) => view.label)).toEqual(["Today", "To review", "Waiting", "Unread", "Snoozed", "Drafts", "Agents", "All", "Settled"]);
+    expect(viewShortcut("all")).toBe("⌘8");
+    expect(viewShortcut("snoozed")).toBe("⌘5");
   });
 });

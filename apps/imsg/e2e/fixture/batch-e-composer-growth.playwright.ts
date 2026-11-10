@@ -1,10 +1,10 @@
-import { expect, test } from "../fixtures/desk";
+import { expect, test, openView } from "../fixtures/desk";
 
 test("the composer grows with the draft up to six lines, then scrolls", async ({ desk }) => {
   const page = desk.page;
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?growth", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: /^To review/ }).click();
+  await openView(page, "To review");
   await expect(page.getByRole("heading", { name: "To review" })).toBeVisible();
   await page.getByTestId("conversation-row").first().click();
   const composer = page.getByPlaceholder("iMessage");

@@ -1,5 +1,5 @@
 import type { ElementHandle, Page } from "@playwright/test";
-import { expect, test } from "../fixtures/desk";
+import { expect, test, openView } from "../fixtures/desk";
 import { fixtureConversationId } from "../../shared/fixture-ids";
 
 /** Element handles, not nth locators: hovering a row reveals its buttons and would shift every later index. */
@@ -33,7 +33,7 @@ async function resetAndOpen(
   await desk.page.setViewportSize({ width, height: 820 });
   await desk.page.emulateMedia({ colorScheme: scheme, reducedMotion });
   await desk.page.goto(`/?visual=${scheme}-${width}`, { waitUntil: "domcontentloaded" });
-  await desk.page.getByRole("tab", { name: /^To review/ }).click();
+  await openView(desk.page, "To review");
   await expect(desk.page.getByRole("heading", { name: "To review" })).toBeVisible();
   await expect(desk.page.getByTestId("conversation-row").first()).toBeVisible();
 }
@@ -148,7 +148,7 @@ test("row actions follow conversation state across queue lenses and keep More mi
   await expect(page.getByTestId("thread-settle")).toHaveAccessibleName("Settle (⌘E)");
   await expect(page.getByTestId("thread-settle")).toHaveAttribute("title", "Settle (⌘E)");
 
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   await expect(page.getByRole("heading", { name: "All messages" })).toBeVisible();
   row = page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" });
   await row.hover();
@@ -235,7 +235,7 @@ test("reply suggestions show vibe, fallback model, reaction confirmation, and mo
   await page.setViewportSize({ width: 390, height: 820 });
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
   await page.goto("/?visual=dark-390", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("button", { name: "Views", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^View, / })).toBeVisible();
   await page.getByText("Alex Rivera", { exact: true }).first().click();
   await expect(page.getByText("what time do you need the final answer by?", { exact: true })).toBeVisible();
   await page.screenshot({ path: "/tmp/comma-suggestion-narrow.png", animations: "disabled" });
@@ -420,7 +420,7 @@ test("Scheduled and Settings remain open across every workspace", async ({ desk 
   await expect(page.getByRole("heading", { name: "To review" })).toBeVisible();
   await expect(page.getByLabel("Close scheduled")).toBeVisible();
 
-  await page.getByRole("tab", { name: /^Waiting/ }).click();
+  await openView(page, "Waiting");
   await expect(page.getByRole("heading", { name: "Waiting" })).toBeVisible();
   await expect(page.getByLabel("Close scheduled")).toBeVisible();
 

@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, test } from "../fixtures/desk";
+import { expect, test, openView } from "../fixtures/desk";
 import { fixtureConversationId } from "../../shared/fixture-ids";
 
 const NINA_ADDRESS = "+16195550201";
@@ -54,7 +54,7 @@ for (const history of ["opened earlier", "never opened"] as const) {
 test("Convex updates edit and retract a confirmed send without reviving its optimistic row", async ({ desk }) => {
   const page = desk.page;
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
   const thread = page.getByTestId("thread-view");
   const composer = page.getByPlaceholder("iMessage");

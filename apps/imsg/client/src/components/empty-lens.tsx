@@ -4,8 +4,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
-import { viewOf, viewShortcut, type NavStyle } from "@/lib/inbox-model";
-import { useNavStyle } from "@/lib/settings";
+import { viewOf, viewShortcut } from "@/lib/inbox-model";
 import { compactAge, LATE_AFTER_MS, waitingLongest, yourTurnLongest, type AgedChat } from "@/lib/turn-age";
 
 import { ChatAvatar } from "./avatar";
@@ -81,15 +80,15 @@ const LENSES = {
   footerAction: "onSeeAllWaiting" | "onGoToNeedsReply";
 }>;
 
-/** The footer names the view it goes to and its chord in the navigation style on screen, both read off VIEWS. */
-export function emptyLensCopy(lens: EmptyLensKind, counts: EmptyLensCounts, style: NavStyle): EmptyLensCopy {
+/** The footer names the view it goes to and its chord, both read off VIEWS. */
+export function emptyLensCopy(lens: EmptyLensKind, counts: EmptyLensCounts): EmptyLensCopy {
   const entry = LENSES[lens];
   return {
     title: entry.title,
     line2: entry.line2(counts),
     sectionTitle: entry.sectionTitle,
     footer: entry.footer(viewOf(entry.footerView).label),
-    footerHint: viewShortcut(style, entry.footerView),
+    footerHint: viewShortcut(entry.footerView),
   };
 }
 
@@ -112,7 +111,7 @@ export function EmptyLens(props: EmptyLensProps) {
   const c = useTheme();
   const s = wide ? SIZE.desk : SIZE.phone;
   const entry = LENSES[lens];
-  const copy = emptyLensCopy(lens, counts, useNavStyle());
+  const copy = emptyLensCopy(lens, counts);
   const rows = entry.pick(chats, ROWS, now);
 
   return (

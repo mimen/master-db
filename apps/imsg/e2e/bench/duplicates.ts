@@ -32,7 +32,8 @@ page.on("websocket", (ws) => ws.on("framesent", (frame) => {
 }));
 await page.goto(url + "/");
 await page.getByTestId("conversation-row").first().waitFor({ timeout: 30_000 });
-await page.getByRole("tab", { name: "All", exact: true }).click();
+await page.getByRole("button", { name: /^View, / }).click();
+  await page.getByRole("option").filter({ hasText: /All$/ }).click();
 await page.waitForTimeout(seconds * 1000);
 const labels = await page.getByTestId("conversation-row").evaluateAll((els) => els.map((el) => el.getAttribute("aria-label") ?? ""));
 await browser.close();

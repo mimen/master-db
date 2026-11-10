@@ -1,4 +1,4 @@
-import { viewOrder, viewShortcut, type NavStyle } from "../inbox-model";
+import { VIEWS, viewShortcut } from "../inbox-model";
 import type { CommandDefinition, CommandId, KeyBinding } from "./types";
 
 /** Single source of truth: every command, once. Help/palette render from this. */
@@ -127,8 +127,8 @@ const SURFACE_KEYS: readonly HelpEntry[] = [
 /** Help entries derived from the registry and the views — cannot drift from behavior.
  * Commands sharing a title (Enter opens in the list, replies elsewhere) read
  * as one entry, since to the user they are one key doing one job. Each view's
- * chord follows the navigation style's order. */
-export function helpEntries(style: NavStyle): HelpEntry[] {
+ * chord follows VIEWS order. */
+export function helpEntries(): HelpEntry[] {
   const entries = new Map<string, string[]>();
   for (const command of COMMANDS) {
     const keys = BINDINGS
@@ -138,8 +138,8 @@ export function helpEntries(style: NavStyle): HelpEntry[] {
     const merged = entries.get(command.title) ?? [];
     entries.set(command.title, [...merged, ...keys.filter((key) => !merged.includes(key))]);
   }
-  const views = viewOrder(style).flatMap((view) => {
-    const key = viewShortcut(style, view.id);
+  const views = VIEWS.flatMap((view) => {
+    const key = viewShortcut(view.id);
     return key ? [{ title: `Go to ${view.label}`, keys: [key] }] : [];
   });
   return [...[...entries].map(([title, keys]) => ({ title, keys })), ...views, ...SURFACE_KEYS];

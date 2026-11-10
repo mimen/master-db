@@ -57,7 +57,8 @@ async function openAlex(page: Page): Promise<void> {
 
 const UNSEND_TEXT = "bench unsend probe";
 async function openRowMenu(page: Page, name: string, item: string): Promise<void> {
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await page.getByRole("button", { name: /^View, / }).click();
+  await page.getByRole("option").filter({ hasText: /All$/ }).click();
   const row = page.getByTestId("conversation-row").filter({ hasText: name });
   await row.hover();
   await row.getByRole("button", { name: /More actions for/ }).click();
@@ -203,7 +204,8 @@ const CASES: Case[] = [
     // Avery's older send carries a stale error code, so its menu offers Send again.
     name: "send-again",
     setup: async (page) => {
-      await page.getByRole("tab", { name: "All", exact: true }).click();
+      await page.getByRole("button", { name: /^View, / }).click();
+  await page.getByRole("option").filter({ hasText: /All$/ }).click();
       await page.getByTestId("conversation-row").filter({ hasText: "Avery Brooks" }).click();
       const own = thread(page).getByRole("button", { name: AVERY_SEND });
       await own.waitFor({ timeout: 30_000 });
@@ -218,7 +220,8 @@ const CASES: Case[] = [
     // The new name in Launch Crew's Details pane.
     name: "rename-group",
     setup: async (page) => {
-      await page.getByRole("tab", { name: "All", exact: true }).click();
+      await page.getByRole("button", { name: /^View, / }).click();
+  await page.getByRole("option").filter({ hasText: /All$/ }).click();
       await page.getByTestId("conversation-row").filter({ hasText: "Launch Crew" }).click();
       await page.keyboard.press("Meta+i");
       await page.getByRole("button", { name: "Rename group" }).click();
