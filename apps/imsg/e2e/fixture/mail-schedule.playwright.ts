@@ -26,7 +26,7 @@ async function scheduleReply(page: import("@playwright/test").Page, text: string
   await page.goto("/mail", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: THREAD }).click();
   const reader = page.getByTestId("email-reader");
-  await reader.getByRole("button", { name: "Reply", exact: true }).click();
+  await reader.getByRole("button", { name: "Reply to the message from Sam Lee", exact: true }).click();
   const composer = page.getByTestId("email-composer");
   const later = composer.getByRole("button", { name: "Send later" });
   await expect(later).toBeDisabled();

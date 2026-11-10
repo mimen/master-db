@@ -274,7 +274,7 @@ test.describe("mail", () => {
     const reader = await openThread(page);
     const reply = async (text: string) => {
       await desk.request.post("/__fixture/mail", { data: { refuseNextSend: "Google answered 500" } });
-      await reader.getByRole("button", { name: "Reply", exact: true }).click();
+      await reader.getByRole("button", { name: /^Reply to the message from / }).last().click();
       await page.getByTestId("email-composer").getByLabel("Message").fill(text);
       await page.getByTestId("email-composer").getByRole("button", { name: "Send", exact: true }).click();
       await expect(reader.getByText("Couldn't send: Google answered 500")).toBeVisible();
@@ -299,7 +299,7 @@ test.describe("mail", () => {
   test("send-recovery: switching Reply and Reply all keeps the chips the user added", async ({ desk }) => {
     const page = desk.page;
     const reader = await openThread(page);
-    await reader.getByRole("button", { name: "Reply", exact: true }).click();
+    await reader.getByRole("button", { name: /^Reply to the message from / }).last().click();
     const composer = page.getByTestId("email-composer");
     await composer.getByRole("textbox", { name: "Cc", exact: true }).fill("Pat <pat@agency.test>;");
     await expect.poll(() => chips(composer, "Cc")).toEqual(["Pat"]);

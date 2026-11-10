@@ -3,7 +3,7 @@ import Settings02Icon from "@hugeicons/core-free-icons/Settings02Icon";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react-native";
 import { router, type Tabs } from "expo-router";
 import type { ComponentProps } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "@/hooks/use-theme";
@@ -60,10 +60,11 @@ function Tab({
  * count), then Scheduled and Settings. It floats above the home indicator over a
  * fade, and the lists scroll under it.
  */
-export function PhoneTabBar({ state, navigation, needsReply }: TabBarProps & { readonly needsReply: number }): React.JSX.Element {
+export function PhoneTabBar({ state, navigation, descriptors, needsReply }: TabBarProps & { readonly needsReply: number }): React.JSX.Element | null {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const route = state.routes[state.index]?.name;
+  const focused = state.routes[state.index];
+  const route = focused?.name;
   const bottom = Math.max(insets.bottom, 12);
   const fade = Platform.OS === "web"
     ? ({ backgroundImage: `linear-gradient(to bottom, ${theme.background}00, ${theme.background}F0 55%)` } as object)
@@ -71,6 +72,8 @@ export function PhoneTabBar({ state, navigation, needsReply }: TabBarProps & { r
   const bar = Platform.OS === "web"
     ? ({ backgroundColor: theme.barBg, boxShadow: theme.barShadow, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" } as object)
     : { backgroundColor: theme.surface, shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 14, shadowOffset: { width: 0, height: 6 } };
+  // A screen hides the bar while it shows a pushed view of its own, as Mail's reader does.
+  if (focused && (StyleSheet.flatten(descriptors[focused.key]?.options.tabBarStyle) as ViewStyle | undefined)?.display === "none") return null;
   return (
     <View testID="phone-tab-bar" pointerEvents="box-none" style={[styles.host, { paddingBottom: bottom, paddingTop: 28 }, fade]}>
       <View role="tablist" style={[styles.bar, bar]}>

@@ -274,7 +274,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
   }, 400, AGENT_SEED);
   const triage = createTriageFixture({
     lastMessage: async (chatGuid) => {
-      const row = (await conversations()).find((candidate) => candidate._id === chatGuid);
+      const row = mailWorld.conversation(chatGuid) ?? (await conversations()).find((candidate) => candidate._id === chatGuid);
       return row ? row.lastMessage ?? null : undefined;
     },
     sameSend: (anchor, lastGuid) => {
@@ -284,6 +284,11 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     settled: (chatGuid) => agent.outbox.settle(chatGuid),
     unsettled: (chatGuid) => agent.outbox.unsettle(chatGuid),
   });
+  // An email thread carries Later and Follow up the way comma/queries puts them on every conversation.
+  const withLater = <T extends { _id: string }>(row: T) => {
+    const later = triage.laterFor(fixtureChatGuid(row._id));
+    return later ? { ...row, later } : row;
+  };
   // The bridge's own grouping merges service siblings; the primary row speaks for the conversation.
   const chatSummaries = async () => {
     const listed = await bb.queryChats(Number.MAX_SAFE_INTEGER);
@@ -662,13 +667,13 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     "comma/queries:listConversations": async (args) => paginate([...slackWorld.listed(), ...await conversations()], args.paginationOpts as Pagination),
     "comma/queries:resolveChat": async (args) => (await conversations()).find((row) => row.primaryChatGuid === args.chatGuid) ?? null,
     "comma/queries:getConversation": async (args) => slackWorld.owns(String(args.conversationId)) ? slackWorld.conversation(String(args.conversationId))
-      : mailWorld.owns(String(args.conversationId)) ? mailWorld.conversation(String(args.conversationId))
+      : mailWorld.owns(String(args.conversationId)) ? withLater(mailWorld.conversation(String(args.conversationId))!)
       : (await conversations()).find((row) => row._id === args.conversationId) ?? null,
     "comma/queries:listMessages": async (args) => paginate(slackWorld.owns(String(args.conversationId)) ? slackWorld.messages(String(args.conversationId))
       : mailWorld.owns(String(args.conversationId)) ? mailWorld.messages(String(args.conversationId))
         : await messages(String(args.conversationId)), args.paginationOpts as Pagination),
     "comma/later:listSnoozed": async () => (await conversations()).filter((row) => row.later?.snoozedUntil !== undefined),
-    "comma/queries:listEmailThreads": async (args) => paginate(mailWorld.threads(), args.paginationOpts as Pagination),
+    "comma/queries:listEmailThreads": async (args) => paginate(mailWorld.threads().map(withLater), args.paginationOpts as Pagination),
     "comma/queries:searchMessages": async (args) => {
       const text = String(args.query).trim();
       if (text.length < 2) return [];
@@ -944,7 +949,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
     if (body.loseNextAnswerMs !== undefined) mailWorld.loseNextAnswer(body.loseNextAnswerMs);
     if (body.invoice) mailWorld.seedInvoice();
     // Both mailboxes connected, as Settings shows them after Connect.
-    if (body.mailboxes) for (const mailbox of [gmailAccount, personalGmail]) Object.assign(mailbox, { connected: true, ever: true });
+    if (body.mailboxes) {
+      for (const mailbox of [gmailAccount, personalGmail]) Object.assign(mailbox, { connected: true, ever: true });
+      mailWorld.splitMailboxes();
+    }
     if (body.longThread) mailWorld.seedLongThread();
     if (body.refuseNextArchive !== undefined) mailWorld.refuseNextArchive(body.refuseNextArchive);
     return c.json({ ok: true });

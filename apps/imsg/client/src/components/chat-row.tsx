@@ -119,6 +119,7 @@ function ChatRowInner({
   agentLens = false,
   today,
   leaving = false,
+  testID = "conversation-row",
 }: {
   chat: ChatSummary;
   /** The handle that separates this row from another of the same name on the same service. */
@@ -135,6 +136,8 @@ function ChatRowInner({
   today?: { rank: number | null; reason: string | null };
   /** Folding out of the list. */
   leaving?: boolean;
+  /** Mail's rows answer to their own id: the phone keeps Mail's tab mounted beside the Messages list. */
+  testID?: string;
 }) {
   const theme = useTheme();
   const { wide: compact } = useLayoutMode();
@@ -156,8 +159,9 @@ function ChatRowInner({
   const draft = chat.draft ? draftPreview(chat.draft) : null;
   const replies = chat.thread ? `Thread, ${chat.thread.replyCount} ${chat.thread.replyCount === 1 ? "reply" : "replies"} · ` : "";
   const snippet = draft ? `${draft.label}: ${draft.body}` : last
-    ? `${replies}${last.isFromMe ? "You: " : chat.isGroup && last.senderName ? `${last.senderName.split(" ")[0]}: ` : ""}${
-        last.text || (last.hasAttachments ? "Attachment" : "")
+    ? `${replies}${last.isFromMe ? "You: " : chat.isGroup && last.senderName && last.senderName !== chat.displayName ? `${last.senderName.split(" ")[0]}: ` : ""}${
+        // An email's line breaks would spend its one preview line on "Hi Sam,".
+        (chat.subject ? last.text.replace(/\s+/g, " ").trim() : last.text) || (last.hasAttachments ? "Attachment" : "")
       }`
     : "";
 
@@ -226,11 +230,11 @@ function ChatRowInner({
 
   const row = (
     <Pressable
-      testID="conversation-row"
+      testID={testID}
       ref={contextRef as never}
       role="button"
       // The dot is drawn, so unread has to be spoken here too.
-      aria-label={[chat.displayName, sendFailed ? "not delivered" : null, chat.flags.unread || chat.unreadCount > 0 ? "unread" : null, chat.agent ? AGENT_ATTENTION[chat.agent.attention].spoken : null, ...spoken].filter(Boolean).join(", ")}
+      aria-label={[chat.displayName, chat.subject, sendFailed ? "not delivered" : null, chat.flags.unread || chat.unreadCount > 0 ? "unread" : null, chat.agent ? AGENT_ATTENTION[chat.agent.attention].spoken : null, ...spoken].filter(Boolean).join(", ")}
       aria-selected={selected}
       onPress={() => onOpen(chat)}
       onPressIn={() => markOpenStart(chat.conversationId)}
@@ -300,12 +304,17 @@ function ChatRowInner({
             {chats ? <Text style={[styles.agentChats, { color: theme.textTertiary }]}>{chats}</Text> : null}
           </Text>
         ) : null}
+        {chat.subject ? (
+          <Text numberOfLines={1} style={[styles.subject, { color: theme.text, fontSize: compact ? 12.5 : 15, lineHeight: compact ? 17 : 20 }]}>
+            {chat.subject}
+          </Text>
+        ) : null}
         <View style={styles.messageRow}>
           {sendFailed ? (
             <Ionicons testID="row-send-failed" name="alert-circle" size={compact ? 14 : 17} color={theme.destructive} style={styles.sendFailed} />
           ) : null}
           <Text
-            numberOfLines={2}
+            numberOfLines={chat.subject ? 1 : 2}
             style={[styles.messagePreview, { color: theme.textSecondary, fontSize: compact ? 12.5 : 15, lineHeight: compact ? 17 : 20 }]}
           >
             {agent && status ? (
@@ -453,6 +462,9 @@ const styles = StyleSheet.create({
   },
   agentTitle: {
     fontWeight: "600",
+    marginTop: 1,
+  },
+  subject: {
     marginTop: 1,
   },
   agentChats: {

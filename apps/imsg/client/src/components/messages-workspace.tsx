@@ -3,13 +3,13 @@ import Reanimated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpr
 import type { ChatSummary, ConversationId, StateFilter, TypeFilter } from "@shared/types";
 import { router, useGlobalSearchParams, usePathname } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
-import { Platform, Text, View } from "react-native";
+import { Platform, View } from "react-native";
 
 import { UnknownSenderBanner } from "@/components/contacts-add-panel";
 import { ConversationListPane } from "@/components/conversation-list-pane";
 import { useDesktopShellContext, useDesktopShellState } from "@/components/desktop-shell-context";
 import { DesktopSplit } from "@/components/desktop-split";
-import { EmptyState, UnavailableState } from "@/components/empty-state";
+import { SelectionEmpty, UnavailableState } from "@/components/empty-state";
 import { EmailReader, ThreadBeside, ThreadView } from "@/components/lazy-surfaces";
 import { useAgentEnabled } from "@/hooks/use-agent";
 import { useConversation } from "@/hooks/use-chat-directory";
@@ -20,7 +20,6 @@ import { useTheme } from "@/hooks/use-theme";
 import { onTriageSettling, toggleSettleChat } from "@/hooks/use-triage-actions";
 import { advanceTarget, publishQueuePosition, queueOrder, queuePosition, useRenderedOrder } from "@/hooks/use-queue-position";
 import { traceTriage } from "@/lib/triage-trace";
-import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { openAgentPane } from "@/lib/agent-pane";
 import { useActionSheet } from "@/lib/action-sheet";
 import { markChatUnread, undoLastAction } from "@/lib/chat-actions";
@@ -56,7 +55,6 @@ export function MessagesWorkspace({
   readonly wide: boolean;
 }): JSX.Element {
   const theme = useTheme();
-  const visual = useTriageTheme();
   const shell = useDesktopShellContext();
   const { closeTopSurface, closeUtility, dispatch, openHelp, openPalette, registerMessagesActions, reportMessagesRail } = shell;
   const utilityOpen = useDesktopShellState((state) => state.utility?.workspace === "messages");
@@ -428,13 +426,7 @@ export function MessagesWorkspace({
             router.replace("/");
           }} />
         ) : (
-          <EmptyState
-            icon="chatbubble-ellipses-outline"
-            iconSize={44}
-            iconColor={visual.hint}
-            style={{ backgroundColor: visual.empty }}
-            message={<Text style={{ color: visual.meta, fontSize: 14, fontWeight: "600" }}>Select a conversation</Text>}
-          />
+          <SelectionEmpty icon="chatbubble-ellipses-outline" message="Select a conversation" />
         )
       }
     />

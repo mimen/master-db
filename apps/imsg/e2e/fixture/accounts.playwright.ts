@@ -68,13 +68,17 @@ test("a gmail.com mailbox connects beside the AUF one, counts down to its weekly
 
   await page.getByRole("button", { name: "Close settings", exact: true }).click();
   await page.getByRole("button", { name: "Mail", exact: true }).click();
-  const mailboxes = page.getByRole("tablist", { name: "Mailbox" });
-  await expect(mailboxes.getByRole("tab")).toHaveText(["All", "AUF", "Personal"]);
+  const mailbox = (name: string) => page.getByRole("button", { name: `Mailbox, ${name}`, exact: true });
+  await mailbox("All").click();
+  await expect(page.getByRole("menuitem")).toHaveText([/All mailboxes$/, "AUF", "Personal"]);
+  await page.keyboard.press("Escape");
   await expect(page.getByTestId("mail-list").getByText("Load-in for Saturday")).toBeVisible();
-  await mailboxes.getByRole("tab", { name: "Personal" }).click();
+  await mailbox("All").click();
+  await page.getByRole("menuitem", { name: "Personal" }).click();
   await expect(page.getByRole("tab", { name: "People, 0" })).toBeVisible();
   await expect(page.getByTestId("mail-list").getByText("Load-in for Saturday")).toHaveCount(0);
-  await mailboxes.getByRole("tab", { name: "AUF" }).click();
+  await mailbox("Personal").click();
+  await page.getByRole("menuitem", { name: "AUF" }).click();
   await expect(page.getByTestId("mail-list").getByText("Load-in for Saturday")).toBeVisible();
   await page.screenshot({ path: "/tmp/comma-mail-two-mailboxes.png", animations: "disabled" });
 });
