@@ -77,7 +77,7 @@ const firstItem: Answer = (prompt) => ({
 });
 
 describe("selectToday", () => {
-  test("reads the newest 100 recent Needs you, fills to 150 least recently read, and the newest 50 Waiting", () => {
+  test("reads the newest 100 recent To review, fills to 150 least recently read, and the newest 50 Waiting", () => {
     const recent = Array.from({ length: 120 }, (_, n) => candidate(n, "needsYou", 1 + n / 10));
     const old = Array.from({ length: 80 }, (_, n) => candidate(1000 + n, "needsYou", 40 + n));
     const waiting = Array.from({ length: 70 }, (_, n) => candidate(2000 + n, "waiting", n / 10));
@@ -169,7 +169,7 @@ describe("buildToday", () => {
     expect(store.getTodaySession(built.outcome.queue.session!.id)).toBeNull();
   });
 
-  test("openAtSnapshot keeps every Needs you past the read caps", async () => {
+  test("openAtSnapshot keeps every To review past the read caps", async () => {
     const list = [
       ...Array.from({ length: 60 }, (_, n) => candidate(n, "waiting")),
       ...Array.from({ length: 170 }, (_, n) => candidate(100 + n, "needsYou", 40)),
@@ -243,7 +243,7 @@ describe("buildToday", () => {
     expect(reduces).toEqual([]);
   });
 
-  test("over the reduce cap, rotated Needs you leave first, oldest first, then Waiting, and what left is neither read nor counted", async () => {
+  test("over the reduce cap, rotated To review leave first, oldest first, then Waiting, and what left is neither read nor counted", async () => {
     const list = [candidate(1, "needsYou", 1), candidate(2, "needsYou", 50), candidate(3, "needsYou", 90), candidate(4, "waiting", 2)];
     const { deps, reduces, logs, store } = fakes(list, firstItem, { attachments: 340 });
     const built = await buildToday(deps, claim);

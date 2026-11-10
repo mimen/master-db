@@ -70,15 +70,15 @@ describe("stripCopy", () => {
 
   test("settled offers un-settle and says what brings it back", () => {
     const copy = stripCopy({ chat: chat({}, { at: NOW - H, fromMe: false }), messages: [], historyComplete: false, now: NOW, compact: false });
-    expect(copy).toEqual({ tone: "settled", lead: "Settled", detail: "Back in Needs you if Tracy texts again", action: "unsettle", today: null });
+    expect(copy).toEqual({ tone: "settled", lead: "Settled", detail: "Back in To review if Tracy texts again", action: "unsettle", today: null });
   });
 
   test("a settled Slack conversation says messages, not texts", () => {
     const slack = { ...chat({}, { at: NOW - H, fromMe: false }), route: { platform: "slack" as const, accountId: "a" as never, slack: { channel: "D1" } } };
-    expect(stripCopy({ chat: slack, messages: [], historyComplete: false, now: NOW, compact: false })?.detail).toBe("Back in Needs you if Tracy messages again");
+    expect(stripCopy({ chat: slack, messages: [], historyComplete: false, now: NOW, compact: false })?.detail).toBe("Back in To review if Tracy messages again");
   });
 
-  test("a conversation in Needs you only for its agent chat says so plainly and offers Settle", () => {
+  test("a conversation in To review only for its agent chat says so plainly and offers Settle", () => {
     const agent = { attention: "ready", chatId: "a", title: "Guest list", openCount: 1, activityAt: NOW } as const;
     const settled = { chat: chat({}, { at: NOW - 2 * H, fromMe: false }, { agent }), messages: [msg(NOW - 2 * H, false)], historyComplete: false, now: NOW, compact: false };
     expect(stripCopy(settled)).toEqual({ tone: "settled", lead: "Agent chat open", detail: null, action: "settle", today: null });

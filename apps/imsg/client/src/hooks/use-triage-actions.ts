@@ -59,7 +59,7 @@ function settleWrite(chat: ChatSummary, settled: (reverse: () => Promise<void>) 
 
     // A send's temp guid anchors too: Convex matches it to the real message once that send lands.
     const anchor = opts.pinned ?? chat.lastMessage?.guid;
-    // In Needs you only for its agent chats, it settles just those: a conversation settle's Undo would
+    // In To review only for its agent chats, it settles just those: a conversation settle's Undo would
     // undismiss both anchors and bring back a flag the user had already cleared.
     const agentsOnly = !chat.flags.unresponded && !chat.flags.waiting && !isSnoozed(chat);
     const written: Promise<{ archived: Promise<unknown> | null }> = conversationState().then(async (state) => {
@@ -171,7 +171,7 @@ function unsettleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome> {
 export async function toggleSettleChat(chat: ChatSummary): Promise<void> {
   const action = settleActionFor(chat);
   if (action === "none") {
-    showToast(chat.lastMessage ? "Nothing to settle — nothing here needs you" : "Nothing to settle — no messages yet");
+    showToast(chat.lastMessage ? "Nothing to settle — nothing here to review" : "Nothing to settle — no messages yet");
     return;
   }
   try {
@@ -186,7 +186,7 @@ export async function toggleSettleChat(chat: ChatSummary): Promise<void> {
     } else if (settled) {
       showToast(`Settled ${chat.displayName}`, { label: "Undo", hint: "⌘⇧Z", onPress: () => void runUndo(settled.undoToken) });
     } else {
-      showToast(chat.lastMessage?.isFromMe ? "Un-settled — back in Waiting" : "Un-settled — back in Needs you");
+      showToast(chat.lastMessage?.isFromMe ? "Un-settled — back in Waiting" : "Un-settled — back in To review");
     }
   } catch {
     // The write that failed already surfaced its own toast.

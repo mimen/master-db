@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, test } from "../fixtures/desk";
+import { expect, openView, test } from "../fixtures/desk";
 
 async function swipe(page: Page, rowName: string, dx: number) {
   const row = page.getByTestId("conversation-row").filter({ hasText: rowName });
@@ -25,7 +25,7 @@ test("a phone row swiped right marks the conversation unread, with gesture-handl
   page.on("request", (request) => { if (request.url().endsWith(".js")) scripts.push(request.url()); });
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("conversation-row").first()).toBeVisible();
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await openView(page, "All");
 
   const entry = scripts.find((url) => /\/entry-[0-9a-f]+\.js$/.test(url));
   const entrySource = await (await page.request.get(entry!)).text();

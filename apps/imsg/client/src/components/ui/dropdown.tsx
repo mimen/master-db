@@ -59,6 +59,8 @@ export interface DropdownProps<T extends string | number> {
    */
   readonly variant?: "field" | "chip" | "title";
   readonly style?: StyleProp<ViewStyle>;
+  /** Draws the trigger's contents in place of the variant's label and chevron, given the option chosen, if any. */
+  readonly renderTrigger?: (current: DropdownOption<T> | undefined, open: boolean) => ReactNode;
 }
 
 const web = Platform.OS === "web";
@@ -71,7 +73,7 @@ const LISTBOX = { role: "listbox" } as object;
  * anchored listbox (arrows move, Enter picks, Escape closes, focus returns to the
  * field); on native it opens an action-sheet list. Every non-lens choice uses it.
  */
-export function Dropdown<T extends string | number>({ label, value, options, onChange, menuWidth, variant = "field", style }: DropdownProps<T>): JSX.Element {
+export function Dropdown<T extends string | number>({ label, value, options, onChange, menuWidth, variant = "field", style, renderTrigger }: DropdownProps<T>): JSX.Element {
   const theme = useTheme();
   const type = useTypeRamp();
   const fieldRef = useRef<View>(null);
@@ -120,7 +122,7 @@ export function Dropdown<T extends string | number>({ label, value, options, onC
       <Pressable
         ref={fieldRef}
         accessibilityRole="button"
-        accessibilityLabel={`${label}, ${current?.label ?? ""}`}
+        accessibilityLabel={current ? `${label}, ${current.label}` : label}
         aria-haspopup="listbox"
         aria-expanded={anchor !== null}
         onPress={open}
@@ -132,17 +134,21 @@ export function Dropdown<T extends string | number>({ label, value, options, onC
           style,
         ]}
       >
-        {current?.icon ?? (current?.dot && <View style={[styles.dot, { backgroundColor: current.dot }]} />)}
-        <Text
-          numberOfLines={1}
-          style={title
-            ? [toolbarTitle, styles.titleText, { color: theme.text }]
-            : [!chip && styles.value, { color: chip ? theme.textSecondary : theme.text, fontSize: chip ? type.secondary : type.body }]}
-        >
-          {current?.label ?? ""}
-          {current?.detail && <Text style={{ color: theme.textTertiary, fontSize: type.secondary }}>{`  ${current.detail}`}</Text>}
-        </Text>
-        <Ionicons name={bare ? "chevron-down" : "chevron-expand"} size={bare ? 11 : 14} color={theme.icon} />
+        {renderTrigger ? renderTrigger(current, anchor !== null) : (
+          <>
+            {current?.icon ?? (current?.dot && <View style={[styles.dot, { backgroundColor: current.dot }]} />)}
+            <Text
+              numberOfLines={1}
+              style={title
+                ? [toolbarTitle, styles.titleText, { color: theme.text }]
+                : [!chip && styles.value, { color: chip ? theme.textSecondary : theme.text, fontSize: chip ? type.secondary : type.body }]}
+            >
+              {current?.label ?? ""}
+              {current?.detail && <Text style={{ color: theme.textTertiary, fontSize: type.secondary }}>{`  ${current.detail}`}</Text>}
+            </Text>
+            <Ionicons name={bare ? "chevron-down" : "chevron-expand"} size={bare ? 11 : 14} color={theme.icon} />
+          </>
+        )}
       </Pressable>
       {web ? (
         <WebMenu

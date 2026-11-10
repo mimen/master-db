@@ -1,5 +1,7 @@
 import { agentAttention, WANTS_YOU, type AgentAttention } from "@shared/agent-attention";
 import { computeCounts, isSettled, matchesFilters } from "@shared/chat-state";
+import type Ionicons from "@expo/vector-icons/Ionicons";
+import type { ComponentProps } from "react";
 import { liveThoughtLine } from "@/components/agent/vendor/live-thought-line";
 import type { AgentChatSummary } from "./agent-api";
 import type { TodayPlan, TodaySectionKey } from "./today";
@@ -34,38 +36,66 @@ export function resetInboxFilters(): InboxFilters {
   return { ...DEFAULT_INBOX_FILTERS };
 }
 
-/** The tab row. Settled is reached through "Also include", not a tab. */
-export type Lens = "today" | "unresponded" | "unread" | "waiting" | "all" | "drafts" | "agents";
+/** How Messages lays out its views. Settings switches it; every style reads VIEWS. */
+export type NavStyle = "list" | "tabs" | "compact";
 
-export const LENSES: readonly { value: Lens; label: string; count: "turn" | "plain" | null }[] = [
-  { value: "today", label: "Today", count: "turn" },
-  { value: "unresponded", label: "Needs you", count: "turn" },
-  { value: "unread", label: "Unread", count: "plain" },
-  { value: "waiting", label: "Waiting", count: null },
-  { value: "all", label: "All", count: null },
-  { value: "drafts", label: "Drafts", count: null },
-  { value: "agents", label: "Agents", count: "plain" },
-];
-
-/**
- * The tab row's counts, each under its own People filter (`typeOf`), the one a click on the tab restores, so a count
- * never depends on which tab is on screen. Today counts its plan's `toGo`.
- */
-export function tabCounts(chats: readonly ChatSummary[], base: StateCounts, toGo: number, typeOf: (lens: Lens) => TypeFilter): StateCounts {
-  const byType = new Map<TypeFilter, StateCounts>();
-  const tabs: StateCounts = { ...base, today: toGo };
-  for (const { value } of LENSES) {
-    if (value === "today") continue;
-    const type = typeOf(value);
-    const counts = byType.get(type) ?? computeCounts([...chats], type);
-    byType.set(type, counts);
-    tabs[value] = counts[value];
-  }
-  return tabs;
+export interface InboxView {
+  readonly id: StateFilter;
+  readonly label: string;
+  /** The heading when it differs from the label ("All messages"). */
+  readonly title?: string;
+  readonly icon: ComponentProps<typeof Ionicons>["name"];
+  /** "turn" colors a count above zero (the app badge's), "plain" grays it; null means no count, for unbounded archives. */
+  readonly count: "turn" | "plain" | null;
+  /** A tab of its own in the Tabs style; the rest sit under More. */
+  readonly primary: boolean;
+  /** What the view says when nothing is in it and no filter or search narrows it. */
+  readonly empty: string;
 }
 
-export function lensOf(state: StateFilter): Lens | null {
-  return state === "settled" ? null : state;
+/** Every view of the Messages list, in list order. A new view is one row here. */
+export const VIEWS: readonly InboxView[] = [
+  { id: "today", label: "Today", icon: "sunny-outline", count: "turn", primary: true, empty: "Nothing queued for today" },
+  { id: "unresponded", label: "To review", icon: "chatbubble-ellipses-outline", count: "turn", primary: true, empty: "Nothing to review" },
+  { id: "waiting", label: "Waiting", icon: "hourglass-outline", count: "plain", primary: true, empty: "Nobody owes you a reply" },
+  { id: "unread", label: "Unread", icon: "ellipse-outline", count: "plain", primary: false, empty: "Nothing unread" },
+  { id: "snoozed", label: "Snoozed", icon: "time-outline", count: "plain", primary: false, empty: "Nothing snoozed. Later on a conversation puts it here until it comes back." },
+  { id: "drafts", label: "Drafts", icon: "document-text-outline", count: "plain", primary: false, empty: "No drafts" },
+  { id: "agents", label: "Agents", icon: "sparkles-outline", count: "plain", primary: false, empty: "No agent chats" },
+  { id: "all", label: "All", title: "All messages", icon: "file-tray-full-outline", count: null, primary: true, empty: "No conversations" },
+  { id: "settled", label: "Settled", icon: "checkmark-done-outline", count: null, primary: false, empty: "Nothing settled" },
+];
+
+export function viewOf(id: StateFilter): InboxView {
+  return VIEWS.find((view) => view.id === id)!;
+}
+
+/** The order a style shows its views in, which ⌘1-⌘9 follow: Tabs puts its primary tabs first, then More. */
+export function viewOrder(style: NavStyle): readonly InboxView[] {
+  return style === "tabs" ? [...VIEWS.filter((view) => view.primary), ...VIEWS.filter((view) => !view.primary)] : VIEWS;
+}
+
+/** The ⌘ chord that opens a view in a style. Only the first nine views have one. */
+export function viewShortcut(style: NavStyle, id: StateFilter): string | undefined {
+  const index = viewOrder(style).findIndex((view) => view.id === id);
+  return index >= 0 && index < 9 ? `⌘${index + 1}` : undefined;
+}
+
+/**
+ * Every view's count, each under its own People filter (`typeOf`), the one opening the view restores, so a count
+ * never depends on which view is on screen. Today counts its plan's `toGo`.
+ */
+export function viewCounts(chats: readonly ChatSummary[], base: StateCounts, toGo: number, typeOf: (id: StateFilter) => TypeFilter): StateCounts {
+  const byType = new Map<TypeFilter, StateCounts>();
+  const counts: StateCounts = { ...base, today: toGo };
+  for (const { id } of VIEWS) {
+    if (id === "today") continue;
+    const type = typeOf(id);
+    const typed = byType.get(type) ?? computeCounts([...chats], type);
+    byType.set(type, typed);
+    counts[id] = typed[id];
+  }
+  return counts;
 }
 
 /** Any conversation, one platform's ("imessage"), or one of its services' ("imessage:SMS"). */
@@ -103,20 +133,11 @@ export const PEOPLE_LABELS: Record<TypeFilter, string> = {
   group: "Groups",
   dm: "One-to-one",
 };
-const LENS_TITLES: Record<StateFilter, string> = {
-  today: "Today",
-  all: "All messages",
-  unread: "Unread",
-  unresponded: "Needs you",
-  waiting: "Waiting",
-  drafts: "Drafts",
-  agents: "Agents",
-  settled: "Settled",
-};
 
 /** The lens as a heading. It names People whenever it is off its default, so "All messages" never hides a filter. */
 export function desktopInboxTitle(filters: InboxFilters): string {
-  const state = LENS_TITLES[filters.state];
+  const view = viewOf(filters.state);
+  const state = view.title ?? view.label;
   return isDefaultTypeLens(filters.type) ? state : `${state} · ${PEOPLE_LABELS[filters.type]}`;
 }
 
@@ -581,7 +602,7 @@ type AgentSummary = NonNullable<ChatSummary["agent"]>;
 
 /** Each attention a row can show: its Agents lens header and status word, and what the row and a toast say aloud. */
 export const AGENT_ATTENTION: Record<AgentSummary["attention"], { header: string; spoken: string }> = {
-  needs_you: { header: "Needs you", spoken: "agent needs you" },
+  needs_you: { header: "Asking you", spoken: "agent is asking you" },
   failed: { header: "Failed", spoken: "agent failed" },
   ready: { header: "Ready", spoken: "agent finished" },
   working: { header: "Working", spoken: "agent working" },

@@ -45,7 +45,7 @@ describe("classifyToday: the placement table", () => {
     expect(classifyToday(v, chat("a", { ...needsYou, unread: true }, { unreadCount: 2 }))).toMatchObject({ at: "ranked", rank: 1, group: "friday" });
   });
 
-  test("a reply removes a queued Needs you and leaves its rank as a gap", () => {
+  test("a reply removes a queued To review and leaves its rank as a gap", () => {
     const replied = view([{ id: "a", group: "friday" }], ["a"], { a: SNAPSHOT + 5 });
     expect(classifyToday(replied, chat("a", waiting))).toEqual({ at: "done", rank: 1, group: "friday", reason: "reason a" });
   });
@@ -65,11 +65,11 @@ describe("classifyToday: the placement table", () => {
     expect(classifyToday(view([{ id: "a", group: "friday" }], ["a"]), chat("a", needsYou))).toMatchObject({ at: "ranked", rank: 1 });
   });
 
-  test("a thread that turns Needs you after the build is New since", () => {
+  test("a thread that turns To review after the build is New since", () => {
     expect(classifyToday(v, chat("c", needsYou))).toEqual({ at: "new" });
   });
 
-  test("a Needs you the build left out is below the line", () => {
+  test("a To review the build left out is below the line", () => {
     expect(classifyToday(v, chat("b", needsYou))).toEqual({ at: "below" });
     expect(classifyToday(view([], ["b"], { b: SNAPSHOT + 1 }), chat("b", needsYou))).toEqual({ at: "new" });
   });
@@ -78,7 +78,7 @@ describe("classifyToday: the placement table", () => {
     expect(classifyToday(view([{ id: "a", group: "friday" }], ["a"], { a: SNAPSHOT - 1 }), chat("a", needsYou))).toMatchObject({ at: "ranked" });
   });
 
-  test("a conversation cleared today and not back in Needs you is settled, so the list matches the settled count", () => {
+  test("a conversation cleared today and not back in To review is settled, so the list matches the settled count", () => {
     expect(classifyToday(view([], [], { s: DAY_START + 1 }), chat("s"))).toEqual({ at: "settled", clearedAt: DAY_START + 1 });
     expect(classifyToday(view([], [], { s: DAY_START + 1 }), chat("s", { waiting: true }))).toEqual({ at: "settled", clearedAt: DAY_START + 1 });
     expect(classifyToday(v, chat("z"))).toEqual({ at: "out" });
@@ -171,11 +171,11 @@ describe("planToday", () => {
     expect(rebuilt.settled).toBe(before.settled);
   });
 
-  test("without a queue today, one Needs you section in its usual order", () => {
+  test("without a queue today, one To review section in its usual order", () => {
     const pinned = chat("p", needsYou, { flags: { ...chat("p").flags, unresponded: true, pinned: true } });
     const plan = planToday(null, [chat("x", needsYou), pinned, chat("q")], { held: null });
     expect(plan.mode).toBe("fallback");
-    expect(plan.sections.map((s) => [s.label, s.rows.map((r) => r.chat.conversationId as string)])).toEqual([["Needs you", ["p", "x"]]]);
+    expect(plan.sections.map((s) => [s.label, s.rows.map((r) => r.chat.conversationId as string)])).toEqual([["To review", ["p", "x"]]]);
     expect(plan.toGo).toBe(2);
   });
 
@@ -231,7 +231,7 @@ describe("todayHeader", () => {
     expect(meta(), "a queue from before sessions").toEqual(["Built 11:52 AM", "Opus 5.5 · read 81 of 380 threads"]);
   });
 
-  test("the header reads what was read against every candidate, and an older queue against its Needs you", () => {
+  test("the header reads what was read against every candidate, and an older queue against its To review", () => {
     const counted = view([{ id: "a", group: "friday" }], ["a", "b"], {}, { candidateCount: 335 });
     expect(todayHeader(counted, plan(counted))).toMatchObject({ readCount: 81, candidateCount: 335 });
     const older = view([{ id: "a", group: "friday" }], ["a", "b"]);

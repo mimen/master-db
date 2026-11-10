@@ -59,7 +59,7 @@ export interface TodayUpdatePlan {
   fresh: TodayCandidate[];
   /** More threads had news than the cap; the next Update reads the rest. */
   freshCut: boolean;
-  /** Needs you threads the session never read, to fill the room. */
+  /** To review threads the session never read, to fill the room. */
   deeper: TodayCandidate[];
   /** Refs of known threads that are no longer candidates. */
   gone: string[];

@@ -14,7 +14,7 @@ export interface ChatState {
   dismissedUnrespondedGuid?: string;
   /** Last-message GUID at the moment "waiting on them" was dismissed. */
   dismissedWaitingGuid?: string;
-  /** Recorded, but Needs you no longer honors it. */
+  /** Recorded, but To review no longer honors it. */
   mutedUnresponded: boolean;
   pinned: boolean;
   /** Epoch ms of the last read in Comma. Apple never back-fills dateRead on
@@ -154,6 +154,8 @@ export function matchesFilters(chat: ChatSummary, state: StateFilter, type: Type
       return chat.draft !== undefined;
     case "agents":
       return chat.agent !== undefined;
+    case "snoozed":
+      return isSnoozed(chat);
     case "settled":
       return isSettled(chat);
   }
@@ -208,13 +210,14 @@ export function settleLeavesLens(action: SettleAction, state: StateFilter): bool
     case "unresponded":
     case "waiting":
     case "agents":
+    case "snoozed":
       return action === "settle";
     case "settled":
       return action === "unsettle";
   }
 }
 
-const STATES: StateFilter[] = ["today", "all", "unread", "unresponded", "waiting", "drafts", "agents", "settled"];
+const STATES: StateFilter[] = ["today", "all", "unread", "unresponded", "waiting", "drafts", "agents", "snoozed", "settled"];
 
 /** The Agents count is only the chats that want the user; a working or open one shows in the lens without counting. */
 function counts(chat: ChatSummary, state: StateFilter, type: TypeFilter): boolean {

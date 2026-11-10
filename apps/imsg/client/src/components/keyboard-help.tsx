@@ -4,16 +4,16 @@ import { StyleSheet, Text, View } from "react-native";
 import { Type } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { helpEntries } from "@/lib/keyboard/registry";
-
-const HELP_ENTRIES = helpEntries();
+import { useNavStyle } from "@/lib/settings";
 
 /** The ⌘/ shortcut list. Its own chunk: it shows only when asked for. */
 export function KeyboardHelp(): JSX.Element {
   const theme = useTheme();
+  const entries = helpEntries(useNavStyle());
   return (
     <>
       <Text style={[styles.helpTitle, { color: theme.text }]}>Keyboard Shortcuts</Text>
-      {HELP_ENTRIES.map(({ title, keys }) => (
+      {entries.map(({ title, keys }) => (
         <View key={title} style={styles.helpRow}>
           <Text style={[styles.helpLabel, { color: theme.textSecondary }]}>{title}</Text>
           <View style={styles.helpKeys}>

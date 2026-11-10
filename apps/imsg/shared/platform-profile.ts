@@ -174,7 +174,7 @@ export const SLACK_PROFILE: PlatformProfile = {
    * iMessage's rule. A thread the user doesn't follow wants nothing: a mention in it makes it followed. A channel needs
    * the user only when its last message is someone else's and mentions them, and it never waits on anyone.
    */
-  // ponytail: a mention buried by later channel chatter drops out of Needs you; carrying it needs a mention anchor in triage.
+  // ponytail: a mention buried by later channel chatter drops out of To review; carrying it needs a mention anchor in triage.
   attention: (conversation, last) => conversation.kind === "channel" ? (last && !last.isFromMe && last.mentionsMe ? "needsYou" : "none")
     : conversation.kind === "thread" && conversation.following === false ? "none"
       : IMESSAGE_PROFILE.attention(conversation, last),
