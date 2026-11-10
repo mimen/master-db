@@ -41,7 +41,7 @@ describe("todayCandidateState", () => {
   const now = Date.parse("2026-10-27T15:00:00Z");
   const base = { platform: "imessage" as const, known: true, isSpam: false, lastMessageAt: now - HOUR };
 
-  test("Needs you counts at any age", () => {
+  test("To review counts at any age", () => {
     expect(todayCandidateState({ ...base, flags: flags({ unresponded: true }), lastMessageAt: now - 90 * 86_400_000 }, now)).toBe("needsYou");
   });
 

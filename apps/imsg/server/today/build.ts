@@ -97,7 +97,7 @@ export interface TodaySelection {
 const newestFirst = (a: TodayCandidate, b: TodayCandidate) => b.lastMessageAt - a.lastMessageAt;
 
 /**
- * The bounded, rotating read: the newest Needs you under 30 days first, then the rest of the Needs you backlog least
+ * The bounded, rotating read: the newest To review under 30 days first, then the rest of the To review backlog least
  * recently read first (never read counts as oldest), then the newest Waiting.
  */
 export function selectToday(candidates: readonly TodayCandidate[], lastRead: ReadonlyMap<string, number>, now: number): TodaySelection {
@@ -227,7 +227,7 @@ async function buildFresh(deps: TodayBuildDeps, claim: TodayClaim, signal: Abort
   const selection = selectToday(candidates, deps.store.todayReadAt(), now);
   const read = [...selection.recent, ...selection.rotated, ...selection.waiting];
   const base = { snapshotAt: claim.startedAt, model: TODAY_MODEL, openAtSnapshot: needsYouIds(candidates), readCount: read.length, candidateCount: candidates.length };
-  if (read.length === 0) return nothingToAccept({ ok: true, queue: { ...base, brief: "Nothing needs you right now.", groups: [], items: [] } });
+  if (read.length === 0) return nothingToAccept({ ok: true, queue: { ...base, brief: "Nothing to review right now.", groups: [], items: [] } });
 
   const { threads, cards, cardMs } = await cardThreads(deps, signal, read.map((candidate, index) => ({ ref: `c${index + 1}`, candidate })));
   const byCandidate = new Map(threads.map((thread) => [thread.candidate, thread]));

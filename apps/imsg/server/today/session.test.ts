@@ -81,7 +81,7 @@ describe("planUpdate", () => {
     expect(plan.room).toBe(49);
   });
 
-  test("deeper reads three unread Needs you per open slot, least recently read first, then newest, and never Waiting", () => {
+  test("deeper reads three unread To review per open slot, least recently read first, then newest, and never Waiting", () => {
     const items = Array.from({ length: 46 }, (_, n) => `conv${n}`);
     const picks = items.map((_, n) => candidate(n, "needsYou", n));
     const backlog = Array.from({ length: 20 }, (_, n) => candidate(100 + n, "needsYou", 1_000 + n));

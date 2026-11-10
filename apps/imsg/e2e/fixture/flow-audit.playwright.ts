@@ -37,7 +37,7 @@ test("B1: Mail answers the palette, help, Esc, j/k and ⌘E", async ({ desk }) =
   await page.keyboard.press("Meta+/");
   const help = page.getByRole("dialog", { name: "Keyboard shortcuts" });
   await expect(help).toBeVisible();
-  await expect(help.getByText("⌘1–⌘7"), "help lists the lens chords").toBeVisible();
+  await expect(help.getByText("Go to To review", { exact: true }), "help lists the view chords").toBeVisible();
   await page.keyboard.press("Escape");
   await expect(help).toHaveCount(0);
 

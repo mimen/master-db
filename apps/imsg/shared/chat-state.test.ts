@@ -296,7 +296,7 @@ describe("settleActionFor", () => {
 });
 
 describe("settleLeavesLens — whether the row drops out from under the cursor", () => {
-  test("settling clears the flags that define Needs you and Waiting", () => {
+  test("settling clears the flags that define To review and Waiting", () => {
     expect(settleLeavesLens("settle", "unresponded")).toBe(true);
     expect(settleLeavesLens("settle", "waiting")).toBe(true);
   });
@@ -422,7 +422,7 @@ describe("agent chats", () => {
   const quiet = (attention: NonNullable<ChatSummary["agent"]>["attention"]) =>
     makeChat({ conversationId: `quiet-${attention}` as ConversationId, agent: agent(attention), lastMessage: { ...makeChat().lastMessage!, isFromMe: true } });
 
-  test("an open agent chat puts a conversation with clear flags in Needs you and Agents, not Settled", () => {
+  test("an open agent chat puts a conversation with clear flags in To review and Agents, not Settled", () => {
     const row = quiet("working");
     expect(matchesFilters(row, "unresponded", "all")).toBe(true);
     expect(matchesFilters(row, "agents", "all")).toBe(true);
@@ -438,13 +438,13 @@ describe("agent chats", () => {
     expect(isSettled(row)).toBe(true);
   });
 
-  test("settle is offered when an agent chat is the only reason to be in Needs you, and it leaves Agents", () => {
+  test("settle is offered when an agent chat is the only reason to be in To review, and it leaves Agents", () => {
     expect(settleActionFor(quiet("open"))).toBe("settle");
     expect(settleLeavesLens("settle", "agents")).toBe(true);
     expect(settleLeavesLens("unsettle", "agents")).toBe(false);
   });
 
-  test("Needs you counts agent rows; Agents counts only the ones that want the user", () => {
+  test("To review counts agent rows; Agents counts only the ones that want the user", () => {
     const rows = (["needs_you", "failed", "ready", "working", "open"] as const).map(quiet);
     const counts = computeCounts([...rows, makeChat({ conversationId: "inbound" as ConversationId, flags: makeFlags({ unresponded: true }) })], "all");
     expect(counts.unresponded).toBe(6);
@@ -533,8 +533,14 @@ describe("Later and Follow up", () => {
     const snoozed = makeChat({ conversationId: "s" as ConversationId, later: { snoozedUntil: until } });
     const open = makeChat({ conversationId: "o" as ConversationId, flags: makeFlags({ unresponded: true, unread: true }) });
     const counts = computeCounts([snoozed, open], "all");
-    expect(counts).toMatchObject({ all: 2, unresponded: 1, unread: 1, waiting: 0, settled: 0 });
+    expect(counts).toMatchObject({ all: 2, unresponded: 1, unread: 1, waiting: 0, settled: 0, snoozed: 1 });
     expect(isSettled(snoozed)).toBe(false);
+  });
+
+  test("the Snoozed view lists only snoozed conversations, and Done takes the row out of it", () => {
+    expect(matchesFilters(makeChat({ later: { snoozedUntil: until } }), "snoozed", "all")).toBe(true);
+    expect(matchesFilters(makeChat({ flags: makeFlags({ unresponded: true }) }), "snoozed", "all")).toBe(false);
+    expect(settleLeavesLens("settle", "snoozed")).toBe(true);
   });
 
   test("settling a snoozed conversation is Done", () => {

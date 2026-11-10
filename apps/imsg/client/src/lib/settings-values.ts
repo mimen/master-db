@@ -1,8 +1,10 @@
 import type { StateFilter, SuggestionModel } from "@shared/types";
 import type { AgentEffort } from "./agent-api";
 import { agentModelChoice, DEFAULT_AGENT_CHOICE, type AgentModel } from "./agent-models";
+import type { NavStyle } from "./inbox-model";
 
 export type { AgentModel } from "./agent-models";
+export type { NavStyle } from "./inbox-model";
 
 export type SuggestionMode = "off" | "on-demand" | "auto";
 
@@ -32,6 +34,7 @@ export interface Settings {
   theme: ThemePreference;
   openOn: OpenOnLens;
   groupBy: GroupConversationsBy;
+  navigation: NavStyle;
   /** The Agent tab in the utility pane, and ⌘J. Shown only while the Mini's agent runner is up. */
   agentPane: boolean;
   /** Fixed into a chat when it starts; a change applies to the next chat. */
@@ -46,6 +49,7 @@ export const DEFAULT: Settings = {
   theme: "system",
   openOn: "unresponded",
   groupBy: "last-message",
+  navigation: "list",
   agentPane: true,
   agentModel: DEFAULT_AGENT_CHOICE.model,
   agentEffort: DEFAULT_AGENT_CHOICE.effort,
@@ -75,6 +79,10 @@ function isGroupBy(value: unknown): value is GroupConversationsBy {
   return value === "last-message" || value === "person" || value === "none";
 }
 
+function isNavStyle(value: unknown): value is NavStyle {
+  return value === "list" || value === "tabs" || value === "compact";
+}
+
 function agentChoiceSettings(model: unknown, effort: unknown): Pick<Settings, "agentModel" | "agentEffort"> {
   const choice = agentModelChoice(model, effort);
   return { agentModel: choice.model, agentEffort: choice.effort };
@@ -91,6 +99,7 @@ export function parseSettings(raw: string): Settings {
     theme: isTheme(parsed.theme) ? parsed.theme : DEFAULT.theme,
     openOn: isOpenOn(parsed.openOn) ? parsed.openOn : DEFAULT.openOn,
     groupBy: isGroupBy(parsed.groupBy) ? parsed.groupBy : DEFAULT.groupBy,
+    navigation: isNavStyle(parsed.navigation) ? parsed.navigation : DEFAULT.navigation,
     agentPane: typeof parsed.agentPane === "boolean" ? parsed.agentPane : DEFAULT.agentPane,
     ...agentChoiceSettings(parsed.agentModel, parsed.agentEffort),
   };

@@ -3,7 +3,7 @@ import type { AgentAttention } from "./agent-attention";
 import type { MentionAnnotation } from "./mentions";
 import type { PendingSendState } from "./pending-send";
 
-export type StateFilter = "today" | "all" | "unread" | "unresponded" | "waiting" | "drafts" | "agents" | "settled";
+export type StateFilter = "today" | "all" | "unread" | "unresponded" | "waiting" | "drafts" | "agents" | "snoozed" | "settled";
 
 /** The line an agent chat shows in lists: its open question, draft, reply, latest thought, or error. */
 export interface AgentPreview {

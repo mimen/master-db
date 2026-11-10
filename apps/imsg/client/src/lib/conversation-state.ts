@@ -57,7 +57,7 @@ function patchCleared(store: OptimisticLocalStore, conversationId: ConversationI
   }
 }
 
-/** A settle closes the conversation's open agent chats, so its row stops being in Needs you for them. */
+/** A settle closes the conversation's open agent chats, so its row stops being in To review for them. */
 function dropAgentChats(store: OptimisticLocalStore, conversationId: ConversationId): void {
   const open = store.getQuery(agentApi.listAgentChats, {});
   if (open) store.setQuery(agentApi.listAgentChats, {}, open.filter((chat) => chat.conversationId !== conversationId));
