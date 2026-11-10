@@ -30,7 +30,7 @@ TS
 trap 'rm -f "$run" "$config"' EXIT
 
 cd "$imsg"
-VERIFY_IMSG_EVIDENCE="$evidence" IMSG_FIXTURE_PORT="$(cat "$state/port")" \
+VERIFY_IMSG_EVIDENCE="$evidence" IMSG_FIXTURE_PORT="$(cat "$state/port")" IMSG_FIXTURE_REUSE=1 \
   bunx playwright test --config "$config" \
   --output "$evidence/playwright" "verify-imsg-$feature" 2>&1 | tee "$evidence/run.log"
 status=${PIPESTATUS[0]}

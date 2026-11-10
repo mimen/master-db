@@ -221,6 +221,8 @@ export interface ChatSummary {
   isSpam: boolean;
   /** An email thread sent to a list: newsletters, notifications, promotions. */
   bulk?: boolean;
+  /** An email thread's subject, which its row shows above the snippet. */
+  subject?: string;
   participants: Participant[];
   lastMessage: {
     guid: string;

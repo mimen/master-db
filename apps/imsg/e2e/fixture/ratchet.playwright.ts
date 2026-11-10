@@ -211,7 +211,8 @@ test("ratchet: a conversation marked unread reads as unread within 50 ms of the 
   expect(await elapsedToFrame(page)).toBeLessThanOrEqual(50);
 });
 
-test("a mark read shows at once and rolls back with a toast when the bridge fails it", async ({ desk }) => {
+// Convex keeps the read when the Mini fails iMessage's read receipt; only the receipt's failure shows, as a toast.
+test("a mark read shows at once and stays, with a toast, when the bridge fails the read receipt", async ({ desk }) => {
   const fault = await desk.request.post("/__fixture/fault", { data: { method: "markRead" } });
   expect(fault.ok()).toBe(true);
   const page = desk.page;
@@ -222,8 +223,9 @@ test("a mark read shows at once and rolls back with a toast when the bridge fail
     .some((element) => /^Launch Crew, (?!unread)/.test(element.getAttribute("aria-label") ?? "")), undefined, { polling: "raf", timeout: 5_000 });
   await markRead.click();
   await cleared;
-  await expect(row).toHaveAttribute("aria-label", /^Launch Crew, unread,/);
   await expect(page.getByText("Couldn't mark as read. Try again.")).toBeVisible();
+  // The toast follows the mutation's server refresh, so the row already shows Convex's read; no retry, no flash back.
+  expect(await row.getAttribute("aria-label")).toMatch(/^Launch Crew, (?!unread)/);
 });
 
 /** An audio bubble's duration ("0:03"), which only a voice message in the thread list draws. */

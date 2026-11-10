@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTheme } from "@/hooks/use-theme";
+import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { useType } from "@/hooks/use-type";
 import { Spacing } from "@/constants/theme";
 
@@ -39,6 +40,20 @@ export function EmptyState({ icon, iconSize = 28, iconColor, message, children, 
       )}
       {children}
     </View>
+  );
+}
+
+/** The detail pane before anything is picked: Messages and Mail show the same one. */
+export function SelectionEmpty({ icon, message }: { icon: keyof typeof Ionicons.glyphMap; message: string }) {
+  const visual = useTriageTheme();
+  return (
+    <EmptyState
+      icon={icon}
+      iconSize={44}
+      iconColor={visual.hint}
+      style={{ backgroundColor: visual.empty }}
+      message={<Text style={{ color: visual.meta, fontSize: 14, fontWeight: "600" }}>{message}</Text>}
+    />
   );
 }
 

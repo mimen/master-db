@@ -42,7 +42,7 @@ test("mail-send: reply prefills the sender and subject, reply all adds the rest,
   const payloads = enqueued(page);
   const reader = await openThread(desk);
 
-  await reader.getByRole("button", { name: "Reply", exact: true }).click();
+  await reader.getByRole("button", { name: "Reply to the message from Sam Lee", exact: true }).click();
   const composer = page.getByTestId("email-composer");
   expect(await chips(composer, "To")).toEqual(["Sam Lee"]);
   expect(await chips(composer, "Cc")).toEqual([]);
@@ -80,7 +80,7 @@ test("mail-send: a send whose answer is lost says so and lands once when the che
   const payloads = enqueued(page);
   const reader = await openThread(desk);
   await desk.request.post("/__fixture/mail", { data: { loseNextAnswerMs: 2_000 } });
-  await reader.getByRole("button", { name: "Reply", exact: true }).click();
+  await reader.getByRole("button", { name: "Reply to the message from Sam Lee", exact: true }).click();
   await page.getByTestId("email-composer").getByLabel("Message").fill("Confirmed.");
   await page.getByTestId("email-composer").getByRole("button", { name: "Send", exact: true }).click();
   await expect(reader.getByText("Not sure this went through. Check Sent in Gmail before sending again.")).toBeVisible();

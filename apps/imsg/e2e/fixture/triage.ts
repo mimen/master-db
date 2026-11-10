@@ -119,5 +119,8 @@ export function createTriageFixture(deps: {
     "comma/later:clearFollowUp": async (args) => { write(id(args), { followUp: undefined }); return null; },
   };
 
-  return { handlers, reset, settle, unsettle, flag, read, replied, carry, flagged, clears: () => clears };
+  /** The deferrals Convex reads onto any conversation's row: an email thread's too. */
+  const laterFor = (chatGuid: string) => laterOf(states.get(chatGuid));
+
+  return { handlers, reset, settle, unsettle, flag, read, replied, carry, flagged, laterFor, clears: () => clears };
 }

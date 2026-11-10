@@ -58,7 +58,10 @@ export const downloadFiles = internalAction({
   args: { accountId: v.id("comma_accounts"), messageId: v.string(), parts: v.array(part) },
   returns: v.null(),
   handler: async (ctx, { accountId, messageId, parts }) => {
-    const token = await gmailToken(ctx, accountId).catch(() => null);
+    const token = await gmailToken(ctx, accountId).catch((error: unknown) => {
+      console.warn(`gmail files: no token for ${messageId}, its parts stay tiles`, error);
+      return null;
+    });
     if (!token) return null;
     const path = `${GMAIL_API}/messages/${encodeURIComponent(messageId)}`;
     let payload: Part | undefined;
@@ -76,7 +79,10 @@ export const downloadFiles = internalAction({
         await ctx.runMutation(internal.comma.slackFiles.storeFile, { attachmentId: item.attachmentId, originalStorageId });
       } catch (error) {
         // Any other failure leaves this part a tile, and the rest still download.
-        if (!(error instanceof GoogleApiError && error.rateLimited)) continue;
+        if (!(error instanceof GoogleApiError && error.rateLimited)) {
+          console.warn(`gmail files: part ${item.partId} of ${messageId} failed, it stays a tile`, error);
+          continue;
+        }
         await ctx.scheduler.runAfter(30_000, internal.comma.gmailFiles.downloadFiles, { accountId, messageId, parts: parts.slice(index) });
         return null;
       }
