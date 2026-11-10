@@ -25,6 +25,7 @@ import {
 import { commandQuery, peopleFirstSections, recencyAge, turnAge, type RowAge } from "@/lib/palette-people";
 import { splitAroundMatch } from "@/lib/split-match";
 import { toggleSettleChat } from "@/hooks/use-triage-actions";
+import { accountsApi } from "@/lib/convex-api";
 import { runCommand as runKeyboardCommand } from "@/lib/keyboard/controller";
 import { openPersonPane } from "@/lib/person-pane";
 import { openScheduledPane } from "@/lib/scheduled-pane";
@@ -36,6 +37,7 @@ import { useToday } from "@/hooks/use-today";
 
 import { addressesMatch, formatAddress } from "@shared/address";
 import { conversationRoute, fromBridgeMessage } from "@shared/imessage";
+import { platformBadge } from "@shared/platform-profile";
 import { composeSections, type ComposeRow } from "@/lib/palette/compose-rows";
 import { useChatDirectory, useConversation } from "@/hooks/use-chat-directory";
 import { openAgentChat } from "@/hooks/use-agent-toasts";
@@ -44,8 +46,7 @@ import { AGENT_ATTENTION } from "@/lib/inbox-model";
 import { useAgentSettings } from "@/lib/settings";
 import { draftBubble, pendingSends } from "@/lib/pending-sends";
 import { afterPaint } from "@/lib/open-timing";
-import { AgentBadge } from "./agent-badge";
-import { ChatAvatar, PersonAvatar } from "./avatar";
+import { ChatAvatar, PersonAvatar, type AvatarSource } from "./avatar";
 import { MorphSendButton } from "./motion/morph-send-button";
 import {
   PaletteListRow,
@@ -137,6 +138,8 @@ function PaletteRoot({
   const [searching, setSearching] = useState(false);
   // One clock per open: ages must not tick while the cursor moves.
   const [now] = useState(() => Date.now());
+  const accounts = useQuery(accountsApi.listAccounts, {});
+  const personalMail = useMemo(() => new Set((accounts ?? []).flatMap((account) => account.gmailApp === "personal" ? [account._id as string] : [])), [accounts]);
   const commandFilter = commandQuery(query);
   const searchText = commandFilter === null ? query.trim() : "";
 
@@ -345,7 +348,7 @@ function PaletteRoot({
                   onPress={() => execute(item)}
                   onHover={() => cursor.setSelectedIndex(index)}
                 >
-                  <PaletteRowContent item={item} needle={needle} age={people.ages.get(item.key)} now={now} />
+                  <PaletteRowContent item={item} needle={needle} age={people.ages.get(item.key)} now={now} personalMail={personalMail} />
                 </PaletteListRow>
               );
             })}
@@ -436,7 +439,11 @@ function MessageHitContent({ hit: m, needle }: { hit: SearchHit; needle: string 
   );
 }
 
-function PaletteRowContent({ item, needle, age, now }: { item: PaletteItem; needle: string; age?: RowAge; now: number }) {
+function sourceOf(chat: ChatSummary, personalMail: ReadonlySet<string>): AvatarSource {
+  return { badge: platformBadge(conversationRoute(chat)), personal: chat.route.accountId !== null && personalMail.has(chat.route.accountId) };
+}
+
+function PaletteRowContent({ item, needle, age, now, personalMail }: { item: PaletteItem; needle: string; age?: RowAge; now: number; personalMail: ReadonlySet<string> }) {
   const theme = useTheme();
   switch (item.kind) {
     case "command":
@@ -464,7 +471,7 @@ function PaletteRowContent({ item, needle, age, now }: { item: PaletteItem; need
           : "";
       return (
         <>
-          <ChatAvatar chat={chat} size={26} />
+          <ChatAvatar chat={chat} size={26} source={sourceOf(chat, personalMail)} />
           <View style={[paletteStyles.textCol, styles.inline]}>
             <Highlighted text={chat.displayName} needle={needle} color={theme.text} style={[paletteStyles.title, styles.shrink]} />
             {subtitle !== "" && (
@@ -480,10 +487,7 @@ function PaletteRowContent({ item, needle, age, now }: { item: PaletteItem; need
     case "agent":
       return (
         <>
-          <View>
-            <ChatAvatar chat={item.chat} size={26} />
-            <AgentBadge attention={item.agent.attention} size={14} />
-          </View>
+          <ChatAvatar chat={item.chat} size={26} source={sourceOf(item.chat, personalMail)} />
           <View style={[paletteStyles.textCol, styles.inline]}>
             <Highlighted text={item.agent.title} needle={needle} color={theme.text} style={[paletteStyles.title, styles.shrink]} />
             <Highlighted text={item.chat.displayName} needle={needle} color={theme.popTertiary} style={[paletteStyles.subtitle, styles.noShrink]} />

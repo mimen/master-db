@@ -18,6 +18,7 @@ import { useActionSheet } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
 import { alternateIndexForKey, shelfTakesKeys, suggestionSlots, type SuggestionSlots } from "@/lib/suggestion-slots";
 import { TAPBACK_EMOJI } from "@/lib/tapbacks";
+import { focusVisible, type InteractionState } from "@/components/ui/interaction";
 import type { ConversationId, EventSuggestion, ReplySuggestion, ReplySuggestions, SuggestionModel } from "@shared/types";
 
 /**
@@ -203,8 +204,8 @@ export function useReplySuggestions(
 }
 
 /**
- * The alternates under the composer. Desktop: keyboard-labeled text links, ⌥1 to ⌥3. Phone: chips
- * in one sideways-scrolling row. The same row carries the on-demand request, a retry, the
+ * The alternates on the state strip's line. Desktop: keyboard-labeled text links, ⌥1 to ⌥3. Phone: chips
+ * in one sideways-scrolling row. The same row carries the on-demand request, a quiet retry, the
  * placeholders for a slow call, a calendar event and the refresh control.
  */
 export function SuggestionAlternates({ state, wide }: { state: ReplySuggestionsState; wide: boolean }): React.JSX.Element | null {
@@ -235,16 +236,13 @@ export function SuggestionAlternates({ state, wide }: { state: ReplySuggestionsS
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [listening]);
 
-  if (slots.kind === "hidden") return null;
+  if (slots.kind === "hidden" || slots.kind === "pending") return null;
   const Row = wide ? DeskRow : PhoneRow;
-  if (slots.kind === "pending") return <Row>{null}</Row>;
 
   if (slots.kind === "offer") {
     return <Row><Alternate wide={wide} icon="sparkles" label="Suggest replies" accent onPress={load} /></Row>;
   }
-  if (slots.kind === "failed") {
-    return <Row><Alternate wide={wide} icon="refresh" label="Retry suggestions" onPress={load} /></Row>;
-  }
+  if (slots.kind === "failed") return <Row><Retry wide={wide} onPress={load} /></Row>;
   if (slots.kind === "loading") {
     return (
       <View accessibilityLabel="Loading reply suggestions" accessibilityLiveRegion="polite" role="status">
@@ -303,6 +301,30 @@ export function SuggestionAlternates({ state, wide }: { state: ReplySuggestionsS
   );
 }
 
+/**
+ * A failed fetch stays quiet: the retry fills the shelf's space but shows only while the pointer is over it or the
+ * keyboard reaches it. Touch has no hover, so the phone keeps a bare refresh icon.
+ */
+function Retry({ wide, onPress }: { wide: boolean; onPress: () => void }): React.JSX.Element {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Retry suggestions"
+      onPress={onPress}
+      style={({ hovered, pressed }) => [styles.retry, (hovered || pressed) && wide && { backgroundColor: theme.rowHover }]}
+    >
+      {(state: InteractionState) => {
+        const shown = !wide || state.hovered || state.pressed || focusVisible(state);
+        return shown ? <>
+          <Ionicons name="refresh" size={wide ? 13 : 15} color={state.hovered || state.pressed ? theme.text : theme.textTertiary} />
+          {wide && <Text numberOfLines={1} style={[styles.linkText, { color: theme.text }]}>Retry suggestions</Text>}
+        </> : null;
+      }}
+    </Pressable>
+  );
+}
+
 const PANE = '[data-testid="thread-view"]';
 
 const SKELETON_WIDTHS = [132, 96, 156] as const;
@@ -329,7 +351,7 @@ function Alternate({ wide, label, shortcut, icon, accent = false, disabled = fal
   wide: boolean;
   label: string;
   shortcut?: string;
-  icon?: "sparkles" | "refresh" | "calendar-outline";
+  icon?: "sparkles" | "calendar-outline";
   accent?: boolean;
   disabled?: boolean;
   accessibilityLabel?: string;
@@ -365,14 +387,15 @@ function Alternate({ wide, label, shortcut, icon, accent = false, disabled = fal
 
 const styles = StyleSheet.create({
   // Tall enough for the refresh control, so placeholders and loaded links share one height.
-  deskRow: { alignItems: "center", flexDirection: "row", gap: 6, minHeight: 30, paddingTop: 4 },
-  phoneRow: { alignItems: "center", flexDirection: "row", gap: 8, minHeight: 42, paddingHorizontal: 4, paddingTop: 10 },
+  deskRow: { alignItems: "center", flexDirection: "row", gap: 6, minHeight: 26 },
+  phoneRow: { alignItems: "center", flexDirection: "row", gap: 6, minHeight: 28, paddingHorizontal: 2 },
   alternateWrap: { flexShrink: 1, minWidth: 0 },
   link: { alignItems: "center", borderRadius: 6, flexDirection: "row", gap: 4, height: 24, paddingHorizontal: 6 },
   linkText: { flexShrink: 1, fontSize: 12 },
   shortcut: { fontSize: 12, fontVariant: ["tabular-nums"], fontWeight: "600" },
-  chip: { alignItems: "center", borderRadius: 999, flexDirection: "row", gap: 6, height: 32, paddingHorizontal: 12 },
-  chipText: { fontSize: 14 },
+  chip: { alignItems: "center", borderRadius: 999, flexDirection: "row", gap: 5, height: 26, paddingHorizontal: 10 },
+  chipText: { fontSize: 13 },
+  retry: { alignItems: "center", alignSelf: "stretch", borderRadius: 6, flex: 1, flexDirection: "row", gap: 4, minHeight: 24, paddingHorizontal: 6 },
   deskSkeleton: { borderRadius: 4, height: 10, marginHorizontal: 6 },
   deskRefresh: { marginLeft: "auto" },
   refresh: { alignItems: "center", borderRadius: 13, height: 26, justifyContent: "center", width: 26 },

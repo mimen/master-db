@@ -1,13 +1,13 @@
 import { expect, test } from "../fixtures/desk";
 
 for (const scheme of ["light", "dark"] as const) {
-  test(`alternate chips share one neutral fill and stay one row under the phone field (${scheme})`, async ({ desk }) => {
+  test(`alternate chips share one neutral fill and stay one row on the strip's line (${scheme})`, async ({ desk }) => {
     const page = desk.page;
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
     await page.goto(`/chat/${encodeURIComponent(desk.chats.needs)}?name=Alex%20Rivera&shelf=${scheme}`, { waitUntil: "domcontentloaded" });
 
-    // The top suggestion is the field's ghost text; the alternates are the chips under it.
+    // The top suggestion is the field's ghost text; the alternates are the chips on the strip above it.
     await expect(page.getByTestId("composer-ghost")).toHaveText("what time do you need the final answer by?");
     const pills = [
       page.getByRole("button", { name: /^decline, boundary:/ }),

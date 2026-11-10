@@ -803,13 +803,14 @@ export function ThreadView({
       <ToastAnchor active={toastActive}>
         {conversation ? <Composer
           suggestions={{
-            enabled: aiStatus?.suggestions === true && !editing,
+            // A Slack channel gets no reply suggestions, so its line never offers or retries them.
+            enabled: aiStatus?.suggestions === true && !editing && conversation.kind !== "channel",
             awaitingReply,
             reactionSuggestions: can("react")?.ok === true,
             reactionUnavailable: reasonOf(can("react")),
             reactionPreview,
           }}
-          strip={besideThread ? undefined : <StateStrip conversationId={conversationId} messages={messages} historyComplete={!hasMore} />}
+          strip={besideThread ? undefined : (shelf) => <StateStrip conversationId={conversationId} messages={messages} historyComplete={!hasMore} shelf={shelf} />}
           chat={conversation}
           isGroup={isGroup}
           participants={participants}

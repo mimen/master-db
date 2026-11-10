@@ -45,7 +45,7 @@ test("settle-loop: strip, ⌘E settle with toast and undo, auto-advance, positio
   await rows.first().click();
   const first = (await heading(page).textContent())!;
   const strip = page.getByTestId("state-strip");
-  await expect(strip).toContainText(/Your turn for \d+[mhdw]/);
+  await expect(strip).toContainText(/Your turn · \d+[mhdw]/);
   await expect(strip.getByRole("button", { name: "Settle (⌘E)" })).toBeVisible();
   await expect(page.getByText(new RegExp(`^1 of ${before}$`))).toBeVisible();
   await page.mouse.move(900, 300);
@@ -127,7 +127,8 @@ test("settle-loop: settled strip offers un-settle (dark)", async ({ desk }) => {
   await expect(strip).toBeVisible();
   if (await strip.getByRole("button", { name: "Settle (⌘E)" }).isVisible()) await page.keyboard.press("Meta+e");
   await expect(strip).toContainText("Settled");
-  await expect(strip).toContainText(/Back in To review if .+ texts again/);
+  // What brings it back is the lead's tooltip, not more words on the line.
+  await expect(strip.getByTestId("strip-lead")).toHaveAttribute("title", /Back in To review if .+ texts again/);
   await expect(strip.getByRole("button", { name: "Un-settle (⌘E)" })).toBeVisible();
   await page.waitForTimeout(5600);
   await page.mouse.move(900, 300);
@@ -138,7 +139,7 @@ test("settle-loop: phone strip", async ({ desk }) => {
   const page = desk.page;
   await open(page, 390, 844, "light");
   await page.getByTestId("conversation-row").first().click();
-  await expect(page.getByTestId("state-strip")).toContainText(/Your turn for/);
+  await expect(page.getByTestId("state-strip")).toContainText(/Your turn ·/);
   await expect(page.getByText(/^\d+ of \d+$/)).toHaveCount(0);
   await page.waitForTimeout(500);
   await page.screenshot({ path: join(evidence, "phone-thread.png") });

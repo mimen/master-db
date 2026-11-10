@@ -38,6 +38,7 @@ test("phone ghost suggestion stays inside the composer field", async ({ desk }) 
   await expect(ghost).toHaveText(LONG_GHOST);
   await expect.poll(() => renderedLines(ghost), { message: "the ghost wraps" }).toBeGreaterThan(1);
   const field = (await page.getByPlaceholder("iMessage").boundingBox())!;
-  const box = (await ghost.boundingBox())!;
+  // The six-line clamp sits on the layer; the ghost's own span runs past it.
+  const box = (await page.getByTestId("composer-ghost-layer").boundingBox())!;
   expect(box.y + box.height, "the ghost ends inside the field").toBeLessThanOrEqual(field.y + field.height);
 });

@@ -93,8 +93,8 @@ interface ComposerProps {
   onDragActiveChange: (active: boolean) => void;
   /** Reply suggestions: the top one is the field's ghost text, the rest are the alternates under it. */
   suggestions: SuggestionSource;
-  /** The state strip, which sits directly on the field. */
-  strip?: ReactNode;
+  /** The state strip, which sits directly on the field and carries the reply alternates it is handed. */
+  strip?: (shelf: ReactNode) => ReactNode;
 }
 
 interface PendingAttachment extends PendingAttachmentAsset {
@@ -138,8 +138,9 @@ const CARD_MAX_HEIGHT = CARD_LINE_HEIGHT * 6 + CARD_PAD_TOP + CARD_PAD_BOTTOM;
 const USE_KEY_INSET = 64;
 
 /**
- * The top reply suggestion, drawn in the empty field in tertiary ink. It fades on snappy as
- * typing starts and returns when the field empties; Reduce Motion makes it instant.
+ * The top reply suggestion, drawn in the empty field in tertiary italic so it never reads as the placeholder; on
+ * desktop a ⇥ after it says Tab takes it. It fades on snappy as typing starts and returns when the field empties;
+ * Reduce Motion makes it instant.
  */
 function GhostText({ text, shown, card, fontSize, color, onHeight }: {
   text: string;
@@ -156,15 +157,15 @@ function GhostText({ text, shown, card, fontSize, color, onHeight }: {
   }, [opacity, shown, spring]);
   const fade = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return (
-    <Reanimated.View pointerEvents="none" aria-hidden style={[card ? styles.cardGhost : styles.phoneGhost, fade]}>
+    <Reanimated.View testID="composer-ghost-layer" pointerEvents="none" aria-hidden style={[card ? styles.cardGhost : styles.phoneGhost, fade]}>
       <Text
-        testID="composer-ghost"
         // The field stops growing at six lines, so the ghost does too; accepting it inserts the whole text.
         numberOfLines={6}
         onLayout={(event) => onHeight(event.nativeEvent.layout.height)}
-        style={{ color, fontSize, lineHeight: card ? CARD_LINE_HEIGHT : IOS_INPUT_LINE_HEIGHT }}
+        style={{ color, fontSize, fontStyle: "italic", lineHeight: card ? CARD_LINE_HEIGHT : IOS_INPUT_LINE_HEIGHT }}
       >
-        {text}
+        <Text testID="composer-ghost">{text}</Text>
+        {card ? <Text testID="composer-ghost-tab" style={styles.ghostTab}>{"  ⇥"}</Text> : null}
       </Text>
     </Reanimated.View>
   );
@@ -329,6 +330,10 @@ export function Composer({
   const draftSync = useComposerDraft(conversationId, editing !== null, loadRemoteDraft);
   const replySuggestions = useReplySuggestions(conversationId, { ...suggestions, enabled: suggestions.enabled && !sendBlocked, pend: onEdit });
   const ghost = replySuggestions.slots.kind === "ready" ? replySuggestions.slots.ghost : null;
+  // Picking an alternate replaces the field, so they stand aside while it holds text.
+  const shelfKind = replySuggestions.slots.kind;
+  const shelf = text.length === 0 && shelfKind !== "hidden" && shelfKind !== "pending"
+    ? <SuggestionAlternates state={replySuggestions} wide={card} /> : null;
   const [ghostTextHeight, setGhostHeight] = useState(0);
 
   // Track native keyboard visibility for keyboard-specific composer edge spacing.
@@ -1312,7 +1317,7 @@ ${url}` : url;
           ))}
         </View>
       )}
-      {strip && <View style={card ? styles.deskStrip : styles.phoneStrip}>{strip}</View>}
+      {strip ? <View style={card ? styles.deskStrip : styles.phoneStrip}>{strip(shelf)}</View> : shelf}
       {card ? (
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.dividerStrong }]}>
           {field}
@@ -1346,12 +1351,6 @@ ${url}` : url;
               <Text style={[styles.toolText, { color: theme.textSecondary }]}>Send later</Text>
             </Pressable>
             <View style={styles.toolSpacer} />
-            {ghostShown && (
-              <View testID="composer-tab-hint" style={styles.tabHint}>
-                <Text style={[styles.kbd, { borderColor: theme.dividerStrong, color: theme.textSecondary }]}>Tab</Text>
-                <Text style={[styles.tabHintText, { color: theme.textTertiary }]}>accept</Text>
-              </View>
-            )}
             {sendControl}
           </View>
         </View>
@@ -1375,8 +1374,6 @@ ${url}` : url;
           </View>
         </View>
       )}
-      {/* Picking one replaces the field, so they stand aside while it holds text. */}
-      {text.length === 0 && <SuggestionAlternates state={replySuggestions} wide={card} />}
     </View>
   );
 }
@@ -1474,9 +1471,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   // StateStrip insets itself 32; these pull it onto the field. Desktop: 14 inside the card.
-  // Phone: from 14 inside the field's left curve to 26 short of the screen edge.
+  // Phone: the composer row's full width, since the line also carries the alternates.
   deskStrip: { marginHorizontal: 14 - 32 },
-  phoneStrip: { marginLeft: 34 + 8 + 14 - 32, marginRight: 26 - 18 - 32 },
+  phoneStrip: { marginHorizontal: -32 },
   phoneField: { flex: 1 },
   tools: {
     alignItems: "center",
@@ -1492,9 +1489,8 @@ const styles = StyleSheet.create({
   toolSep: { height: 16, marginHorizontal: 2, width: 1 },
   toolSpacer: { flex: 1 },
   serviceDot: { borderRadius: 4, height: 8, width: 8 },
-  tabHint: { alignItems: "center", flexDirection: "row", gap: 6, marginRight: 6 },
-  kbd: { borderRadius: 5, borderWidth: 1, fontSize: 11, fontWeight: "600", paddingHorizontal: 5, paddingVertical: 1 },
-  tabHintText: { fontSize: 12 },
+  // The ghost's own size: a smaller run would stretch the line box and grow the field by a pixel.
+  ghostTab: { fontStyle: "normal", fontWeight: "600" },
   cardGhost: { left: 16, position: "absolute", right: 16, top: CARD_PAD_TOP },
   phoneGhost: { left: MIRROR_INSET_H, position: "absolute", right: USE_KEY_INSET, top: (Platform.OS === "web" ? 7 : 8) + INPUT_BORDER_W },
   useKey: {

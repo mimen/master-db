@@ -295,11 +295,15 @@ test("suggestion shelf states hold their footprint and recover quietly", async (
 
     fail = true;
     await page.getByRole("button", { name: /^Regenerate suggestions/ }).click();
-    await expect(page.getByRole("button", { name: "Retry suggestions" })).toBeVisible();
+    const retry = page.getByRole("button", { name: "Retry suggestions" });
+    await page.mouse.move(5, 5);
+    await expect(retry, "a failure stays quiet until the pointer reaches the shelf").toHaveText("");
+    await retry.hover();
+    await expect(retry).toContainText("Retry suggestions");
     await page.screenshot({ path: `/tmp/comma-shelf-failed-${scheme}.png`, animations: "disabled" });
 
     fail = false;
-    await page.getByRole("button", { name: "Retry suggestions" }).click();
+    await retry.click();
     await expect(pill).toBeVisible();
     await page.unroute("**/__fixture/convex");
 
