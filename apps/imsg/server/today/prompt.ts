@@ -162,10 +162,12 @@ export function renderTodayPrompt(input: {
     "A one-to-one thread may carry elsewhere lines: that person's latest messages in Milad's other conversations, such as a group. Use them to judge the person's urgency, and to see when they were already answered elsewhere.",
     "Return JSON with:",
     "- brief: one or two sentences on what matters most today and how far today's queue gets toward inbox zero.",
-    `- groups: up to ${TODAY_LIMITS.groups} groups in display order, counting the settle group, each with a short id, a title of a few words, and one line of context.`,
+    `- groups: up to ${TODAY_LIMITS.groups} groups in display order, counting the settle group, each with a short id, a title of a few words, and one line of context. Apart from the settle group, a group holds at most ${TODAY_LIMITS.groupSize} threads, so each one can be finished in a sitting.`,
     `- items: about ${TODAY_LIMITS.items} conversations in rank order, each with its thread ref, its group id, and one line of reason under about 15 words. Fill all ${TODAY_LIMITS.items} whenever the threads allow; do not stop early.`,
     `Threads that can simply be settled, because no reply is owed (a thanks, a reaction, an FYI, a closed loop, spam), go in a group with id "${TODAY_SETTLE_GROUP}" titled "Just settle these", placed last. Each reason there says why in a few words, like "No reply needed: they said thanks". Milad settles that group in one action.`,
-    "Rank the rest by what has a clock on it today, then what blocks other people, then money, then people Milad cares about.",
+    GROUPS_RULE,
+    "Order the groups by what matters most today, anything with a clock today first, and rank within a group by urgency.",
+    CYCLE_RULE,
     "Deliberately elevate threads from deeper in the inbox: a thread older than 30 days that still deserves an answer belongs in the queue, and its reason says how old it is, like \"Six weeks without an answer on the venue.\"",
     "Leave out only threads that want a reply someday but not today.",
     "state=\"needs_you\" means the last message is theirs; state=\"waiting\" means Milad wrote last and is waiting on them. since is the age of the last message. platform is where the thread lives.",
@@ -187,11 +189,29 @@ export function renderTodayPrompt(input: {
   return { system, prompt: [...blocks.values()].join(SEPARATOR), kept: [...blocks.keys()] };
 }
 
-const UPDATE_ASK = [
+/** The groups are lenses picked for the day, not a fixed set: the same headings every day surface the same threads. */
+const GROUPS_RULE = [
+  "Groups are lenses on the inbox, chosen for this day. Pick the ones that fit what the threads actually hold today, from lenses like these or your own:",
+  "a clock today; money owed either way; someone blocked on Milad; plans, invites and dates to confirm; family and close friends; artists and bookings; partners and vendors;",
+  "quick replies that take under a minute; a decision only Milad can make; people gone quiet who are worth a reconnect; the deep inbox.",
+  "Title each group for what is in it today, not for the lens.",
+].join(" ");
+
+const CYCLE_RULE = "The queue moves through the inbox instead of showing the same threads every day. A thread you queued on an earlier day that is still open has had its turn: keep it only when it has a clock today or high stakes, and say so in its reason. Give the rest of the room to threads you have not queued before.";
+
+/** An Update turn restates the rules, since a continued session's system prompt is the one its fresh build froze. */
+const updateAsk = (newDay: boolean): string => [
   `Return the complete queue in the same JSON shape: about ${TODAY_LIMITS.items} items, across every open thread you know.`,
-  "Re-rank with the new information, and with the date, since what was due yesterday may be overdue.",
-  "Keep group ids and titles stable unless the news changes what matters. Keep reasons current.",
-  "Fill the room from the new threads and from threads you passed over before.",
+  ...(newDay ? [
+    GROUPS_RULE,
+    "Choose today's lenses again: do not repeat yesterday's set of groups unless the inbox demands it.",
+    CYCLE_RULE,
+    "Re-rank with the date, since what was due yesterday may be overdue.",
+  ] : [
+    "Keep the groups, their order, and the order of the threads still open, so the list does not reshuffle while Milad works it. Move a thread only when its news changes its urgency, and slot new threads in where they belong.",
+    "Fill the room from the new threads and from threads you passed over before.",
+  ]),
+  `Apart from the settle group, a group holds at most ${TODAY_LIMITS.groupSize} threads. Keep reasons current.`,
   "The brief describes the queue as it stands now. Keep the settle group rules.",
 ].join(" ");
 
@@ -214,7 +234,7 @@ export function renderUpdateTurn(input: {
       ? "The threads with new messages since you read them, and threads new to you, follow. A thread you already know keeps its ref, and this reading replaces the old one."
       : "No thread has new messages since you read them.",
   ].join("\n");
-  return [head, ...input.threads.map((thread) => reduceBlock(thread, input.now)), UPDATE_ASK].join("\n\n");
+  return [head, ...input.threads.map((thread) => reduceBlock(thread, input.now)), updateAsk(input.newDay)].join("\n\n");
 }
 
 export type TodayDraft = { brief: string; groups: TodayGroup[]; items: TodayItem[]; dropped: number };

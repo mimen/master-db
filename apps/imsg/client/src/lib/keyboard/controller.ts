@@ -227,6 +227,9 @@ export function runCommand(id: CommandId, _source: CommandSource): boolean {
     case "conversation.later":
       rt.deferSelected("later");
       return true;
+    case "conversation.skipToday":
+      rt.deferSelected("tomorrow");
+      return true;
     case "conversation.followUp":
       rt.deferSelected("followUp");
       return true;

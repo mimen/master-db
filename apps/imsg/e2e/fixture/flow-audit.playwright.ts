@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, test, openView } from "../fixtures/desk";
+import { expect, openView, test, unfoldToday } from "../fixtures/desk";
 import { fixtureConversationId } from "../../shared/fixture-ids";
 
 /** Every Convex call the client makes, by function name, with its args. */
@@ -115,6 +115,7 @@ test("B7: a thread opens on its unread divider, and each open reads it once", as
   const NINA = "iMessage;-;+16195550201";
   const rows = page.getByTestId("conversation-row");
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await unfoldToday(page);
   await rows.filter({ hasText: "Nina Park" }).click();
   await expect(page.getByTestId("thread-view").getByText("Any update when you get a chance?", { exact: true })).toBeVisible();
   await rows.filter({ hasText: "Alex Rivera" }).click();

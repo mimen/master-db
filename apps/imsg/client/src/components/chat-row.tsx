@@ -32,6 +32,7 @@ import { compactAge } from "@/lib/turn-age";
 import { rowChip, type RowChip } from "@/lib/row-chip";
 import { RowAge } from "./conversations/row-age";
 import { ROW_SIGNAL_SIZE, UNREAD_DOT_SIZE, rowSignal } from "@/lib/row-signal";
+import { skipToday } from "@/lib/later";
 import { SWIPE_THRESHOLD } from "@/lib/row-swipe";
 import { hapticCommit } from "@/lib/haptics";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
@@ -239,6 +240,8 @@ function ChatRowInner({
   useEffect(() => {
     if (!leaving) slideHome();
   }, [chat, leaving, slideHome]);
+  // In Today a right swipe pushes an open row to tomorrow; elsewhere it toggles read.
+  const skips = today !== undefined && (chat.flags.unresponded || chat.flags.waiting);
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
 
   const fill = selected ? theme.rowSelected : hovered || focusedWithin ? theme.rowHover : "transparent";
@@ -387,8 +390,8 @@ function ChatRowInner({
       <SwipeAction
         offset={offset}
         side="left"
-        icon={chat.flags.unread ? "mail-open-outline" : "radio-button-on-outline"}
-        label={chat.flags.unread ? "Mark read" : "Mark unread"}
+        icon={skips ? "arrow-forward-outline" : chat.flags.unread ? "mail-open-outline" : "radio-button-on-outline"}
+        label={skips ? "Tomorrow" : chat.flags.unread ? "Mark read" : "Mark unread"}
         armedFill={theme.swipeUnread}
       />
       {settleOffered ? (
@@ -400,7 +403,7 @@ function ChatRowInner({
           armedFill={theme.swipeSettle}
         />
       ) : null}
-      <RowPan offset={offset} dragging={dragging} settleOffered={settleOffered} onSettle={settle} onToggleRead={toggleRead}>
+      <RowPan offset={offset} dragging={dragging} settleOffered={settleOffered} onSettle={settle} onToggleRead={skips ? () => skipToday(chat) : toggleRead}>
         <Reanimated.View style={[styles.slide, { backgroundColor: theme.background }, slide]}>{row}</Reanimated.View>
       </RowPan>
     </View>

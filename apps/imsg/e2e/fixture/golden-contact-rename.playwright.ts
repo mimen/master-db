@@ -2,7 +2,7 @@ import { tmpdir } from "node:os";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { expect, test } from "../fixtures/desk";
+import { expect, test, unfoldToday } from "../fixtures/desk";
 import { FIXTURE_NOW } from "./world";
 
 const evidence = process.env.VERIFY_IMSG_EVIDENCE ?? mkdtempSync(join(tmpdir(), "imsg-golden-"));
@@ -50,6 +50,7 @@ test("contact-rename: a contact rename shows in the list, Today, the thread and 
 
   await page.getByRole("button", { name: "Messages", exact: true }).click();
   await expect(page.getByTestId("today-header")).toBeVisible();
+  await unfoldToday(page);
   await expect(row(page, "Lex Rivera")).toHaveCount(1);
   await expect(row(page, "Alex Rivera")).toHaveCount(0);
   await expect(row(page, "Lex Rivera").getByTestId("today-reason")).toBeVisible();

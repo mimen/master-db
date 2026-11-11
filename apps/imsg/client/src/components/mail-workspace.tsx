@@ -59,7 +59,7 @@ import { useLightbox } from "@/lib/lightbox";
 import { runEscapeClosers, setKeyboardRuntime } from "@/lib/keyboard/controller";
 import { shortcutFor } from "@/lib/keyboard/registry";
 import { EMAIL_SANDBOX, emailDocument, foldQuotes, messageFiles, openByDefault, threadFiles, type MailFile } from "@/lib/mail";
-import { openDeferMenu } from "@/lib/later";
+import { openDeferMenu, skipToday } from "@/lib/later";
 import { inLens, regularSenders, type MailLens } from "@/lib/mail-lens";
 import { setMailSelection } from "@/lib/mail-selection";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
@@ -228,7 +228,13 @@ export function MailWorkspace({ wide, active = false, onReader }: {
       },
       deferSelected: (kind) => {
         const chat = thread();
-        if (chat) openDeferMenu(showSheet, chat, kind, { onPicked: kind === "later" ? () => advanceFrom(chat.conversationId) : undefined });
+        if (!chat) return;
+        if (kind === "tomorrow") {
+          skipToday(chat);
+          advanceFrom(chat.conversationId);
+          return;
+        }
+        openDeferMenu(showSheet, chat, kind, { onPicked: kind === "later" ? () => advanceFrom(chat.conversationId) : undefined });
       },
       toggleDetails: () => undefined,
       openAgent: () => {

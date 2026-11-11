@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, openView, test } from "../fixtures/desk";
+import { expect, openView, test, unfoldToday } from "../fixtures/desk";
 
 const evidence = process.env.VERIFY_IMSG_EVIDENCE ?? mkdtempSync(join(tmpdir(), "imsg-send-recovery-"));
 const FAILED_TOAST = "Couldn't send. Check the Mac mini connection.";
@@ -128,6 +128,7 @@ test("send-recovery: Slack turns away dropped files with its reason instead of s
   await desk.request.post("/__fixture/slack", { data: { seed: true } });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await unfoldToday(page);
   await page.getByTestId("conversation-row").filter({ hasText: "Are we still on for the load-in at 4?" }).click();
   await expect(page.getByPlaceholder("Message Sam Lee")).toBeVisible();
   await drop(page.getByTestId("thread-view"), ["rider.txt"]);
@@ -185,6 +186,7 @@ test.describe("slack", () => {
     await desk.request.post("/__fixture/slack", { data: { seed: true } });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/", { waitUntil: "domcontentloaded" });
+    await unfoldToday(page);
     await page.getByTestId("conversation-row").filter({ hasText: INBOUND }).click();
     await expect(page.getByPlaceholder("Message Sam Lee")).toBeVisible();
     return page.getByTestId("thread-view");

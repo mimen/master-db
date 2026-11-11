@@ -15,7 +15,7 @@ const DAY_MS = 86_400_000;
  * at least `update.newDay` on a new day and at most `update.deeper`.
  */
 export const TODAY_LIMITS = {
-  groups: 6, items: 50, messages: 30,
+  groups: 8, groupSize: 8, items: 50, messages: 30,
   needsYou: 150, recent: 100, recentMaxAgeMs: 30 * DAY_MS,
   waiting: 50, waitingMaxAgeMs: 30 * DAY_MS,
   update: { fresh: 100, perOpenSlot: 3, newDay: 30, deeper: 90 },

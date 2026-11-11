@@ -4,7 +4,7 @@ import type Ionicons from "@expo/vector-icons/Ionicons";
 import type { ComponentProps } from "react";
 import { liveThoughtLine } from "@/components/agent/vendor/live-thought-line";
 import type { AgentChatSummary } from "./agent-api";
-import type { TodayPlan, TodaySectionKey } from "./today";
+import { chunkToday, type TodayPlan, type TodaySectionKey } from "./today";
 import { conversationRoute } from "@shared/imessage";
 import { platformBadge, platformServiceBadges, PROFILES, type PlatformBadge } from "@shared/platform-profile";
 import type { ChatSummary, ConversationId, Platform, StateCounts, StateFilter, TypeFilter } from "@shared/types";
@@ -328,6 +328,8 @@ export type InboxRow =
       tone?: "fresh" | null;
       /** A foldable Today section; a closed one renders without its chats. */
       fold?: { key: TodaySectionKey; open: boolean } | null;
+      /** Who is inside a folded New since. */
+      preview?: string;
     }
   | { kind: "chat"; key: string; chat: ChatSummary; today?: { rank: number | null; reason: string | null } };
 
@@ -488,7 +490,7 @@ export function narrowToday(plan: TodayPlan, type: TypeFilter, refine: RefineCon
     dropped = true;
     return rows.length ? [{ ...section, rows }] : [];
   });
-  return dropped ? { ...plan, sections } : plan;
+  return dropped ? { ...plan, sections: chunkToday(sections) } : plan;
 }
 
 /** Every conversation the plan shows, folded sections included. */
@@ -504,6 +506,7 @@ function todayRows(plan: TodayPlan, openFolds: ReadonlySet<TodaySectionKey>): In
       {
         kind: "section", key: `section-today-${section.key}`, label: section.label, count: section.rows.length,
         detail: section.detail, tone: section.tone, fold: section.foldable ? { key: section.key, open } : null,
+        ...(section.preview === undefined ? {} : { preview: section.preview }),
       },
       ...(open ? section.rows.map(({ chat, rank, reason }): InboxRow => ({
         kind: "chat", key: chat.conversationId, chat, today: { rank, reason },

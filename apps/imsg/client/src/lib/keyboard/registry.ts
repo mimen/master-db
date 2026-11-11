@@ -12,6 +12,7 @@ export const COMMANDS: readonly CommandDefinition[] = [
   { id: "conversation.settle", title: "Settle / un-settle", group: "Conversation" },
   { id: "conversation.markUnread", title: "Mark unread", group: "Conversation" },
   { id: "conversation.later", title: "Later (snooze)", group: "Conversation" },
+  { id: "conversation.skipToday", title: "Skip today (back tomorrow)", group: "Conversation" },
   { id: "conversation.followUp", title: "Follow up if no reply", group: "Conversation" },
   { id: "action.undo", title: "Undo last action", group: "Conversation" },
   { id: "conversation.new", title: "New message", group: "Conversation" },
@@ -70,6 +71,7 @@ export const BINDINGS: readonly KeyBinding[] = [
   { commandId: "conversation.previous", combo: "arrowup", scope: "global", allowInEditable: false, allowRepeat: true, preventDefault: true },
   // Later is Superhuman's H. A plain letter, so only outside text fields, like j/k.
   { commandId: "conversation.later", combo: "h", scope: "global", allowInEditable: false, allowRepeat: false, preventDefault: true },
+  { commandId: "conversation.skipToday", combo: "shift+h", scope: "global", allowInEditable: false, allowRepeat: false, preventDefault: true },
   // ⌘↓ / ⌘↑ step from anywhere, the composer included, without settling or marking read.
   { commandId: "conversation.next", combo: "mod+arrowdown", scope: "global", allowInEditable: true, allowRepeat: true, preventDefault: true },
   { commandId: "conversation.previous", combo: "mod+arrowup", scope: "global", allowInEditable: true, allowRepeat: true, preventDefault: true },

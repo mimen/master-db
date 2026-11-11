@@ -18,6 +18,7 @@ export type CommandId =
   | "conversation.settle"
   | "conversation.markUnread"
   | "conversation.later"
+  | "conversation.skipToday"
   | "conversation.followUp"
   | "conversation.details"
   | "list.focusSearch"
@@ -67,8 +68,8 @@ export interface KeyboardRuntime {
   findInConversation(): void;
   settleSelected(): void;
   markUnreadSelected(): void;
-  /** Opens the Later… or Follow up… menu for the selected conversation. */
-  deferSelected(kind: "later" | "followUp"): void;
+  /** Opens the Later… or Follow up… menu for the selected conversation; "tomorrow" skips it for today with no menu. */
+  deferSelected(kind: "later" | "followUp" | "tomorrow"): void;
   toggleDetails(): void;
   /** Opens the Agent tab for the open conversation and focuses its input. */
   openAgent(): void;

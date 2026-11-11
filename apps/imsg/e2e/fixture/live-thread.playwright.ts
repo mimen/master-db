@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, test, openView } from "../fixtures/desk";
+import { expect, openView, test, unfoldToday } from "../fixtures/desk";
 import { fixtureConversationId } from "../../shared/fixture-ids";
 
 const NINA_ADDRESS = "+16195550201";
@@ -24,6 +24,7 @@ for (const history of ["opened earlier", "never opened"] as const) {
   test(`a message seen in the sidebar is in the thread before its fetch lands: chat ${history}`, async ({ desk }) => {
     const page = desk.page;
     await page.goto("/", { waitUntil: "domcontentloaded" });
+    await unfoldToday(page);
     const rows = page.getByTestId("conversation-row");
     const thread = page.getByTestId("thread-view");
     const nina = rows.filter({ hasText: "Nina Park" });

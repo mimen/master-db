@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { expect, test } from "../fixtures/desk";
+import { expect, test, unfoldToday } from "../fixtures/desk";
 
 const evidence = process.env.VERIFY_IMSG_EVIDENCE ?? mkdtempSync(join(tmpdir(), "imsg-person-summary-"));
 const SLACK_INBOUND = "Are we still on for the load-in at 4?";
@@ -14,6 +14,7 @@ test("Today mixes iMessage, Slack and a People email; the agent pane heads Sam L
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await unfoldToday(page);
 
   const rows = page.getByTestId("conversation-row");
   await expect(rows.filter({ hasText: SLACK_INBOUND })).toHaveCount(1);

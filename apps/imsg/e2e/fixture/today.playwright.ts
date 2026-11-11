@@ -14,10 +14,11 @@ async function openToday(page: Page): Promise<void> {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 }
 
+const newSince = (page: Page) => page.getByTestId("today-fold").filter({ hasText: "New since" });
 const heading = (page: Page) => page.getByTestId("thread-view").getByRole("heading", { level: 2 });
 const composerFocused = (page: Page) => page.evaluate(() => document.activeElement?.getAttribute("placeholder"));
 
-test("the app opens on Today; a settle leaves a rank gap and moves progress; Update folds New since into the groups", async ({ desk }) => {
+test("the app opens on Today; a settle leaves a rank gap and moves progress; Update ranks New since into the groups", async ({ desk }) => {
   const { page } = desk;
   await openToday(page);
   await expect(page.getByRole("button", { name: "View, Today" })).toBeVisible();
@@ -27,14 +28,25 @@ test("the app opens on Today; a settle leaves a rank gap and moves progress; Upd
   const rows = page.getByTestId("conversation-row");
   const alex = rows.filter({ hasText: "Alex Rivera" });
   await expect(alex.getByTestId("today-reason")).toHaveText("The final arrival time unblocks the run of show.");
-  await expect(page.getByTestId("today-progress")).toHaveText("0 settled · 14 to go");
+  // Arrivals stay out of the bar's finish line.
+  await expect(page.getByTestId("today-progress")).toHaveText("0 settled · 12 to go · 2 new");
+
+  // One chunk at a time: the settle sweep leads, the first group is open, arrivals and later groups wait folded.
+  await expect(rows, "two to settle and the four in Friday's group").toHaveCount(6);
+  await expect(rows.filter({ hasText: "Nina Park" }), "Money waits folded").toHaveCount(0);
+  await expect(newSince(page).getByTestId("today-fold-preview"), "the fold names who wrote").toContainText("Launch Crew");
+  await expect(page.getByTestId("today-fold").filter({ hasText: "Money" })).toHaveAttribute("aria-expanded", "false");
+  await expect(rows.filter({ hasText: "Launch Crew" }), "an arrival does not jump the queue").toHaveCount(0);
+  await newSince(page).click();
+  await expect(rows.filter({ hasText: "Launch Crew" })).toBeVisible();
+  await newSince(page).click();
 
   await rows.filter({ hasText: "Priya Shah" }).click();
   // The rank and reason live in the lead's tooltip, not on the line.
   await expect(page.getByTestId("strip-lead")).toHaveAttribute("title", /#2 today · Guest list locks at 6 PM\./);
   await page.getByTestId("thread-settle").click();
   await expect.poll(() => todayCount(page)).toBe(13);
-  await expect(page.getByTestId("today-progress")).toHaveText("1 settled · 13 to go");
+  await expect(page.getByTestId("today-progress")).toHaveText("1 settled · 11 to go · 2 new");
   await alex.click();
   await expect(rows.filter({ hasText: "Priya Shah" })).toHaveCount(0);
   expect((await page.getByTestId("today-rank").allTextContents()).filter(Boolean).slice(0, 2)).toEqual(["1", "3"]);
@@ -58,7 +70,9 @@ test("Today ranks a People email beside Messages; it opens in the Mail reader, a
   await expect(rows.filter({ hasText: "Club Weekly" })).toHaveCount(0);
   await expect(rows.filter({ hasText: "Pat Moreno" })).toHaveCount(0);
   const mail = rows.filter({ hasText: "Load-in is at 6 pm" });
-  await expect(mail.getByTestId("today-rank"), "arrived after the build: New since").toHaveText("");
+  await expect(mail, "arrived after the build: folded in New since").toHaveCount(0);
+  await newSince(page).click();
+  await expect(mail.getByTestId("today-rank")).toHaveText("");
   await page.getByTestId("today-update").click();
   await expect(page.getByTestId("today-update")).toHaveText("Update", { timeout: 10_000 });
   await expect(mail.getByTestId("today-rank"), "the build ranks it").toHaveText(/^\d+$/);
@@ -71,6 +85,7 @@ test("the Service filter narrows Today, Gmail included, while the tab keeps coun
   const { page } = desk;
   await openToday(page);
   const rows = page.getByTestId("conversation-row");
+  await newSince(page).click();
   await expect(rows.filter({ hasText: "Load-in is at 6 pm" })).toBeVisible();
   const total = await todayCount(page);
   const service = async (name: string) => {
@@ -130,14 +145,14 @@ test("Settle all settles the settle group as one action, and one Undo brings eve
   await expect(page.getByText("Settled 2 threads", { exact: true })).toBeVisible();
   await expect.poll(() => todayCount(page)).toBe(before - 2);
   await expect(page.getByText("Just settle these", { exact: true })).toHaveCount(0);
-  await expect(page.getByTestId("today-progress")).toHaveText(`2 settled · ${before - 2} to go`);
+  await expect(page.getByTestId("today-progress")).toHaveText(`2 settled · ${before - 4} to go · 2 new`);
 
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect.poll(() => todayCount(page)).toBe(before);
   await expect(page.getByText("Just settle these", { exact: true })).toBeVisible();
   await expect(rows.filter({ hasText: "Taylor Morgan" })).toBeVisible();
   await expect(rows.filter({ hasText: "Sofia Martinez" })).toBeVisible();
-  await expect(page.getByTestId("today-progress")).toHaveText(`0 settled · ${before} to go`);
+  await expect(page.getByTestId("today-progress")).toHaveText(`0 settled · ${before - 2} to go · 2 new`);
 });
 
 const TAYLOR = "iMessage;-;+16195550204";
@@ -172,6 +187,7 @@ test("a settle-group thread that gets a new message after the build moves to New
   await expect(page.getByText("Settled 1 thread", { exact: true })).toBeVisible();
   expect(triage.filter((call) => call.kind === "settle")).toEqual([{ conversationId: fixtureConversationId(SOFIA), kind: "settle", messageGuid: "backlog-in-9" }]);
   await expect(rows.filter({ hasText: "Sofia Martinez" })).toHaveCount(0);
+  await newSince(page).click();
   await expect(taylor).toBeVisible();
   await expect(taylor).toHaveAttribute("aria-label", /^Taylor Morgan, unread,/);
 });
@@ -216,7 +232,29 @@ test("auto-advance skips a folded section", async ({ desk }) => {
   await below.click();
   await page.keyboard.press("Meta+e");
   await expect(rows.filter({ hasText: "Noah Blake" })).toHaveCount(0);
-  await expect(heading(page)).toHaveText("Taylor Morgan");
+  // The settle sweep's last row leads into the open group, not back up the list.
+  await expect(heading(page)).toHaveText("Alex Rivera");
+});
+
+test("finishing a group advances into the next one, which opens; Skip today pushes a row to tomorrow", async ({ desk }) => {
+  const { page } = desk;
+  await openToday(page);
+  const rows = page.getByTestId("conversation-row");
+  await rows.filter({ hasText: "Alex Rivera" }).click();
+  for (const name of ["Alex Rivera", "Priya Shah", "Jordan Lee", "Diego Santos"]) {
+    await expect(heading(page)).toHaveText(name);
+    await expect(rows.filter({ hasText: "Nina Park" }), "Money stays folded while Friday has rows").toHaveCount(0);
+    await page.keyboard.press("Meta+e");
+  }
+  await expect(heading(page), "the group's last row leads into Money, which opens").toHaveText("Nina Park");
+  await expect(rows.filter({ hasText: "Nina Park" })).toBeVisible();
+
+  const before = await todayCount(page);
+  await rows.filter({ hasText: "Marcus Reed" }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: /^Skip today/ }).click();
+  await expect(page.getByText(/^Snoozed until /)).toBeVisible();
+  await expect(rows.filter({ hasText: "Marcus Reed" })).toHaveCount(0);
+  await expect.poll(() => todayCount(page)).toBe(before - 1);
 });
 
 test("⌘E on Today advances once and keeps reply intent", async ({ desk }) => {

@@ -36,15 +36,15 @@ describe("parseTodayOutput", () => {
     expect(result.draft.dropped).toBe(4);
   });
 
-  test("keeps six groups with a unique id and a title, and drops groups left without items", () => {
-    const many = Array.from({ length: 8 }, (_, n) => ({ id: `g${n}`, title: `Group ${n}`, context: "" }));
+  test("keeps eight groups with a unique id and a title, and drops groups left without items", () => {
+    const many = Array.from({ length: 10 }, (_, n) => ({ id: `g${n}`, title: `Group ${n}`, context: "" }));
     const result = parseTodayOutput({
       brief: "b",
       groups: [{ id: "g0", title: "Dupe", context: "" }, { id: "x", title: "", context: "" }, ...many],
-      items: [item("c1", "g0"), item("c2", "g6"), item("c3", "x"), item("c4", "g5")],
+      items: [item("c1", "g0"), item("c2", "g8"), item("c3", "x"), item("c4", "g7")],
     }, refs);
     if (!result.ok) throw new Error(result.error);
-    expect(result.draft.groups.map((g) => [g.id, g.title])).toEqual([["g0", "Dupe"], ["g5", "Group 5"]]);
+    expect(result.draft.groups.map((g) => [g.id, g.title])).toEqual([["g0", "Dupe"], ["g7", "Group 7"]]);
   });
 
   test("clips titles, context and reasons", () => {
@@ -75,8 +75,8 @@ describe("parseTodayOutput", () => {
     expect(parseTodayOutput({ brief: "b", groups: [], items: [] }, new Map())).toMatchObject({ ok: true });
   });
 
-  test("accepts the settle group like any other, and it counts toward the six", () => {
-    const five = Array.from({ length: 5 }, (_, n) => ({ id: `g${n}`, title: `Group ${n}`, context: "" }));
+  test("accepts the settle group like any other, and it counts toward the eight", () => {
+    const five = Array.from({ length: 7 }, (_, n) => ({ id: `g${n}`, title: `Group ${n}`, context: "" }));
     const result = parseTodayOutput({
       brief: "b",
       groups: [...five, { id: "settle", title: "Just settle these", context: "No reply owed." }, { id: "extra", title: "Extra", context: "" }],
@@ -190,7 +190,10 @@ describe("renderTodayPrompt", () => {
     expect(system).toContain("do not stop early");
     expect(system).toContain('id "settle" titled "Just settle these"');
     expect(system).toContain("No reply needed: they said thanks");
-    expect(system).toContain("up to 6 groups in display order, counting the settle group");
+    expect(system).toContain("up to 8 groups in display order, counting the settle group");
+    expect(system).toContain("a group holds at most 8 threads");
+    expect(system).toContain("Groups are lenses on the inbox, chosen for this day");
+    expect(system).toContain("has had its turn");
     expect(system).toContain("older than 30 days that still deserves an answer");
     expect(system).toContain("says how old it is");
     expect(system).toContain("inbox zero");
@@ -229,6 +232,8 @@ describe("renderUpdateTurn", () => {
     expect(turn).toStartWith("It is now Tuesday, October 27, 2026 at 2:40 PM (America/Los_Angeles).\nThis updates your queue from 9:15 AM.");
     expect(turn).toContain("These threads are no longer open, so leave them out: c3, c7.");
     expect(turn).toContain("44 of your picks are still open, so there is room for 6 more.");
+    expect(turn, "a same-day Update keeps the list in place").toContain("so the list does not reshuffle");
+    expect(turn).not.toContain("yesterday's set of groups");
     expect(turn).toContain("A thread you already know keeps its ref, and this reading replaces the old one.");
     expect(turn).toContain('<thread ref="c12" state="needs_you" since="1m"');
     expect(turn).toContain('<thread ref="c41"');
@@ -242,6 +247,8 @@ describe("renderUpdateTurn", () => {
     const turn = renderUpdateTurn({ threads: [], gone: [], open: 50, room: 0, now: AFTERNOON + 86_400_000, since: AFTERNOON, newDay: true });
     expect(turn).toContain("This is a new day. Build today's queue from everything you know. Your last queue was for Tuesday, October 27.");
     expect(turn).not.toContain("This updates your queue");
+    expect(turn, "a new day picks its lenses again and cycles the inbox").toContain("do not repeat yesterday's set of groups");
+    expect(turn).toContain("has had its turn");
     expect(turn).not.toContain("no longer open");
     expect(turn).toContain("No thread has new messages since you read them.");
   });

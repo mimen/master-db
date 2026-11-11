@@ -1,7 +1,7 @@
 import type { ChatSummary, ConversationId } from "@shared/types";
 import { describe, expect, test } from "bun:test";
 
-import { buildDetail, builtLine, busyCopy, classifyToday, planToday, settleAllTargets, todayHeader, toTodayView, type TodayHeader, type TodayRun, type TodayView } from "./today";
+import { advanceOrder, buildDetail, builtLine, busyCopy, classifyToday, planToday, settleAllTargets, todayHeader, toTodayView, type TodayHeader, type TodayRun, type TodayView } from "./today";
 
 const SNAPSHOT = 1_000_000;
 const DAY_START = 500_000;
@@ -124,15 +124,35 @@ describe("planToday", () => {
     chat("low", needsYou), chat("s"),
   ];
 
-  test("New since leads newest first, groups follow in build order by rank, folds close the list", () => {
+  test("one group is open: New since waits folded under it newest first, later groups fold, folds close the list", () => {
     const plan = planToday(view(items, ["a", "b", "m", "low"], { s: DAY_START + 3 }), chats, { held: null });
     expect(plan.mode).toBe("queue");
     expect(plan.sections.map((s) => [s.key, s.rows.map((r) => r.chat.conversationId as string)])).toEqual([
-      ["new", ["n2", "n1"]], ["group:friday", ["a", "b"]], ["group:money", ["m"]], ["below", ["low"]], ["settled", ["s"]],
+      ["group:friday", ["a", "b"]], ["new", ["n2", "n1"]], ["group:money", ["m"]], ["below", ["low"]], ["settled", ["s"]],
     ]);
-    expect(plan.sections[0]).toMatchObject({ label: expect.stringMatching(/^New since /), tone: "fresh" });
-    expect(plan.sections.filter((s) => s.foldable).map((s) => s.key)).toEqual(["below", "settled"]);
+    expect(plan.sections[1]).toMatchObject({ label: expect.stringMatching(/^New since /), preview: "n2, n1", tone: "fresh" });
+    expect(plan.sections.filter((s) => s.foldable).map((s) => s.key)).toEqual(["new", "group:money", "below", "settled"]);
     expect(plan).toMatchObject({ toGo: 5, newSince: 2, settled: 1 });
+  });
+
+  test("the settle group leads without ranks, and finishing a group opens the next", () => {
+    const withSettle = [...items, { id: "t", group: "settle", anchor: "m-t" }];
+    const all = [...chats, chat("t", needsYou)];
+    const before = planToday(view(withSettle, ["a", "b", "m", "t", "low"]), all, { held: null });
+    expect(before.sections.slice(0, 2).map((s) => [s.key, s.foldable, s.rows.map((r) => r.rank)])).toEqual([["group:settle", false, [null]], ["group:friday", false, [1, 2]]]);
+    const ids = (order: ChatSummary[]) => order.map((c) => c.conversationId as string);
+    expect(ids(advanceOrder(before, new Set())), "auto-advance stays in an unfinished group").toEqual(["t", "a", "b"]);
+    expect(ids(advanceOrder(before, new Set(["new"] as const)))).toEqual(["t", "a", "b", "n2", "n1"]);
+    const last = planToday(view(withSettle, ["a", "b", "m", "t", "low"], { a: SNAPSHOT + 1 }), all.map((c) => (c.conversationId === "a" ? chat("a") : c)), { held: null });
+    expect(ids(advanceOrder(last, new Set())), "the group's last row leads into the folded group, past folded New since").toEqual(["t", "b", "m"]);
+    const after = planToday(view(withSettle, ["a", "b", "m", "t", "low"], { a: SNAPSHOT + 1, b: SNAPSHOT + 1 }), all.map((c) => (["a", "b"].includes(c.conversationId) ? chat(c.conversationId) : c)), { held: null });
+    expect(after.sections.find((s) => s.key === "group:money")).toMatchObject({ foldable: false });
+  });
+
+  test("with no group left, New since shows unfolded", () => {
+    const plan = planToday(view([{ id: "a", group: "friday" }], ["a"], { a: SNAPSHOT + 1 }), [chat("a"), chat("n1", needsYou)], { held: null });
+    expect(plan.sections[0]).toMatchObject({ key: "new", foldable: false });
+    expect(plan.sections[0]?.preview).toBeUndefined();
   });
 
   test("a settled ranked row leaves its gap and bumps progress", () => {
@@ -241,12 +261,12 @@ describe("todayHeader", () => {
   test("an Update moves the snapshot, so what arrived since the last build folds into the ranking", () => {
     const before = view([{ id: "a", group: "friday" }], ["a"]);
     const chats = [chat("a", needsYou), chat("n", needsYou)];
-    expect(planToday(before, chats, { held: null }).sections.map((section) => section.key)).toEqual(["new", "group:friday"]);
+    expect(planToday(before, chats, { held: null }).sections.map((section) => section.key)).toEqual(["group:friday", "new"]);
     const updated = view([{ id: "n", group: "friday" }, { id: "a", group: "friday" }], ["a", "n"], {}, { snapshotAt: SNAPSHOT + 3_600_000, session: { id: "s", startedAt: SNAPSHOT, updates: 1 } });
     const after = planToday(updated, chats, { held: null });
     expect(after.sections.map((section) => section.key)).toEqual(["group:friday"]);
     expect(after.sections[0]?.rows.map((row) => [row.chat.conversationId as string, row.rank])).toEqual([["n", 1], ["a", 2]]);
-    expect(planToday(updated, [...chats, chat("late", needsYou)], { held: null }).sections[0]?.label, "New since names the Update's snapshot")
+    expect(planToday(updated, [...chats, chat("late", needsYou)], { held: null }).sections[1]?.label, "New since names the Update's snapshot")
       .toBe(`New since ${new Date(SNAPSHOT + 3_600_000).toLocaleTimeString("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit" })}`);
   });
 

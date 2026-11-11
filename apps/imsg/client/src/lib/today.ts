@@ -125,8 +125,10 @@ export interface TodaySection {
   label: string;
   detail: string | null;
   tone: "fresh" | null;
-  /** Below the line and Settled today start folded. */
+  /** Starts folded: groups after the one being worked, New since while a group is open, Below the line, Settled today. */
   foldable: boolean;
+  /** Who is inside a folded New since. */
+  preview?: string;
   rows: TodayRowEntry[];
 }
 
@@ -149,11 +151,34 @@ export function todayDate(at: number): string {
   return new Date(at).toLocaleDateString("en-US", { timeZone: TODAY_TIME_ZONE, weekday: "long", month: "short", day: "numeric" });
 }
 
-const NEW_DETAIL = "Arrived after the queue was built. Newest first, not ranked.";
+const NEW_DETAIL = "Arrived after the queue was built. Newest first, not ranked. Update ranks them in.";
 const BELOW_DETAIL = "To review threads left out today: closed loops, low stakes.";
 
 const entry = (chat: ChatSummary): TodayRowEntry => ({ chat, rank: null, reason: null });
 const newestFirst = (a: ChatSummary, b: ChatSummary) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0);
+
+const SETTLE_KEY: TodaySectionKey = `group:${TODAY_SETTLE_GROUP}`;
+
+/**
+ * One chunk at a time: the settle sweep, then the first group with work left, open. New since waits folded under
+ * it, naming who wrote, so an arrival never jumps the queue; with no group left to protect, it shows. Later groups
+ * fold until their turn. Runs again after a filter narrows the plan, so the open group is one the filter kept.
+ */
+export function chunkToday(sections: readonly TodaySection[]): TodaySection[] {
+  const isGroup = (section: TodaySection) => section.key.startsWith("group:") && section.key !== SETTLE_KEY;
+  const [current, ...later] = sections.filter(isGroup);
+  const fresh = sections.filter((section) => section.key === "new").map((section): TodaySection => {
+    const names = section.rows.slice(0, 2).map((row) => row.chat.displayName).join(", ") + (section.rows.length > 2 ? ` +${section.rows.length - 2}` : "");
+    return current ? { ...section, foldable: true, preview: names } : { key: section.key, label: section.label, detail: section.detail, tone: section.tone, foldable: false, rows: section.rows };
+  });
+  return [
+    ...sections.filter((section) => section.key === SETTLE_KEY),
+    ...(current ? [{ ...current, foldable: false }] : []),
+    ...fresh,
+    ...later.map((section) => ({ ...section, foldable: true })),
+    ...sections.filter((section) => section.key !== "new" && !section.key.startsWith("group:")),
+  ];
+}
 
 /**
  * Buckets classifyToday over the directory. A held conversation that was handled keeps its slot (the desktop hold):
@@ -222,15 +247,29 @@ export function planToday(
     sections.push({ key: "new", label: `New since ${todayTime(queue.snapshotAt)}`, detail: NEW_DETAIL, tone: "fresh", foldable: false, rows: fresh.sort(newestFirst).map(entry) });
   }
   for (const group of queue.groups) {
-    const rows = ranked.get(group.id);
+    const rows = ranked.get(group.id)?.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
     if (!rows?.length) continue;
-    sections.push({ key: `group:${group.id}`, label: group.title, detail: group.context || null, tone: null, foldable: false, rows: rows.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0)) });
+    const key: TodaySectionKey = `group:${group.id}`;
+    // The settle group leads the list, so its ranks (the queue's last) would read out of order: it shows none.
+    sections.push({ key, label: group.title, detail: group.context || null, tone: null, foldable: false, rows: key === SETTLE_KEY ? rows.map((row) => ({ ...row, rank: null })) : rows });
   }
   if (below.length) sections.push({ key: "below", label: "Below the line", detail: BELOW_DETAIL, tone: null, foldable: true, rows: queueOrder(below).map(entry) });
   if (done.length) {
     sections.push({ key: "settled", label: "Settled today", detail: null, tone: null, foldable: true, rows: done.sort((a, b) => b.clearedAt - a.clearedAt).map(({ chat }) => entry(chat)) });
   }
-  return { mode: "queue", sections, toGo: rankedCount + fresh.length - heldFresh, newSince: fresh.length - heldFresh, settled };
+  return { mode: "queue", sections: chunkToday(sections), toGo: rankedCount + fresh.length - heldFresh, newSince: fresh.length - heldFresh, settled };
+}
+
+/**
+ * Where auto-advance goes: the rows showing. The folded groups' rows join once the open group is down to its last
+ * row, so finishing a group moves on to the next one, and an unfinished group keeps the advance inside it. New since,
+ * Below the line and Settled today join only once opened.
+ */
+export function advanceOrder(plan: TodayPlan, openFolds: ReadonlySet<TodaySectionKey>): ChatSummary[] {
+  const isGroup = (section: TodaySection) => section.key.startsWith("group:") && section.key !== SETTLE_KEY;
+  const finishing = (plan.sections.find((section) => isGroup(section) && !section.foldable)?.rows.length ?? 0) <= 1;
+  return plan.sections.flatMap((section) =>
+    !section.foldable || openFolds.has(section.key) || (finishing && isGroup(section)) ? section.rows.map((row) => row.chat) : []);
 }
 
 /** A build in flight, and which kind, so the header can say Updating or Regenerating. */

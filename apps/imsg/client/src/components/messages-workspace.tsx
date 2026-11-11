@@ -23,7 +23,7 @@ import { traceTriage } from "@/lib/triage-trace";
 import { openAgentPane } from "@/lib/agent-pane";
 import { useActionSheet } from "@/lib/action-sheet";
 import { markChatUnread, undoLastAction } from "@/lib/chat-actions";
-import { openDeferMenu } from "@/lib/later";
+import { openDeferMenu, skipToday } from "@/lib/later";
 import { DEFAULT_INBOX_FILTERS, desktopInboxTitle } from "@/lib/inbox-model";
 import {
   getListAdapter,
@@ -295,8 +295,14 @@ export function MessagesWorkspace({
           return;
         }
         // A snooze takes the row out of every lens but All and Drafts.
-        const leaves = kind === "later" && stateRef.current !== "all" && stateRef.current !== "drafts";
-        openDeferMenu(showSheet, sel, kind, { onPicked: leaves ? () => getListAdapter()?.selectNeighborOf(sel.conversationId) : undefined });
+        const leaves = kind !== "followUp" && stateRef.current !== "all" && stateRef.current !== "drafts";
+        const onPicked = leaves ? () => getListAdapter()?.selectNeighborOf(sel.conversationId) : undefined;
+        if (kind === "tomorrow") {
+          skipToday(sel);
+          onPicked?.();
+          return;
+        }
+        openDeferMenu(showSheet, sel, kind, { onPicked });
       },
       toggleDetails: () => {
         const sel = selectedRef.current;

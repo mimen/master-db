@@ -1,4 +1,4 @@
-import { expect, test } from "../fixtures/desk";
+import { expect, test, unfoldToday } from "../fixtures/desk";
 
 for (const surface of ["bubble", "gallery", "lightbox"] as const) {
   test(`${surface} shows unavailable media for null storage URLs without a Mini fallback`, async ({ desk }) => {
@@ -21,6 +21,7 @@ for (const surface of ["bubble", "gallery", "lightbox"] as const) {
       await route.fulfill({ response, json: result });
     });
     await page.goto("/", { waitUntil: "domcontentloaded" });
+    await unfoldToday(page);
     await page.getByTestId("conversation-row").filter({ hasText: "Launch Crew" }).click();
     await expect(page.getByTestId("thread-view")).toBeVisible();
     if (surface === "gallery") {

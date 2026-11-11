@@ -93,6 +93,13 @@ export async function openView(page: Page, name: string): Promise<void> {
   await page.mouse.move(0, 0);
 }
 
+/** Opens Today's folded groups and New since, for a test that reaches for a row anywhere in the day's queue. */
+export async function unfoldToday(page: Page): Promise<void> {
+  await expect(page.getByTestId("today-progress")).toBeVisible();
+  const closed = page.locator('[data-testid="today-fold"][aria-expanded="false"]').filter({ hasNotText: /Below the line|Settled today/ });
+  while (await closed.count()) await closed.first().click();
+}
+
 /** The open view's count, read off its heading. */
 export async function viewCount(page: Page, name: string): Promise<number> {
   const label = await page.locator(`[aria-label^="${name}, "]`).first().getAttribute("aria-label");

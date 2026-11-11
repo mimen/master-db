@@ -199,7 +199,9 @@ export function TodayHeaderCard({ header, dayStart, onRequest }: {
     );
   }
 
-  const total = header.settled + header.toGo;
+  // Arrivals stay out of the bar, so a new message never moves the finish line.
+  const ranked = header.toGo - header.newSince;
+  const total = header.settled + ranked;
   const detail = buildDetail(header);
   const meta = busyText ? busyText.meta
     : header.cleared ? `${header.settled} settled today${header.newSince ? ` · ${header.newSince} new since ${todayTime(header.builtAt)}` : ""}`
@@ -217,7 +219,7 @@ export function TodayHeaderCard({ header, dayStart, onRequest }: {
       {header.cleared ? null : (
         <Text testID="today-brief" style={[styles.brief, { color: colors.textSecondary, opacity: busy ? 0.45 : 1 }]}>{header.brief}</Text>
       )}
-      <Progress fraction={total ? header.settled / total : 1} busy={busy !== null} label={`${header.settled} settled · ${header.toGo} to go`} colors={colors} />
+      <Progress fraction={total ? header.settled / total : 1} busy={busy !== null} label={`${header.settled} settled · ${ranked} to go${header.newSince ? ` · ${header.newSince} new` : ""}`} colors={colors} />
     </View>
   );
 }

@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { expect, test } from "../fixtures/desk";
+import { expect, test, unfoldToday } from "../fixtures/desk";
 
 const evidence = process.env.VERIFY_IMSG_EVIDENCE ?? mkdtempSync(join(tmpdir(), "imsg-mail-schedule-"));
 const THREAD = "Sam Lee, Load-in for Saturday";
@@ -97,6 +97,7 @@ test("mail-schedule: Send later in a Slack DM schedules it in Convex, not BlueBu
   const calls = convexCalls(page);
   await desk.request.post("/__fixture/slack", { data: { seed: true } });
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await unfoldToday(page);
   await page.getByTestId("conversation-row").filter({ hasText: "Are we still on for the load-in at 4?" }).click();
   await page.getByPlaceholder("Message Sam Lee").fill("Load-in moved to 5");
   await page.getByRole("button", { name: "Send later" }).click();

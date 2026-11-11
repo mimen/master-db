@@ -25,6 +25,9 @@ export function deferOptions(kind: DeferKind, now = new Date()): { label: string
   ];
 }
 
+/** Skip today returns a conversation at 6 AM, ahead of the 7:00 AM Today build, so tomorrow's queue can rank it. */
+export const skipTodayAt = (now = new Date()): number => at(now, 1, 6);
+
 export const shortDay = (ms: number) => new Date(ms).toLocaleDateString([], { month: "short", day: "numeric" });
 
 /** What Details says about a conversation's deferrals, one line each. */

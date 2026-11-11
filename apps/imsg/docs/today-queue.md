@@ -631,7 +631,7 @@ Where the build differs from the shapes above, and why.
 - A failed Update or Regenerate over a good queue keeps that queue and shows the error inline. The fallback to Needs you order applies only when today has no queue.
 - Today is fixed to Known contacts with no People chips.
 - "N settled" counts every known conversation cleared since LA midnight.
-- "M to go" is ranked plus New since. "Queue cleared" means no ranked rows remain; the header still names New since when it has rows.
+- The tab and the app badge count ranked plus New since. The header's bar counts ranked only and names arrivals beside it ("3 settled · 9 to go · 2 new"), so a new message never moves the finish line. "Queue cleared" means no ranked rows remain; the header still names New since when it has rows.
 - The Mini's system time zone is America/Los_Angeles (checked 2026-10-27), so `StartCalendarInterval` 07:00 and the LA day key agree.
 - The building header says "Updating" or "Regenerating", by the run's mode, with no thread count.
 
@@ -654,3 +654,15 @@ Today keeps its build and ranking; P1 widens what qualifies and what the build r
 - **Prefilter.** `todayCandidates` checks each row's flags (one state read) before the full projection, and skips unfollowed Slack threads in the query. On that data, 1,913 rows are scanned and 879 are projected, down from 1,913.
 - **Client.** `TodayProvider` also reads the newest 50 inbox threads and adds the People ones to the directory `planToday` sees. An email row opens `EmailReader` in the thread pane; on a phone, the conversation route redirects to the Mail tab.
 - **Person summaries.** The card model's thread block carries a `summary` line per person who has one (`agentPeople`), so the card folds it in. The Opus reduce reads cards, not summaries, so its prompt keeps its size: at most 900 characters a person across up to 200 read threads would otherwise add up to about 45,000 tokens. See "Person summary" in `CONTEXT.md`.
+
+## One chunk at a time
+
+The list showed all 50 ranked rows under New since, so arrivals took the top and the end was never in sight. `chunkToday` in `client/src/lib/today.ts` orders and folds the sections, and runs again after `narrowToday`, so the open group is one the filters kept.
+
+- **Order.** Just settle these, with its rows and no ranks. Then the first group with work left, open. Then New since, the later groups, Below the line and Settled today.
+- **New since** waits folded under the open group and names who wrote. A message never jumps the queue: Milad opens the fold, or Update ranks it in. With no group left, it shows unfolded.
+- **Later groups** fold to one line each with a count, so the whole day fits on a screen. Finishing a group makes the next one the open group.
+- **Auto-advance** reads `advanceOrder`: the rows showing, plus the folded groups' rows once the open group is down to its last row. An unfinished group keeps the advance inside it, and finishing one leads into the next. Folded New since, Below the line and Settled today stay out of it.
+- **Skip today** snoozes a conversation until 6:00 AM tomorrow (`skipTodayAt`), ahead of the 7:00 AM build, which can then rank it. It is ⇧H, the row menu's Skip today, and a right swipe on a phone's Today row, which toggles read in every other view. It writes through the same snooze as Later.
+
+**The build.** Groups are lenses the model picks for the day from a menu in the prompt (`GROUPS_RULE` in `server/today/prompt.ts`), not a fixed set, and a group other than the settle group holds at most `TODAY_LIMITS.groupSize` threads. A thread queued on an earlier day keeps a slot only with a clock today or high stakes (`CYCLE_RULE`), so the queue cycles through the inbox. A same-day Update keeps the groups and the order of the open threads; a new day's Update picks the lenses again. An Update turn restates these rules, because a continued session's system prompt is the one its fresh build froze.

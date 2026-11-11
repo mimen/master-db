@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { expect, test } from "../fixtures/desk";
+import { expect, test, unfoldToday } from "../fixtures/desk";
 
 const evidence = process.env.VERIFY_IMSG_EVIDENCE ?? mkdtempSync(join(tmpdir(), "imsg-slack-"));
 const INBOUND = "Are we still on for the load-in at 4?";
@@ -28,6 +28,7 @@ test("slack-send: send, react many, edit and delete in a Slack DM; a lost answer
 
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await unfoldToday(page);
   await page.getByTestId("conversation-row").filter({ hasText: INBOUND }).click();
   const thread = page.getByTestId("thread-view");
   const composer = page.getByPlaceholder("Message Sam Lee");

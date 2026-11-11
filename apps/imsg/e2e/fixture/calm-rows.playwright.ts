@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, openView, test } from "../fixtures/desk";
+import { expect, openView, test, unfoldToday } from "../fixtures/desk";
 import { FIXTURE_NOW } from "./world";
 
 const row = (page: Page, name: string) => page.getByTestId("conversation-row").filter({ hasText: name }).first();
@@ -23,6 +23,7 @@ test("the source sits on the avatar and the agent reads as one chip on the previ
   await desk.request.post("/__fixture/slack", { data: { seedChannel: true } });
   await desk.request.post("/__fixture/mail", { data: { mailboxes: true } });
   await open(page, "Today");
+  await unfoldToday(page);
 
   for (const [name, source] of [["Alex Rivera", "iMessage"], ["#bookings", "Slack"], ["Sam Lee", "Gmail"]] as const) {
     const target = row(page, name);

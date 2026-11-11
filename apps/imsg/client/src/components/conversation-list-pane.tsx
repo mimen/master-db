@@ -72,7 +72,7 @@ import {
   type SavedView,
 } from "@/lib/palette/saved-views";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
-import { planToday, settleAllTargets, todayHeader, type TodaySectionKey } from "@/lib/today";
+import { advanceOrder, planToday, settleAllTargets, todayHeader, type TodaySectionKey } from "@/lib/today";
 import { InfoTip, TodayHeaderCard } from "./today-header";
 import { isListMode, requestFocus, subscribeListMode } from "@/lib/keyboard/controller";
 import { keyboardDriven, subscribeKeyboardDriven } from "@/components/ui/interaction";
@@ -332,7 +332,10 @@ export function ConversationListPane({
     return { ...deskModel, navigationEntries: deskModel.navigationEntries.map((entry) => ({ ...entry, index: at.get(rowKey(deskModel.rows[entry.index]!)) ?? entry.index })) };
   }, [deskModel, rows, leaving]);
   // The thread's "2 of 41" and auto-advance read the order this list renders.
-  useEffect(() => publishRenderedOrder(deskModel.listChats), [deskModel.listChats]);
+  // Today advances through its folded groups too, so the end of one group leads into the next.
+  const advancing = useMemo(() => onToday && !search.query.trim() ? advanceOrder(shownPlan, openFolds) : deskModel.listChats,
+    [onToday, search.query, shownPlan, openFolds, deskModel.listChats]);
+  useEffect(() => publishRenderedOrder(advancing), [advancing]);
   useEffect(() => () => publishRenderedOrder(null), []);
   const dropLeaving = useCallback((key: string): void => {
     setSeen((current) => {
@@ -649,14 +652,16 @@ function TodaySectionHeader({ row, onToggleFold, onSettleAll }: {
       <Pressable
         testID="today-fold"
         accessibilityRole="button"
-        accessibilityLabel={`${row.label}, ${row.count}`}
+        accessibilityLabel={[row.label, row.preview, row.count].filter(Boolean).join(", ")}
         aria-expanded={fold.open}
         onPress={() => onToggleFold(fold.key)}
         style={({ hovered }) => [styles.fold, hovered && { backgroundColor: theme.rowHover }]}
       >
         <View style={styles.foldText}>
           <View style={styles.todayTitleRow}>
-            <Text accessibilityRole="header" style={[styles.foldLabel, { color: theme.textSecondary }]}>{row.label}</Text>
+            {row.tone === "fresh" ? <View style={[styles.freshDot, { backgroundColor: theme.accent }]} /> : null}
+            <Text accessibilityRole="header" numberOfLines={1} style={[styles.foldLabel, { color: theme.textSecondary }]}>{row.label}</Text>
+            {row.preview ? <Text testID="today-fold-preview" numberOfLines={1} style={[styles.foldPreview, { color: theme.textTertiary }]}>{row.preview}</Text> : null}
             {info}
           </View>
           {detail}
@@ -709,7 +714,8 @@ const styles = StyleSheet.create({
   freshDot: { borderRadius: 3.5, height: 7, width: 7 },
   fold: { alignItems: "center", borderRadius: 10, flexDirection: "row", justifyContent: "space-between", marginTop: 4, paddingHorizontal: 10, paddingVertical: 9 },
   foldText: { flex: 1, minWidth: 0 },
-  foldLabel: { fontSize: 12, fontWeight: "600" },
+  foldLabel: { flexShrink: 0, fontSize: 12, fontWeight: "600" },
+  foldPreview: { flexShrink: 1, fontSize: 12 },
   chev: { alignItems: "center", flexDirection: "row", gap: 4 },
   visuallyHidden: { height: 1, overflow: "hidden", position: "absolute", width: 1, opacity: 0 },
   offlineBar: { alignItems: "center", borderRadius: 8, flexDirection: "row", gap: 6, marginHorizontal: 4, marginVertical: 6, paddingHorizontal: 10, paddingVertical: 5 },

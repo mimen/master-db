@@ -4,7 +4,7 @@ import { beginUndoAction, commitUndoAction, runUndo } from "@/lib/action-undo";
 import type { PopoverAnchor, SheetAction } from "@/lib/action-sheet";
 import { conversationState } from "@/lib/conversation-state";
 import { formatScheduledWhen } from "@/lib/scheduled";
-import { canFollowUp, deferOptions, type DeferKind } from "@/lib/later-times";
+import { canFollowUp, deferOptions, skipTodayAt, type DeferKind } from "@/lib/later-times";
 import { showToast } from "@/lib/toast";
 
 /** One write with its reversal on the undo stack, answered by a toast. */
@@ -29,6 +29,9 @@ export function deferChat(chat: ChatSummary, kind: DeferKind, when: number): voi
       `Follow up ${label} if no reply`, "Couldn't set the follow-up. Try again.");
   }
 }
+
+/** Skip today: out of every queue until tomorrow morning, in one gesture. */
+export const skipToday = (chat: ChatSummary): void => deferChat(chat, "later", skipTodayAt());
 
 export function unsnoozeChat(chat: ChatSummary): void {
   conversationState().then((s) => s.unsnooze(chat.conversationId)).then(() => showToast("Unsnoozed"))
