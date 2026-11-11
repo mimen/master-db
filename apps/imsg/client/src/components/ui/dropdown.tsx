@@ -61,6 +61,8 @@ export interface DropdownProps<T extends string | number> {
   readonly style?: StyleProp<ViewStyle>;
   /** Draws the trigger's contents in place of the variant's label and chevron, given the option chosen, if any. */
   readonly renderTrigger?: (current: DropdownOption<T> | undefined, open: boolean) => ReactNode;
+  /** Draws a web menu row's contents in place of the check, label and trailing text. */
+  readonly renderOption?: (option: DropdownOption<T>, selected: boolean) => ReactNode;
 }
 
 const web = Platform.OS === "web";
@@ -73,7 +75,7 @@ const LISTBOX = { role: "listbox" } as object;
  * anchored listbox (arrows move, Enter picks, Escape closes, focus returns to the
  * field); on native it opens an action-sheet list. Every non-lens choice uses it.
  */
-export function Dropdown<T extends string | number>({ label, value, options, onChange, menuWidth, variant = "field", style, renderTrigger }: DropdownProps<T>): JSX.Element {
+export function Dropdown<T extends string | number>({ label, value, options, onChange, menuWidth, variant = "field", style, renderTrigger, renderOption }: DropdownProps<T>): JSX.Element {
   const theme = useTheme();
   const type = useTypeRamp();
   const fieldRef = useRef<View>(null);
@@ -159,6 +161,7 @@ export function Dropdown<T extends string | number>({ label, value, options, onC
           active={active}
           menuWidth={menuWidth}
           align={title ? "start" : "end"}
+          renderOption={renderOption}
           onActive={setActive}
           onChoose={choose}
           onClose={close}
@@ -181,9 +184,10 @@ interface MenuProps<T extends string | number> {
   readonly onActive: (index: number) => void;
   readonly onChoose: (index: number) => void;
   readonly onClose: () => void;
+  readonly renderOption?: (option: DropdownOption<T>, selected: boolean) => ReactNode;
 }
 
-function WebMenu<T extends string | number>({ label, anchor, options, value, active, menuWidth, align, onActive, onChoose, onClose }: MenuProps<T>): JSX.Element {
+function WebMenu<T extends string | number>({ label, anchor, options, value, active, menuWidth, align, onActive, onChoose, onClose, renderOption }: MenuProps<T>): JSX.Element {
   const theme = useTheme();
   const type = useTypeRamp();
   const viewport = useWindowDimensions();
@@ -286,8 +290,9 @@ function WebMenu<T extends string | number>({ label, anchor, options, value, act
                         if (index !== active) onActive(index);
                       }}
                       onPress={() => onChoose(index)}
-                      style={[styles.option, index === active && { backgroundColor: theme.popSelected }]}
+                      style={[renderOption ? styles.customOption : styles.option, index === active && { backgroundColor: theme.popSelected }]}
                     >
+                      {renderOption ? renderOption(option, selected) : (<>
                       <View style={styles.check}>
                         {selected && <Ionicons name="checkmark" size={15} color={theme.text} />}
                       </View>
@@ -304,6 +309,7 @@ function WebMenu<T extends string | number>({ label, anchor, options, value, act
                           <Text style={[styles.description, { color: theme.textTertiary, fontSize: type.secondary }]}>{option.description}</Text>
                         )}
                       </View>
+                      </>)}
                     </Pressable>
                   </Fragment>
                 );
@@ -426,6 +432,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
     cursor: "pointer",
   } as ViewStyle,
+  customOption: { borderRadius: Radius.sm, cursor: "pointer" } as ViewStyle,
   check: { width: 18, paddingTop: 1, alignItems: "center" },
   optionBody: { flex: 1 },
   optionTitle: { flexDirection: "row", alignItems: "center", gap: 6 },
