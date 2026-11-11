@@ -85,10 +85,10 @@ export const test = base.extend<DeskFixture>({
 
 export { expect };
 
-/** Opens a Messages view from the view menu. An option's text is its glyph, label, then count. */
+/** Opens a Messages view from the view menu. An option's text is its glyph, label, count, then the open view's chevron. */
 export async function openView(page: Page, name: string): Promise<void> {
   await page.getByRole("button", { name: /^View, / }).click();
-  await page.getByRole("option").filter({ hasText: new RegExp(`${name}(\\d+|999\\+)?$`) }).click();
+  await page.getByRole("option").filter({ hasText: new RegExp(`${name}(\\d+|999\\+)?\\W?$`) }).click();
   // The menu closes over the list; a pointer left there hovers a row.
   await page.mouse.move(0, 0);
 }

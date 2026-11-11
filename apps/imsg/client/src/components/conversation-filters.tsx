@@ -1,6 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { StateCounts, StateFilter } from "@shared/types";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { RollingNumber } from "./motion/rolling-number";
@@ -23,17 +23,17 @@ function countOf(view: InboxView, counts: StateCounts | null): number | undefine
 }
 
 /** A view's count in its own color: a "turn" count above zero is the app badge's, and rolls as it changes. */
-function ViewCount({ view, counts }: { readonly view: InboxView; readonly counts: StateCounts | null }) {
+function ViewCount({ view, counts, size = "title" }: { readonly view: InboxView; readonly counts: StateCounts | null; readonly size?: "row" | "title" }) {
   const theme = useTheme();
   const count = countOf(view, counts);
   if (!view.count) return null;
-  const textStyle = styles.titleCount;
+  const textStyle = size === "row" ? styles.rowCount : styles.titleCount;
   const turn = view.count === "turn" && (count ?? 0) > 0;
   const color = turn ? theme.turn : theme.textTertiary;
   return (
     // The rolling digits need a box of their own: a margin on their text would land on every digit.
     // Named for assistive tech and tests: the digits alone roll through every value.
-    <View aria-label={count === undefined ? undefined : `${view.label}, ${count}`}>
+    <View aria-label={count === undefined ? undefined : `${view.label}, ${count}`} style={size === "row" ? styles.rowCountBox : null}>
       {count === undefined ? (
         // Counts are unknown until the first list arrives; two digits hold the place so nothing shifts.
         <Text aria-hidden style={[textStyle, styles.countPlaceholder]}>00</Text>
@@ -65,11 +65,58 @@ function ViewGlyph({ view, size = 14 }: { readonly view: InboxView; readonly siz
   return <Ionicons aria-hidden name={view.icon} size={size} color={theme.icon} style={{ width: size, textAlign: "center" }} />;
 }
 
-/** The Messages views: the view's name is the heading, and a menu of every view. Every view reads VIEWS. */
-export function ViewNav({ state, counts, onSelect, phone = false }: ViewNavProps) {
+/** The Messages views. Wide: the open view's row, which unfolds into every view's row in place. Phone: the view's name is a menu. */
+export function ViewNav(props: ViewNavProps) {
+  return props.phone ? <ViewMenu {...props} /> : <ViewList {...props} />;
+}
+
+function ViewList({ state, counts, onSelect }: ViewNavProps) {
+  const theme = useTheme();
+  const [open, setOpen] = useState(false);
+  const current = viewOf(state);
+  const row = (view: InboxView, selected: boolean, onPress: () => void, trailing?: ReactNode, a11y?: object) => (
+    <Pressable
+      key={view.id}
+      {...a11y}
+      onPress={onPress}
+      style={({ hovered, pressed }: { hovered?: boolean; pressed?: boolean }) => [
+        styles.row,
+        NO_SELECT,
+        (hovered || pressed) && { backgroundColor: theme.rowHover },
+        selected && { backgroundColor: theme.rowSelected },
+      ]}
+    >
+      <ViewGlyph view={view} size={15} />
+      <Text numberOfLines={1} style={[styles.rowLabel, { color: theme.text }, selected && styles.rowLabelOn]}>{view.label}</Text>
+      <ViewCount view={view} counts={counts} size="row" />
+      {trailing}
+    </Pressable>
+  );
+  const chevron = (name: "chevron-down" | "chevron-up") => <Ionicons aria-hidden name={name} size={12} color={theme.textTertiary} style={styles.rowChevron} />;
+  if (!open) {
+    return (
+      <View style={styles.list}>
+        {row(current, true, () => setOpen(true), chevron("chevron-down"), { role: "button", "aria-expanded": false, accessibilityLabel: `View, ${current.label}` })}
+      </View>
+    );
+  }
+  return (
+    <View {...({ role: "listbox" } as object)} aria-label="View" style={styles.list}>
+      {VIEWS.map((view) => {
+        const selected = view.id === state;
+        return row(view, selected, () => {
+          setOpen(false);
+          if (!selected) onSelect(view.id);
+        }, selected ? chevron("chevron-up") : <View style={styles.rowChevron} />, { role: "option", "aria-selected": selected })}
+      )}
+    </View>
+  );
+}
+
+function ViewMenu({ state, counts, onSelect }: ViewNavProps) {
   const theme = useTheme();
   return (
-    <View style={phone ? styles.menuPhone : styles.menu}>
+    <View style={styles.menuPhone}>
       <Dropdown
         label="View"
         value={state}
@@ -77,7 +124,7 @@ export function ViewNav({ state, counts, onSelect, phone = false }: ViewNavProps
         onChange={onSelect}
         variant="title"
         menuWidth={240}
-        renderTrigger={(current) => current && <ViewTitle view={viewOf(current.value)} counts={counts} phone={phone} trailing={<Ionicons aria-hidden name="chevron-down" size={phone ? 16 : 12} color={theme.icon} />} />}
+        renderTrigger={(current) => current && <ViewTitle view={viewOf(current.value)} counts={counts} phone trailing={<Ionicons aria-hidden name="chevron-down" size={16} color={theme.icon} />} />}
       />
     </View>
   );
@@ -174,7 +221,13 @@ export function FilterChipRow({
 const styles = StyleSheet.create({
   turnCount: { fontWeight: "600" },
   countPlaceholder: { opacity: 0 },
-  menu: { alignItems: "flex-start", paddingBottom: 6, paddingHorizontal: 8 },
+  list: { paddingBottom: 6, paddingHorizontal: 6, paddingTop: 2 },
+  row: { alignItems: "center", borderRadius: 7, flexDirection: "row", gap: 9, height: 28, paddingHorizontal: 8 },
+  rowLabel: { flex: 1, fontSize: 13.5, fontWeight: "500" },
+  rowLabelOn: { fontWeight: "600" },
+  rowCount: { fontSize: 12, fontVariant: ["tabular-nums"], fontWeight: "500", lineHeight: 16 },
+  rowCountBox: { alignItems: "flex-end", minWidth: 24 },
+  rowChevron: { width: 12 },
   menuPhone: { alignItems: "flex-start", paddingHorizontal: 14 },
   title: { alignItems: "baseline", flexDirection: "row", flexShrink: 1, gap: 6 },
   titleText: { ...headerFace, flexShrink: 1, fontSize: 17, letterSpacing: -0.3 },
