@@ -1,6 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { StateCounts, StateFilter } from "@shared/types";
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { RollingNumber } from "./motion/rolling-number";
@@ -65,50 +65,39 @@ function ViewGlyph({ view, size = 14 }: { readonly view: InboxView; readonly siz
   return <Ionicons aria-hidden name={view.icon} size={size} color={theme.icon} style={{ width: size, textAlign: "center" }} />;
 }
 
-/** The Messages views. Wide: the open view's row, which unfolds into every view's row in place. Phone: the view's name is a menu. */
+/** The Messages views: the open view's row opens a menu of every view's row. The phone's menu hangs off the view's name. */
 export function ViewNav(props: ViewNavProps) {
-  return props.phone ? <ViewMenu {...props} /> : <ViewList {...props} />;
+  return props.phone ? <ViewMenu {...props} /> : <ViewRowMenu {...props} />;
 }
 
-function ViewList({ state, counts, onSelect }: ViewNavProps) {
+function ViewRow({ view, counts, selected, trailing }: { readonly view: InboxView; readonly counts: StateCounts | null; readonly selected: boolean; readonly trailing?: ReactNode }) {
   const theme = useTheme();
-  const [open, setOpen] = useState(false);
-  const current = viewOf(state);
-  const row = (view: InboxView, selected: boolean, onPress: () => void, trailing?: ReactNode, a11y?: object) => (
-    <Pressable
-      key={view.id}
-      {...a11y}
-      onPress={onPress}
-      style={({ hovered, pressed }: { hovered?: boolean; pressed?: boolean }) => [
-        styles.row,
-        NO_SELECT,
-        (hovered || pressed) && { backgroundColor: theme.rowHover },
-        selected && { backgroundColor: theme.rowSelected },
-      ]}
-    >
+  return (
+    <View style={styles.row}>
       <ViewGlyph view={view} size={15} />
       <Text numberOfLines={1} style={[styles.rowLabel, { color: theme.text }, selected && styles.rowLabelOn]}>{view.label}</Text>
       <ViewCount view={view} counts={counts} size="row" />
       {trailing}
-    </Pressable>
+    </View>
   );
-  const chevron = (name: "chevron-down" | "chevron-up") => <Ionicons aria-hidden name={name} size={12} color={theme.textTertiary} style={styles.rowChevron} />;
-  if (!open) {
-    return (
-      <View style={styles.list}>
-        {row(current, true, () => setOpen(true), chevron("chevron-down"), { role: "button", "aria-expanded": false, accessibilityLabel: `View, ${current.label}` })}
-      </View>
-    );
-  }
+}
+
+function ViewRowMenu({ state, counts, onSelect }: ViewNavProps) {
+  const theme = useTheme();
   return (
-    <View {...({ role: "listbox" } as object)} aria-label="View" style={styles.list}>
-      {VIEWS.map((view) => {
-        const selected = view.id === state;
-        return row(view, selected, () => {
-          setOpen(false);
-          if (!selected) onSelect(view.id);
-        }, selected ? chevron("chevron-up") : <View style={styles.rowChevron} />, { role: "option", "aria-selected": selected })}
-      )}
+    <View style={styles.list}>
+      <Dropdown
+        label="View"
+        value={state}
+        options={menuOptions(VIEWS, counts)}
+        onChange={onSelect}
+        variant="title"
+        style={[styles.rowTrigger, { backgroundColor: theme.rowSelected }]}
+        renderTrigger={(current) => current && (
+          <ViewRow view={viewOf(current.value)} counts={counts} selected trailing={<Ionicons aria-hidden name="chevron-down" size={12} color={theme.textTertiary} style={styles.rowChevron} />} />
+        )}
+        renderOption={(option, selected) => <ViewRow view={viewOf(option.value)} counts={counts} selected={selected} trailing={<View style={styles.rowChevron} />} />}
+      />
     </View>
   );
 }
@@ -222,12 +211,13 @@ const styles = StyleSheet.create({
   turnCount: { fontWeight: "600" },
   countPlaceholder: { opacity: 0 },
   list: { paddingBottom: 6, paddingHorizontal: 6, paddingTop: 2 },
-  row: { alignItems: "center", borderRadius: 7, flexDirection: "row", gap: 9, height: 28, paddingHorizontal: 8 },
+  row: { alignItems: "center", flexGrow: 1, flexDirection: "row", gap: 9, height: 28, paddingHorizontal: 8 },
   rowLabel: { flex: 1, fontSize: 13.5, fontWeight: "500" },
   rowLabelOn: { fontWeight: "600" },
   rowCount: { fontSize: 12, fontVariant: ["tabular-nums"], fontWeight: "500", lineHeight: 16 },
   rowCountBox: { alignItems: "flex-end", minWidth: 24 },
   rowChevron: { width: 12 },
+  rowTrigger: { alignSelf: "stretch", flexShrink: 0, minHeight: 0, paddingHorizontal: 0, borderRadius: 7 },
   menuPhone: { alignItems: "flex-start", paddingHorizontal: 14 },
   title: { alignItems: "baseline", flexDirection: "row", flexShrink: 1, gap: 6 },
   titleText: { ...headerFace, flexShrink: 1, fontSize: 17, letterSpacing: -0.3 },
