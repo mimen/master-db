@@ -1,3 +1,6 @@
+import { Bookmark } from "lucide-react"
+import { Link } from "wouter"
+
 import { NavHeader } from "./components/NavHeader"
 import { SIDEBAR_CONFIG } from "./config/sidebarConfig"
 import { SidebarHoverProvider, useSidebarHover } from "./contexts/SidebarHoverContext"
@@ -10,7 +13,9 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Sidebar as SidebarPrimitive,
   SidebarContent,
+  SidebarFooter,
   SidebarHeader,
+  SidebarMenuButton,
   useSidebar,
 } from "@/components/ui/sidebar"
 import { useCountRegistry } from "@/contexts/CountContext"
@@ -124,6 +129,14 @@ function SidebarContent_({ currentViewKey, onViewChange: changeView }: SidebarPr
           </div>
         </ScrollArea>
       </SidebarContent>
+      <SidebarFooter>
+        <SidebarMenuButton asChild>
+          <Link href="/saved">
+            <Bookmark />
+            <span>Saved</span>
+          </Link>
+        </SidebarMenuButton>
+      </SidebarFooter>
     </SidebarPrimitive>
   )
 }
