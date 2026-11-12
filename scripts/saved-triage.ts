@@ -59,7 +59,9 @@ ${JSON.stringify(batch.map(({ platform, platform_id, author, text, links, collec
   const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
   clearTimeout(timer);
   if (code !== 0) throw new Error(`claude exited ${code}: ${(err || out).slice(0, 300)}`);
-  return (JSON.parse(out) as { result: string }).result;
+  const res = JSON.parse(out) as { result: string; is_error?: boolean };
+  if (res.is_error) throw new Error(`claude: ${res.result.slice(0, 300)}`);
+  return res.result;
 }
 
 /** Keeps only well-formed results for ids that were in the batch. */
