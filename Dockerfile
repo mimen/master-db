@@ -11,6 +11,8 @@ COPY app/package.json app/bun.lock* ./app/
 # Install dependencies
 WORKDIR /workspace/app
 RUN bun install --frozen-lockfile
+# The app imports types from the root convex/_generated, whose imports must resolve from /workspace/convex.
+RUN ln -s /workspace/app/node_modules /workspace/node_modules
 
 # Copy app source files
 COPY app ./
