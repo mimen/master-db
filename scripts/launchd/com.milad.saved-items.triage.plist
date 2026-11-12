@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.milad.saved-items.triage</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/zsh</string>
+		<string>/Users/mimen/Programming/Repos/hub/bin/run</string>
+		<string>mini.launchd.com.milad.saved-items.triage</string>
+		<string>--timeout</string>
+		<string>3600</string>
+		<string>--</string>
+		<string>/bin/zsh</string>
+		<string>/Users/mimen/Programming/Repos/master-db/scripts/saved-job.sh</string>
+		<string>triage</string>
+	</array>
+	<key>RunAtLoad</key>
+	<false/>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>6</integer>
+		<key>Minute</key>
+		<integer>45</integer>
+	</dict>
+	<key>StandardOutPath</key>
+	<string>/Users/mimen/Library/Logs/saved-items/triage.log</string>
+	<key>StandardErrorPath</key>
+	<string>/Users/mimen/Library/Logs/saved-items/triage.log</string>
+</dict>
+</plist>
