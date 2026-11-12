@@ -9136,6 +9136,23 @@ export declare const internal: {
         { inserted: number; updated: number }
       >;
     };
+    migrations: {
+      moveRawOut: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          paginationOpts: {
+            cursor: string | null;
+            endCursor?: string | null;
+            id?: number;
+            maximumBytesRead?: number;
+            maximumRowsRead?: number;
+            numItems: number;
+          };
+        },
+        { continueCursor: string; isDone: boolean; moved: number }
+      >;
+    };
   };
   todoist: {
     computed: {

@@ -64,6 +64,18 @@ describe("saved items", () => {
     expect(rows[0].processed_at).toEqual(expect.any(String));
   });
 
+  test("raw platform JSON lives in saved_item_raw, one row per item", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.saved.ingest.upsertItems, { items: [{ ...post("1", "t"), raw: "v1" }] });
+    await t.mutation(internal.saved.ingest.upsertItems, { items: [{ ...post("1", "t"), raw: "v2" }] });
+    const [items, raws] = await t.run(async (ctx) => [
+      await ctx.db.query("saved_items").collect(),
+      await ctx.db.query("saved_item_raw").collect(),
+    ]);
+    expect(items[0].raw).toBeUndefined();
+    expect(raws).toEqual([expect.objectContaining({ item_id: items[0]._id, raw: "v2" })]);
+  });
+
   test("re-ingest keeps stored media and deletes the duplicate upload", async () => {
     const t = convexTest(schema, modules);
     const [kept, dupe] = await t.run(async (ctx) => [

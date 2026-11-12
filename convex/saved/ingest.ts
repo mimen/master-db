@@ -32,7 +32,7 @@ export const upsertItems = internalMutation({
   handler: async (ctx, { items }) => {
     let inserted = 0;
     let updated = 0;
-    for (const item of items) {
+    for (const { raw, ...item } of items) {
       const existing = await ctx.db
         .query("saved_items")
         .withIndex("by_platform_and_platform_id", (q) =>
@@ -40,12 +40,13 @@ export const upsertItems = internalMutation({
         )
         .unique();
       if (!existing) {
-        await ctx.db.insert("saved_items", {
+        const id = await ctx.db.insert("saved_items", {
           ...item,
           saved_at: item.saved_at ?? new Date().toISOString(),
           status: "new",
           tags: [],
         });
+        if (raw !== undefined) await ctx.db.insert("saved_item_raw", { item_id: id, raw });
         inserted += 1;
         continue;
       }
@@ -65,6 +66,14 @@ export const upsertItems = internalMutation({
         }
       }
       await ctx.db.patch(existing._id, { ...fields, media: nextMedia });
+      if (raw !== undefined) {
+        const stored = await ctx.db
+          .query("saved_item_raw")
+          .withIndex("by_item_id", (q) => q.eq("item_id", existing._id))
+          .unique();
+        if (stored) await ctx.db.patch(stored._id, { raw });
+        else await ctx.db.insert("saved_item_raw", { item_id: existing._id, raw });
+      }
       updated += 1;
     }
     return { inserted, updated };

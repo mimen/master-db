@@ -54,3 +54,12 @@ export const saved_items = defineTable({
   .index("by_platform_and_platform_id", ["platform", "platform_id"])
   .index("by_status", ["status"])
   .index("by_status_and_triaged_at", ["status", "triaged_at"]);
+
+/**
+ * The platform's JSON for one saved item, kept apart because it runs to tens of
+ * KB per Instagram post and every inbox read would otherwise pull it.
+ */
+export const saved_item_raw = defineTable({
+  item_id: v.id("saved_items"),
+  raw: v.string(),
+}).index("by_item_id", ["item_id"]);
