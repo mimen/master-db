@@ -72,7 +72,6 @@ describe("saved items", () => {
       await ctx.db.query("saved_items").collect(),
       await ctx.db.query("saved_item_raw").collect(),
     ]);
-    expect(items[0].raw).toBeUndefined();
     expect(raws).toEqual([expect.objectContaining({ item_id: items[0]._id, raw: "v2" })]);
   });
 

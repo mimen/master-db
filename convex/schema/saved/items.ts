@@ -42,7 +42,6 @@ export const saved_items = defineTable({
   links: v.array(v.string()),
   media: v.array(savedMedia),
   collections: v.array(v.string()),
-  raw: v.optional(v.string()),
   status: savedStatus,
   summary: v.optional(v.string()),
   tags: v.array(v.string()),

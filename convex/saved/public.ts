@@ -8,7 +8,7 @@ import { saved_items, savedMedia, savedStatus } from "../schema/saved/items";
 const savedItemView = v.object({
   _id: v.id("saved_items"),
   _creationTime: v.number(),
-  ...saved_items.validator.omit("raw", "media").fields,
+  ...saved_items.validator.omit("media").fields,
   media: v.array(savedMedia.extend({ src: v.string() })),
 });
 
@@ -35,7 +35,7 @@ export const list = query({
       ? result.page.filter((row) => row.tags.includes(tag) || row.collections.includes(tag))
       : result.page;
     const page = await Promise.all(
-      rows.map(async ({ raw: _raw, media, ...row }) => ({
+      rows.map(async ({ media, ...row }) => ({
         ...row,
         media: await Promise.all(
           media.map(async (m) => ({
