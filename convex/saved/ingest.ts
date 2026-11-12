@@ -112,9 +112,8 @@ export const listUntriaged = internalQuery({
   handler: async (ctx, { limit }) => {
     const rows = await ctx.db
       .query("saved_items")
-      .withIndex("by_status", (q) => q.eq("status", "new"))
+      .withIndex("by_status_and_triaged_at", (q) => q.eq("status", "new").eq("triaged_at", undefined))
       .order("desc")
-      .filter((q) => q.eq(q.field("suggestion"), undefined))
       .take(limit);
     return rows.map((row) => ({
       platform: row.platform,

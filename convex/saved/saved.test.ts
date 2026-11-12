@@ -42,6 +42,9 @@ describe("saved items", () => {
         ],
       }),
     ).toEqual({ updated: 1, skipped: 1 });
+    await me.mutation(api.saved.public.setStatus, { id: row._id, status: "new" });
+    expect(await t.query(internal.saved.ingest.listUntriaged, { limit: 10 })).toEqual([]);
+    await me.mutation(api.saved.public.setStatus, { id: row._id, status: "kept" });
 
     expect(
       await t.mutation(internal.saved.ingest.upsertItems, { items: [post("1", "edited text")] }),

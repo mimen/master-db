@@ -52,4 +52,5 @@ export const saved_items = defineTable({
   triaged_at: v.optional(v.string()),
 })
   .index("by_platform_and_platform_id", ["platform", "platform_id"])
-  .index("by_status", ["status"]);
+  .index("by_status", ["status"])
+  .index("by_status_and_triaged_at", ["status", "triaged_at"]);
