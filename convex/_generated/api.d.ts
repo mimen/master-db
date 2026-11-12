@@ -748,6 +748,7 @@ export declare const api: {
           gmail?: {
             archiveError?: string;
             bulk: boolean;
+            historyId?: string;
             inInbox: boolean;
             subject: string;
             threadId: string;
@@ -761,11 +762,6 @@ export declare const api: {
           isSpam: boolean;
           kind: "dm" | "group" | "channel" | "thread" | "emailThread";
           known: boolean;
-          later?: {
-            followUp?: { at: number; due: boolean; since: number };
-            returned?: { at: number; reason: "time" | "message"; until: number };
-            snoozedUntil?: number;
-          };
           lastMessage?: {
             dateCreated: number;
             guid: string;
@@ -776,6 +772,15 @@ export declare const api: {
             text: string;
           };
           lastMessageAt: number;
+          later?: {
+            followUp?: { at: number; due: boolean; since: number };
+            returned?: {
+              at: number;
+              reason: "time" | "message";
+              until: number;
+            };
+            snoozedUntil?: number;
+          };
           participants: Array<{
             address: string;
             name: string | null;
@@ -787,6 +792,7 @@ export declare const api: {
           searchNames: Array<string>;
           slack?: { channel: string; following?: boolean; threadTs?: string };
           thread?: { parentId?: Id<"comma_conversations">; replyCount: number };
+          unlisted?: true;
           unread?: { count: number; firstAt: number };
           unreadCount: number;
           updatedAt: number;
@@ -2284,6 +2290,7 @@ export declare const api: {
           gmail?: {
             archiveError?: string;
             bulk: boolean;
+            historyId?: string;
             inInbox: boolean;
             subject: string;
             threadId: string;
@@ -2297,11 +2304,6 @@ export declare const api: {
           isSpam: boolean;
           kind: "dm" | "group" | "channel" | "thread" | "emailThread";
           known: boolean;
-          later?: {
-            followUp?: { at: number; due: boolean; since: number };
-            returned?: { at: number; reason: "time" | "message"; until: number };
-            snoozedUntil?: number;
-          };
           lastMessage?: {
             dateCreated: number;
             guid: string;
@@ -2312,6 +2314,15 @@ export declare const api: {
             text: string;
           };
           lastMessageAt: number;
+          later?: {
+            followUp?: { at: number; due: boolean; since: number };
+            returned?: {
+              at: number;
+              reason: "time" | "message";
+              until: number;
+            };
+            snoozedUntil?: number;
+          };
           participants: Array<{
             address: string;
             name: string | null;
@@ -2323,6 +2334,7 @@ export declare const api: {
           searchNames: Array<string>;
           slack?: { channel: string; following?: boolean; threadTs?: string };
           thread?: { parentId?: Id<"comma_conversations">; replyCount: number };
+          unlisted?: true;
           unread?: { count: number; firstAt: number };
           unreadCount: number;
           updatedAt: number;
@@ -2427,6 +2439,7 @@ export declare const api: {
             gmail?: {
               archiveError?: string;
               bulk: boolean;
+              historyId?: string;
               inInbox: boolean;
               subject: string;
               threadId: string;
@@ -2440,11 +2453,6 @@ export declare const api: {
             isSpam: boolean;
             kind: "dm" | "group" | "channel" | "thread" | "emailThread";
             known: boolean;
-            later?: {
-              followUp?: { at: number; due: boolean; since: number };
-              returned?: { at: number; reason: "time" | "message"; until: number };
-              snoozedUntil?: number;
-            };
             lastMessage?: {
               dateCreated: number;
               guid: string;
@@ -2455,6 +2463,15 @@ export declare const api: {
               text: string;
             };
             lastMessageAt: number;
+            later?: {
+              followUp?: { at: number; due: boolean; since: number };
+              returned?: {
+                at: number;
+                reason: "time" | "message";
+                until: number;
+              };
+              snoozedUntil?: number;
+            };
             participants: Array<{
               address: string;
               name: string | null;
@@ -2469,6 +2486,7 @@ export declare const api: {
               parentId?: Id<"comma_conversations">;
               replyCount: number;
             };
+            unlisted?: true;
             unread?: { count: number; firstAt: number };
             unreadCount: number;
             updatedAt: number;
@@ -2529,6 +2547,7 @@ export declare const api: {
             gmail?: {
               archiveError?: string;
               bulk: boolean;
+              historyId?: string;
               inInbox: boolean;
               subject: string;
               threadId: string;
@@ -2542,11 +2561,6 @@ export declare const api: {
             isSpam: boolean;
             kind: "dm" | "group" | "channel" | "thread" | "emailThread";
             known: boolean;
-            later?: {
-              followUp?: { at: number; due: boolean; since: number };
-              returned?: { at: number; reason: "time" | "message"; until: number };
-              snoozedUntil?: number;
-            };
             lastMessage?: {
               dateCreated: number;
               guid: string;
@@ -2557,6 +2571,15 @@ export declare const api: {
               text: string;
             };
             lastMessageAt: number;
+            later?: {
+              followUp?: { at: number; due: boolean; since: number };
+              returned?: {
+                at: number;
+                reason: "time" | "message";
+                until: number;
+              };
+              snoozedUntil?: number;
+            };
             participants: Array<{
               address: string;
               name: string | null;
@@ -2571,6 +2594,7 @@ export declare const api: {
               parentId?: Id<"comma_conversations">;
               replyCount: number;
             };
+            unlisted?: true;
             unread?: { count: number; firstAt: number };
             unreadCount: number;
             updatedAt: number;
@@ -2801,6 +2825,7 @@ export declare const api: {
           gmail?: {
             archiveError?: string;
             bulk: boolean;
+            historyId?: string;
             inInbox: boolean;
             subject: string;
             threadId: string;
@@ -2814,11 +2839,6 @@ export declare const api: {
           isSpam: boolean;
           kind: "dm" | "group" | "channel" | "thread" | "emailThread";
           known: boolean;
-          later?: {
-            followUp?: { at: number; due: boolean; since: number };
-            returned?: { at: number; reason: "time" | "message"; until: number };
-            snoozedUntil?: number;
-          };
           lastMessage?: {
             dateCreated: number;
             guid: string;
@@ -2829,6 +2849,15 @@ export declare const api: {
             text: string;
           };
           lastMessageAt: number;
+          later?: {
+            followUp?: { at: number; due: boolean; since: number };
+            returned?: {
+              at: number;
+              reason: "time" | "message";
+              until: number;
+            };
+            snoozedUntil?: number;
+          };
           participants: Array<{
             address: string;
             name: string | null;
@@ -2840,6 +2869,7 @@ export declare const api: {
           searchNames: Array<string>;
           slack?: { channel: string; following?: boolean; threadTs?: string };
           thread?: { parentId?: Id<"comma_conversations">; replyCount: number };
+          unlisted?: true;
           unread?: { count: number; firstAt: number };
           unreadCount: number;
           updatedAt: number;
@@ -3598,6 +3628,82 @@ export declare const api: {
           any
         >;
       };
+    };
+  };
+  saved: {
+    public: {
+      list: FunctionReference<
+        "query",
+        "public",
+        {
+          paginationOpts: {
+            cursor: string | null;
+            endCursor?: string | null;
+            id?: number;
+            maximumBytesRead?: number;
+            maximumRowsRead?: number;
+            numItems: number;
+          };
+          status?: "new" | "kept" | "done" | "dropped";
+          tag?: string;
+        },
+        {
+          continueCursor: string;
+          isDone: boolean;
+          page: Array<{
+            _creationTime: number;
+            _id: Id<"saved_items">;
+            author?: string;
+            collections: Array<string>;
+            links: Array<string>;
+            media: Array<{
+              height?: number;
+              src: string;
+              storage_id?: Id<"_storage">;
+              type: "image" | "video";
+              url: string;
+              width?: number;
+            }>;
+            notes?: string;
+            platform: "x" | "instagram";
+            platform_id: string;
+            posted_at?: string;
+            processed_at?: string;
+            saved_at: string;
+            status: "new" | "kept" | "done" | "dropped";
+            suggestion?:
+              | "read later"
+              | "try this tool"
+              | "add to a project"
+              | "drop";
+            summary?: string;
+            tags: Array<string>;
+            text?: string;
+            triaged_at?: string;
+            url: string;
+          }>;
+          pageStatus?: "SplitRecommended" | "SplitRequired" | null;
+          splitCursor?: string | null;
+        }
+      >;
+      setNotes: FunctionReference<
+        "mutation",
+        "public",
+        { id: Id<"saved_items">; notes: string },
+        any
+      >;
+      setStatus: FunctionReference<
+        "mutation",
+        "public",
+        { id: Id<"saved_items">; status: "new" | "kept" | "done" | "dropped" },
+        any
+      >;
+      tagCounts: FunctionReference<
+        "query",
+        "public",
+        {},
+        Array<{ count: number; tag: string }>
+      >;
     };
   };
   todoist: {
@@ -8959,6 +9065,76 @@ export declare const internal: {
           any
         >;
       };
+    };
+  };
+  saved: {
+    ingest: {
+      generateUploadUrl: FunctionReference<"mutation", "internal", {}, string>;
+      knownIds: FunctionReference<
+        "query",
+        "internal",
+        { platform: "x" | "instagram"; platform_ids: Array<string> },
+        Array<string>
+      >;
+      listUntriaged: FunctionReference<
+        "query",
+        "internal",
+        { limit: number },
+        Array<{
+          author?: string;
+          collections: Array<string>;
+          links: Array<string>;
+          media: Array<{ type: "image" | "video" }>;
+          platform: "x" | "instagram";
+          platform_id: string;
+          text?: string;
+          url: string;
+        }>
+      >;
+      setTriage: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          results: Array<{
+            platform: "x" | "instagram";
+            platform_id: string;
+            suggestion:
+              | "read later"
+              | "try this tool"
+              | "add to a project"
+              | "drop";
+            summary: string;
+            tags: Array<string>;
+          }>;
+        },
+        { skipped: number; updated: number }
+      >;
+      upsertItems: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          items: Array<{
+            author?: string;
+            collections: Array<string>;
+            links: Array<string>;
+            media: Array<{
+              height?: number;
+              storage_id?: Id<"_storage">;
+              type: "image" | "video";
+              url: string;
+              width?: number;
+            }>;
+            platform: "x" | "instagram";
+            platform_id: string;
+            posted_at?: string;
+            raw?: string;
+            saved_at?: string;
+            text?: string;
+            url: string;
+          }>;
+        },
+        { inserted: number; updated: number }
+      >;
     };
   };
   todoist: {

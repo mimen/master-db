@@ -7,6 +7,7 @@ import * as beeper from "./schema/beeper";
 import * as comma from "./schema/comma";
 import * as identity from "./schema/identity";
 import * as routines from "./schema/routines";
+import * as saved from "./schema/saved";
 import { sync_state } from "./schema/sync/syncState";
 import * as todoist from "./schema/todoist";
 
@@ -33,6 +34,9 @@ export default defineSchema({
 
   // Identity graph (cross-network people + identities, Convex-canonical)
   ...identity,
+
+  // Saved posts inbox (X, Instagram), bearer-ingested, auth-gated reads
+  ...saved,
 
   // Sync management
   sync_state,

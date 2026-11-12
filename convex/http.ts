@@ -13,6 +13,13 @@ import { handleIngest as handleCommaIngest, handleUploadUrl as handleCommaUpload
 import { handleCallback as handleSlackCallback, handleInstall as handleSlackInstall } from "./comma/slackAuth";
 import { handleSlackEvents } from "./comma/slackEvents";
 import { handleIngestContacts } from "./identity/sync/handleIngestContacts";
+import {
+  handleIngest as handleSavedIngest,
+  handleKnown as handleSavedKnown,
+  handleTriage as handleSavedTriage,
+  handleUntriaged as handleSavedUntriaged,
+  handleUploadUrl as handleSavedUploadUrl,
+} from "./saved/http";
 import { handleTodoistWebhook } from "./todoist/webhook";
 
 /**
@@ -131,5 +138,15 @@ http.route({ path: "/comma/gmail/push", method: "POST", handler: handleGmailPush
 
 /** Slack's Events API, signed with SLACK_SIGNING_SECRET. The Slack app's Event Subscriptions request URL. */
 http.route({ path: "/comma/slack/events", method: "POST", handler: handleSlackEvents });
+
+/**
+ * Saved items inbox: the X and Instagram importers and the triage pass on the
+ * Mini. All POST, Bearer SAVED_INGEST_SECRET. Contracts in convex/saved/http.ts.
+ */
+http.route({ path: "/saved/ingest", method: "POST", handler: handleSavedIngest });
+http.route({ path: "/saved/known", method: "POST", handler: handleSavedKnown });
+http.route({ path: "/saved/upload-url", method: "POST", handler: handleSavedUploadUrl });
+http.route({ path: "/saved/untriaged", method: "POST", handler: handleSavedUntriaged });
+http.route({ path: "/saved/triage", method: "POST", handler: handleSavedTriage });
 
 export default http;
