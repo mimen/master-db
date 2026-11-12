@@ -37,7 +37,6 @@ import { SidebarFooter } from "@/components/sidebar/sidebar-footer";
 import { SidebarFrame } from "@/components/sidebar/sidebar-frame";
 import { SidebarHeader } from "@/components/sidebar/sidebar-header";
 import { SidebarSearchField } from "@/components/sidebar/sidebar-search-field";
-import { BackButton } from "@/components/ui/back-button";
 import { IconButton } from "@/components/ui/icon-button";
 import { TriageGeometry } from "@/constants/triage-theme";
 import { useAgentEnabled } from "@/hooks/use-agent";
@@ -62,6 +61,7 @@ import { EMAIL_SANDBOX, emailDocument, foldQuotes, messageFiles, openByDefault, 
 import { openDeferMenu, skipToday } from "@/lib/later";
 import { inLens, regularSenders, type MailLens } from "@/lib/mail-lens";
 import { setMailSelection } from "@/lib/mail-selection";
+import { conversationRoute } from "@/lib/selection";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
 import { messagingCommandError } from "@/lib/messaging-api";
 import { showToast } from "@/lib/toast";
@@ -85,11 +85,10 @@ const READER_WIDTH = 760;
 const searchText = (row: Thread) =>
   [row.displayName, row.gmail?.subject ?? "", row.lastMessage?.text ?? "", ...row.participants.map((p) => `${p.name ?? ""} ${p.address}`)].join(" ");
 
-/** `active`: the wide shell shows Mail, so the keyboard acts on it. `onReader`: the phone reader opened or closed. */
-export function MailWorkspace({ wide, active = false, onReader }: {
+/** `active`: the wide shell shows Mail, so the keyboard acts on it. */
+export function MailWorkspace({ wide, active = false }: {
   readonly wide: boolean;
   readonly active?: boolean;
-  readonly onReader?: (open: boolean) => void;
 }): JSX.Element {
   const theme = useTheme();
   const { isAuthenticated } = useConvexAuth();
@@ -97,19 +96,19 @@ export function MailWorkspace({ wide, active = false, onReader }: {
   const [selectedId, setSelectedId] = useState<ConversationId | null>(null);
   const [composingNew, setComposingNew] = useState(false);
   const open = (id: ConversationId | null) => setSelectedId(id);
-  const openChat = useCallback((chat: ChatSummary) => setSelectedId(chat.conversationId), []);
+  // The phone reads a thread on the screen a Messages thread opens on, under the same header.
+  const show = useCallback((id: ConversationId) => (wide ? setSelectedId(id) : router.push(conversationRoute(id))), [wide]);
+  const openChat = useCallback((chat: ChatSummary) => show(chat.conversationId), [show]);
   // The wide shell's agent pane follows the open thread.
   useEffect(() => {
     setMailSelection(wide ? selectedId : null);
     return () => setMailSelection(null);
   }, [wide, selectedId]);
-  const pushed = !wide && selectedId !== null;
-  useEffect(() => onReader?.(pushed), [onReader, pushed]);
   // Search opens a mail hit as /mail?thread=<id>.
   const { thread: routed } = useGlobalSearchParams<{ thread?: string }>();
   useEffect(() => {
-    if (routed) open(routed as ConversationId);
-  }, [routed]);
+    if (routed) show(routed as ConversationId);
+  }, [routed, show]);
   const { results, status, loadMore } = usePaginatedQuery(commaApi.listEmailThreads, isAuthenticated ? {} : "skip", { initialNumItems: 50 });
   // Later takes a thread out of Mail until it comes back, as it leaves every Messages queue.
   const inbox = useMemo(() => results.filter((row) => !isSnoozed(row)), [results]);
@@ -382,11 +381,10 @@ export function MailWorkspace({ wide, active = false, onReader }: {
       conversationId={selectedId}
       subject={results.find((row) => row._id === selectedId)?.gmail?.subject}
       regularSenders={regular}
-      onBack={wide ? undefined : () => open(null)}
     />
   ) : <SelectionEmpty icon="mail-outline" message="Select a thread" />;
 
-  if (!wide) return <View style={[styles.fill, { backgroundColor: theme.background }]}>{pushed ? reader : list}{newEmail}</View>;
+  if (!wide) return <View style={[styles.fill, { backgroundColor: theme.background }]}>{list}{newEmail}</View>;
   return <><DesktopSplit list={list} detail={reader} />{newEmail}</>;
 }
 
@@ -394,11 +392,12 @@ export function MailWorkspace({ wide, active = false, onReader }: {
  * `subject` is the listed row's; a thread opened from search, archived or not yet listed, reads it off its messages.
  * `regularSenders` are the lists whose images load without asking; without it, only a known sender's do.
  */
-export function EmailReader({ conversationId, subject, regularSenders: listed, onBack }: {
+export function EmailReader({ conversationId, subject, regularSenders: listed, phone = false }: {
   conversationId: ConversationId;
   subject?: string;
   regularSenders?: ReadonlySet<string>;
-  onBack?: () => void;
+  /** The phone's thread screen: its own header carries the subject and the actions. */
+  phone?: boolean;
 }): JSX.Element {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -481,25 +480,26 @@ export function EmailReader({ conversationId, subject, regularSenders: listed, o
     <HugeiconsIcon icon={icon} size={18} color={active ? theme.text : theme.icon} strokeWidth={1.6} />
   );
   // The phone's bottom inset belongs to whatever sits last: the composer when it is open, the cards otherwise.
-  const bottom = onBack ? insets.bottom : 0;
+  const bottom = phone ? insets.bottom : 0;
   return (
     <View testID="email-reader" style={[styles.fill, { backgroundColor: theme.thread }]}>
-      <View style={[styles.readerHeader, onBack ? styles.readerHeaderPhone : styles.readerHeaderWide, { borderBottomColor: theme.divider }]}>
-        {onBack ? <BackButton onPress={onBack} label="Back to Mail" /> : null}
-        <Text accessibilityRole="header" numberOfLines={1} style={[styles.readerSubject, { color: theme.text }]}>{threadSubject}</Text>
-        <View style={styles.readerActions}>
-          {agentEnabled ? (
-            <IconButton label={onBack ? "Ask the agent" : "Ask the agent (⌘J)"} onPress={() => openAgentPane(conversationId)} style={styles.headerIconButton}>
-              {glyph(SparklesIcon)}
-            </IconButton>
-          ) : null}
-          {conversation ? (
-            <IconButton label={settled ? "Move to Inbox" : "Archive"} onPress={archive} style={styles.headerIconButton}>
-              {glyph(settled ? ArchiveRestoreIcon : Archive02Icon)}
-            </IconButton>
-          ) : null}
+      {phone ? null : (
+        <View style={[styles.readerHeader, { borderBottomColor: theme.divider }]}>
+          <Text accessibilityRole="header" numberOfLines={1} style={[styles.readerSubject, { color: theme.text }]}>{threadSubject}</Text>
+          <View style={styles.readerActions}>
+            {agentEnabled ? (
+              <IconButton label="Ask the agent (⌘J)" onPress={() => openAgentPane(conversationId)} style={styles.headerIconButton}>
+                {glyph(SparklesIcon)}
+              </IconButton>
+            ) : null}
+            {conversation ? (
+              <IconButton label={settled ? "Move to Inbox" : "Archive"} onPress={archive} style={styles.headerIconButton}>
+                {glyph(settled ? ArchiveRestoreIcon : Archive02Icon)}
+              </IconButton>
+            ) : null}
+          </View>
         </View>
-      </View>
+      )}
       {conversation?.gmail?.archiveError ? (
         <Text accessibilityRole="alert" style={[styles.archiveError, { color: theme.destructive, borderBottomColor: theme.divider }]}>{conversation.gmail.archiveError}</Text>
       ) : null}
@@ -817,9 +817,7 @@ const styles = StyleSheet.create({
   more: { alignItems: "center", paddingVertical: 14 },
   moreText: { fontSize: 13, fontWeight: "600" },
   empty: { fontSize: 13, paddingHorizontal: 12, paddingTop: 24 },
-  readerHeader: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 8, height: TriageGeometry.threadHeaderHeight },
-  readerHeaderWide: { paddingLeft: 22, paddingRight: 12 },
-  readerHeaderPhone: { paddingHorizontal: 8 },
+  readerHeader: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 8, height: TriageGeometry.threadHeaderHeight, paddingLeft: 22, paddingRight: 12 },
   readerSubject: { ...toolbarTitle, flex: 1 },
   readerActions: { alignItems: "center", flexDirection: "row", flexShrink: 0, gap: 4 },
   headerIconButton: { borderRadius: 7, height: 30, width: 30 },

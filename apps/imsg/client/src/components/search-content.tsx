@@ -11,6 +11,7 @@ import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-na
 import { ListRow } from "./list-row";
 
 import { useChatDirectory } from "@/hooks/use-chat-directory";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { api, type SearchHit } from "@/lib/api";
 import { formatListTimestamp } from "@/lib/format";
@@ -37,6 +38,7 @@ export function SearchContent({
   onClose: () => void;
 }) {
   const theme = useTheme();
+  const { wide } = useLayoutMode();
   const [query, setQuery] = useState(initialQuery ?? "");
 
   useEffect(() => {
@@ -100,7 +102,8 @@ export function SearchContent({
   const openMessage = (message: SearchHit) => {
     onClose();
     if (message.platform === "gmail") {
-      router.push({ pathname: "/mail", params: { thread: message.conversationId } });
+      // The wide shell opens it in Mail's reader; the phone opens the thread screen.
+      router.push(wide ? { pathname: "/mail", params: { thread: message.conversationId } } : conversationRoute(message.conversationId));
       return;
     }
     const jumpTarget = { guid: message.guid, dateCreated: message.dateCreated };

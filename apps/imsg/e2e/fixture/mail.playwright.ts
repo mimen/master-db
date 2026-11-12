@@ -145,18 +145,27 @@ test("a long thread opens at its first unread message, folds the read ones to a 
   }
 });
 
-test("on a phone, Mail is a tab whose reader opens in place and goes back", async ({ desk }) => {
+test("on a phone, an email thread opens on the thread screen, under the header a message thread has", async ({ desk }) => {
   const page = desk.page;
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByTestId("phone-tab-bar").getByRole("tab", { name: "Mail" }).click();
   await page.getByRole("button", { name: "Sam Lee, Load-in for Saturday" }).click();
+  await expect(page).toHaveURL(/\/c\//);
   await expect(page.getByTestId("email-card")).toHaveCount(2);
-  await expect(page.getByTestId("phone-tab-bar"), "the reader is pushed over the tab bar").toHaveCount(0);
+  await expect(page.getByText("Load-in for Saturday", { exact: true }).filter({ visible: true }), "the header's second line is the subject").toBeVisible();
+  await expect(page.getByRole("button", { name: "Archive" })).toBeVisible();
   await page.screenshot({ path: "/tmp/comma-mail-phone.png", animations: "disabled" });
-  await page.getByRole("button", { name: "Back to Mail" }).click();
+  await page.getByRole("button", { name: "Back" }).click();
   await expect(page.getByRole("tab", { name: "People, 1" })).toBeVisible();
   await expect(page.getByTestId("phone-tab-bar")).toBeVisible();
+
+  // Archive answers with its toast and returns to the list.
+  await page.getByRole("button", { name: "Sam Lee, Load-in for Saturday" }).click();
+  await page.getByRole("button", { name: "Archive" }).click();
+  await expect(page.getByText("Settled Sam Lee")).toBeVisible();
+  await expect(page.getByTestId("phone-tab-bar")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sam Lee, Load-in for Saturday" })).toHaveCount(0);
 });
 
 test("All shows each thread's mailbox on its Gmail mark, and older messages offer Reply only on hover", async ({ desk }) => {

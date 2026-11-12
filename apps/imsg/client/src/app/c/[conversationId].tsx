@@ -1,8 +1,9 @@
-import { Redirect, router, Stack, useLocalSearchParams } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { formatAddress, parseHandle } from "@shared/address";
+import { settleActionFor } from "@shared/chat-state";
 import { conversationRoute, dmAddress } from "@shared/imessage";
 import { platformBadge } from "@shared/platform-profile";
 import type { ChatSummary, ConversationId } from "@shared/types";
@@ -10,8 +11,9 @@ import { useAgentEnabled } from "@/hooks/use-agent";
 import { useConversation } from "@/hooks/use-chat-directory";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
+import { toggleSettleChat } from "@/hooks/use-triage-actions";
 import { ChatAvatar, PersonAvatar } from "@/components/avatar";
-import { ThreadView } from "@/components/lazy-surfaces";
+import { EmailReader, ThreadView } from "@/components/lazy-surfaces";
 import { useFaceTimeActions } from "@/components/facetime-button";
 import { UnavailableState } from "@/components/empty-state";
 import { BackButton } from "@/components/ui/back-button";
@@ -37,11 +39,12 @@ function HeaderTitle({ chat, maxWidth }: { chat: ChatSummary | null | undefined;
           </Text>
           {chat ? <SourceIcon badge={platformBadge(conversationRoute(chat))} size={14} /> : null}
         </View>
-        {chat?.isGroup && chat.participants.length > 0 && (
+        {chat?.isGroup && !chat.subject && chat.participants.length > 0 && (
           <Text style={{ color: theme.textSecondary, fontSize: 11 }}>{chat.participants.length} people</Text>
         )}
-        {shownAddress && (
-          <Text numberOfLines={1} style={{ color: theme.textSecondary, fontSize: 11 }}>{shownAddress}</Text>
+        {/* An email thread's second line is its subject. */}
+        {(chat?.subject || shownAddress) && (
+          <Text numberOfLines={1} style={{ color: theme.textSecondary, fontSize: 11 }}>{chat?.subject || shownAddress}</Text>
         )}
       </View>
     </View>
@@ -69,6 +72,25 @@ const headerStyles = StyleSheet.create({
   },
 });
 
+/** Archive is Mail's settle. It answers with its toast and Undo, and returns to the list the thread left. */
+function MailArchive({ chat }: { chat: ChatSummary }) {
+  const theme = useTheme();
+  const settled = settleActionFor(chat) === "unsettle";
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={settled ? "Move to Inbox" : "Archive"}
+      onPress={() => {
+        void toggleSettleChat(chat);
+        if (!settled) goBackOrHome(router);
+      }}
+      hitSlop={8}
+    >
+      <Ionicons name={settled ? "arrow-undo-circle-outline" : "archive-outline"} size={24} color={theme.accent} />
+    </Pressable>
+  );
+}
+
 export default function ChatScreen(): React.JSX.Element | null {
   const params = useLocalSearchParams<{
     conversationId: ConversationId;
@@ -91,8 +113,6 @@ export default function ChatScreen(): React.JSX.Element | null {
       ? { guid: params.targetGuid, dateCreated: Number(params.targetDate) }
       : null;
   if (wide) return null;
-  // An email Today ranks reads in the Mail reader.
-  if (chat?.route.platform === "gmail") return <Redirect href={{ pathname: "/mail", params: { thread: chat.conversationId } }} />;
   if (chat === null) {
     return (
       <>
@@ -101,8 +121,9 @@ export default function ChatScreen(): React.JSX.Element | null {
       </>
     );
   }
+  const mail = chat?.route.platform === "gmail";
   // Room left of the action pill: ~70pt for the back button, ~44pt per action, ~32pt of pill padding.
-  const titleMaxWidth = width - 70 - (agentEnabled ? 3 : 2) * 44 - 32;
+  const titleMaxWidth = width - 70 - ((agentEnabled ? 1 : 0) + (mail ? 1 : 2)) * 44 - 32;
   const openMore = () => showSheet({ actions: [{ label: "Search conversation", onPress: () => openThreadSearch() }, ...faceTime] });
 
   return (
@@ -119,27 +140,34 @@ export default function ChatScreen(): React.JSX.Element | null {
                   <Ionicons name="sparkles-outline" size={22} color={theme.accent} />
                 </Pressable>
               ) : null}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Details"
-                onPress={() => router.push({ pathname: "/chat-info", params: { conversation: params.conversationId } })}
-                hitSlop={8}
-              >
-                <Ionicons name="information-circle-outline" size={26} color={theme.accent} />
-              </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="More actions" onPress={openMore} hitSlop={8}>
-                <Ionicons name="ellipsis-horizontal-circle-outline" size={26} color={theme.accent} />
-              </Pressable>
+              {mail && chat ? <MailArchive chat={chat} /> : (
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Details"
+                    onPress={() => router.push({ pathname: "/chat-info", params: { conversation: params.conversationId } })}
+                    hitSlop={8}
+                  >
+                    <Ionicons name="information-circle-outline" size={26} color={theme.accent} />
+                  </Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel="More actions" onPress={openMore} hitSlop={8}>
+                    <Ionicons name="ellipsis-horizontal-circle-outline" size={26} color={theme.accent} />
+                  </Pressable>
+                </>
+              )}
             </View>
           ),
         }}
       />
-      <ThreadView
-        conversationId={params.conversationId}
-        isGroup={chat?.isGroup ?? false}
-        jumpTarget={jumpTarget}
-        headerOffset={headerHeight}
-      />
+      {/* An email thread reads in the Mail reader, under the same header a message thread has. */}
+      {mail ? <EmailReader key={params.conversationId} conversationId={params.conversationId} phone /> : (
+        <ThreadView
+          conversationId={params.conversationId}
+          isGroup={chat?.isGroup ?? false}
+          jumpTarget={jumpTarget}
+          headerOffset={headerHeight}
+        />
+      )}
     </>
   );
 }
