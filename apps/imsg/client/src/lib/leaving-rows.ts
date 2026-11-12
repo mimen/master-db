@@ -27,6 +27,16 @@ export function nextLeaving<T>(
   return next;
 }
 
+/**
+ * The leaving rows once `key` has finished collapsing. A row that sat under it takes over its neighbor, so a row
+ * still collapsing holds its slot instead of landing at the end of the list.
+ */
+export function withoutLeaving<T>(leaving: ReadonlyMap<string, LeavingRow<T>>, key: string): ReadonlyMap<string, LeavingRow<T>> {
+  const gone = leaving.get(key);
+  if (!gone) return leaving;
+  return new Map([...leaving].filter(([k]) => k !== key).map(([k, row]) => [k, row.after === key ? { ...row, after: gone.after } : row]));
+}
+
 /** The list with each leaving row put back under its old neighbor, so the gap closes instead of cutting. */
 export function withLeaving<T>(
   current: readonly T[],

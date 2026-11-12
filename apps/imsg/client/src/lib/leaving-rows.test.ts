@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { nextLeaving, withLeaving } from "./leaving-rows";
+import { nextLeaving, withLeaving, withoutLeaving } from "./leaving-rows";
 
 const id = (s: string) => s;
 
@@ -21,4 +21,12 @@ test("Undo brings the row back and it stops leaving", () => {
   const undone = nextLeaving(["a"], ["a", "b"], leaving, id);
   expect(undone.size).toBe(0);
   expect(withLeaving(["a", "b"], undone, id)).toEqual(["a", "b"]);
+});
+
+test("a row still collapsing holds its slot when the row above it finishes first", () => {
+  const first = nextLeaving(["a", "b", "c", "d"], ["a", "c", "d"], new Map(), id);
+  const second = nextLeaving(["a", "c", "d"], ["a", "d"], first, id);
+  expect(withLeaving(["a", "d"], withoutLeaving(second, "b"), id)).toEqual(["a", "c", "d"]);
+  const top = nextLeaving(["a", "b", "c"], ["c"], new Map(), id);
+  expect(withLeaving(["c"], withoutLeaving(top, "a"), id)).toEqual(["b", "c"]);
 });

@@ -77,7 +77,7 @@ import { InfoTip, TodayHeaderCard } from "./today-header";
 import { isListMode, requestFocus, subscribeListMode } from "@/lib/keyboard/controller";
 import { keyboardDriven, subscribeKeyboardDriven } from "@/components/ui/interaction";
 import { shortcutFor } from "@/lib/keyboard/registry";
-import { nextLeaving, withLeaving, type LeavingRow } from "@/lib/leaving-rows";
+import { nextLeaving, withLeaving, withoutLeaving, type LeavingRow } from "@/lib/leaving-rows";
 import { useSyncExternalStore } from "react";
 
 function useMinuteClock(): number {
@@ -338,12 +338,7 @@ export function ConversationListPane({
   useEffect(() => publishRenderedOrder(advancing), [advancing]);
   useEffect(() => () => publishRenderedOrder(null), []);
   const dropLeaving = useCallback((key: string): void => {
-    setSeen((current) => {
-      if (!current.leaving.has(key)) return current;
-      const next = new Map(current.leaving);
-      next.delete(key);
-      return { ...current, leaving: next };
-    });
+    setSeen((current) => (current.leaving.has(key) ? { ...current, leaving: withoutLeaving(current.leaving, key) } : current));
   }, []);
 
   // All imperative list scrolling (glide pinning, view resets, reorder
@@ -618,7 +613,7 @@ const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, 
   return (
     // A leaving row ignores input, so a click mid-fold never reopens what was just settled.
     <View pointerEvents={gone ? "none" : "auto"}>
-      <Collapse collapsed={gone} onCollapsed={() => onCollapsed(row.key)}>
+      <Collapse collapsed={gone} onCollapsed={() => onCollapsed(row.key)} rowKey={row.key}>
         {row.kind === "section" ? (
           row.fold || row.detail !== undefined ? <TodaySectionHeader row={row} onToggleFold={onToggleFold} onSettleAll={onSettleAll} /> : (
             <View style={styles.group}>

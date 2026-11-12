@@ -4,7 +4,7 @@ import { settleActionFor } from "@shared/chat-state";
 import { conversationRoute } from "@shared/imessage";
 import { platformBadge, sourceLabel } from "@shared/platform-profile";
 import type { ChatSummary } from "@shared/types";
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Reanimated, {
   ReduceMotion,
@@ -237,9 +237,14 @@ function ChatRowInner({
   const slideHome = useCallback(() => {
     if (!dragging.value && offset.value !== 0) offset.value = withSpring(0, { ...Springs.smooth, reduceMotion: ReduceMotion.System });
   }, [dragging, offset]);
+  // A recycled cell that takes another conversation starts home, not slid out where the last one was let go.
+  const slidFor = useRef(chat.conversationId);
   useEffect(() => {
-    if (!leaving) slideHome();
-  }, [chat, leaving, slideHome]);
+    if (slidFor.current !== chat.conversationId) {
+      slidFor.current = chat.conversationId;
+      offset.value = 0;
+    } else if (!leaving) slideHome();
+  }, [chat, leaving, slideHome, offset]);
   // In Today a right swipe pushes an open row to tomorrow; elsewhere it toggles read.
   const skips = today !== undefined && (chat.flags.unresponded || chat.flags.waiting);
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));

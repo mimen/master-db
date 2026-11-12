@@ -10,24 +10,32 @@ export interface CollapseProps {
   readonly children: ReactNode;
   /** Fires once the fold finishes, so the caller can drop the row. */
   readonly onCollapsed?: () => void;
+  /** The row shown. A recycled list cell that takes another row starts at rest instead of animating out of the last one's fold. */
+  readonly rowKey?: string;
 }
 
 /** A leaving row: height and opacity go to 0 on smooth while the rows below close the gap. */
-export function Collapse({ collapsed, children, onCollapsed }: CollapseProps): React.JSX.Element {
+export function Collapse({ collapsed, children, onCollapsed, rowKey }: CollapseProps): React.JSX.Element {
   const spring = useSpring("smooth");
   const open = useSharedValue(collapsed ? 0 : 1);
   const height = useSharedValue(0);
   const [measured, setMeasured] = useState(false);
   const done = useRef(onCollapsed);
   done.current = onCollapsed;
+  const shown = useRef(rowKey);
 
   useEffect(() => {
+    if (shown.current !== rowKey) {
+      shown.current = rowKey;
+      open.value = collapsed ? 0 : 1;
+      return;
+    }
     const notify = () => done.current?.();
     open.value = withSpring(collapsed ? 0 : 1, spring, (finished) => {
       "worklet";
       if (finished && collapsed) runOnJS(notify)();
     });
-  }, [collapsed, open, spring]);
+  }, [collapsed, open, spring, rowKey]);
 
   const style = useAnimatedStyle(() =>
     // At rest and open the row keeps its natural height, so content changes still reflow it.
