@@ -5455,6 +5455,12 @@ export declare const internal: {
         { accountId: Id<"comma_accounts">; cursor: string | null },
         null
       >;
+      forgetThread: FunctionReference<
+        "mutation",
+        "internal",
+        { accountId: Id<"comma_accounts">; threadId: string },
+        null
+      >;
       heldThreads: FunctionReference<
         "query",
         "internal",

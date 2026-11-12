@@ -328,6 +328,34 @@ describe("history sync", () => {
     expect((await thread(t, "t-news"))).toMatchObject({ gmail: { bulk: false }, lastMessage: { guid: "m9", isFromMe: true } });
   });
 
+  test("a message Gmail no longer has is retracted, and a deleted thread drops its preview", async () => {
+    seedMailbox();
+    google.deliver(inbound("m1b", "t-sam", `Sam Lee <${SAM}>`, { text: "Second note", internalDate: Date.now() }));
+    const { t, as } = await setup();
+    await connect(t, as);
+    expect((await thread(t, "t-sam"))!.lastMessage?.guid).toBe("m1b");
+
+    google.mail.splice(google.mail.findIndex((message) => message.id === "m1"), 1);
+    google.historyId += 1;
+    google.history.push({ id: google.historyId, threadId: "t-sam" });
+    await push(t, await google.oidcToken());
+    await settle(t);
+    const messages = await t.run((ctx) => ctx.db.query("comma_messages").collect());
+    expect(messages.find((message) => message.guid === "m1")).toMatchObject({ retracted: true, text: "" });
+    expect(messages.find((message) => message.guid === "m1b")!.retracted).toBe(false);
+    expect((await thread(t, "t-sam"))!.lastMessage?.guid).toBe("m1b");
+
+    const kept = google.mail.filter((message) => message.threadId !== "t-sam");
+    google.mail.splice(0, google.mail.length, ...kept);
+    google.historyId += 1;
+    google.history.push({ id: google.historyId, threadId: "t-sam" });
+    await push(t, await google.oidcToken());
+    await settle(t);
+    const after = await t.run((ctx) => ctx.db.query("comma_messages").collect());
+    expect(after.find((message) => message.guid === "m1b")).toMatchObject({ retracted: true, text: "" });
+    expect((await thread(t, "t-sam"))!.lastMessage).toBeUndefined();
+  });
+
   test("a cursor Gmail has forgotten resyncs the inbox quietly and moves the cursor on", async () => {
     seedMailbox();
     const { t, as } = await setup();

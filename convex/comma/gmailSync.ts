@@ -15,16 +15,17 @@ import { GMAIL_API, googleApi, GoogleApiError } from "./gmailApi";
 import { writeGmailFiles } from "./gmailFiles";
 import { METADATA_HEADERS, parseGmailMessage, type EmailAddress, type RawGmailMessage } from "./gmailMessage";
 import { gmailToken, pushTopic } from "./googleAuth";
+import { resurfaceOnMessages } from "./later";
+import { MODEL_TEXT_UNSET } from "./messageShape";
 import { refreshLastMessage } from "./pendingSends";
 import { schedulePersonSummaries } from "./personSummaries";
 import { personForNormalized } from "./photos";
-import { resurfaceOnMessages } from "./later";
 import { logReplies, settleConversation, unsettleConversation } from "./triage";
 
 /**
  * Reading a Gmail mailbox into Comma. Every path (a push nudge, the 5-minute backstop, the paged backfill, a full
- * resync) reads whole threads in an action and writes each through `ingestThread`, which skips messages it holds, so a
- * thread read twice changes nothing. A thread's Inbox label is its settle state: archived in Gmail is settled in Comma.
+ * resync) reads whole threads in an action and writes each through `ingestThread`, which skips messages it holds and
+ * retracts ones Gmail no longer returns. A thread's Inbox label is its settle state: archived in Gmail is settled in Comma.
  */
 
 type GmailMessageValue = Infer<typeof gmailMessageValue>;
@@ -80,17 +81,20 @@ export async function writeGmailThread(ctx: MutationCtx, accountId: Id<"comma_ac
   historyId?: string) {
   const account = await gmailAccount(ctx, accountId);
   const messages = raw.filter((message) => !message.labelIds.includes("DRAFT")).sort((a, b) => a.internalDate - b.internalDate);
-  if (!messages.length) return { written: 0, skipped: 0 };
   const scope = { platform: "gmail" as const, accountId };
-  const inInbox = messages.some((message) => message.labelIds.includes("INBOX"));
-  // A reply is never bulk, so replying to a thread lifts it out.
-  const bulk = messages.every((message) => message.bulk);
-  const unread = messages.filter((message) => message.labelIds.includes("UNREAD")).length;
   const conversationKey = gmail.conversationKey(threadId);
   const existing = await findByKey(ctx, scope, conversationKey);
   const held = existing?.gmail?.historyId;
   // Two syncs can read one thread and commit out of order; the older read's labels are stale, and its messages are held.
   if (held && historyId && BigInt(historyId) < BigInt(held)) return { written: 0, skipped: messages.length };
+  if (!messages.length) {
+    if (existing) await retractAbsent(ctx, scope, existing._id, new Set());
+    return { written: 0, skipped: 0 };
+  }
+  const inInbox = messages.some((message) => message.labelIds.includes("INBOX"));
+  // A reply is never bulk, so replying to a thread lifts it out.
+  const bulk = messages.every((message) => message.bulk);
+  const unread = messages.filter((message) => message.labelIds.includes("UNREAD")).length;
   const newest = historyId ?? held;
   // A refused archive stays on screen while the thread is still in the inbox; a settle or an archive in Gmail ends it.
   const archiveError = inInbox ? existing?.gmail?.archiveError : undefined;
@@ -111,6 +115,7 @@ export async function writeGmailThread(ctx: MutationCtx, accountId: Id<"comma_ac
     if (!same) await ctx.db.patch(existing._id, { ...fields, updatedAt: Date.now() });
   }
   const written = await insertGmailMessages(ctx, account, conversationId, messages);
+  await retractAbsent(ctx, scope, conversationId, new Set(messages.map((message) => message.id)));
   // Archived in Gmail is settled in Comma. Only a live archive the user made in Gmail counts as cleared today. A thread
   // whose inbox state Comma already holds is left alone, so the echo of Comma's own archive or unarchive does nothing.
   const prior = existing?.gmail?.inInbox;
@@ -157,6 +162,35 @@ export async function insertGmailMessages(ctx: MutationCtx, account: Doc<"comma_
   return real.length;
 }
 
+/**
+ * A full thread read is the whole thread. A message it no longer contains was deleted in Gmail, so the reader drops it.
+ * A row with `clientKey` is a send Comma just landed; an older read must not retract it.
+ */
+async function retractAbsent(ctx: MutationCtx, scope: { platform: "gmail"; accountId: Id<"comma_accounts"> }, conversationId: Id<"comma_conversations">, kept: ReadonlySet<string>) {
+  const rows = await ctx.db.query("comma_messages").withIndex("by_conversation_date", (q) => q.eq("conversationId", conversationId)).collect();
+  let changed = false;
+  for (const row of rows) {
+    if (row.retracted || row.clientKey || kept.has(row.guid)) continue;
+    await ctx.db.patch(row._id, { ...MODEL_TEXT_UNSET, retracted: true, text: "", mentions: [], dateRetracted: Date.now(), sourceVersion: Date.now() });
+    changed = true;
+  }
+  if (!changed) return;
+  await refreshLastMessage(ctx, conversationId);
+  const preview = (await ctx.db.get(conversationId))?.lastMessage;
+  if (preview && (await findMessage(ctx, scope, preview.guid))?.retracted) await ctx.db.patch(conversationId, { lastMessage: undefined });
+}
+
+export const forgetThread = internalMutation({
+  args: { accountId: v.id("comma_accounts"), threadId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { accountId, threadId }) => {
+    const scope = { platform: "gmail" as const, accountId };
+    const existing = await findByKey(ctx, scope, gmail.conversationKey(threadId));
+    if (existing) await retractAbsent(ctx, scope, existing._id, new Set());
+    return null;
+  },
+});
+
 export const ingestThread = internalMutation({
   args: { accountId: v.id("comma_accounts"), threadId: v.string(), messages: v.array(gmailMessageValue), quiet: v.boolean(), historyId: v.optional(v.string()) },
   returns: v.object({ written: v.number(), skipped: v.number() }),
@@ -201,7 +235,10 @@ async function readThread(ctx: ActionCtx, token: string, accountId: Id<"comma_ac
   try {
     thread = await googleApi<RawThread>(threadUrl(threadId, "metadata"), { token });
   } catch (error) {
-    if (error instanceof GoogleApiError && error.status === 404) return null;
+    if (error instanceof GoogleApiError && error.status === 404) {
+      await ctx.runMutation(internal.comma.gmailSync.forgetThread, { accountId, threadId });
+      return null;
+    }
     throw error;
   }
   let messages = (thread.messages ?? []).map(parseGmailMessage);
@@ -264,7 +301,7 @@ export async function syncMailbox(ctx: ActionCtx, accountId: Id<"comma_accounts"
   try {
     do {
       const params = new URLSearchParams({ startHistoryId: cursor, maxResults: "500", ...(pageToken ? { pageToken } : {}) });
-      for (const type of ["messageAdded", "labelAdded", "labelRemoved"]) params.append("historyTypes", type);
+      for (const type of ["messageAdded", "messageDeleted", "labelAdded", "labelRemoved"]) params.append("historyTypes", type);
       const page = await googleApi<HistoryPage>(`${GMAIL_API}/history?${params}`, { token });
       for (const entry of page.history ?? []) {
         for (const item of [...(entry.messages ?? []), ...(entry.messagesAdded ?? []).map((added) => added.message),
