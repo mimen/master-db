@@ -788,7 +788,9 @@ function EmailFrame({ html, images, inline, title }: { html: string; images: boo
       foldQuotes(doc);
       // The body, not the document: the document is never shorter than the frame, so a folded quote would leave a gap.
       const fit = () => setHeight(doc.body.scrollHeight + 4);
-      doc.addEventListener("toggle", fit, true);
+      // An observer, not a `toggle` listener: WebKit (the desktop app, iOS) runs no listener in a document whose sandbox
+      // bars scripts, so an opened quote stayed clipped at the folded height. It also follows a reflow and a late image.
+      new ResizeObserver(fit).observe(doc.body);
       fit();
     },
   });
