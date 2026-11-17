@@ -1,6 +1,7 @@
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { forwardSubject, forwardText, mailboxText, replyRecipients, replySubject } from "../../apps/imsg/shared/email-reply";
 import { pendingGuid } from "../../apps/imsg/shared/pending-send";
 import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
@@ -10,9 +11,8 @@ import type { CommaOutboxPayload } from "../schema/comma/validators";
 import { normalizeModules } from "../test-utils.vitest";
 
 import { sealCredentials } from "./credentials";
-import { forwardSubject, forwardText, mailboxText, replyRecipients, replySubject } from "../../apps/imsg/shared/email-reply";
-
 import { ALIAS, FakeGmail, MAILBOX, parseRfc822, REFRESH_TOKEN, stubGmailEnv } from "./fakeGmail.vitest";
+import { applyGmailResult } from "./gmailLane";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 const SAM = "sam@venue.test";
@@ -236,6 +236,34 @@ describe("files, reply all and forward", () => {
     expect(forwarded).toMatchObject({ platform: "gmail", accountId, gmail: { threadId: "thread-sent-1", subject: "Fwd: Re: Doors" }, lastMessage: { guid: "sent-1", isFromMe: true } });
     const landed = await t.run(async (ctx) => (await ctx.db.query("comma_attachments").collect()).filter((a) => a.messageGuid === "sent-1"));
     expect(landed.map((a) => [a.filename, a.conversationId])).toEqual([["invoice.pdf", row.conversationId]]);
+  });
+
+  test("a new email Gmail files onto an existing thread keeps that thread's messages and inbox", async () => {
+    const { t, accountId, messages, thread } = await connected();
+    const before = (await thread())!;
+    const now = Date.now();
+    const sent = {
+      id: "sent-new", threadId: "t-doors", internalDate: now, labelIds: ["SENT"],
+      from: { address: MAILBOX, name: "Milad Imen" }, to: [{ address: SAM, name: "Sam Lee" }], cc: [] as { address: string; name: string | null }[],
+      subject: "Doors", snippet: "One more thing", bulk: false, text: "One more thing",
+      model: { subject: "Doors", threadRef: "t-doors" },
+    };
+    await t.run(async (ctx) => {
+      const id = await ctx.db.insert("comma_outbox", {
+        clientKey: "ne-thread", lane: "gmail", status: "sent", attempts: 1,
+        payload: { kind: "sendEmail", accountId, text: "One more thing", email: { to: [`Sam Lee <${SAM}>`], cc: [], subject: "Doors" } },
+        resultGuid: "sent-new", result: { kind: "sendEmail", guid: "sent-new", gmail: sent },
+        createdAt: now, updatedAt: now,
+      });
+      await applyGmailResult(ctx, (await ctx.db.get(id))!);
+    });
+    expect((await messages()).map((row) => [row.guid, row.retracted])).toEqual([
+      ["m0", false], ["m1", false], ["sent-new", false],
+    ]);
+    expect(await thread()).toMatchObject({
+      gmail: { inInbox: before.gmail!.inInbox, subject: before.gmail!.subject },
+      lastMessage: { guid: "sent-new" },
+    });
   });
 
   test("Convex refuses a new email with no recipients or from a mailbox that is not one", async () => {

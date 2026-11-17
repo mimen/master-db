@@ -283,8 +283,12 @@ async function setInbox(ctx: MutationCtx, conversationId: Id<"comma_conversation
 export async function applyGmailResult(ctx: MutationCtx, row: OutboxRow): Promise<void> {
   const { route, payload, conversationId, result } = row;
   if (payload.kind === "sendEmail" && result?.kind === "sendEmail") {
-    await writeGmailThread(ctx, payload.accountId, result.gmail.threadId, [result.gmail], true);
-    const thread = await findByKey(ctx, { platform: "gmail", accountId: payload.accountId }, gmail.conversationKey(result.gmail.threadId));
+    const key = gmail.conversationKey(result.gmail.threadId);
+    const existing = await findByKey(ctx, { platform: "gmail", accountId: payload.accountId }, key);
+    // One sent message is not a full thread read. writeGmailThread would retract every other message and drop the inbox flag.
+    if (existing) await landGmailSend(ctx, payload.accountId, existing._id, result.gmail, row.clientKey);
+    else await writeGmailThread(ctx, payload.accountId, result.gmail.threadId, [result.gmail], true);
+    const thread = existing ?? await findByKey(ctx, { platform: "gmail", accountId: payload.accountId }, key);
     if (thread) await ctx.db.patch(row._id, { conversationId: thread._id });
     return;
   }
