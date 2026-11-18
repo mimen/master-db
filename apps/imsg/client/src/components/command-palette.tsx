@@ -38,7 +38,8 @@ import { openAgentChat } from "@/hooks/use-agent-toasts";
 import { agentApi, type AgentChatSummary } from "@/lib/agent-api";
 import { AGENT_ATTENTION } from "@/lib/inbox-model";
 import { useAgentSettings } from "@/lib/settings";
-import { ChatAvatar, PersonAvatar, type AvatarSource } from "./avatar";
+import { ChatAvatar, PersonAvatar } from "./avatar";
+import { SourceIcon } from "./service-label";
 import {
   PaletteListRow,
   PaletteSectionHeader,
@@ -425,8 +426,9 @@ function MessageHitContent({ hit: m, needle }: { hit: SearchHit; needle: string 
   );
 }
 
-function sourceOf(chat: ChatSummary, personalMail: ReadonlySet<string>): AvatarSource {
-  return { badge: platformBadge(conversationRoute(chat)), personal: chat.route.accountId !== null && personalMail.has(chat.route.accountId) };
+function SourceMark({ chat, personalMail }: { chat: ChatSummary; personalMail: ReadonlySet<string> }) {
+  const personal = chat.route.accountId !== null && personalMail.has(chat.route.accountId);
+  return <SourceIcon badge={platformBadge(conversationRoute(chat))} personal={personal} size={12} />;
 }
 
 function PaletteRowContent({ item, needle, age, now, personalMail }: { item: PaletteItem; needle: string; age?: RowAge; now: number; personalMail: ReadonlySet<string> }) {
@@ -457,9 +459,10 @@ function PaletteRowContent({ item, needle, age, now, personalMail }: { item: Pal
           : "";
       return (
         <>
-          <ChatAvatar chat={chat} size={26} source={sourceOf(chat, personalMail)} />
+          <ChatAvatar chat={chat} size={26} />
           <View style={[paletteStyles.textCol, styles.inline]}>
             <Highlighted text={chat.displayName} needle={needle} color={theme.text} style={[paletteStyles.title, styles.shrink]} />
+            <SourceMark chat={chat} personalMail={personalMail} />
             {subtitle !== "" && (
               <Text numberOfLines={1} style={[paletteStyles.subtitle, styles.shrink, { color: theme.popTertiary }]}>{subtitle}</Text>
             )}
@@ -473,9 +476,10 @@ function PaletteRowContent({ item, needle, age, now, personalMail }: { item: Pal
     case "agent":
       return (
         <>
-          <ChatAvatar chat={item.chat} size={26} source={sourceOf(item.chat, personalMail)} />
+          <ChatAvatar chat={item.chat} size={26} />
           <View style={[paletteStyles.textCol, styles.inline]}>
             <Highlighted text={item.agent.title} needle={needle} color={theme.text} style={[paletteStyles.title, styles.shrink]} />
+            <SourceMark chat={item.chat} personalMail={personalMail} />
             <Highlighted text={item.chat.displayName} needle={needle} color={theme.popTertiary} style={[paletteStyles.subtitle, styles.noShrink]} />
           </View>
           <Text style={[styles.age, { color: theme.popTertiary }]}>{AGENT_ATTENTION[item.agent.attention].header}</Text>

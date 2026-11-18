@@ -38,7 +38,7 @@ import { hapticCommit } from "@/lib/haptics";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 
 import { ChatAvatar } from "./avatar";
-import { HandleIcon } from "./service-label";
+import { HandleIcon, SourceIcon } from "./service-label";
 import { RowPan } from "./lazy-surfaces";
 
 /** The Agents lens status word's color: the attention's own, so the line reads like the badge. */
@@ -275,7 +275,7 @@ function ChatRowInner({
         <Text testID="today-rank" style={[styles.rank, { color: theme.textTertiary, paddingTop: compact ? 2 : 0 }]}>{today.rank ?? ""}</Text>
       ) : null}
       <View style={today && compact ? styles.todayAvatar : null}>
-        <ChatAvatar chat={chat} size={compact ? 32 : 44} source={{ badge: source, personal }} />
+        <ChatAvatar chat={chat} size={compact ? 32 : 44} />
       </View>
       <View style={styles.content}>
         <View style={styles.topLine}>
@@ -283,6 +283,7 @@ function ChatRowInner({
             <Text numberOfLines={1} style={[styles.name, { color: theme.text, fontSize: compact ? 13 : 17 }, boldUnread && signal !== "bold" && styles.nameRead]}>
               {chat.displayName}
             </Text>
+            <SourceIcon badge={source} personal={personal} size={compact ? 12 : 14} decorative />
             {handle ? <HandleIcon tiebreak={handle} size={compact ? 12 : 14} decorative /> : null}
             {/* Private CRM layer (favorite/priority). Mirrors the star on favorited contacts. */}
             {chat.crm?.is_favorite && (
