@@ -8,7 +8,7 @@ import type { SuggestionModel } from "@shared/types";
  * mirrored to AsyncStorage — but reactive, so a change in the settings picker
  * updates every reader (the suggestion shelf) immediately.
  */
-export type { Settings, SuggestionMode, NameOrder, ThemePreference, OpenOnLens, GroupConversationsBy, AgentModel } from "./settings-values";
+export type { Settings, SuggestionMode, NameOrder, ThemePreference, GroupConversationsBy, AgentModel } from "./settings-values";
 import type { AgentEffort } from "./agent-api";
 import {
   DEFAULT,
@@ -16,7 +16,6 @@ import {
   type AgentModel,
   type GroupConversationsBy,
   type NameOrder,
-  type OpenOnLens,
   type Settings,
   type SuggestionMode,
   type ThemePreference,
@@ -85,14 +84,6 @@ export function setTheme(theme: ThemePreference): void {
 }
 
 /** Stored only; the conversation list reads it when the filters unit wires it in. */
-export function setOpenOn(openOn: OpenOnLens): void {
-  if (state.openOn === openOn) return;
-  state = { ...state, openOn };
-  emit();
-  persist();
-}
-
-/** Stored only; the conversation list reads it when the filters unit wires it in. */
 export function setGroupBy(groupBy: GroupConversationsBy): void {
   if (state.groupBy === groupBy) return;
   state = { ...state, groupBy };
@@ -137,10 +128,6 @@ export function useNameOrder(): NameOrder {
 
 export function useThemePreference(): ThemePreference {
   return useSyncExternalStore(subscribe, () => state.theme, () => state.theme);
-}
-
-export function useOpenOn(): OpenOnLens {
-  return useSyncExternalStore(subscribe, () => state.openOn, () => state.openOn);
 }
 
 export function useGroupBy(): GroupConversationsBy {

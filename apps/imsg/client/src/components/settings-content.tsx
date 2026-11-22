@@ -28,21 +28,18 @@ import {
   setAgentSettings,
   setGroupBy,
   setNameOrder,
-  setOpenOn,
   setSuggestionMode,
   setSuggestionModel,
   setTheme,
   useAgentSettings,
   useGroupBy,
   useNameOrder,
-  useOpenOn,
   useSuggestionMode,
   useSuggestionModel,
   useThemePreference,
   type AgentModel,
   type GroupConversationsBy,
   type NameOrder,
-  type OpenOnLens,
   type SuggestionMode,
   type ThemePreference,
 } from "@/lib/settings";
@@ -61,13 +58,6 @@ export interface SettingsContentProps {
 const NAME_ORDER_OPTIONS: readonly DropdownOption<NameOrder>[] = [
   { value: "first-last", label: "First Last" },
   { value: "last-first", label: "Last, First" },
-];
-
-const OPEN_ON_OPTIONS: readonly DropdownOption<OpenOnLens>[] = [
-  { value: "unresponded", label: "To review" },
-  { value: "unread", label: "Unread" },
-  { value: "waiting", label: "Waiting" },
-  { value: "all", label: "All" },
 ];
 
 const GROUP_BY_OPTIONS: readonly DropdownOption<GroupConversationsBy>[] = [
@@ -349,7 +339,6 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
   const theme = useTheme();
   const { wide } = useLayoutMode();
   const nameOrder = useNameOrder();
-  const openOn = useOpenOn();
   const groupBy = useGroupBy();
   const suggestionMode = useSuggestionMode();
   const suggestionModel = useSuggestionModel();
@@ -423,10 +412,7 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
           <AccountsGroup />
 
           <Group title="Lists">
-            <SettingRow first title="Open on" caption="The view Comma shows when it starts.">
-              <Dropdown label="Open on" value={openOn} options={OPEN_ON_OPTIONS} onChange={setOpenOn} />
-            </SettingRow>
-            <SettingRow title="Group conversations by" caption="Section headers in every lens.">
+            <SettingRow first title="Group conversations by" caption="Section headers in every lens.">
               <Dropdown label="Group conversations by" value={groupBy} options={GROUP_BY_OPTIONS} onChange={setGroupBy} />
             </SettingRow>
           </Group>

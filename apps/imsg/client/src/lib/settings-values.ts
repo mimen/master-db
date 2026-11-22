@@ -1,4 +1,4 @@
-import type { StateFilter, SuggestionModel } from "@shared/types";
+import type { SuggestionModel } from "@shared/types";
 import type { AgentEffort } from "./agent-api";
 import { agentModelChoice, DEFAULT_AGENT_CHOICE, type AgentModel } from "./agent-models";
 
@@ -15,9 +15,6 @@ export type NameOrder = "first-last" | "last-first";
 /** "system" follows the OS appearance; the others pin it. */
 export type ThemePreference = "system" | "light" | "dark";
 
-/** The lens Comma starts in. Settled is a filter, not a lens, so it is not offered. */
-export type OpenOnLens = Exclude<StateFilter, "settled">;
-
 /** How every lens sections its conversations. */
 export type GroupConversationsBy = "last-message" | "person" | "none";
 
@@ -30,7 +27,6 @@ export interface Settings {
   /** Contacts list name ordering — see NameOrder above. */
   nameOrder: NameOrder;
   theme: ThemePreference;
-  openOn: OpenOnLens;
   groupBy: GroupConversationsBy;
   /** The Agent tab in the utility pane, and ⌘J. Shown only while the Mini's agent runner is up. */
   agentPane: boolean;
@@ -44,7 +40,6 @@ export const DEFAULT: Settings = {
   suggestionModel: "opus",
   nameOrder: "first-last",
   theme: "system",
-  openOn: "unresponded",
   groupBy: "last-message",
   agentPane: true,
   agentModel: DEFAULT_AGENT_CHOICE.model,
@@ -67,10 +62,6 @@ function isTheme(value: unknown): value is ThemePreference {
   return value === "system" || value === "light" || value === "dark";
 }
 
-function isOpenOn(value: unknown): value is OpenOnLens {
-  return value === "unresponded" || value === "unread" || value === "waiting" || value === "all";
-}
-
 function isGroupBy(value: unknown): value is GroupConversationsBy {
   return value === "last-message" || value === "person" || value === "none";
 }
@@ -89,7 +80,6 @@ export function parseSettings(raw: string): Settings {
     suggestionModel: isSuggestionModel(parsed.suggestionModel) ? parsed.suggestionModel : DEFAULT.suggestionModel,
     nameOrder: isNameOrder(parsed.nameOrder) ? parsed.nameOrder : DEFAULT.nameOrder,
     theme: isTheme(parsed.theme) ? parsed.theme : DEFAULT.theme,
-    openOn: isOpenOn(parsed.openOn) ? parsed.openOn : DEFAULT.openOn,
     groupBy: isGroupBy(parsed.groupBy) ? parsed.groupBy : DEFAULT.groupBy,
     agentPane: typeof parsed.agentPane === "boolean" ? parsed.agentPane : DEFAULT.agentPane,
     ...agentChoiceSettings(parsed.agentModel, parsed.agentEffort),
