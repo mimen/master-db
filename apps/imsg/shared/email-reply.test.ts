@@ -35,6 +35,11 @@ describe("subjects, addresses and forwards", () => {
     expect(parseTyped('Sam Lee <Sam@Venue.test>; pat@agency.test, not an address')).toEqual([sam, pat]);
   });
 
+  test("a quoted name keeps its comma and quotes, so a pasted or written address reads back whole", () => {
+    const rock = { address: "dj@venue.test", name: 'Dwayne "DJ" Ortiz' };
+    expect(parseTyped(`${mailboxText(dana)}, ${mailboxText(rock)}; pat@agency.test`)).toEqual([dana, rock, pat]);
+  });
+
   test("a forward puts the note above Gmail's forwarded block with the original's headers and text", () => {
     const original = { isFromMe: false, from: sam, to: [me], cc: [pat], date: Date.UTC(2026, 10, 6, 18, 5), subject: "Invoice #42", text: "Attached." };
     // ICU builds join the date and time with "at" or a comma.
