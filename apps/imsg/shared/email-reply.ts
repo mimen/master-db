@@ -66,13 +66,16 @@ export function forwardText(note: string, original: ReplySource & { date: number
   return note.trim() ? `${note.trimEnd()}\n\n${block}` : block;
 }
 
-/** What a person typed into To or Cc, as addresses: `Name <a@b.c>` or a bare address, split on commas and semicolons. */
+/**
+ * What a person typed into To or Cc, as addresses: `Name <a@b.c>` or a bare address, split on commas, semicolons and
+ * newlines outside a quoted name, so `mailboxText`'s `"Ortiz, Dana" <a@b.c>` reads back whole.
+ */
 export function parseTyped(text: string): MailAddress[] {
-  return text.split(/[,;\n]/).flatMap((entry) => {
+  return (text.match(/(?:"(?:\\.|[^"\\])*"?|[^,;\n"])+/g) ?? []).flatMap((entry) => {
     const angle = /^(.*)<([^>]*)>\s*$/s.exec(entry.trim());
     const address = normalizeEmail(angle ? angle[2]! : entry);
     if (!address) return [];
-    const name = angle?.[1]!.trim().replace(/^"(.*)"$/s, "$1").trim();
+    const name = angle?.[1]!.trim().replace(/^"(.*)"$/s, (_, quoted: string) => quoted.replace(/\\(.)/g, "$1")).trim();
     return [{ address, name: name || null }];
   });
 }
