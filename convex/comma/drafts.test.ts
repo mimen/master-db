@@ -113,6 +113,8 @@ test("prepareDraft resolves a conversation by phone in any format, chatGuid, or 
   }
   expect(await t.run((ctx) => ctx.db.query("comma_drafts").collect())).toHaveLength(1);
   await expect(t.mutation(internal.comma.drafts.prepareDraft, { address: "+15559999999", text: "x" })).rejects.toThrow("No conversation");
+  await expect(t.query(internal.comma.drafts.resolveDraftTarget, { address: "(415) 555-2671" })).resolves.toBe(conversationId);
+  await expect(t.query(internal.comma.drafts.resolveDraftTarget, { address: "+15559999999" })).rejects.toThrow("No conversation");
   await expect(t.mutation(internal.comma.drafts.prepareDraft, { address: "+14155552671", conversationId, text: "x" })).rejects.toThrow("exactly one");
   await expect(as.query(api.comma.queries.getDraft, { conversationId })).resolves.toMatchObject({ source: "agent" });
 });

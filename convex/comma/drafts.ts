@@ -6,7 +6,7 @@ import { internalAction, internalMutation, internalQuery, mutation, type Mutatio
 import { assertAllowed } from "../_lib/authed";
 import { draftListItem, type DraftAttachment } from "../schema/comma/validators";
 
-import { findConversation } from "./conversationLookup";
+import { type ConversationRef, findConversation } from "./conversationLookup";
 
 async function draftFor(ctx: QueryCtx, conversationId: Id<"comma_conversations">): Promise<Doc<"comma_drafts"> | null> {
   return await ctx.db
@@ -79,12 +79,24 @@ export const prepareDraft = internalMutation({
   returns: v.object({ conversationId: v.id("comma_conversations"), draftId: v.id("comma_drafts"), replaced: v.boolean() }),
   handler: async (ctx, { text, note, attachments = [], force, ...to }) => {
     if (!text.trim() && attachments.length === 0) throw new Error("A draft needs text or an attachment");
-    const conversation = await findConversation(ctx, to);
-    if (!conversation) throw new Error(`No conversation for ${to.conversationId ?? to.chatGuid ?? to.address}`);
-    const written = await writeAgentDraft(ctx, conversation._id, { text, note, attachments: await recordedAttachments(ctx, attachments), force });
+    const conversationId = await requireConversation(ctx, to);
+    const written = await writeAgentDraft(ctx, conversationId, { text, note, attachments: await recordedAttachments(ctx, attachments), force });
     if (!written) throw new Error("The conversation has an unsent draft the user wrote. Pass force to replace it.");
-    return { conversationId: conversation._id, ...written };
+    return { conversationId, ...written };
   },
+});
+
+async function requireConversation(ctx: QueryCtx, to: ConversationRef): Promise<Id<"comma_conversations">> {
+  const conversation = await findConversation(ctx, to);
+  if (!conversation) throw new Error(`No conversation for ${to.conversationId ?? to.chatGuid ?? to.address}`);
+  return conversation._id;
+}
+
+/** prepareDraft's recipient check, run by the CLI before it uploads anything. */
+export const resolveDraftTarget = internalQuery({
+  args: { conversationId: v.optional(v.id("comma_conversations")), chatGuid: v.optional(v.string()), address: v.optional(v.string()) },
+  returns: v.id("comma_conversations"),
+  handler: async (ctx, to) => await requireConversation(ctx, to),
 });
 
 /** The composer attachment for each upload recorded by recordUpload, so sendAttachment accepts it. */

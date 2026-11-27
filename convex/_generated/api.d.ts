@@ -5353,6 +5353,16 @@ export declare const internal: {
         { filename: string; mimeType: string; storageId: Id<"_storage"> },
         { size: number; storageId: Id<"_storage"> }
       >;
+      resolveDraftTarget: FunctionReference<
+        "query",
+        "internal",
+        {
+          address?: string;
+          chatGuid?: string;
+          conversationId?: Id<"comma_conversations">;
+        },
+        Id<"comma_conversations">
+      >;
       storeAttachment: FunctionReference<
         "action",
         "internal",

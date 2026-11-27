@@ -59,16 +59,22 @@ async function upload(path: string): Promise<string> {
   return storageId;
 }
 
-if (import.meta.main) {
-  const cli = parseCli(Bun.argv.slice(2));
+type Run = (fn: string, args: Record<string, unknown>) => unknown;
+
+/** Resolves the recipient before any upload, so a bad --to stores no files. */
+export async function prepare(cli: ReturnType<typeof parseCli>, run: Run = convexRun, store: (path: string) => Promise<string> = upload) {
+  const conversationId = run("comma/drafts:resolveDraftTarget", cli.target) as string;
   const attachments = [];
-  for (const path of cli.attach) attachments.push(await upload(path));
-  const result = convexRun("comma/drafts:prepareDraft", {
-    ...cli.target,
+  for (const path of cli.attach) attachments.push(await store(path));
+  return run("comma/drafts:prepareDraft", {
+    conversationId,
     text: cli.text,
     ...(cli.note !== undefined ? { note: cli.note } : {}),
     ...(attachments.length ? { attachments } : {}),
     ...(cli.force ? { force: true } : {}),
   });
-  console.log(JSON.stringify(result));
+}
+
+if (import.meta.main) {
+  console.log(JSON.stringify(await prepare(parseCli(Bun.argv.slice(2)))));
 }
