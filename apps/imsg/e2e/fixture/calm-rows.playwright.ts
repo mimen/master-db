@@ -18,7 +18,7 @@ async function open(page: Page, lens: string): Promise<void> {
   await expect(page.getByTestId("conversation-row").first()).toBeVisible();
 }
 
-test("the source sits on the avatar and the agent reads as one chip on the preview line", async ({ desk }) => {
+test("the source sits beside the name, not on the avatar, and the agent reads as one chip on the preview line", async ({ desk }) => {
   const page = desk.page;
   await desk.request.post("/__fixture/slack", { data: { seedChannel: true } });
   await desk.request.post("/__fixture/mail", { data: { mailboxes: true } });
@@ -27,12 +27,12 @@ test("the source sits on the avatar and the agent reads as one chip on the previ
 
   for (const [name, source] of [["Alex Rivera", "iMessage"], ["#bookings", "Slack"], ["Sam Lee", "Gmail"]] as const) {
     const target = row(page, name);
-    await expect(target.getByTestId("avatar-source"), `${name} carries its source on the avatar`).toHaveCount(1);
+    // The corner badge read as a new-message indicator, so the mark moved beside the name.
+    await expect(target.getByTestId("avatar-source"), `${name} keeps its avatar clean`).toHaveCount(0);
+    const nameLine = target.getByText(name, { exact: true }).locator("xpath=..");
+    await expect(nameLine.locator("svg"), `${name} carries its source after the name`).toHaveCount(1);
     await expect(target, "the source is still spoken").toHaveAttribute("aria-label", new RegExp(source));
   }
-  // The name line holds the name and the star, with no glyph after them.
-  const nameLine = row(page, "Alex Rivera").getByText("Alex Rivera", { exact: true });
-  await expect(nameLine.locator("xpath=..").locator("svg")).toHaveCount(0);
   await expect(row(page, "Alex Rivera").getByLabel("Favorite")).toHaveCSS("color", "rgb(100, 100, 107)");
 
   await openView(page, "All");
