@@ -6,9 +6,9 @@ import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
+import { aufPath, humansReply, stubAuf } from "./aufFixture.vitest";
 import { reconcileBatch } from "./canonicalReconciliation";
 import { semanticStateProof, stateProof, stateProofSummary, type CleanupPlan, type State } from "./cleanupPlan";
-import { aufPath, humansReply, stubAuf } from "./aufFixture.vitest";
 import { ingestOneCard } from "./ingestContacts";
 import { recomputePersonAggregates } from "./internal";
 import { assertProtectedPlan, protectedLegacy, unreviewedLegacyCount } from "./protectedLegacy";
