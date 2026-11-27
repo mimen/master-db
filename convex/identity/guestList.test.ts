@@ -22,20 +22,28 @@ function prismList(remaining: number | null, emails: string[] = []) {
   };
 }
 
-type Call = { url: URL; method: string; body: unknown };
+type Call = { url: URL; method: string; body: unknown; auth: string | null };
+const AUF = "https://fixture-auf.convex.cloud";
 
-/** Routes the add flow's four endpoints and records every call, so a test can assert exactly what was written. */
-function stubAddFlow({ remaining, allocationRow }: { remaining: number | null; allocationRow?: { id: string; count: number } }) {
+async function fixtureKey(): Promise<{ pem: string; publicKey: CryptoKey }> {
+  const pair = await crypto.subtle.generateKey(
+    { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+    true,
+    ["sign", "verify"],
+  );
+  const der = new Uint8Array(await crypto.subtle.exportKey("pkcs8", pair.privateKey));
+  return { pem: `-----BEGIN PRIVATE KEY-----\n${btoa(String.fromCharCode(...der))}\n-----END PRIVATE KEY-----`, publicKey: pair.publicKey };
+}
+
+/** Routes the add flow's endpoints and records every call, so a test can assert exactly what was written. */
+function stubAddFlow({ remaining, topUp = { ok: true } }: { remaining: number | null; topUp?: { ok: boolean; error?: string } }) {
   const calls: Call[] = [];
-  vi.stubEnv("AIRTABLE_API_KEY", "fixture-airtable-key");
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     const method = init?.method ?? "GET";
-    calls.push({ url, method, body: init?.body ? JSON.parse(String(init.body)) : undefined });
-    if (url.hostname === "api.airtable.com") {
-      if (method === "GET") return Response.json({ records: allocationRow ? [{ id: allocationRow.id, fields: { Count: allocationRow.count } }] : [] });
-      return Response.json({ records: [{ id: allocationRow?.id ?? "recNewAllocation", fields: {} }] });
-    }
+    const auth = new Headers(init?.headers).get("Authorization");
+    calls.push({ url, method, auth, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    if (url.origin === AUF) return Response.json({ status: "success", value: topUp });
     return method === "GET" ? Response.json(prismList(remaining)) : Response.json({ outcome: "confirmed", list: {} });
   }));
   return calls;
@@ -82,38 +90,55 @@ describe("upcomingGuestLists", () => {
 });
 
 describe("addToGuestList", () => {
-  test("with a spot free, posts one trimmed GA add and writes nothing to Airtable", async () => {
+  test("with a spot free, posts one trimmed GA add and tops up nothing", async () => {
     const calls = stubAddFlow({ remaining: 2 });
     const t = convexTest(schema, modules);
     expect(await t.action(addToGuestListRef, guest)).toEqual({ outcome: "confirmed" });
-    expect(calls.filter((c) => c.url.hostname === "api.airtable.com")).toEqual([]);
+    expect(calls.filter((c) => c.url.origin === AUF || c.url.hostname === "api.airtable.com")).toEqual([]);
     const post = calls.find((c) => c.method === "POST");
     expect(post?.url.toString()).toBe(`https://afternoonumbrellafriends.com/api/events/${FREAK}/guest-list?ownerType=human&ownerId=${MILAD}`);
     expect(post?.body).toMatchObject({ kind: "add", tierId: GA, contact: { firstName: "Chase", lastName: "Petersen", email: "chase@example.test" } });
   });
 
-  test("with his allocation used up, raises his own GA row by one before adding", async () => {
-    const calls = stubAddFlow({ remaining: 0, allocationRow: { id: "recMiladGA", count: 5 } });
-    const t = convexTest(schema, modules);
-    expect(await t.action(addToGuestListRef, guest)).toEqual({ outcome: "confirmed" });
-    const patch = calls.findIndex((c) => c.method === "PATCH");
-    expect(calls[patch].body).toEqual({ records: [{ id: "recMiladGA", fields: { Count: 6 } }] });
-    expect(calls.findIndex((c) => c.method === "POST" && c.url.hostname !== "api.airtable.com")).toBeGreaterThan(patch);
-  });
-
-  test("with no allocation on the event, creates his GA row for one spot", async () => {
+  test("with no spot free, tops up through AUF's Convex on its own signed token, then adds", async () => {
+    const { pem, publicKey } = await fixtureKey();
+    vi.stubEnv("AUF_CONVEX_URL", AUF);
+    vi.stubEnv("AUF_COMMA_JWT_PRIVATE_KEY", pem);
     const calls = stubAddFlow({ remaining: null });
     const t = convexTest(schema, modules);
     expect(await t.action(addToGuestListRef, { ...guest, eventId: ECHOES })).toEqual({ outcome: "confirmed" });
-    const lookup = calls.find((c) => c.url.hostname === "api.airtable.com" && c.method === "GET");
-    expect(lookup?.url.searchParams.get("filterByFormula")).toContain(`FIND('${MILAD}', ARRAYJOIN({Human ID}))`);
-    expect(calls.find((c) => c.url.hostname === "api.airtable.com" && c.method === "POST")?.body).toEqual({
-      records: [{ fields: { Event: [ECHOES], Human: [MILAD], "Ticket Tier": [GA], Count: 1, Reason: "Comma quick add" } }],
+
+    expect(calls.filter((c) => c.url.hostname === "api.airtable.com")).toEqual([]);
+    const topUp = calls.findIndex((c) => c.url.origin === AUF);
+    expect(calls[topUp].url.pathname).toBe("/api/action");
+    expect(calls[topUp].body).toEqual({ path: "commaGuestList:ensureSpot", args: { eventId: ECHOES, shortfall: 1 }, format: "json" });
+    const [header, payload, signature] = (calls[topUp].auth ?? "").replace("Bearer ", "").split(".");
+    const fromB64url = (s: string) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+    expect(await crypto.subtle.verify("RSASSA-PKCS1-v1_5", publicKey, fromB64url(signature), new TextEncoder().encode(`${header}.${payload}`))).toBe(true);
+    expect(JSON.parse(new TextDecoder().decode(fromB64url(payload)))).toMatchObject({ iss: "https://auf.network/comma", aud: "auf-comma", sub: "comma-guest-list" });
+    expect(calls.findIndex((c) => c.method === "POST" && c.url.origin !== AUF)).toBeGreaterThan(topUp);
+  });
+
+  test("with no spot free and no AUF credential, refuses and writes nothing", async () => {
+    const calls = stubAddFlow({ remaining: 0 });
+    const t = convexTest(schema, modules);
+    expect(await t.action(addToGuestListRef, guest)).toEqual({
+      outcome: "rejected",
+      reason: "No General Admission spot left on your list. Grant one in Backstage.",
     });
+    expect(calls.filter((c) => c.method !== "GET")).toEqual([]);
+  });
+
+  test("surfaces AUF's refusal of the top-up without adding", async () => {
+    vi.stubEnv("AUF_CONVEX_URL", AUF);
+    vi.stubEnv("AUF_COMMA_JWT_PRIVATE_KEY", (await fixtureKey()).pem);
+    const calls = stubAddFlow({ remaining: 0, topUp: { ok: false, error: "Event is not upcoming." } });
+    const t = convexTest(schema, modules);
+    expect(await t.action(addToGuestListRef, guest)).toEqual({ outcome: "rejected", reason: "Event is not upcoming." });
+    expect(calls.filter((c) => c.method === "POST" && c.url.origin !== AUF)).toEqual([]);
   });
 
   test("retries an unconfirmed add with the same commandId", async () => {
-    vi.stubEnv("AIRTABLE_API_KEY", "fixture-airtable-key");
     const replies = [Response.json({ outcome: "unconfirmed" }, { status: 202 }), Response.json({ outcome: "confirmed" })];
     const fetcher = vi.fn(async (_input: string | URL, init?: RequestInit) =>
       init?.method === "POST" ? (replies.shift() ?? Response.json({}, { status: 500 })) : Response.json(prismList(3)));

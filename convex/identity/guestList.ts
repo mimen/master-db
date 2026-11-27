@@ -6,21 +6,27 @@ import { requireIdentityAccess } from "./key";
 
 /**
  * Milad's own AUF guest lists, for Comma's quick add. Guest rows live in AUF's
- * Convex, not Airtable, and Prism's capability route reads and writes them
- * while enforcing the owner's comp budget and deadline. Milad's list is
- * uncapped, so an add first tops up his own General Admission allocation in
- * Airtable, the same record Backstage writes when staff grant comps.
+ * Convex, and Prism's capability route reads and writes them while enforcing
+ * the owner's comp budget and deadline. Milad's list is uncapped, so an add
+ * first tops up his own General Admission allocation through AUF's Convex,
+ * which owns Guest Allocations; a direct Airtable write would be reverted as
+ * drift. Until AUF_CONVEX_URL and AUF_COMMA_JWT_PRIVATE_KEY are set, an add
+ * with no free spot is refused and the spot is granted in Backstage.
  */
 
 const AIRTABLE_BASE_ID = "app39VsA3z85GTMbT";
 const EVENTS_TABLE_ID = "tblMUAZPSnj9al2AC";
-const GUEST_ALLOCATIONS_TABLE_ID = "tblM4CWNiCpKUANho";
 const PRISM_ORIGIN = "https://afternoonumbrellafriends.com";
 /** Milad's Humans record: the owner whose comp allocation the quick add spends. */
 const OWNER_HUMAN_ID = "rec6tdemsHYMY3X80";
 /** AUF's global General Admission tier, valid on every event. */
 const GA_TIER_ID = "recJzhaWLggd36A9Z";
 const RECORD_ID = /^rec[A-Za-z0-9]+$/;
+/** AUF's token family for this one lane: its Convex trusts this issuer for `commaGuestList:ensureSpot` alone. */
+const AUF_ISSUER = "https://auf.network/comma";
+const AUF_AUDIENCE = "auf-comma";
+const AUF_SUBJECT = "comma-guest-list";
+const NO_SPOT = "No General Admission spot left on your list. Grant one in Backstage.";
 
 /** Prism's comps window: from yesterday on, minus events that are not happening. */
 const UPCOMING_FORMULA =
@@ -80,37 +86,41 @@ export function toGuestListEvent(event: AirtableEventRecord, list: PrismGuestLis
   };
 }
 
-/** Raises Milad's own GA allocation on the event until it has a free spot, creating the row when he has none. */
-async function ensureSpot(eventId: string): Promise<void> {
+const b64url = (bytes: Uint8Array): string => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const b64urlJson = (value: object): string => b64url(new TextEncoder().encode(JSON.stringify(value)));
+
+/** A one-minute RS256 token on AUF's comma issuer, signed with the PKCS#8 PEM key. */
+async function aufToken(pem: string, now = Date.now()): Promise<string> {
+  const der = Uint8Array.from(atob(pem.replace(/-----[^-]+-----|\s/g, "")), (c) => c.charCodeAt(0));
+  const key = await crypto.subtle.importKey("pkcs8", der, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
+  const iat = Math.floor(now / 1000);
+  const body = `${b64urlJson({ alg: "RS256", typ: "JWT" })}.${b64urlJson({ iss: AUF_ISSUER, aud: AUF_AUDIENCE, sub: AUF_SUBJECT, iat, exp: iat + 60 })}`;
+  const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(body));
+  return `${body}.${b64url(new Uint8Array(signature))}`;
+}
+
+/**
+ * Raises Milad's own GA allocation on the event until it has a free spot, through AUF's Convex,
+ * which creates the row when he has none. Answers a refusal reason, or null once a spot is free.
+ */
+async function ensureSpot(eventId: string): Promise<string | null> {
   const list = await readGuestList(eventId);
   const remaining = list.allocations.filter((a) => a.ticketTierId === GA_TIER_ID).reduce((sum, a) => sum + a.remaining, 0);
   const shortfall = 1 - remaining;
-  if (shortfall <= 0) return;
+  if (shortfall <= 0) return null;
+  if (!Number.isInteger(shortfall)) throw new Error("Guest list answered no usable remaining count");
 
-  const headers = { Authorization: `Bearer ${airtableKey()}`, "Content-Type": "application/json" };
-  const params = new URLSearchParams({
-    filterByFormula: `AND(FIND('${eventId}', ARRAYJOIN({Event ID})), FIND('${OWNER_HUMAN_ID}', ARRAYJOIN({Human ID})), FIND('${GA_TIER_ID}', ARRAYJOIN({Ticket Tier ID})), NOT({Booking}))`,
-    "fields[]": "Count",
+  const url = process.env.AUF_CONVEX_URL;
+  const pem = process.env.AUF_COMMA_JWT_PRIVATE_KEY;
+  if (!url || !pem) return NO_SPOT;
+  const res = await fetch(`${url}/api/action`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${await aufToken(pem)}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ path: "commaGuestList:ensureSpot", args: { eventId, shortfall }, format: "json" }),
   });
-  const found = await fetch(airtableUrl(GUEST_ALLOCATIONS_TABLE_ID, params), { headers });
-  if (!found.ok) throw new Error(`Guest Allocations read failed: ${found.status} ${await found.text()}`);
-  const [row] = ((await found.json()) as { records: { id: string; fields: { Count?: number } }[] }).records;
-
-  const write = row
-    ? fetch(airtableUrl(GUEST_ALLOCATIONS_TABLE_ID), {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify({ records: [{ id: row.id, fields: { Count: (row.fields.Count ?? 0) + shortfall } }] }),
-      })
-    : fetch(airtableUrl(GUEST_ALLOCATIONS_TABLE_ID), {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          records: [{ fields: { Event: [eventId], Human: [OWNER_HUMAN_ID], "Ticket Tier": [GA_TIER_ID], Count: shortfall, Reason: "Comma quick add" } }],
-        }),
-      });
-  const res = await write;
-  if (!res.ok) throw new Error(`Guest Allocations write failed: ${res.status} ${await res.text()}`);
+  const result = (await res.json().catch(() => ({}))) as { status?: string; value?: { ok: boolean; error?: string }; errorMessage?: string };
+  if (result.status !== "success" || !result.value) throw new Error(`AUF allocation top-up failed: ${res.status} ${result.errorMessage ?? ""}`);
+  return result.value.ok ? null : (result.value.error ?? NO_SPOT);
 }
 
 export const upcomingGuestLists = action({
@@ -146,7 +156,8 @@ export const addToGuestList = action({
   handler: async (ctx, { key, eventId, firstName, lastName, email }): Promise<GuestAddResult> => {
     await requireIdentityAccess(ctx, key);
     if (!RECORD_ID.test(eventId)) return { outcome: "rejected", reason: "Unknown event" };
-    await ensureSpot(eventId);
+    const refused = await ensureSpot(eventId);
+    if (refused) return { outcome: "rejected", reason: refused };
 
     const body = JSON.stringify({
       kind: "add",
