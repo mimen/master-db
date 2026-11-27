@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Read-only snapshot capture. Default is Master only; --complete needs lane release."""
-import argparse, datetime, hashlib, json, os, pathlib, subprocess, sys, time, urllib.request, urllib.parse
+import argparse, datetime, hashlib, json, os, pathlib, subprocess, sys, urllib.request
 
 ARCHIVE = pathlib.Path('/Users/mimen/.local/state/migration-deletions/final-20261018/C')
 ENV = {**os.environ, 'CONVEX_DEPLOYMENT': 'dev:shiny-gerbil-853'}
 ENDPOINT = 'https://dusty-manatee-615.convex.site/canonical-contacts/read'
+HUMANS = pathlib.Path(__file__).with_name('auf-humans.ts')
 
 
 def cli(args):
@@ -40,7 +41,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def request(url, token, body=None):
-    if not (url == ENDPOINT or url.startswith('https://api.airtable.com/v0/app39VsA3z85GTMbT/tbl6LptFEMKLaN0I9?')):
+    if url != ENDPOINT:
         raise RuntimeError('Read URL denied')
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'}, method='POST' if data else 'GET')
@@ -63,20 +64,12 @@ def main():
     if args.complete:
         # Existing deployment credentials only; captured in memory, never logged.
         token = cli(['env', 'get', 'AUF_CANONICAL_CONTACT_READ_TOKEN']).strip()
-        api_key = cli(['env', 'get', 'AIRTABLE_API_KEY']).strip()
-        records, offset = [], None
-        for _ in range(1000):
-            params = [('pageSize', '100')] + [('fields[]', x) for x in ['Name', 'First Name', 'Last Name', 'Primary Email', 'Primary Phone']]
-            if offset:
-                params.append(('offset', offset))
-            page = request('https://api.airtable.com/v0/app39VsA3z85GTMbT/tbl6LptFEMKLaN0I9?' + urllib.parse.urlencode(params), api_key)
-            records.extend(page['records'])
-            offset = page.get('offset')
-            if not offset:
-                break
-            time.sleep(0.55)
-        if offset:
-            raise RuntimeError('Airtable complete-read bound exceeded')
+        auf = {name: cli(['env', 'get', name]).strip() for name in ['AUF_CONVEX_URL', 'AUF_COMMA_JWT_PRIVATE_KEY']}
+        # AUF commaIdentity:humans, paged by the helper on Comma's own key; stdout is the rows only.
+        result = subprocess.run(['bun', str(HUMANS)], env={**os.environ, **auf}, capture_output=True, text=True)
+        if result.returncode:
+            raise RuntimeError('AUF Humans read failed; raw output withheld')
+        records = json.loads(result.stdout)
         human_ids = list(dict.fromkeys([r['id'] for r in records] + [p['airtable_human_id'] for p in data['people'] if p.get('airtable_human_id')] + [r['source_contact_id'] for r in data['identities'] if r['source'] == 'airtable_human' and r.get('source_contact_id')]))
         snapshot = {'contacts': [], 'resolutions': []}
         for start in range(0, len(human_ids), 100):

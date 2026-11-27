@@ -8,6 +8,7 @@ import { normalizeModules } from "../test-utils.vitest";
 
 import { reconcileBatch } from "./canonicalReconciliation";
 import { semanticStateProof, stateProof, stateProofSummary, type CleanupPlan, type State } from "./cleanupPlan";
+import { aufPath, humansReply, stubAuf } from "./aufFixture.vitest";
 import { ingestOneCard } from "./ingestContacts";
 import { recomputePersonAggregates } from "./internal";
 import { assertProtectedPlan, protectedLegacy, unreviewedLegacyCount } from "./protectedLegacy";
@@ -77,9 +78,9 @@ test("semantic cleanup guard permits only Apple update time drift", async () => 
   await t.run(ctx => ctx.db.patch(apple._id, { updated_at: "later" }));
   expect((await stateProof(await state())).fingerprint).not.toBe(plan.initialFingerprint);
   expect((await semanticStateProof(await state(), plan.semanticGuard!)).fingerprint).toBe(plan.semanticGuard.initialFingerprint);
-  vi.stubEnv("AIRTABLE_API_KEY", "");
+  vi.stubEnv("AUF_CONVEX_URL", "");
   await expect(t.action(makeFunctionReference<"action", { apply: boolean; plan: CleanupPlan }>("identity/airtableSync:reconcileLegacyAirtableHumans"),
-    { apply: true, plan })).rejects.toThrow("AIRTABLE_API_KEY not configured");
+    { apply: true, plan })).rejects.toThrow("AUF_CONVEX_URL and AUF_COMMA_JWT_PRIVATE_KEY are not configured");
   vi.unstubAllEnvs();
   expect((await t.mutation(remove, { plan })).removed).toBe(1);
 });
@@ -212,18 +213,18 @@ test("remote-capture drift stops before the first replacement mutation", async (
   plan.semanticGuard = { ...scope, initialFingerprint: initial.fingerprint,
     beforeRemovalFingerprint: initial.fingerprint, afterRemovalFingerprint: after.fingerprint,
     legacyFingerprint: initial.legacyFingerprint };
-  vi.stubEnv("AIRTABLE_API_KEY", "synthetic");
+  await stubAuf();
   vi.stubEnv("AUF_CANONICAL_CONTACT_READ_TOKEN", "synthetic");
   vi.stubEnv("AUF_CANONICAL_CONTACT_READ_URL", "https://fixture.convex.site/canonical-contacts/read");
   const apple = before.identities.find(row => row.source === "apple_contact")!;
   let driftOnFetch = false;
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => {
-    if (String(input).includes("api.airtable.com")) {
+    if (aufPath(input, init)) {
       if (driftOnFetch) {
         driftOnFetch = false;
         await t.run(ctx => ctx.db.patch(apple._id, { normalized: "changed@example.test" }));
       }
-      return Response.json({ records: [{ id: "recAAAAAAAAAAAAAA", fields: { Name: "Fixture" } }] });
+      return humansReply("commaIdentity:humans", [{ id: "recAAAAAAAAAAAAAA", fields: { Name: "Fixture" } }]);
     }
     const { humanIds } = JSON.parse(init!.body as string) as { humanIds: string[] };
     return Response.json({ resolutions: humanIds.map(humanId => ({ humanId, canonicalHumanId: humanId })),
@@ -405,11 +406,11 @@ test("a reviewed protected legacy row survives cleanup and is accepted by the ho
     const source = makeFunctionReference<"query", Record<string, never>, { legacyCount: number }>("identity/canonicalReconciliation:sourceState");
     expect((await t.query(source, {})).legacyCount).toBe(0);
     const beforeProtected = (await state()).identities.find(row => row._id === entry.id);
-    vi.stubEnv("AIRTABLE_API_KEY", "synthetic");
+    await stubAuf();
     vi.stubEnv("AUF_CANONICAL_CONTACT_READ_TOKEN", "synthetic");
     vi.stubEnv("AUF_CANONICAL_CONTACT_READ_URL", "https://fixture.convex.site/canonical-contacts/read");
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => {
-      if (String(input).includes("api.airtable.com")) return Response.json({ records: [{ id: "recAAAAAAAAAAAAAA", fields: { Name: "Fixture" } }] });
+      if (aufPath(input, init)) return humansReply("commaIdentity:humans", [{ id: "recAAAAAAAAAAAAAA", fields: { Name: "Fixture" } }]);
       const { humanIds } = JSON.parse(init!.body as string) as { humanIds: string[] };
       return Response.json({ resolutions: humanIds.map(humanId => ({ humanId, canonicalHumanId: humanId })),
         contacts: humanIds.map(humanId => ({ humanId, channel: "email", value: "new@example.test", primary: true })) });
@@ -455,11 +456,11 @@ test("scheduled sync accepts seven exact protected legacy rows", async () => {
   for (const entry of (await stateProof(before)).legacy) protectedLegacy.set(entry.id, entry.fingerprint);
   const source = makeFunctionReference<"query", Record<string, never>, { legacyCount: number }>("identity/canonicalReconciliation:sourceState");
   expect((await t.query(source, {})).legacyCount).toBe(0);
-  vi.stubEnv("AIRTABLE_API_KEY", "synthetic");
+  await stubAuf();
   vi.stubEnv("AUF_CANONICAL_CONTACT_READ_TOKEN", "synthetic");
   vi.stubEnv("AUF_CANONICAL_CONTACT_READ_URL", "https://fixture.convex.site/canonical-contacts/read");
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => {
-    if (String(input).includes("api.airtable.com")) return Response.json({ records: [] });
+    if (aufPath(input, init)) return humansReply("commaIdentity:humans", []);
     const { humanIds } = JSON.parse(init!.body as string) as { humanIds: string[] };
     return Response.json({ resolutions: humanIds.map(humanId => ({ humanId, canonicalHumanId: null })), contacts: [] });
   }));

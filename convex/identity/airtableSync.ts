@@ -3,15 +3,16 @@ import { v } from "convex/values";
 
 import { internalAction, type ActionCtx } from "../_generated/server";
 
+import { aufIdentityQuery } from "./aufConvex";
 import { contactValues, readCanonicalSnapshot, type CanonicalContact, type CanonicalSnapshot } from "./canonicalContacts";
 import { cleanupPlan, fingerprint, type CleanupPlan, type SemanticGuard } from "./cleanupPlan";
 import { assertProtectedPlan } from "./protectedLegacy";
 
 /**
- * Pulls AUF's Airtable "Humans" table into the identity graph, Convex-native
- * (no imsg involvement — unlike Apple Contacts, Airtable has a real cloud
- * API, so this runs the same way convex/todoist/sync does: a scheduled
- * action calling fetch() directly). Cron-driven, full refresh each run —
+ * Pulls AUF's Humans into the identity graph, Convex-native (no imsg
+ * involvement — unlike Apple Contacts, AUF's Convex has a real cloud API, so
+ * this runs the same way convex/todoist/sync does: a scheduled action calling
+ * fetch() directly). The names come from AUF `commaIdentity:humans`. Cron-driven, full refresh each run —
  * the table is small enough that incremental sync isn't worth the
  * complexity Todoist's sync token approach needs.
  *
@@ -28,19 +29,17 @@ import { assertProtectedPlan } from "./protectedLegacy";
  * unmatched person in on purpose is airtableSearch.ts's job.
  */
 
-const AIRTABLE_BASE_ID = "app39VsA3z85GTMbT";
-const HUMANS_TABLE_ID = "tbl6LptFEMKLaN0I9";
 // Contact join keys come from AUF's canonical assignments, including secondary contacts.
-const FIELDS = ["Name", "First Name", "Last Name"];
-
 type AirtableRecord = {
   id: string;
   fields: { Name?: string; "First Name"?: string; "Last Name"?: string };
 };
 
-type AirtableListResponse = {
-  records: AirtableRecord[];
-  offset?: string;
+/** AUF `commaIdentity:humans`: every Human in creation order, names only. */
+export type AufHumansPage = {
+  page: { id: string; name?: string; firstName?: string; lastName?: string }[];
+  continueCursor: string;
+  isDone: boolean;
 };
 
 type ContactCard = {
@@ -90,38 +89,23 @@ async function synchronize(ctx: ActionCtx, migration: "none" | "preview" | "appl
       : initial?.fingerprint !== plan.initialFingerprint)) throw new Error("Cleanup initial state drift");
     if (migration === "none" && state.legacyCount)
       throw new Error("Legacy Airtable identities require reviewed canonical cleanup before hourly sync");
-    const apiKey = process.env.AIRTABLE_API_KEY;
-    if (!apiKey) {
-      throw new Error("AIRTABLE_API_KEY not configured on this Convex deployment");
-    }
-
     const records = new Map<string, AirtableRecord>();
     const snapshot: CanonicalSnapshot = { contacts: [], resolutions: [] };
 
-    let offset: string | undefined;
-    let pages = 0;
-    do {
-      const params = new URLSearchParams({ pageSize: "100" });
-      for (const f of FIELDS) params.append("fields[]", f);
-      if (offset) params.set("offset", offset);
-
-      const res = await fetch(
-        `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${HUMANS_TABLE_ID}?${params.toString()}`,
-        { headers: { Authorization: `Bearer ${apiKey}` } },
-      );
-      if (!res.ok) {
-        throw new Error(`Airtable Humans fetch failed: ${res.status}`);
-      }
-      const body = (await res.json()) as AirtableListResponse;
-      const canonical = await readCanonicalSnapshot(body.records.map((row) => row.id));
+    let cursor: string | null = null;
+    let done = false;
+    for (let pages = 0; !done && pages < 1000; pages++) { // bounded complete read: up to 100,000 Humans
+      const body: AufHumansPage = await aufIdentityQuery<AufHumansPage>("humans", { paginationOpts: { cursor, numItems: 100 } });
+      const canonical = await readCanonicalSnapshot(body.page.map((row) => row.id));
       snapshot.contacts.push(...canonical.contacts);
       snapshot.resolutions.push(...canonical.resolutions);
-      for (const record of body.records) records.set(record.id, record);
-      offset = body.offset;
-      pages++;
-    } while (offset && pages < 1000); // bounded complete read: up to 100,000 Humans
+      for (const { id, name, firstName, lastName } of body.page)
+        records.set(id, { id, fields: { Name: name, "First Name": firstName, "Last Name": lastName } });
+      cursor = body.continueCursor;
+      done = body.isDone;
+    }
 
-    if (offset) throw new Error("Airtable Humans exceeded the complete-read page limit");
+    if (!done) throw new Error("AUF Humans exceeded the complete-read page limit");
 
     const missing = state.humanIds.filter((id) => !records.has(id));
     for (let i = 0; i < missing.length; i += 100) {
@@ -136,7 +120,7 @@ async function synchronize(ctx: ActionCtx, migration: "none" | "preview" | "appl
       contactsByHuman.set(contact.humanId, contacts);
     }
     const cards: SnapshotCard[] = snapshot.resolutions.map(({ humanId, canonicalHumanId }) => {
-      // A complete Airtable enumeration proves whether the canonical Human still exists.
+      // A complete AUF Humans enumeration proves whether the canonical Human still exists.
       const record = canonicalHumanId ? records.get(canonicalHumanId) : undefined;
       const contactCard = record ? toContactCard({ ...record, id: humanId }, contactsByHuman.get(humanId) ?? []) : null;
       return { humanId, canonicalHumanId: record ? canonicalHumanId : null,

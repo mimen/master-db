@@ -6,7 +6,7 @@ Run the candidate reconciliation offline against restricted snapshots before dec
 
 Run from this worktree. `python3 scripts/canonical-preview/capture.py` captures only live Master people and identities through inline readonly queries. Output is mode 600 in a new timestamped mode-700 directory under the approved C archive. Only counts and a digest reach stdout.
 
-After the coordinator releases the Airtable lane and proves the resolutions endpoint live, run `python3 scripts/canonical-preview/capture.py --complete --airtable-lane-released`. This refreshes Master snapshots, fully enumerates native Human display and primary fields, and reads canonical assignments/resolutions in batches of at most 100 IDs. It uses the existing configured credentials in memory, never prints them, and denies redirects. Airtable pages are paced below two requests per second.
+After the coordinator releases the Airtable lane and proves the resolutions endpoint live, run `python3 scripts/canonical-preview/capture.py --complete --airtable-lane-released`. This refreshes Master snapshots, fully enumerates AUF Human names through AUF `commaIdentity:humans` (`auf-humans.ts`, on Comma's own key), and reads canonical assignments/resolutions in batches of at most 100 IDs. It uses the existing configured credentials in memory, never prints them, and denies redirects.
 
 Snapshots are paginated observations, not a cross-service frozen transaction. Refresh before any approved apply and compare the new preview. Each capture gets a new directory; replay refuses to overwrite existing outputs. Original evidence stays intact.
 
