@@ -89,12 +89,18 @@ export function toGuestListEvent(event: AirtableEventRecord, list: PrismGuestLis
 const b64url = (bytes: Uint8Array): string => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const b64urlJson = (value: object): string => b64url(new TextEncoder().encode(JSON.stringify(value)));
 
-/** A one-minute RS256 token on AUF's comma issuer, signed with the PKCS#8 PEM key. */
+/**
+ * A one-minute RS256 token on AUF's comma issuer, signed with the PKCS#8 PEM key. Its `kid` is the
+ * key's RFC 7638 thumbprint, the id AUF publishes for it, so a rotation changes only the key.
+ */
 async function aufToken(pem: string, now = Date.now()): Promise<string> {
   const der = Uint8Array.from(atob(pem.replace(/-----[^-]+-----|\s/g, "")), (c) => c.charCodeAt(0));
-  const key = await crypto.subtle.importKey("pkcs8", der, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
+  const algorithm = { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" };
+  const key = await crypto.subtle.importKey("pkcs8", der, algorithm, true, ["sign"]);
+  const { n, e } = await crypto.subtle.exportKey("jwk", key);
+  const kid = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify({ e, kty: "RSA", n })))));
   const iat = Math.floor(now / 1000);
-  const body = `${b64urlJson({ alg: "RS256", typ: "JWT" })}.${b64urlJson({ iss: AUF_ISSUER, aud: AUF_AUDIENCE, sub: AUF_SUBJECT, iat, exp: iat + 60 })}`;
+  const body = `${b64urlJson({ alg: "RS256", typ: "JWT", kid })}.${b64urlJson({ iss: AUF_ISSUER, aud: AUF_AUDIENCE, sub: AUF_SUBJECT, iat, exp: iat + 60 })}`;
   const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(body));
   return `${body}.${b64url(new Uint8Array(signature))}`;
 }

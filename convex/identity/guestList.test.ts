@@ -25,14 +25,17 @@ function prismList(remaining: number | null, emails: string[] = []) {
 type Call = { url: URL; method: string; body: unknown; auth: string | null };
 const AUF = "https://fixture-auf.convex.cloud";
 
-async function fixtureKey(): Promise<{ pem: string; publicKey: CryptoKey }> {
+async function fixtureKey(): Promise<{ pem: string; publicKey: CryptoKey; kid: string }> {
   const pair = await crypto.subtle.generateKey(
     { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
     true,
     ["sign", "verify"],
   );
   const der = new Uint8Array(await crypto.subtle.exportKey("pkcs8", pair.privateKey));
-  return { pem: `-----BEGIN PRIVATE KEY-----\n${btoa(String.fromCharCode(...der))}\n-----END PRIVATE KEY-----`, publicKey: pair.publicKey };
+  const { n, e } = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify({ e, kty: "RSA", n }))));
+  const kid = btoa(String.fromCharCode(...digest)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return { pem: `-----BEGIN PRIVATE KEY-----\n${btoa(String.fromCharCode(...der))}\n-----END PRIVATE KEY-----`, publicKey: pair.publicKey, kid };
 }
 
 /** Routes the add flow's endpoints and records every call, so a test can assert exactly what was written. */
@@ -101,7 +104,7 @@ describe("addToGuestList", () => {
   });
 
   test("with no spot free, tops up through AUF's Convex on its own signed token, then adds", async () => {
-    const { pem, publicKey } = await fixtureKey();
+    const { pem, publicKey, kid } = await fixtureKey();
     vi.stubEnv("AUF_CONVEX_URL", AUF);
     vi.stubEnv("AUF_COMMA_JWT_PRIVATE_KEY", pem);
     const calls = stubAddFlow({ remaining: null });
@@ -115,6 +118,7 @@ describe("addToGuestList", () => {
     const [header, payload, signature] = (calls[topUp].auth ?? "").replace("Bearer ", "").split(".");
     const fromB64url = (s: string) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
     expect(await crypto.subtle.verify("RSASSA-PKCS1-v1_5", publicKey, fromB64url(signature), new TextEncoder().encode(`${header}.${payload}`))).toBe(true);
+    expect(JSON.parse(new TextDecoder().decode(fromB64url(header)))).toEqual({ alg: "RS256", typ: "JWT", kid });
     expect(JSON.parse(new TextDecoder().decode(fromB64url(payload)))).toMatchObject({ iss: "https://auf.network/comma", aud: "auf-comma", sub: "comma-guest-list" });
     expect(calls.findIndex((c) => c.method === "POST" && c.url.origin !== AUF)).toBeGreaterThan(topUp);
   });
