@@ -22,7 +22,7 @@ function harness(responses: Partial<{ [K in keyof Routes]: Routes[K][1] }> = {})
   const fetch = async (url: string) => url.endsWith("missing") ? new Response("no", { status: 404 }) : new Response(png, { headers: { "content-type": "image/png" } });
   const tools = commaTools({ port, chatId: fakeId("chat-1"), conversationId: fakeId("conv-1"), scratchDir, timeZone: "UTC", fetch });
   const call = (name: string, args: Record<string, unknown> = {}) => tools.find((t) => t.name === name)!.handler(args as never, {});
-  return { call, calls, uploads, scratchDir };
+  return { tools, call, calls, uploads, scratchDir };
 }
 
 describe("comma tools", () => {
@@ -59,10 +59,8 @@ describe("comma tools", () => {
     expect(h.uploads).toEqual([]);
   });
 
-  test("send_message enqueues an outbox send for the bound conversation", async () => {
-    const h = harness();
-    await h.call("send_message", { text: "See you there" });
-    expect(h.calls).toEqual([{ route: "agentSend", body: { conversationId: "conv-1", clientKey: expect.stringMatching(/^agent-/), text: "See you there" } }]);
+  test("no tool sends: a reply reaches the outbox only as a draft Milad sends himself", () => {
+    expect(harness().tools.map((t) => t.name)).toEqual(["read_thread", "search_thread", "read_person", "get_people", "get_attachment", "attach_file", "set_draft"]);
   });
 
   test("get_attachment saves the file and returns images for the model to see", async () => {

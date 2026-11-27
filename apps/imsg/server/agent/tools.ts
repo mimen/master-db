@@ -41,7 +41,7 @@ async function download(deps: ToolDeps, url: string): Promise<{ bytes: Uint8Arra
   return { bytes: new Uint8Array(await response.arrayBuffer()), mime: response.headers.get("content-type")?.split(";")[0] ?? "application/octet-stream" };
 }
 
-/** The comma MCP tools, bound to one chat's conversation and scratch folder. */
+/** The comma MCP tools, bound to one chat's conversation and scratch folder. None sends: a reply goes out only when Milad sends the draft himself. */
 export function commaTools(deps: ToolDeps) {
   const { port, chatId, conversationId } = deps;
   const staged: StorageId[] = [];
@@ -121,11 +121,6 @@ export function commaTools(deps: ToolDeps) {
         ? "The draft is in the composer."
         : "Milad has typed in the composer, so the draft is shown in the pane with a Use in composer button.");
     })),
-    tool("send_message", "Send text to this conversation through Comma's outbox. Only send text Milad approved.", { text: z.string().min(1) },
-      (args) => guarded(async () => {
-        await port.post("agentSend", { conversationId, clientKey: `agent-${crypto.randomUUID()}`, text: args.text });
-        return text("Queued for sending.");
-      })),
   ];
 }
 

@@ -536,9 +536,9 @@ describe("agent chats follow the conversation", () => {
     await expect(t.mutation(api.comma.agent.reopenConversationAgents, { conversationId: c })).rejects.toThrow("Unauthorized");
   });
 
-  test("sending an agent draft settles its chat, after an edit too; clearing the composer or an agent send does not", async () => {
+  test("sending an agent draft settles its chat, after an edit too; clearing the composer does not", async () => {
     const { t, as, c } = await setup();
-    const [edited, cleared, sentByAgent] = await chats(t, c, [{ state: "idle" }, { state: "idle" }, { state: "idle" }]);
+    const [edited, cleared] = await chats(t, c, [{ state: "idle" }, { state: "idle" }]);
     const draft = (chatId: Id<"comma_agent_chats">) => t.mutation(internal.comma.agent.agentDraft, { chatId, conversationId: c, itemKey: `d-${chatId}`, text: "On my way" });
 
     await draft(cleared!);
@@ -546,18 +546,14 @@ describe("agent chats follow the conversation", () => {
     await as.mutation(api.comma.drafts.setDraft, { conversationId: c, text: "my own words" });
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "s1", conversationId: c, payload: { kind: "send", text: "my own words" } });
 
-    await draft(sentByAgent!);
-    await t.mutation(internal.comma.agent.agentSend, { conversationId: c, clientKey: "agent-send", text: "hi" });
-
     await as.mutation(api.comma.drafts.setDraft, { conversationId: c, text: "" });
     await draft(edited!);
     await as.mutation(api.comma.drafts.setDraft, { conversationId: c, text: "On my way, 10 min" });
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "s2", conversationId: c, payload: { kind: "send", text: "On my way, 10 min" } });
 
-    const [editedRow, clearedRow, agentRow] = await rows(t, [edited!, cleared!, sentByAgent!]);
+    const [editedRow, clearedRow] = await rows(t, [edited!, cleared!]);
     expect(editedRow).toMatchObject({ settledAt: expect.any(Number), settledWithConversation: false });
     expect(clearedRow).not.toHaveProperty("settledAt");
-    expect(agentRow).not.toHaveProperty("settledAt");
     expect(await as.query(api.comma.queries.getDraft, { conversationId: c })).toBeNull();
   });
 
