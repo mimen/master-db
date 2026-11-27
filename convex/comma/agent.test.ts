@@ -482,21 +482,23 @@ describe("runner functions", () => {
     expect(await t.run((ctx) => ctx.db.query("comma_bridge_state").withIndex("by_key", (q) => q.eq("key", "ai")).unique())).toMatchObject({ capabilities: { suggestions: true } });
   });
 
-  test("agentSend enqueues a send the way the composer does and leaves the user's draft alone", async () => {
-    const { t, as, conversationId } = await setup();
-    await as.mutation(api.comma.drafts.setDraft, { conversationId, text: "unsent" });
-    const id = await t.mutation(internal.comma.agent.agentSend, { conversationId, clientKey: "agent-1", text: "hello" });
-    expect(await t.mutation(internal.comma.agent.agentSend, { conversationId, clientKey: "agent-1", text: "hello" })).toBe(id);
-    expect(await t.run((ctx) => ctx.db.get(id))).toMatchObject({ payload: { kind: "send", text: "hello" }, status: "pending" });
-    expect(await t.run((ctx) => ctx.db.query("comma_messages").collect())).toMatchObject([{ guid: "temp-agent-1", text: "hello" }]);
-    expect(await as.query(api.comma.queries.getDraft, { conversationId })).toMatchObject({ text: "unsent", source: "user" });
-  });
 });
 
 describe("POST /comma/ingest/agent*", () => {
   const post = (kind: string, body: unknown, token = SECRET) => ({
     method: "POST", body: JSON.stringify(body),
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+  });
+
+  test("the runner has no send route: an agent reply goes out only when Milad sends its draft", async () => {
+    const { t, as, conversationId, ask } = await setup();
+    const chatId = await ask("k1");
+    const outbox = () => t.run((ctx) => ctx.db.query("comma_outbox").collect());
+    expect((await t.fetch("/comma/ingest/agentSend", post("agentSend", { conversationId, clientKey: "c1", text: "hi" }))).status).toBe(404);
+    expect((await t.fetch("/comma/ingest/agentDraft", post("agentDraft", { chatId, conversationId, itemKey: "d", text: "See you there" }))).status).toBe(200);
+    expect(await outbox(), "a draft waits for Milad").toEqual([]);
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "milad-1", conversationId, payload: { kind: "send", text: "See you there" } });
+    expect(await outbox()).toMatchObject([{ payload: { kind: "send", text: "See you there" }, status: "pending" }]);
   });
 
   test("rejects a wrong bearer token", async () => {
@@ -522,7 +524,6 @@ describe("POST /comma/ingest/agent*", () => {
       ["agentPeople", { conversationId }, [{ address: "+15550001111", name: "Alex", handles: ["+15550001111"], personId: expect.any(String), tags: [], events: [] }]],
       ["agentPersonContext", { conversationId, limit: 5, maxChars: 1000 }, { name: "Alex", lines: [], more: false }],
       ["agentAttachment", { conversationId, guid: "missing" }, null],
-      ["agentSend", { conversationId, clientKey: "c1", text: "hi" }, expect.any(String)],
     ];
     for (const [kind, body, result] of cases) {
       const response = await t.fetch(`/comma/ingest/${kind}`, post(kind, body));

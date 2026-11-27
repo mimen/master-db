@@ -5042,16 +5042,6 @@ export declare const internal: {
         { now: number },
         { chatIds: Array<Id<"comma_agent_chats">> }
       >;
-      agentSend: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          clientKey: string;
-          conversationId: Id<"comma_conversations">;
-          text: string;
-        },
-        Id<"comma_outbox">
-      >;
     };
     agentContext: {
       agentAttachment: FunctionReference<

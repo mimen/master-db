@@ -76,7 +76,6 @@ const COMMA_TOOL_SUMMARIES: Record<string, (input: Record<string, unknown>) => s
   get_attachment: () => "Opened an attachment",
   set_draft: () => "Drafted a reply",
   attach_file: () => "Attached a file",
-  send_message: () => "Sent a message",
 };
 
 const TOOL_SUMMARIES: Record<string, (input: Fields) => string> = {

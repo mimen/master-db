@@ -12,7 +12,6 @@ import {
 import { askTitle, chatPreview } from "./agentSummary";
 import { sameSecret } from "./bridgeAuth";
 import { recordedAttachments, writeAgentDraft } from "./drafts";
-import { enqueueCommand } from "./enqueue";
 
 /**
  * The agent pane. The client asks, answers, and stops through the public mutations; the runner on
@@ -431,10 +430,4 @@ export const agentDraft = internalMutation({
     await upsertItems(ctx, chatId, [{ key: itemKey, entry }]);
     return { placed };
   },
-});
-
-export const agentSend = internalMutation({
-  args: { conversationId: v.id("comma_conversations"), clientKey: v.string(), text: v.string() },
-  returns: v.id("comma_outbox"),
-  handler: async (ctx, { conversationId, clientKey, text }) => (await enqueueCommand(ctx, { conversationId, clientKey, payload: { kind: "send", text } })).id,
 });
