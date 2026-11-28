@@ -74,6 +74,7 @@ const COMMA_TOOL_SUMMARIES: Record<string, (input: Record<string, unknown>) => s
   get_people: () => "Looked up people",
   read_person: (input) => input.handle ? `Read other conversations with ${String(input.handle)}` : "Read their other conversations",
   get_attachment: () => "Opened an attachment",
+  send_message: () => "Asked to send a message",
   set_draft: () => "Drafted a reply",
   attach_file: () => "Attached a file",
 };

@@ -41,7 +41,7 @@ async function download(deps: ToolDeps, url: string): Promise<{ bytes: Uint8Arra
   return { bytes: new Uint8Array(await response.arrayBuffer()), mime: response.headers.get("content-type")?.split(";")[0] ?? "application/octet-stream" };
 }
 
-/** The comma MCP tools, bound to one chat's conversation and scratch folder. None sends: a reply goes out only when Milad sends the draft himself. */
+/** The comma MCP tools, bound to one chat's conversation and scratch folder. None sends: send_message asks Milad, and only his Approve reaches the outbox. */
 export function commaTools(deps: ToolDeps) {
   const { port, chatId, conversationId } = deps;
   const staged: StorageId[] = [];
@@ -121,6 +121,11 @@ export function commaTools(deps: ToolDeps) {
         ? "The draft is in the composer."
         : "Milad has typed in the composer, so the draft is shown in the pane with a Use in composer button.");
     })),
+    tool("send_message", "Ask Milad to approve sending this exact text to this conversation. It shows in the pane with Approve and Reject and goes out only if he taps Approve.", { text: z.string().min(1) },
+      (args) => guarded(async () => {
+        await port.post("agentRequestSend", { chatId, conversationId, itemKey: `send-${crypto.randomUUID()}`, text: args.text });
+        return text("Waiting for Milad: the message is in the pane with Approve and Reject, and it sends only if he taps Approve. Don't ask again or send it another way.");
+      })),
   ];
 }
 

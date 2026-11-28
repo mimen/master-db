@@ -23,6 +23,7 @@ type Entry<Kind extends AgentEntry["kind"]> = Extract<AgentEntry, { kind: Kind }
 export interface TranscriptActions {
   readonly onAnswer: (requestId: string, answers: Record<string, string>) => Promise<void>;
   readonly onUseDraft: (item: AgentItem) => Promise<void>;
+  readonly onDecideSend: (item: AgentItem, approve: boolean) => Promise<void>;
   /** A row grew or shrank because the user expanded it; scroll-follow must not jump. */
   readonly onDisclosure: () => void;
 }
@@ -199,6 +200,35 @@ function DraftCard({ item, entry, onUse }: { readonly item: AgentItem; readonly 
   );
 }
 
+/** A send the agent asked for: the exact text and who it goes to, held until the user approves or rejects it. */
+function SendRequestCard({ item, entry, onDecide }: { readonly item: AgentItem; readonly entry: Entry<"send_request">; readonly onDecide: (item: AgentItem, approve: boolean) => Promise<void> }) {
+  const theme = useTheme();
+  const type = useTypeRamp();
+  const [deciding, setDeciding] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const decide = (approve: boolean) => {
+    setDeciding(approve);
+    setError(null);
+    onDecide(item, approve).catch(() => setError("Couldn't record that. Try again.")).finally(() => setDeciding(null));
+  };
+  const status = entry.status === "approved" ? "Approved · sending" : entry.status === "rejected" ? "Rejected · not sent" : null;
+  return (
+    <RaisedCard testID="agent-send-request">
+      <Text style={[styles.meta, { color: theme.textTertiary }]}>{`Send to ${entry.recipient}?`}</Text>
+      <Text selectable style={{ color: theme.text, fontSize: type.body, lineHeight: Math.round(type.body * 1.5) }}>{entry.text}</Text>
+      {error ? <Text accessibilityRole="alert" style={[styles.meta, { color: theme.destructive }]}>{error}</Text> : null}
+      {status ? (
+        <Text style={[styles.meta, { color: theme.textSecondary }]}>{status}</Text>
+      ) : (
+        <View style={styles.cardActions}>
+          <Button label={deciding === false ? "Rejecting…" : "Reject"} variant="ghost" disabled={deciding !== null} onPress={() => decide(false)} />
+          <Button label={deciding === true ? "Approving…" : "Approve"} variant="primary" disabled={deciding !== null} onPress={() => decide(true)} />
+        </View>
+      )}
+    </RaisedCard>
+  );
+}
+
 function ItemRow({ item, shortcuts, actions }: { readonly item: AgentItem; readonly shortcuts: boolean; readonly actions: TranscriptActions }) {
   const theme = useTheme();
   const type = useTypeRamp();
@@ -231,6 +261,8 @@ function ItemRow({ item, shortcuts, actions }: { readonly item: AgentItem; reado
       return entry.placed === "pane"
         ? <DraftCard item={item} entry={entry} onUse={actions.onUseDraft} />
         : <Text style={[styles.meta, { color: theme.textTertiary }]}>Put a reply in the composer</Text>;
+    case "send_request":
+      return <SendRequestCard item={item} entry={entry} onDecide={actions.onDecideSend} />;
     case "turn_end":
       return entry.outcome === "failed"
         ? <Text accessibilityRole="alert" selectable style={[styles.meta, { color: theme.destructive }]}>{entry.error || "The agent stopped with an error."}</Text>
@@ -324,7 +356,7 @@ const styles = StyleSheet.create({
   fileChip: { alignItems: "center", borderRadius: Radius.sm, flexDirection: "row", gap: Space.xs, maxWidth: 220, paddingHorizontal: Space.md, paddingVertical: Space.xs },
   reply: { gap: Space.xxs },
   replyActions: { flexDirection: "row", marginLeft: -Space.sm + 2 },
-  cardActions: { alignItems: "flex-end" },
+  cardActions: { alignItems: "center", flexDirection: "row", gap: 8, justifyContent: "flex-end" },
   attachment: { alignItems: "center", flexDirection: "row", gap: Space.sm },
   status: { gap: Space.xxs },
   timer: { fontVariant: ["tabular-nums"] },

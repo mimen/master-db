@@ -5,9 +5,9 @@ import type { PendingSendState } from "./pending-send";
 
 export type StateFilter = "today" | "all" | "unread" | "unresponded" | "waiting" | "drafts" | "agents" | "snoozed" | "settled";
 
-/** The line an agent chat shows in lists: its open question, draft, reply, latest thought, or error. */
+/** The line an agent chat shows in lists: its open question or send to approve, draft, reply, latest thought, or error. */
 export interface AgentPreview {
-  kind: "question" | "draft" | "reply" | "thinking" | "error";
+  kind: "question" | "send" | "draft" | "reply" | "thinking" | "error";
   text: string;
 }
 /** One axis, ordered as the filter rail renders it. See matchesFilters for what

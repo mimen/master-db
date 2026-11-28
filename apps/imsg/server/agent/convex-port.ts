@@ -13,7 +13,7 @@ export type ConversationId = Chat["conversationId"];
 export type Item = { key: string; entry: AgentEntry };
 
 /** The bridge ingest routes the runner posts to, each the internal mutation of the same name. */
-type Refs = Pick<typeof internal.comma.agent, "agentClaim" | "agentRecover" | "agentChat" | "agentItems" | "agentHeartbeat" | "agentDraft">
+type Refs = Pick<typeof internal.comma.agent, "agentClaim" | "agentRecover" | "agentChat" | "agentItems" | "agentHeartbeat" | "agentDraft" | "agentRequestSend">
   & typeof internal.comma.agentContext
   & { agentRecordUpload: typeof internal.comma.drafts.recordUpload };
 export type Routes = { [K in keyof Refs]: [FunctionArgs<Refs[K]>, FunctionReturnType<Refs[K]>] };

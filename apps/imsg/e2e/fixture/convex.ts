@@ -255,6 +255,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls 
       const upload = uploads.get(storageId);
       return upload?.filename && upload.mimeType ? { filename: upload.filename, mimeType: upload.mimeType, size: upload.bytes.size } : null;
     },
+    name: async (conversationId) => (await conversations()).find((row) => row._id === conversationId)?.displayName ?? conversationId,
+    send: async (conversationId, clientKey, text) => {
+      await handlers["comma/outbox:enqueue"]!({ clientKey, conversationId, payload: { kind: "send", text } });
+    },
     // Production's read, from the world: what this DM's person sent in every other conversation, newest first.
     personContext: async (conversationId) => {
       const rows = await conversations();

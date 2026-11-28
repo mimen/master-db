@@ -349,6 +349,53 @@ describe("drafts", () => {
   });
 });
 
+describe("send approval", () => {
+  async function requested(key = "send-1", text = "See you at 7") {
+    const env = await setup();
+    const chatId = await env.ask("k1");
+    await env.t.mutation(internal.comma.agent.agentRequestSend, { chatId, conversationId: env.conversationId, itemKey: key, text });
+    const item = (await env.items(chatId)).find((row) => row.key === key)!;
+    const outbox = () => env.t.run((ctx) => ctx.db.query("comma_outbox").collect());
+    const chat = () => env.t.run((ctx) => ctx.db.get(chatId));
+    return { ...env, chatId, item, outbox, chat };
+  }
+
+  test("a request waits for Milad: nothing reaches the outbox, the chat needs him, and the card names the recipient", async () => {
+    const { item, outbox, chat, as, conversationId } = await requested();
+    expect(item.entry).toEqual({ kind: "send_request", text: "See you at 7", recipient: "Alex", status: "pending" });
+    expect(await outbox()).toEqual([]);
+    expect(await chat()).toMatchObject({ awaitingApproval: true });
+    expect((await as.query(api.comma.agent.chatsFor, { conversationId }))[0]?.preview).toEqual({ kind: "send", text: "See you at 7" });
+  });
+
+  test("Reject never sends", async () => {
+    const { t, item, outbox, chat, as } = await requested();
+    await as.mutation(api.comma.agent.decideSend, { itemId: item._id, approve: false });
+    await as.mutation(api.comma.agent.decideSend, { itemId: item._id, approve: true });
+    expect(await outbox()).toEqual([]);
+    expect((await t.run((ctx) => ctx.db.get(item._id)))?.entry).toMatchObject({ status: "rejected", decidedAt: expect.any(Number) });
+    expect((await chat())?.awaitingApproval).toBeUndefined();
+  });
+
+  test("Approve sends the exact text to the chat's conversation, once", async () => {
+    const { t, item, outbox, chat, as, conversationId } = await requested();
+    await as.mutation(api.comma.agent.decideSend, { itemId: item._id, approve: true });
+    await as.mutation(api.comma.agent.decideSend, { itemId: item._id, approve: true });
+    expect(await outbox()).toMatchObject([{ conversationId, payload: { kind: "send", text: "See you at 7" }, status: "pending" }]);
+    expect((await t.run((ctx) => ctx.db.get(item._id)))?.entry).toMatchObject({ status: "approved" });
+    expect((await chat())?.awaitingApproval).toBeUndefined();
+  });
+
+  test("only Milad can decide, and settling the chat rejects what is still waiting", async () => {
+    const { t, item, outbox, as, chatId } = await requested();
+    await expect(t.mutation(api.comma.agent.decideSend, { itemId: item._id, approve: true })).rejects.toThrow("Unauthorized");
+    await as.mutation(api.comma.agent.settle, { chatId });
+    await as.mutation(api.comma.agent.decideSend, { itemId: item._id, approve: true });
+    expect(await outbox()).toEqual([]);
+    expect((await t.run((ctx) => ctx.db.get(item._id)))?.entry).toMatchObject({ status: "rejected" });
+  });
+});
+
 describe("runner functions", () => {
   test("pendingAgentCommands rejects a wrong bridge key and joins each command with its chat", async () => {
     const { t, ask } = await setup();
@@ -490,7 +537,7 @@ describe("POST /comma/ingest/agent*", () => {
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
   });
 
-  test("the runner has no send route: an agent reply goes out only when Milad sends its draft", async () => {
+  test("the runner has no route that sends: a draft waits for Milad", async () => {
     const { t, as, conversationId, ask } = await setup();
     const chatId = await ask("k1");
     const outbox = () => t.run((ctx) => ctx.db.query("comma_outbox").collect());
@@ -519,6 +566,7 @@ describe("POST /comma/ingest/agent*", () => {
       ["agentHeartbeat", { now: 1 }, null],
       ["agentRecordUpload", { storageId, filename: "a.png", mimeType: "image/png" }, { storageId, size: 5 }],
       ["agentDraft", { chatId, conversationId, itemKey: "d", text: "hi", attachments: [storageId] }, { placed: "composer" }],
+      ["agentRequestSend", { chatId, conversationId, itemKey: "s", text: "hi" }, null],
       ["agentContext", { conversationId, limit: 40 }, { title: "Alex", participants: [{ name: "Alex", handles: ["+15550001111"] }], messages: [] }],
       ["agentSearch", { conversationId, query: "hi" }, []],
       ["agentPeople", { conversationId }, [{ address: "+15550001111", name: "Alex", handles: ["+15550001111"], personId: expect.any(String), tags: [], events: [] }]],

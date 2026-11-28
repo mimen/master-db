@@ -28,6 +28,8 @@ function preview(kind: AgentPreview["kind"], text: string | undefined): AgentPre
  * after the newest user entry, so an earlier turn's draft or thought never stands for this one.
  */
 export function chatPreview(newestFirst: readonly AgentEntry[], state: AgentChatState): AgentPreview | undefined {
+  const send = preview("send", newestFirst.find((entry): entry is Entry<"send_request"> => entry.kind === "send_request" && entry.status === "pending")?.text);
+  if (send) return send;
   if (state === "waiting_input") {
     const question = newestFirst.find((entry): entry is Entry<"question"> => entry.kind === "question" && entry.status === "pending");
     const asked = preview("question", question?.questions[0]?.question);

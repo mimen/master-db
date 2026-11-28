@@ -11,7 +11,10 @@ import {
 
 import { askTitle, chatPreview } from "./agentSummary";
 import { sameSecret } from "./bridgeAuth";
+import { conversationPeople } from "./conversationInfo";
 import { recordedAttachments, writeAgentDraft } from "./drafts";
+import { enqueueCommand } from "./enqueue";
+import { resolveConversationNames } from "./names";
 
 /**
  * The agent pane. The client asks, answers, and stops through the public mutations; the runner on
@@ -54,6 +57,14 @@ const REOPENED = { settledAt: undefined, settledWithConversation: undefined };
 async function settleChat(ctx: MutationCtx, chat: Doc<"comma_agent_chats">, { withConversation }: { withConversation: boolean }) {
   const now = Date.now();
   await ctx.db.patch(chat._id, { settledAt: now, settledWithConversation: withConversation });
+  if (chat.awaitingApproval) {
+    for await (const item of ctx.db.query("comma_agent_items").withIndex("by_chat_ordinal", (q) => q.eq("chatId", chat._id))) {
+      if (item.entry.kind === "send_request" && item.entry.status === "pending") {
+        await ctx.db.patch(item._id, { entry: { ...item.entry, status: "rejected", decidedAt: now }, updatedAt: now });
+      }
+    }
+    await ctx.db.patch(chat._id, { awaitingApproval: undefined });
+  }
   switch (chat.state) {
     case "waiting_input":
       for await (const item of ctx.db.query("comma_agent_items").withIndex("by_chat_ordinal", (q) => q.eq("chatId", chat._id))) {
@@ -311,6 +322,33 @@ export const useDraft = mutation({
 });
 
 /**
+ * Approve or Reject on a send the agent asked for. Approve is the only path from the agent to the
+ * outbox: it enqueues the exact text the card showed, to the chat's own conversation.
+ */
+export const decideSend = mutation({
+  args: { itemId: v.id("comma_agent_items"), approve: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, { itemId, approve }) => {
+    await assertAllowed(ctx);
+    const item = await ctx.db.get(itemId);
+    if (item?.entry.kind !== "send_request") throw new Error("Not a send request");
+    if (item.entry.status !== "pending") return null;
+    const chat = await requireChat(ctx, item.chatId);
+    const now = Date.now();
+    if (approve) {
+      await enqueueCommand(ctx, { conversationId: chat.conversationId, clientKey: `agent-${item.key}`, payload: { kind: "send", text: item.entry.text } });
+    }
+    await ctx.db.patch(itemId, { entry: { ...item.entry, status: approve ? "approved" : "rejected", decidedAt: now }, updatedAt: now });
+    let waiting = false;
+    for await (const other of ctx.db.query("comma_agent_items").withIndex("by_chat_ordinal", (q) => q.eq("chatId", chat._id))) {
+      if (other.entry.kind === "send_request" && other.entry.status === "pending") waiting = true;
+    }
+    if (!waiting) await ctx.db.patch(chat._id, { awaitingApproval: undefined, updatedAt: now });
+    return null;
+  },
+});
+
+/**
  * The runner subscribes to this with ConvexClient, so like pendingOutbox it is public and gated
  * by the bridge secret instead of Convex Auth.
  */
@@ -412,6 +450,26 @@ export const agentHeartbeat = internalMutation({
  * The agent's draft lands in the composer unless the user has typed there; then it waits in the
  * pane for useDraft. Idempotent on itemKey, so a retried post keeps its first placement.
  */
+/** send_message: records the agent's request for the user to approve. It sends nothing. */
+export const agentRequestSend = internalMutation({
+  args: { chatId: v.id("comma_agent_chats"), conversationId: v.id("comma_conversations"), itemKey: v.string(), text: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { chatId, conversationId, itemKey, text }) => {
+    const chat = await requireChat(ctx, chatId);
+    if (chat.conversationId !== conversationId) throw new Error("The agent chat belongs to another conversation");
+    if (!text.trim()) throw new Error("A send needs text");
+    if (await itemFor(ctx, chatId, itemKey)) return null;
+    const conversation = await ctx.db.get(conversationId);
+    if (!conversation) throw new Error("Conversation not found");
+    const people = (await conversationPeople(ctx, conversation)).map(({ person }) => person);
+    const recipient = resolveConversationNames(conversation, people).displayName;
+    const now = Date.now();
+    await upsertItems(ctx, chatId, [{ key: itemKey, entry: { kind: "send_request", text, recipient, status: "pending" } }], now);
+    await ctx.db.patch(chatId, { awaitingApproval: true, updatedAt: now, ...REOPENED });
+    return null;
+  },
+});
+
 export const agentDraft = internalMutation({
   args: {
     chatId: v.id("comma_agent_chats"), conversationId: v.id("comma_conversations"), itemKey: v.string(), text: v.string(),

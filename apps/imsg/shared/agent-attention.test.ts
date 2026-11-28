@@ -13,6 +13,7 @@ describe("agentAttention", () => {
 
   test("an open question needs the user and a turn in flight is working", () => {
     expect(agentAttention(chat({ state: "waiting_input" }))).toBe("needs_you");
+    expect(agentAttention(chat({ state: "idle", awaitingApproval: true })), "a send waiting on Approve").toBe("needs_you");
     expect(agentAttention(chat({ state: "pending" }))).toBe("working");
     expect(agentAttention(chat({ state: "running", lastTurnEndedAt: 9, seenAt: 1 }))).toBe("working");
   });
