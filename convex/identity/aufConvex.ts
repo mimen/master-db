@@ -28,7 +28,7 @@ export async function aufToken(pem: string, sub: AufLane, now = Date.now()): Pro
 }
 
 /** One AUF Convex function call on `lane`. Throws on a missing credential or any failure. */
-export async function aufCall<T>(kind: "query" | "action", path: string, args: object, lane: AufLane): Promise<T> {
+export async function aufCall<T>(kind: "query" | "mutation" | "action", path: string, args: object, lane: AufLane): Promise<T> {
   const url = process.env.AUF_CONVEX_URL;
   const pem = process.env.AUF_COMMA_JWT_PRIVATE_KEY;
   if (!url || !pem) throw new Error("AUF_CONVEX_URL and AUF_COMMA_JWT_PRIVATE_KEY are not configured on this Convex deployment");
