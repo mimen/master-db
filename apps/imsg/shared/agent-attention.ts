@@ -9,13 +9,14 @@ export interface AttentionInput {
   state: "idle" | "pending" | "running" | "waiting_input" | "interrupted" | "failed";
   settledAt?: number;
   seenAt?: number;
+  awaitingApproval?: boolean;
   lastTurnEndedAt?: number;
   updatedAt: number;
 }
 
 export function agentAttention(chat: AttentionInput): AgentAttention {
   if (chat.settledAt !== undefined) return "settled";
-  if (chat.state === "waiting_input") return "needs_you";
+  if (chat.state === "waiting_input" || chat.awaitingApproval) return "needs_you";
   if (chat.state === "pending" || chat.state === "running") return "working";
   const unseen = (chat.lastTurnEndedAt ?? 0) > (chat.seenAt ?? 0);
   if (unseen && chat.state === "failed") return "failed";

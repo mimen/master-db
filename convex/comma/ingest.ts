@@ -37,6 +37,7 @@ const ROUTES = {
   agentItems: internal.comma.agent.agentItems,
   agentHeartbeat: internal.comma.agent.agentHeartbeat,
   agentDraft: internal.comma.agent.agentDraft,
+  agentRequestSend: internal.comma.agent.agentRequestSend,
   agentContext: internal.comma.agentContext.agentContext,
   agentSearch: internal.comma.agentContext.agentSearch,
   agentPeople: internal.comma.agentContext.agentPeople,

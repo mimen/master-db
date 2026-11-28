@@ -127,6 +127,9 @@ export function AgentPane({ conversationId, requestedChatId, onClose }: {
     onUseDraft: async (item) => {
       await convex.mutation(agentApi.useDraft, { itemId: item._id });
     },
+    onDecideSend: async (item, approve) => {
+      await convex.mutation(agentApi.decideSend, { itemId: item._id, approve });
+    },
     onDisclosure: disclosure,
   }), [chatId, convex, disclosure]);
 

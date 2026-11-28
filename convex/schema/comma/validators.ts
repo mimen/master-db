@@ -910,6 +910,8 @@ export const agentChatFields = {
   title: v.optional(v.string()),
   /** When the user last saw the chat's finished turn. */
   seenAt: v.optional(v.number()),
+  /** True while a send the agent asked for waits on the user's Approve or Reject. */
+  awaitingApproval: v.optional(v.boolean()),
   lastTurnEndedAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -954,6 +956,14 @@ export const agentDraftEntry = v.object({
   kind: v.literal("draft"), text: v.string(), note: v.optional(v.string()), attachments: v.optional(v.array(draftAttachment)),
   placed: agentDraftPlacement, used: v.boolean(),
 });
+/** A send the agent asked for. Nothing reaches the outbox until the user approves it. */
+export const agentSendRequestEntry = v.object({
+  kind: v.literal("send_request"), text: v.string(),
+  /** The conversation's name when the agent asked, so the card says who it goes to. */
+  recipient: v.string(),
+  status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected")),
+  decidedAt: v.optional(v.number()),
+});
 export const agentTurnEndEntry = v.object({
   kind: v.literal("turn_end"), outcome: v.union(v.literal("completed"), v.literal("interrupted"), v.literal("failed")),
   error: v.optional(v.string()), durationMs: v.optional(v.number()),
@@ -962,7 +972,7 @@ export const agentTurnEndEntry = v.object({
 });
 export const agentEntry = v.union(
   agentUserEntry, agentAssistantEntry, agentThinkingEntry, agentToolEntry, agentQuestionEntry, agentDraftEntry, agentTurnEndEntry,
-  agentTodosEntry,
+  agentTodosEntry, agentSendRequestEntry,
 );
 
 export const agentItemFields = {
@@ -1009,15 +1019,15 @@ export const pendingAgentCommand = v.object({
   chat: v.object({ conversationId, sessionId, model, effort, state, seenThroughMessageAt, title }),
 });
 
-const { settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt } = agentChatFields;
+const { settledAt, seenAt, awaitingApproval, lastTurnEndedAt, createdAt, updatedAt } = agentChatFields;
 export const agentPreview = v.object({
-  kind: v.union(v.literal("question"), v.literal("draft"), v.literal("reply"), v.literal("thinking"), v.literal("error")),
+  kind: v.union(v.literal("question"), v.literal("send"), v.literal("draft"), v.literal("reply"), v.literal("thinking"), v.literal("error")),
   /** At most 200 characters. */
   text: v.string(),
 });
 /** An agent chat as lists show it. title falls back to the clipped first ask until the runner names the chat. */
 export const agentChatSummary = v.object({
-  _id: v.id("comma_agent_chats"), conversationId, title: v.string(), state, model, effort, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt,
+  _id: v.id("comma_agent_chats"), conversationId, title: v.string(), state, model, effort, settledAt, seenAt, awaitingApproval, lastTurnEndedAt, createdAt, updatedAt,
   preview: v.optional(agentPreview),
 });
 

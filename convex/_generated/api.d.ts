@@ -253,10 +253,11 @@ export declare const api: {
           lastTurnEndedAt?: number;
           model: string;
           preview?: {
-            kind: "question" | "draft" | "reply" | "thinking" | "error";
+            kind: "question" | "send" | "draft" | "reply" | "thinking" | "error";
             text: string;
           };
           seenAt?: number;
+          awaitingApproval?: boolean;
           settledAt?: number;
           state:
             | "idle"
@@ -281,10 +282,11 @@ export declare const api: {
           lastTurnEndedAt?: number;
           model: string;
           preview?: {
-            kind: "question" | "draft" | "reply" | "thinking" | "error";
+            kind: "question" | "send" | "draft" | "reply" | "thinking" | "error";
             text: string;
           };
           seenAt?: number;
+          awaitingApproval?: boolean;
           settledAt?: number;
           state:
             | "idle"
@@ -369,6 +371,13 @@ export declare const api: {
                   content: string;
                   status: "pending" | "in_progress" | "completed";
                 }>;
+              }
+            | {
+                decidedAt?: number;
+                kind: "send_request";
+                recipient: string;
+                status: "pending" | "approved" | "rejected";
+                text: string;
               };
           key: string;
           ordinal: number;
@@ -461,6 +470,12 @@ export declare const api: {
         "mutation",
         "public",
         { itemId: Id<"comma_agent_items"> },
+        null
+      >;
+      decideSend: FunctionReference<
+        "mutation",
+        "public",
+        { approve: boolean; itemId: Id<"comma_agent_items"> },
         null
       >;
     };
@@ -4942,6 +4957,17 @@ export declare const internal: {
           createdAt: number;
         }>
       >;
+      agentRequestSend: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          chatId: Id<"comma_agent_chats">;
+          conversationId: Id<"comma_conversations">;
+          itemKey: string;
+          text: string;
+        },
+        null
+      >;
       agentDraft: FunctionReference<
         "mutation",
         "internal",
@@ -5030,6 +5056,13 @@ export declare const internal: {
                     content: string;
                     status: "pending" | "in_progress" | "completed";
                   }>;
+                }
+              | {
+                  decidedAt?: number;
+                  kind: "send_request";
+                  recipient: string;
+                  status: "pending" | "approved" | "rejected";
+                  text: string;
                 };
             key: string;
           }>;

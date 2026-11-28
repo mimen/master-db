@@ -12,6 +12,10 @@ export interface AgentDraftPort {
   writeAgentDraft(conversationId: string, text: string, note: string, chatId: string): void;
   /** A finalized upload, or null; an ask may carry only finalized files. */
   upload?(storageId: string): AgentAttachmentMeta | null;
+  /** The conversation's name, as a send request's card shows it. */
+  name?(conversationId: string): Promise<string>;
+  /** Convex's outbox enqueue, which only an approved send request reaches. */
+  send?(conversationId: string, clientKey: string, text: string): Promise<void>;
   /** agentPersonContext for this conversation's person, or null for a group. */
   personContext?(conversationId: string): Promise<PersonContext | null>;
 }
@@ -25,6 +29,9 @@ const GUEST_QUESTION = {
   multiSelect: false,
   options: [{ label: "Freaquency 10/31", description: "Halloween, 2 spots left" }, { label: "Afterparty 11/1" }],
 };
+
+/** What the fake agent asks to send. */
+export const SEND_TEXT = "On my way, there in 10";
 
 const ESC = "\u001b";
 /** What the guest-list script prints: green ticks, a bold count, a yellow warning. */
@@ -65,7 +72,7 @@ export interface SeedAgentChat {
  * list instead, and the answer drafts a reply, into the composer or, when the user has typed
  * there, into the pane. A message asking what they said elsewhere reads the person's other
  * conversations with read_person and quotes the newest line. A message saying "take your time"
- * keeps working until Stop. Seeded chats come back on every reset; a seeded working chat runs
+ * keeps working until Stop. A message saying "send" asks to send a reply, which goes out only on Approve. Seeded chats come back on every reset; a seeded working chat runs
  * until Stop.
  */
 export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400, seeds: readonly SeedAgentChat[] = []) {
@@ -134,9 +141,9 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400, seeds: 
   const summary = (chat: AgentChat): AgentChatSummary => {
     const list = items.get(chat._id) ?? [];
     const first = list[0]?.entry;
-    const { _id, conversationId, state, model, effort, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt } = chat;
+    const { _id, conversationId, state, model, effort, settledAt, seenAt, awaitingApproval, lastTurnEndedAt, createdAt, updatedAt } = chat;
     return {
-      _id, conversationId, state, model, effort, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt,
+      _id, conversationId, state, model, effort, settledAt, seenAt, awaitingApproval, lastTurnEndedAt, createdAt, updatedAt,
       title: chat.title ?? askTitle(first?.kind === "user" ? first.text : ""),
       preview: chatPreview(list.slice(-40).reverse().map((item) => item.entry), state),
     };
@@ -154,7 +161,10 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400, seeds: 
   };
   /** Convex's settleChat with the fake runner's answer folded in: a waiting chat's turn stops at once. */
   const settleChat = (chat: AgentChat, withConversation: boolean) => {
-    markChat(chat._id, { settledAt: now(), settledWithConversation: withConversation });
+    markChat(chat._id, { settledAt: now(), settledWithConversation: withConversation, awaitingApproval: undefined });
+    for (const item of items.get(chat._id) ?? []) {
+      if (item.entry.kind === "send_request" && item.entry.status === "pending") upsert(chat._id, item.key, { ...item.entry, status: "rejected", decidedAt: now() });
+    }
     if (chat.state === "waiting_input") interrupt(chats.get(chat._id)!);
   };
   const endTurn = (chat: AgentChat, key: string) => {
@@ -209,6 +219,16 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400, seeds: 
           upsert(chatId, `${turn}-reply`, { kind: "assistant", streaming: false, text: newest
             ? `Elsewhere, ${newest.sender} wrote in ${newest.kind} **${newest.conversation}**: “${newest.text}”`
             : "Nothing from them in your other conversations." });
+          endTurn(chats.get(chatId)!, `${turn}-end`);
+        });
+        return;
+      }
+      if (/\bsend\b/i.test(args.text)) {
+        void (drafts.name?.(args.conversationId) ?? Promise.resolve("this conversation")).then((recipient) => {
+          upsert(chatId, `${turn}-send`, { ...comma("send_message", "Asked to send a message"), input: JSON.stringify({ text: SEND_TEXT }) });
+          upsert(chatId, `${turn}-request`, { kind: "send_request", text: SEND_TEXT, recipient, status: "pending" });
+          markChat(chatId, { awaitingApproval: true });
+          upsert(chatId, `${turn}-reply`, { kind: "assistant", streaming: false, text: "It's waiting for your approval above." });
           endTurn(chats.get(chatId)!, `${turn}-end`);
         });
         return;
@@ -283,6 +303,20 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400, seeds: 
       const chat = chatOf(args);
       if ((chat.lastTurnEndedAt ?? 0) > (chat.seenAt ?? 0)) markChat(chat._id, { seenAt: now() });
       return null;
+    },
+    "comma/agent:decideSend": async (args) => {
+      for (const [chatId, list] of items) {
+        const item = list.find((row) => row._id === args.itemId);
+        if (item?.entry.kind !== "send_request") continue;
+        if (item.entry.status !== "pending") return null;
+        const chat = chats.get(chatId)!;
+        if (args.approve) await drafts.send?.(chat.conversationId, `agent-${item.key}`, item.entry.text);
+        upsert(chatId, item.key, { ...item.entry, status: args.approve ? "approved" : "rejected", decidedAt: now() });
+        const waiting = (items.get(chatId) ?? []).some((row) => row.entry.kind === "send_request" && row.entry.status === "pending");
+        if (!waiting) markChat(chatId, { awaitingApproval: undefined });
+        return null;
+      }
+      throw new Error("Not a send request");
     },
     "comma/agent:useDraft": async (args) => {
       for (const [chatId, list] of items) {

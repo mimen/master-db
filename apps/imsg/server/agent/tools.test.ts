@@ -59,8 +59,11 @@ describe("comma tools", () => {
     expect(h.uploads).toEqual([]);
   });
 
-  test("no tool sends: a reply reaches the outbox only as a draft Milad sends himself", () => {
-    expect(harness().tools.map((t) => t.name)).toEqual(["read_thread", "search_thread", "read_person", "get_people", "get_attachment", "attach_file", "set_draft"]);
+  test("send_message only asks: it records a request for Milad to approve and never posts a send", async () => {
+    const h = harness();
+    const result = await h.call("send_message", { text: "See you there" });
+    expect(h.calls).toEqual([{ route: "agentRequestSend", body: { chatId: "chat-1", conversationId: "conv-1", itemKey: expect.stringMatching(/^send-/), text: "See you there" } }]);
+    expect(JSON.stringify(result)).toContain("Waiting for Milad");
   });
 
   test("get_attachment saves the file and returns images for the model to see", async () => {
