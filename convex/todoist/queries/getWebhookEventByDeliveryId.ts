@@ -3,8 +3,8 @@ import { v } from "convex/values";
 import { internalQuery } from "../../_generated/server";
 
 /**
- * Query to check if a webhook event with a specific delivery ID has already been processed
- * Used for idempotency - prevents processing the same webhook twice
+ * Find a successfully processed (or skipped) webhook event for a delivery ID.
+ * Used for idempotency. Failed attempts are ignored so Todoist's retry is processed.
  */
 export const getWebhookEventByDeliveryId = internalQuery({
   args: {
@@ -14,6 +14,7 @@ export const getWebhookEventByDeliveryId = internalQuery({
     const event = await ctx.db
       .query("todoist_webhook_events")
       .withIndex("by_delivery_id", (q) => q.eq("delivery_id", deliveryId))
+      .filter((q) => q.neq(q.field("status"), "failed"))
       .first();
 
     return event;
