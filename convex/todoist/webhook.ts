@@ -86,6 +86,11 @@ export const handleTodoistWebhook = httpAction(async (ctx, request) => {
       initiatorEmail: event.initiator.email,
     });
 
+    // A 5xx makes Todoist retry; the failed row does not count as a duplicate
+    if (result.status === "failed") {
+      return new Response("Processing failed", { status: 500 });
+    }
+
     return new Response("OK", { status: 200 });
   } catch (error) {
     console.error("Error processing webhook:", error);
@@ -145,7 +150,7 @@ async function verifyWebhookSignature(
 }
 
 /**
- * Check if we've already processed this delivery
+ * Check if we've already processed this delivery (a failed attempt does not count)
  */
 async function checkDuplicateDelivery(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -243,7 +248,7 @@ async function processItemEvent(
 
   // Check if this is a routine task and handle accordingly
   if (isRoutineTask(item)) {
-    await handleRoutineTaskEvent(ctx, item, eventName);
+    await handleRoutineTaskEvent(ctx, item, eventName, Date.parse(event.triggered_at));
   }
 
   // Trigger metadata extraction for items
@@ -275,63 +280,59 @@ async function handleRoutineTaskEvent(
     id: string;
     [key: string]: unknown;
   },
-  eventName: string
+  eventName: string,
+  completedDate: number
 ): Promise<void> {
-  try {
-    const todoistTaskId = item.id as string;
+  const todoistTaskId = item.id as string;
 
-    // Find the routineTask by todoistTaskId
-    const routineTask = await ctx.runQuery(
-      internal.routines.queries.getRoutineTaskByTodoistId.getRoutineTaskByTodoistId,
-      { todoistTaskId }
-    );
+  // Find the routineTask by todoistTaskId
+  const routineTask = await ctx.runQuery(
+    internal.routines.queries.getRoutineTaskByTodoistId.getRoutineTaskByTodoistId,
+    { todoistTaskId }
+  );
 
-    if (!routineTask) {
-      // Task not linked to a routine yet, skip routine handling
-      return;
+  if (!routineTask) {
+    // Task not linked to a routine yet, skip routine handling
+    return;
+  }
+
+  // Handle different event types
+  if (eventName === "item:completed") {
+    // Don't overwrite "missed" status with "completed"
+    // (tasks marked as missed and then completed in Todoist should stay missed)
+    if (routineTask.status !== "missed") {
+      await ctx.runMutation(
+        internal.routines.internalMutations.markRoutineTaskCompleted.markRoutineTaskCompleted,
+        {
+          routineTaskId: routineTask._id,
+          completedDate,
+        }
+      );
     }
-
-    // Handle different event types
-    if (eventName === "item:completed") {
-      // Don't overwrite "missed" status with "completed"
-      // (tasks marked as missed and then completed in Todoist should stay missed)
-      if (routineTask.status !== "missed") {
-        await ctx.runMutation(
-          internal.routines.internalMutations.markRoutineTaskCompleted.markRoutineTaskCompleted,
-          {
-            routineTaskId: routineTask._id,
-            completedDate: Date.now(),
-          }
-        );
+  } else if (eventName === "item:deleted") {
+    await ctx.runMutation(
+      internal.routines.internalMutations.markRoutineTaskSkipped.markRoutineTaskSkipped,
+      {
+        routineTaskId: routineTask._id,
       }
-    } else if (eventName === "item:deleted") {
-      await ctx.runMutation(
-        internal.routines.internalMutations.markRoutineTaskSkipped.markRoutineTaskSkipped,
-        {
-          routineTaskId: routineTask._id,
-        }
-      );
-    } else if (eventName === "item:uncompleted") {
-      await ctx.runMutation(
-        internal.routines.internalMutations.markRoutineTaskPending.markRoutineTaskPending,
-        {
-          routineTaskId: routineTask._id,
-        }
-      );
-    }
+    );
+  } else if (eventName === "item:uncompleted") {
+    await ctx.runMutation(
+      internal.routines.internalMutations.markRoutineTaskPending.markRoutineTaskPending,
+      {
+        routineTaskId: routineTask._id,
+      }
+    );
+  }
 
-    // Recalculate completion rate for the routine
-    if (routineTask.routineId) {
-      await ctx.runMutation(
-        internal.routines.internalMutations.recalculateRoutineCompletionRate.recalculateRoutineCompletionRate,
-        {
-          routineId: routineTask.routineId,
-        }
-      );
-    }
-  } catch (error) {
-    // Log error but don't fail the webhook
-    console.error("Error handling routine task event:", error);
+  // Recalculate completion rate for the routine
+  if (routineTask.routineId) {
+    await ctx.runMutation(
+      internal.routines.internalMutations.recalculateRoutineCompletionRate.recalculateRoutineCompletionRate,
+      {
+        routineId: routineTask.routineId,
+      }
+    );
   }
 }
 
