@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
+import { aufPath, humansReply, stubAuf } from "./aufFixture.vitest";
 import { ingestOneCard } from "./ingestContacts";
 import { protectedLegacy } from "./protectedLegacy";
 import { addPersonFromAirtableRef, listPeopleRef, nameDirectoryRef, searchAirtableHumansRef, setPrimaryHandleRef, TEST_KEY, whoIsRef } from "./testRefs.vitest";
@@ -14,7 +15,7 @@ const a = "recAAAAAAAAAAAAAA", c = "recCCCCCCCCCCCCCC";
 const sync = makeFunctionReference<"action", Record<string, never>>("identity/airtableSync:syncAirtableHumans");
 const cleanup = makeFunctionReference<"action", { apply?: boolean }>("identity/airtableSync:reconcileLegacyAirtableHumans");
 const approvedProtected = new Map(protectedLegacy);
-beforeEach(() => protectedLegacy.clear());
+beforeEach(async () => { protectedLegacy.clear(); await stubAuf(); });
 afterEach(() => {
   protectedLegacy.clear();
   for (const [id, fingerprint] of approvedProtected) protectedLegacy.set(id, fingerprint);
@@ -23,13 +24,13 @@ afterEach(() => {
 
 function fixture() {
   vi.stubEnv("IMSG_SERVER_SECRET", TEST_KEY);
-  vi.stubEnv("AIRTABLE_API_KEY", "synthetic");
   vi.stubEnv("AUF_CANONICAL_CONTACT_READ_TOKEN", "synthetic");
   vi.stubEnv("AUF_CANONICAL_CONTACT_READ_URL", "https://fixture.convex.site/canonical-contacts/read");
   const state = { records: [{ id: a, fields: { Name: "Fixture", "Primary Email": "revoked@example.test", "Primary Phone": "+16195550100" } }],
     target: a as string | null, emails: ["secondary@example.test", "imported@example.test"], phones: [] as string[] };
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => {
-    if (String(input).includes("api.airtable.com")) return Response.json({ records: state.records });
+    const auf = aufPath(input, init);
+    if (auf) return humansReply(auf.path, state.records);
     const { humanIds } = JSON.parse(init!.body as string) as { humanIds: string[] };
     return Response.json({ resolutions: humanIds.map((humanId) => ({ humanId, canonicalHumanId: state.target })),
       contacts: humanIds.flatMap((humanId) => state.target ? [
@@ -106,7 +107,8 @@ test("shared contacts alone cannot replace a different live Human link", async (
   state.records.push({ ...state.records[0], id: c });
   // No redirect for A: use per-request identity mapping for this fixture.
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => {
-    if (String(input).includes("api.airtable.com")) return Response.json({ records: state.records });
+    const auf = aufPath(input, init);
+    if (auf) return humansReply(auf.path, state.records);
     const { humanIds } = JSON.parse(init!.body as string) as { humanIds: string[] };
     return Response.json({ resolutions: humanIds.map((humanId) => ({ humanId, canonicalHumanId: humanId })),
       contacts: humanIds.map((humanId) => ({ humanId, channel: "email", value: "secondary@example.test", primary: false })) });
@@ -130,9 +132,9 @@ test("complete preview reads beyond 100 pages without truncation", async () => {
   const { t } = fixture();
   let pages = 0;
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => {
-    if (String(input).includes("api.airtable.com")) {
+    if (aufPath(input, init)) {
       pages++;
-      return Response.json({ records: [{ id: a, fields: { Name: "Fixture" } }], ...(pages < 101 ? { offset: String(pages) } : {}) });
+      return humansReply("commaIdentity:humans", [{ id: a, fields: { Name: "Fixture" } }], pages < 101);
     }
     const { humanIds } = JSON.parse(init!.body as string) as { humanIds: string[] };
     return Response.json({ contacts: [], resolutions: humanIds.map(humanId => ({ humanId, canonicalHumanId: humanId })) });

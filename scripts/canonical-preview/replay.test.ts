@@ -7,6 +7,8 @@ import { convexTest } from "convex-test";
 import { test, vi, expect } from "vitest";
 
 import type { Doc, Id } from "../../convex/_generated/dataModel";
+import type { AufHumansPage } from "../../convex/identity/airtableSync";
+import { AUF, stubAuf } from "../../convex/identity/aufFixture.vitest";
 import type { CanonicalSnapshot } from "../../convex/identity/canonicalContacts";
 import { reconcileBatch } from "../../convex/identity/canonicalReconciliation";
 import { semanticStateProof, stateProof, type CleanupPlan, type SemanticGuard, type State } from "../../convex/identity/cleanupPlan";
@@ -16,7 +18,7 @@ import schema from "../../convex/schema";
 import { normalizeModules } from "../../convex/test-utils.vitest";
 
 const modules = normalizeModules(import.meta.glob("../../convex/**/*.*s"), import.meta.url);
-type RecordRow = { id: string; fields: Record<string, string> };
+type RecordRow = AufHumansPage["page"][number];
 type Input = { people: Doc<"people">[]; identities: Doc<"identities">[]; records: RecordRow[]; canonical: CanonicalSnapshot; complete: boolean };
 const key = (r: Doc<"identities">) => `${r.kind}:${r.normalized}`;
 const sorted = (xs: string[]) => [...new Set(xs)].sort();
@@ -73,14 +75,17 @@ async function replay(input: Input) {
     }
   });
   const before = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
-  vi.stubEnv("AIRTABLE_API_KEY", "offline-only");
+  await stubAuf();
   vi.stubEnv("AUF_CANONICAL_CONTACT_READ_TOKEN", "offline-only");
   vi.stubEnv("AUF_CANONICAL_CONTACT_READ_URL", "https://offline.convex.site/canonical-contacts/read");
   vi.stubGlobal("fetch", async (url: string | URL, init?: RequestInit) => {
     const u = new URL(String(url));
-    if (u.origin === "https://api.airtable.com" && u.pathname === "/v0/app39VsA3z85GTMbT/tbl6LptFEMKLaN0I9" && (!init?.method || init.method === "GET")) {
-      const start = Number(u.searchParams.get("offset") ?? 0);
-      return Response.json({ records: input.records.slice(start, start + 100), ...(start + 100 < input.records.length ? { offset: String(start + 100) } : {}) });
+    if (u.href === `${AUF}/api/query` && init?.method === "POST") {
+      const { path, args } = JSON.parse(String(init.body)) as { path: string; args: { paginationOpts: { cursor: string | null } } };
+      if (path !== "commaIdentity:humans") throw new Error("NETWORK DENIED: offline replay only");
+      const start = Number(args.paginationOpts.cursor ?? 0);
+      return Response.json({ status: "success", value: { page: input.records.slice(start, start + 100),
+        continueCursor: String(start + 100), isDone: start + 100 >= input.records.length } });
     }
     if (u.href === "https://offline.convex.site/canonical-contacts/read" && init?.method === "POST") {
       const requested = new Set<string>(JSON.parse(String(init.body)).humanIds);
@@ -255,7 +260,7 @@ async function replay(input: Input) {
   });
   const humanIds = sorted([...input.records.map(r => r.id), ...input.canonical.resolutions.map(r => r.humanId)]);
   const humans = humanIds.map(humanId => ({ humanId,
-    nativeDisplay: recordsById.get(humanId)?.fields,
+    nativeDisplay: recordsById.get(humanId),
     resolution: resolutionsByHuman.get(humanId)?.[0],
     canonicalContacts: contactsByHuman.get(humanId) ?? [],
     before: beforeByHuman.get(humanId) ?? [],
@@ -286,9 +291,9 @@ test.skipIf(Boolean(process.env.CANONICAL_PREVIEW_INPUT))("offline operator pres
   const now = "2026-10-18"; const person = "fixture" as Id<"people">; const human = "recAAAAAAAAAAAAAA";
   const p = { _id: person, _creationTime: 1, normalized_phones: [], normalized_emails: ["old@example.test"], identity_count: 1, message_count: 0, is_self: false, auto_clustered: true, created_at: now, updated_at: now, airtable_human_id: human };
   const row = { _id: "legacy" as Id<"identities">, _creationTime: 1, person_id: person, kind: "email", value: "old@example.test", normalized: "old@example.test", message_count: 0, chat_count: 0, is_self: false, source: "airtable_human", created_at: now, updated_at: now };
-  const r = await replay({ complete: true, people: [p], identities: [row, { ...row, _id: "independent" as Id<"identities">, source: "manual" }], records: [{ id: human, fields: { Name: "Fixture" } }], canonical: { resolutions: [{ humanId: human, canonicalHumanId: human }], contacts: [{ humanId: human, channel: "email", value: "new@example.test", primary: true }] } });
+  const r = await replay({ complete: true, people: [p], identities: [row, { ...row, _id: "independent" as Id<"identities">, source: "manual" }], records: [{ id: human, name: "Fixture" }], canonical: { resolutions: [{ humanId: human, canonicalHumanId: human }], contacts: [{ humanId: human, channel: "email", value: "new@example.test", primary: true }] } });
   expect(r.summary).toMatchObject({ legacyRemoved: 1, canonicalRowsAfter: 1, independentSourceChanges: 0, genuinelyRemovedDistinctIdentifiers: 0, addedPersonIdentifierPairs: 1 });
-  const empty = await replay({ complete: true, people: [p], identities: [row], records: [{ id: human, fields: { Name: "Fixture" } }], canonical: { resolutions: [{ humanId: human, canonicalHumanId: human }], contacts: [] } });
+  const empty = await replay({ complete: true, people: [p], identities: [row], records: [{ id: human, name: "Fixture" }], canonical: { resolutions: [{ humanId: human, canonicalHumanId: human }], contacts: [] } });
   expect(empty.summary).toMatchObject({ withoutIndependentSources: 1, withoutIndependentSourcesLosingAllIdentifiers: 1, genuinelyRemovedDistinctIdentifiers: 1 });
   expect(empty.withoutIndependentSources[0].canonicalProof).toEqual([{ humanId: human, canonicalHumanId: human }]);
 });
@@ -305,7 +310,7 @@ test("offline operator stamps an optional bounded semantic guard", async () => {
       identity_count: 1, message_count: 0, is_self: false, auto_clustered: true, created_at: "fixture", updated_at: "fixture", airtable_human_id: human };
     const legacy = { _id: "legacy" as Id<"identities">, _creationTime: 1, person_id: person, kind: "email", value: "old@example.test",
       normalized: "old@example.test", message_count: 0, chat_count: 0, is_self: false, source: "airtable_human", created_at: "fixture", updated_at: "fixture" };
-    const result = await replay({ complete: true, people: [before], identities: [legacy], records: [{ id: human, fields: { Name: "Fixture" } }],
+    const result = await replay({ complete: true, people: [before], identities: [legacy], records: [{ id: human, name: "Fixture" }],
       canonical: { resolutions: [{ humanId: human, canonicalHumanId: human }], contacts: [{ humanId: human, channel: "email", value: "new@example.test", primary: true }] } });
     expect(result.reviewedPlan?.semanticGuard).toMatchObject({ allowAppleUpdatedAt: true, legacyOwnerRows: [], derivedPeople: [] });
     expect(result.summary.legacyRemoved).toBe(1);

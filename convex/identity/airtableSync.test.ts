@@ -6,6 +6,7 @@ import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
 import { toContactCard } from "./airtableSync";
+import { aufPath, humansPage, stubAuf } from "./aufFixture.vitest";
 import type { CanonicalContact } from "./canonicalContacts";
 import { ingestOneCard } from "./ingestContacts";
 import { protectedLegacy } from "./protectedLegacy";
@@ -60,14 +61,14 @@ describe("canonical Airtable sync", () => {
     expect(await t.run((ctx) => ctx.db.query("people").collect())).toHaveLength(1);
   });
   test("actual action uses bounded canonical fetch and link_only ingestion", async () => {
-    vi.stubEnv("AIRTABLE_API_KEY", "synthetic");
+    await stubAuf();
     vi.stubEnv("AUF_CANONICAL_CONTACT_READ_TOKEN", "synthetic");
     vi.stubEnv("AUF_CANONICAL_CONTACT_READ_URL", "https://fixture.convex.site/canonical-contacts/read");
     const fetcher = vi.fn(async (input: string | URL, init?: RequestInit) => {
-      if (String(input).includes("api.airtable.com")) {
-        const fields = new URL(String(input)).searchParams.getAll("fields[]");
-        expect(fields).toEqual(["Name", "First Name", "Last Name"]);
-        return Response.json({ records: [record] });
+      const auf = aufPath(input, init);
+      if (auf) {
+        expect(auf).toEqual({ path: "commaIdentity:humans", args: { paginationOpts: { cursor: null, numItems: 100 } } });
+        return humansPage([record]);
       }
       expect(JSON.parse(init!.body as string)).toEqual({ humanIds: [id] });
       return Response.json({ contacts, resolutions: [{ humanId: id, canonicalHumanId: id }] });
@@ -81,13 +82,12 @@ describe("canonical Airtable sync", () => {
     expect(await t.run((ctx) => ctx.db.query("people").collect())).toHaveLength(1);
   });
   test("a later canonical read failure prevents partial identity writes", async () => {
-    vi.stubEnv("AIRTABLE_API_KEY", "synthetic");
+    await stubAuf();
     vi.stubEnv("AUF_CANONICAL_CONTACT_READ_TOKEN", "synthetic");
     vi.stubEnv("AUF_CANONICAL_CONTACT_READ_URL", "https://fixture.convex.site/canonical-contacts/read");
     let pages = 0;
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL) => {
-      if (String(input).includes("api.airtable.com"))
-        return Response.json({ records: [record], ...(pages++ === 0 ? { offset: "next" } : {}) });
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => {
+      if (aufPath(input, init)) return humansPage([record], pages++ === 0);
       return pages === 1 ? Response.json({ contacts, resolutions: [{ humanId: id, canonicalHumanId: id }] }) : new Response("private", { status: 503 });
     }));
     const t = convexTest(schema, modules);

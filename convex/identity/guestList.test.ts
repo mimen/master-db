@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
+import { aufPath, aufReply, stubAuf } from "./aufFixture.vitest";
 import { addToGuestListRef, TEST_KEY, upcomingGuestListsRef } from "./testRefs.vitest";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
@@ -62,16 +63,17 @@ afterEach(() => {
 
 describe("upcomingGuestLists", () => {
   test("lists every upcoming event, whether or not Milad holds spots, with his guests' emails", async () => {
-    vi.stubEnv("AIRTABLE_API_KEY", "fixture-airtable-key");
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL) => {
-      const url = new URL(String(input));
-      if (url.hostname === "api.airtable.com") {
-        expect(url.searchParams.get("filterByFormula")).toContain("{Event Status}!='Cancelled'");
-        return Response.json({ records: [
-          { id: ECHOES, fields: { Name: "ECHOES", "Start Date": "2026-10-25T05:00:00.000Z" } },
-          { id: FREAK, fields: { Name: "Freakuency 2026", "Start Date": "2026-11-01T03:00:00.000Z" } },
-        ] });
+    await stubAuf();
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const auf = aufPath(input, init);
+      if (auf) {
+        expect(auf).toEqual({ path: "commaIdentity:upcomingEvents", args: { today: new Date().toISOString().slice(0, 10) } });
+        return aufReply([
+          { id: ECHOES, name: "ECHOES", startDate: "2026-10-25T05:00:00.000Z" },
+          { id: FREAK, name: "Freakuency 2026", startDate: "2026-11-01T03:00:00.000Z" },
+        ]);
       }
+      const url = new URL(String(input));
       expect(url.searchParams.get("ownerId")).toBe(MILAD);
       return Response.json(url.pathname.includes(FREAK) ? prismList(4, ["Chase@Example.test"]) : prismList(null));
     }));
@@ -83,7 +85,7 @@ describe("upcomingGuestLists", () => {
     ]);
   });
 
-  test("rejects a caller without identity access before touching Airtable", async () => {
+  test("rejects a caller without identity access before touching AUF", async () => {
     const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
     const t = convexTest(schema, modules);

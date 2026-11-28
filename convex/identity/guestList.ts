@@ -2,10 +2,12 @@ import { v } from "convex/values";
 
 import { action } from "../_generated/server";
 
+import { aufIdentityQuery, aufToken } from "./aufConvex";
 import { requireIdentityAccess } from "./key";
 
 /**
- * Milad's own AUF guest lists, for Comma's quick add. Guest rows live in AUF's
+ * Milad's own AUF guest lists, for Comma's quick add. The upcoming events come
+ * from AUF's Convex on Comma's identity lane. Guest rows live in AUF's
  * Convex, and Prism's capability route reads and writes them while enforcing
  * the owner's comp budget and deadline. Milad's list is uncapped, so an add
  * first tops up his own General Admission allocation through AUF's Convex,
@@ -14,24 +16,13 @@ import { requireIdentityAccess } from "./key";
  * with no free spot is refused and the spot is granted in Backstage.
  */
 
-const AIRTABLE_BASE_ID = "app39VsA3z85GTMbT";
-const EVENTS_TABLE_ID = "tblMUAZPSnj9al2AC";
 const PRISM_ORIGIN = "https://afternoonumbrellafriends.com";
 /** Milad's Humans record: the owner whose comp allocation the quick add spends. */
 const OWNER_HUMAN_ID = "rec6tdemsHYMY3X80";
 /** AUF's global General Admission tier, valid on every event. */
 const GA_TIER_ID = "recJzhaWLggd36A9Z";
 const RECORD_ID = /^rec[A-Za-z0-9]+$/;
-/** AUF's token family for this one lane: its Convex trusts this issuer for `commaGuestList:ensureSpot` alone. */
-const AUF_ISSUER = "https://auf.network/comma";
-const AUF_AUDIENCE = "auf-comma";
-const AUF_SUBJECT = "comma-guest-list";
 const NO_SPOT = "No General Admission spot left on your list. Grant one in Backstage.";
-
-/** Prism's comps window: from yesterday on, minus events that are not happening. */
-const UPCOMING_FORMULA =
-  "AND({Name}!='', {Start Date}!='', IS_AFTER({Start Date}, DATEADD(TODAY(),-1,'days')), " +
-  "{Event Status}!='Cancelled', {Event Status}!='Postponed')";
 
 export type GuestListEvent = {
   eventId: string;
@@ -47,7 +38,8 @@ export type GuestAddResult =
   | { outcome: "rejected"; reason: string }
   | { outcome: "unconfirmed" };
 
-type AirtableEventRecord = { id: string; fields: { Name?: string; "Start Date"?: string } };
+/** AUF `commaIdentity:upcomingEvents`: Prism's comps window, from yesterday on, minus events that are not happening. */
+type UpcomingEvent = { id: string; name: string; startDate: string };
 
 type PrismGuestList = {
   view: { rows: { contact: { email: string } }[] };
@@ -59,50 +51,20 @@ function guestListUrl(eventId: string): string {
   return `${PRISM_ORIGIN}/api/events/${eventId}/guest-list?ownerType=human&ownerId=${OWNER_HUMAN_ID}`;
 }
 
-function airtableUrl(table: string, params?: URLSearchParams): string {
-  return `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${table}${params ? `?${params.toString()}` : ""}`;
-}
-
-function airtableKey(): string {
-  const apiKey = process.env.AIRTABLE_API_KEY;
-  if (!apiKey) throw new Error("AIRTABLE_API_KEY not configured on this Convex deployment");
-  return apiKey;
-}
-
 async function readGuestList(eventId: string): Promise<PrismGuestList> {
   const res = await fetch(guestListUrl(eventId));
   if (!res.ok) throw new Error(`Guest list read failed: ${res.status}`);
   return (await res.json()) as PrismGuestList;
 }
 
-export function toGuestListEvent(event: AirtableEventRecord, list: PrismGuestList): GuestListEvent | null {
-  if (!event.fields.Name || !event.fields["Start Date"]) return null;
+export function toGuestListEvent(event: UpcomingEvent, list: PrismGuestList): GuestListEvent {
   return {
     eventId: event.id,
-    name: event.fields.Name,
-    startDate: event.fields["Start Date"],
+    name: event.name,
+    startDate: event.startDate,
     deadline: list.deadline,
     guestEmails: list.view.rows.map((r) => r.contact.email.toLowerCase()),
   };
-}
-
-const b64url = (bytes: Uint8Array): string => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-const b64urlJson = (value: object): string => b64url(new TextEncoder().encode(JSON.stringify(value)));
-
-/**
- * A one-minute RS256 token on AUF's comma issuer, signed with the PKCS#8 PEM key. Its `kid` is the
- * key's RFC 7638 thumbprint, the id AUF publishes for it, so a rotation changes only the key.
- */
-async function aufToken(pem: string, now = Date.now()): Promise<string> {
-  const der = Uint8Array.from(atob(pem.replace(/-----[^-]+-----|\s/g, "")), (c) => c.charCodeAt(0));
-  const algorithm = { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" };
-  const key = await crypto.subtle.importKey("pkcs8", der, algorithm, true, ["sign"]);
-  const { n, e } = await crypto.subtle.exportKey("jwk", key);
-  const kid = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify({ e, kty: "RSA", n })))));
-  const iat = Math.floor(now / 1000);
-  const body = `${b64urlJson({ alg: "RS256", typ: "JWT", kid })}.${b64urlJson({ iss: AUF_ISSUER, aud: AUF_AUDIENCE, sub: AUF_SUBJECT, iat, exp: iat + 60 })}`;
-  const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(body));
-  return `${body}.${b64url(new Uint8Array(signature))}`;
 }
 
 /**
@@ -121,7 +83,7 @@ async function ensureSpot(eventId: string): Promise<string | null> {
   if (!url || !pem) return NO_SPOT;
   const res = await fetch(`${url}/api/action`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${await aufToken(pem)}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${await aufToken(pem, "comma-guest-list")}`, "Content-Type": "application/json" },
     body: JSON.stringify({ path: "commaGuestList:ensureSpot", args: { eventId, shortfall }, format: "json" }),
   });
   const result = (await res.json().catch(() => ({}))) as { status?: string; value?: { ok: boolean; error?: string }; errorMessage?: string };
@@ -133,14 +95,12 @@ export const upcomingGuestLists = action({
   args: { key: v.optional(v.string()) },
   handler: async (ctx, { key }): Promise<GuestListEvent[]> => {
     await requireIdentityAccess(ctx, key);
-    const params = new URLSearchParams({ filterByFormula: UPCOMING_FORMULA, "sort[0][field]": "Start Date" });
-    for (const f of ["Name", "Start Date"]) params.append("fields[]", f);
-    const res = await fetch(airtableUrl(EVENTS_TABLE_ID, params), { headers: { Authorization: `Bearer ${airtableKey()}` } });
-    if (!res.ok) throw new Error(`Airtable upcoming events failed: ${res.status} ${await res.text()}`);
-    const { records } = (await res.json()) as { records: AirtableEventRecord[] };
+    // Airtable's TODAY() is the UTC day.
+    const today = new Date().toISOString().slice(0, 10);
+    const events = await aufIdentityQuery<UpcomingEvent[]>("upcomingEvents", { today });
 
     const lists = await Promise.all(
-      records.map(async (event) => {
+      events.map(async (event) => {
         const list = await fetch(guestListUrl(event.id));
         return list.ok ? toGuestListEvent(event, (await list.json()) as PrismGuestList) : null;
       }),

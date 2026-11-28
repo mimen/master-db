@@ -1,11 +1,12 @@
 import { convexTest, type TestConvex } from "convex-test";
-import { beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
-import { linkEventRef, seedGroup, TEST_KEY, unlinkEventRef } from "./testRefs.vitest";
+import { aufPath, aufReply, stubAuf } from "./aufFixture.vitest";
+import { linkEventRef, searchEventsRef, seedGroup, TEST_KEY, unlinkEventRef } from "./testRefs.vitest";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 
@@ -174,5 +175,34 @@ describe("unlinkEvent", () => {
     });
     await t.mutation(unlinkEventRef, { key: TEST_KEY, linkId });
     await expect(t.mutation(unlinkEventRef, { key: TEST_KEY, linkId })).resolves.toBeNull();
+  });
+});
+
+describe("searchEvents", () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+
+  test("asks AUF's identity lane for the trimmed name and answers the picker's shape", async () => {
+    await stubAuf();
+    const fetcher = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      expect(aufPath(input, init)).toEqual({ path: "commaIdentity:searchEvents", args: { query: "freak" } });
+      expect(new Headers(init?.headers).get("Authorization")).toMatch(/^Bearer [\w-]+\.[\w-]+\.[\w-]+$/);
+      return aufReply([{ id: "reczGNezBIJaL27Z5", name: "Freakuency 2026", startDate: "2026-11-01T03:00:00.000Z" }, { id: "recNoStart0000000", name: "Freak TBA" }]);
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const t = convexTest(schema, modules);
+    await expect(t.action(searchEventsRef, { key: "wrong", query: "freak" })).rejects.toThrow();
+    expect(await t.action(searchEventsRef, { key: TEST_KEY, query: "f" })).toEqual([]);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(await t.action(searchEventsRef, { key: TEST_KEY, query: " freak " })).toEqual([
+      { record_id: "reczGNezBIJaL27Z5", name: "Freakuency 2026", start_date: "2026-11-01T03:00:00.000Z" },
+      { record_id: "recNoStart0000000", name: "Freak TBA", start_date: undefined },
+    ]);
+  });
+
+  test("fails loudly when AUF refuses", async () => {
+    await stubAuf();
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ status: "error", errorMessage: "commaIdentity requires the comma identity lane." }, { status: 400 })));
+    const t = convexTest(schema, modules);
+    await expect(t.action(searchEventsRef, { key: TEST_KEY, query: "freak" })).rejects.toThrow("AUF commaIdentity:searchEvents failed: 400");
   });
 });
